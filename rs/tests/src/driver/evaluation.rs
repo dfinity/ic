@@ -1,4 +1,5 @@
 use std::panic::catch_unwind;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use super::config;
@@ -109,21 +110,31 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()>
     }
     .write_attribute(&pot_env);
 
-    let pot_setup_result: TestResult =
-        if let Err(err) = create_group_for_pot(&pot_env, &pot, &ctx.logger) {
-            TestResult::failed_with_message(format!("{:?}", err).as_str())
-        } else if let Err(err) = pot.setup.evaluate(pot_env.clone()) {
-            if let Some(s) = err.downcast_ref::<String>() {
-                TestResult::failed_with_message(s.as_str())
-            } else if let Some(s) = err.downcast_ref::<&str>() {
-                TestResult::failed_with_message(s)
-            } else {
-                TestResult::failed_with_message(format!("{:?}", err).as_str())
+    // create the group (and start the keep alive thread) and evaluate the pot
+    // setup
+    let (pot_setup_result, keep_alive_handle_and_signal) =
+        match create_group_for_pot_and_spawn_keepalive_thread(&pot_env, &pot, &ctx.logger) {
+            Ok(keep_alive_handle_and_signal) => {
+                let res = if let Err(err) = pot.setup.evaluate(pot_env.clone()) {
+                    if let Some(s) = err.downcast_ref::<String>() {
+                        TestResult::failed_with_message(s.as_str())
+                    } else if let Some(s) = err.downcast_ref::<&str>() {
+                        TestResult::failed_with_message(s)
+                    } else {
+                        TestResult::failed_with_message(format!("{:?}", err).as_str())
+                    }
+                } else {
+                    TestResult::Passed
+                };
+                (res, Some(keep_alive_handle_and_signal))
             }
-        } else {
-            TestResult::Passed
+            Err(err) => (
+                TestResult::failed_with_message(format!("{:?}", err).as_str()),
+                None,
+            ),
         };
 
+    // store away the pot result before the pot's tests are evaluated
     pot_env
         .write_json_object(config::POT_SETUP_RESULT_FILE, &pot_setup_result)
         .unwrap_or_else(|e| {
@@ -135,30 +146,56 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()>
             );
         });
 
+    // fail fast in case of a setup failure
     if let TestResult::Failed(err) = pot_setup_result {
         bail!("Could not evaluate pot setup: {}", err);
     }
 
-    evaluate_pot_with_group(ctx, pot, pot_path, &pot_env)?;
+    evaluate_pot_with_group(ctx, pot, pot_path.clone(), &pot_env)?;
+
+    // at this point we should be guaranteed to have a task_handle
+    if let Some((task_handle, stop_sig_s)) = keep_alive_handle_and_signal {
+        info!(ctx.logger, "Stopping keep alive task for pot: {}", pot_path);
+        if let Err(e) = stop_sig_s.try_send(()) {
+            warn!(ctx.logger, "Could not send stop signal: {:?}", e);
+        }
+        std::mem::drop(stop_sig_s);
+        info!(ctx.logger, "Joining keep alive task for pot: {}", pot_path);
+        task_handle
+            .join()
+            .expect("could not join keep alive handle");
+    }
+
     if let Err(e) = ctx.farm.delete_group(&group_name) {
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
     }
     Ok(())
 }
 
-fn create_group_for_pot(env: &TestEnv, pot: &Pot, logger: &Logger) -> Result<()> {
+fn create_group_for_pot_and_spawn_keepalive_thread(
+    env: &TestEnv,
+    pot: &Pot,
+    logger: &Logger,
+) -> Result<(JoinHandle<()>, Sender<()>)> {
     let pot_setup = PotSetup::read_attribute(env);
     let ic_setup = IcSetup::read_attribute(env);
     let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
     info!(logger, "creating group '{}'", &pot_setup.farm_group_name);
-    Ok(farm.create_group(
+    farm.create_group(
         &pot_setup.farm_group_name,
         pot_setup.pot_timeout,
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
             required_host_features: pot.required_host_features.clone(),
         },
-    )?)
+    )?;
+
+    // keep the group alive using a background thread
+    let (keep_alive_task, stop_sig_s) =
+        keep_group_alive_task(logger.clone(), farm, &pot_setup.farm_group_name);
+    let task_handle = std::thread::spawn(keep_alive_task);
+
+    Ok((task_handle, stop_sig_s))
 }
 
 fn evaluate_pot_with_group(
@@ -224,23 +261,7 @@ fn evaluate_test(ctx: &DriverContext, test_env: TestEnv, t: Test, path: TestPath
         .write_test_path(&path)
         .expect("Could not write test path");
     info!(ctx.logger, "Starting test: {}", path);
-    let pot_setup = PotSetup::read_attribute(&test_env);
-    // keep underlying group alive
-    let (keep_alive_task, stop_sig_s) = keep_group_alive_task(
-        ctx.logger.clone(),
-        ctx.farm.clone(),
-        &pot_setup.farm_group_name,
-    );
-    let task_handle = std::thread::spawn(keep_alive_task);
     let t_res = catch_unwind(|| (t.f)(test_env.clone()));
-
-    info!(ctx.logger, "Stopping keep alive task for test: {}", path);
-    if let Err(e) = stop_sig_s.try_send(()) {
-        warn!(ctx.logger, "Could not send stop signal: {:?}", e);
-    }
-    std::mem::drop(stop_sig_s);
-    info!(ctx.logger, "Joining keep alive task for test: {}", path);
-    task_handle.join().expect("could not join tickle handle");
 
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
