@@ -1,5 +1,4 @@
 type BlockIndex = nat64;
-type ApprovalId = BlockIndex;
 type Subaccount = blob;
 // Number of nanoseconds since the UNIX epoch in UTC timezone.
 type Timestamp = nat64;
@@ -45,112 +44,6 @@ type Value = variant {
     Blob : blob;
 };
 
-// The argument of the [icrc1_approveTransfer] endpoint.
-type ApproveTransferArg = record {
-    // The subaccount of the source account.
-    from_subaccount : opt Subaccount;
-    // The principal that can commit the transfer using the issued approval.
-    to_principal : principal;
-    // The exact amount that the principal can transfer.
-    amount : Tokens;
-    // The fee that the caller expects to pay.
-    fee : opt Tokens;
-    // If set, specifies the time (in nanoseconds in UTC timezone) at which
-    // the caller constructed this approval.
-    created_at_time: opt Timestamp;
-    // If set, specifies that latest time (in nanoseconds in UTC timezone) at
-    // which the approved principal can commit the transfer.
-    expires_at_time : opt Timestamp;
-};
-
-type ApproveTransferError = variant {
-    // The fee is no the one that the ledger expected.
-    BadFee : record { expected_fee : Tokens };
-
-    // The source account does not have enough funds for the transfer.
-    InsufficientFunds : record { balance : Tokens };
-
-    // [created_at_time] in the [ApproveTransferArg] is too far in the past.
-    TooOld : record { allowed_window_nanos : Duration };
-
-    // The [created_at_time] is in future.
-    // You can safely retry the request later.
-    CreatedInFuture;
-
-    // This approval is a duplicate of another approval with the same arguments.
-    Duplicate : record { duplicate_of : ApprovalId };
-
-    // The ledger rejected the approval because it is currently overloaded.
-    // You can safely retry the request.
-    Throttled;
-
-    // A generic implementation-specific error.
-    GenericError : record { error_code : nat64; message : text };
-};
-
-type ApproveTransferResult = variant {
-    Ok : ApprovalId;
-    Err : ApproveTransferError;
-};
-
-type RevokeApprovalError = variant {
-    // The approval does not belong to the caller.
-    NotAuthorized;
-    // The ledger did not find the specified approval.
-    // The approval might have been expired or never existed in the first place.
-    ApprovalNotFound;
-
-    // A generic implementation-specific error.
-    GenericError : record { error_code : nat64; message : text };
-};
-
-type RevokeApprovalResult = variant {
-    Ok : BlockIndex;
-    Err : RevokeApprovalError;
-};
-
-type CommitTransferError = variant {
-    // The source account did not have enough funds for the transfer.
-    InsufficientFunds : record { balance : Tokens };
-
-    // The ledger did not find the specified approval.
-    // The approval might have been expired or never existed in the first place.
-    ApprovalNotFound;
-
-    // The caller is not authorized to make the transfer.
-    NotAuthorized;
-
-    // A generic implementation-specific error.
-    GenericError : record { error_code : nat64; message : text };
-};
-
-// The result of the [icrc1_commitTransfer] call.
-type CommitTransferResult = variant {
-    Ok : BlockIndex;
-    Err : CommitTransferError;
-};
-
-// The argument of the [icrc1_commitTransfer] call.
-type CommitTransferArg = record {
-    // The identifier of the approval.
-    approval : ApprovalId;
-    // The owner of the destination account.
-    to_principal : principal;
-    // The subaccount of the destination account.
-    to_subaccount : opt Subaccount;
-    // The amount to transfer.
-    // Must be the same amount that the owner of the source account approved.
-    amount : Tokens;
-};
-
-// The result of the [icrc1_allowance] call.
-type ApprovalDetails = record {
-    // The number of tokens approved.
-    amount : Tokens;
-    // The time (in nanoseconds 
-    expires_at_time : Timestamp;
-};
-
 // The initialization parameters of the Ledger
 type InitArgs = record {
     minting_account : Account;
@@ -178,9 +71,4 @@ service : (InitArgs) -> {
 
     icrc1_balanceOf : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
-
-    icrc1_approveTransfer : (ApproveTransferArg) -> (ApproveTransferResult);
-    icrc1_allowance : (ApprovalId) -> (opt ApprovalDetails) query;
-    icrc1_revokeApproval : (ApprovalId) -> (RevokeApprovalResult);
-    icrc1_commitTransfer : (CommitTransferArg) -> (CommitTransferResult);
 }
