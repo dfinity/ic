@@ -653,9 +653,32 @@ xnet-nightly:
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
+.sns-tests:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-sns-tests
+  stage: sns-tests
+  resource_group: $TESTNET
+  dependencies: []  # don't copy artifacts from other jobs by default
+  variables:
+    SHELL_WRAPPER: "/usr/bin/time"
+    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
+    CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
+    cd_target_env: "BENCHMARK_NIGHTLY"
+    CD_ENV: "SNS_CD"
+    PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
+  artifacts:
+    when: always
+    paths:
+      - $CI_JOB_STAGE/$CI_JOB_NAME
+  tags:
+    - ic-prod-tests
+    - docker
+    - ubuntu
+  timeout: 1 hour
 
 sns-deployment-test-nightly:
-   extends: .benchmark-spot-test
+   extends: .sns-tests
    artifacts:
     when: always
     paths:
@@ -676,5 +699,3 @@ sns-deployment-test-nightly:
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
-
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"

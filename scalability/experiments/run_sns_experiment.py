@@ -18,6 +18,7 @@ from common import base_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("interactive", True, "Confirm some steps before continuing the script")
+gflags.DEFINE_boolean("deploy", True, "Should the NNS be deployed")
 
 TMPDIR = "/tmp"
 DFX_VERSION = "0.11.0-beta.1"
@@ -32,6 +33,9 @@ class SnsExperiment(base_experiment.BaseExperiment):
             return {key: value[FLAGS.testnet] for key, value in json.loads(f.read()).items()}
 
     def ensure_install_dfx(self):
+        current_version = subprocess.check_output(["dfx", "--version"]).decode().split()
+        if len(current_version) == 2 and current_version[1] == DFX_VERSION:
+            return
         subprocess.check_output(
             f'DFX_VERSION={DFX_VERSION} sh -ci "$(curl -fsSL https://smartcontracts.org/install.sh)"', shell=True
         )
@@ -56,10 +60,10 @@ class SnsExperiment(base_experiment.BaseExperiment):
                 ["git", "clone", "https://github.com/dfinity/nns-dapp/", self.nns_dapp_dir],
                 cwd=TMPDIR,
             )
-        subprocess.check_output(
-            ["git", "reset", "--hard", SNS_BRANCH],
-            cwd=self.nns_dapp_dir,
-        )
+            subprocess.check_output(
+                ["git", "reset", "--hard", SNS_BRANCH],
+                cwd=self.nns_dapp_dir,
+            )
 
     def deploy_sns(self):
         # XXX git clean -fdx here
@@ -138,35 +142,54 @@ class SnsExperiment(base_experiment.BaseExperiment):
                     found = True
         return found
 
+    def check_correctness(self, canisters):
+        cmd = [
+            "dfx",
+            "canister",
+            "--network",
+            FLAGS.testnet,
+            "call",
+            "wasm_canister",
+            "list_deployed_snses",
+            "( record { } )",
+        ]
+        print("Calling", cmd)
+        out = subprocess.check_output(cmd, cwd=self.nns_dapp_dir).decode()
+        print("Result", out, " - looking for", canisters["sns_root"])
+        return canisters["sns_root"] in out
+
 
 if __name__ == "__main__":
     exp = SnsExperiment()
     nns_url = exp._get_nns_url()
     sns_subnet = exp.get_subnets()[1]
     print(f"SNS subnet ID is: {sns_subnet}")
-    res = subprocess.check_output(
-        [
-            exp._get_ic_admin_path(),
-            "--nns-url",
-            nns_url,
-            "propose-to-update-subnet",
-            "--subnet",
-            sns_subnet,
-            "--test-neuron-proposer",
-            "--initial-notary-delay-millis",
-            "1000",
-        ],
-        encoding="utf-8",
-    )
-    print(f"Result of ic-admin call to update subnet: {res}")
 
-    exp.get_idl2json()
     exp.ensure_checkout_nns_dapp()
-    exp.ensure_install_dfx()
-    exp.generate_dfx_json(FLAGS.testnet, nns_url)
+    if FLAGS.deploy:
+        res = subprocess.check_output(
+            [
+                exp._get_ic_admin_path(),
+                "--nns-url",
+                nns_url,
+                "propose-to-update-subnet",
+                "--subnet",
+                sns_subnet,
+                "--test-neuron-proposer",
+                "--initial-notary-delay-millis",
+                "1000",
+            ],
+            encoding="utf-8",
+        )
+        print(f"Result of ic-admin call to update subnet: {res}")
 
-    exp.deploy_sns()
+        exp.get_idl2json()
+        exp.ensure_install_dfx()
+        exp.generate_dfx_json(FLAGS.testnet, nns_url)
+        exp.deploy_sns()
+
     exp.check_root_canister(nns_url)  # Doesn't work yet ..
     assert exp.check_canisters_installed(nns_url, exp.get_canister_ids()["sns_root"], "get_sns_canisters_summary")
     assert exp.check_canisters_installed(nns_url, exp.get_canister_ids()["sns_governance"], "get_root_canister_status")
+    assert exp.check_correctness(exp.get_canister_ids())
     print(f"Done, check if canisters are installed at: {nns_url}")

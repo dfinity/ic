@@ -230,6 +230,15 @@
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
       when: always
 
+# Rule for triggering SNS tests
+.rules-sns-tests:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
+      when: always
+
 .rules-prod-tests:
   rules:
     - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
