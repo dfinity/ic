@@ -210,6 +210,7 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
+    ct state { new } tcp dport { 80, 443, 20000-65535 } reject # Explicitly block ports that may be used by users of the canister HTTP request feature \n\
     <<IPv6_RULES>>\n\
   }\n\
 \n\
