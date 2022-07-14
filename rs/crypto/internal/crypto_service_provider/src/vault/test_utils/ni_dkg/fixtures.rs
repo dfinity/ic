@@ -81,7 +81,7 @@ impl MockNode {
     /// Deal, resharing or not.
     #[allow(clippy::too_many_arguments)]
     pub fn create_dealing(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
@@ -449,12 +449,12 @@ impl StateWithTranscript {
 
     /// Receivers decrypt their threshold secret key using their forward secure
     /// secret key.
-    pub fn load_keys(&mut self) {
-        let network = &mut self.network;
+    pub fn load_keys(&self) {
+        let network = &self.network;
         for (node_index, node_id) in self.config.receivers.iter() {
             let node = network
                 .nodes_by_node_id
-                .get_mut(&node_id)
+                .get(&node_id)
                 .expect("Config refers to a NodeId not in the network");
             node.csp_vault
                 .load_threshold_signing_key(

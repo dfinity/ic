@@ -248,7 +248,7 @@ pub mod util {
         let threshold = NumberOfNodes::from(rng.gen_range(0..10));
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
-        let mut csp = {
+        let csp = {
             let key_store = TempSecretKeyStore::new();
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
             Csp::of(csprng, key_store)

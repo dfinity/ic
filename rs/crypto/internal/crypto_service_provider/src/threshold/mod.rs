@@ -30,7 +30,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     /// failure it is possible that some but not all keys are written.
     #[cfg(test)]
     fn threshold_keygen(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         threshold: ic_types::NumberOfNodes,
         signatory_eligibilty: &[bool],

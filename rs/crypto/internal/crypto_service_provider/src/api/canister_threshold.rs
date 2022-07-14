@@ -101,7 +101,7 @@ pub trait CspIDkgProtocol {
     /// Generate a MEGa key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
     fn idkg_create_mega_key_pair(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 

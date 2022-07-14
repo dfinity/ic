@@ -109,7 +109,7 @@ mock! {
         ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError>;
 
         fn gen_tls_key_pair(
-            &mut self,
+            &self,
             node: NodeId,
             not_after: &str,
         ) -> Result<TlsPublicKeyCert, CryptoError>;
@@ -157,7 +157,7 @@ mock! {
 
     pub trait NiDkgCspClient {
     fn create_forward_secure_key_pair(
-        &mut self,
+        &self,
         _algorithm_id: AlgorithmId,
         _node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError>;
@@ -446,7 +446,7 @@ mock! {
             active_keys: &std::collections::BTreeSet<IDkgTranscriptInternal>
         ) -> Result<(), IDkgRetainThresholdKeysError>;
 
-        fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+        fn idkg_create_mega_key_pair(&self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 
         fn idkg_verify_complaint(
             &self,

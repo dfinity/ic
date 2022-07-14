@@ -51,7 +51,7 @@ pub trait CspKeyGenerator {
     /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated
     fn gen_tls_key_pair(
-        &mut self,
+        &self,
         node_id: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CryptoError>;

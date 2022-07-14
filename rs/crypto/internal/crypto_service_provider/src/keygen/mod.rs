@@ -42,7 +42,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
     }
 
     fn gen_tls_key_pair(
-        &mut self,
+        &self,
         node: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CryptoError> {
