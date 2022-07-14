@@ -204,7 +204,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
     }
 
     fn idkg_create_mega_key_pair(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         debug!(self.logger; crypto.method_name => "idkg_create_mega_key_pair");

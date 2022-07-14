@@ -65,7 +65,7 @@ fn state_with_transcript(config: &MockDkgConfig, network: MockNetwork) -> StateW
     };
     let state = StateWithDealings::from_state_with_config(state).expect("Dealing failed");
     let state = StateWithVerifiedDealings::from_state_with_dealings(state);
-    let mut state = StateWithTranscript::from_state_with_verified_dealings(state);
+    let state = StateWithTranscript::from_state_with_verified_dealings(state);
     state.load_keys();
     state
 }

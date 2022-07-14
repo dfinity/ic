@@ -57,7 +57,7 @@ fn state_with_transcript(config: &MockDkgConfig, network: MockNetwork) -> StateW
     };
     let state = StateWithDealings::from_state_with_config(state).expect("Dealing failed");
     let state = StateWithVerifiedDealings::from_state_with_dealings(state);
-    let mut state = StateWithTranscript::from_state_with_verified_dealings(state);
+    let state = StateWithTranscript::from_state_with_verified_dealings(state);
     state.load_keys();
     state
 }
@@ -243,7 +243,7 @@ pub fn test_create_dealing_should_detect_errors(
     let mut rng = ChaCha20Rng::from_seed(seed);
     let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
     let config = MockDkgConfig::from_network(&mut rng, &network, None);
-    let mut state = StateWithConfig { network, config };
+    let state = StateWithConfig { network, config };
     // Dealing errors:
     state.deal_with_incorrect_algorithm_id_should_fail(&mut rng);
     state.deal_with_incorrect_threshold_should_fail(&mut rng);
@@ -264,7 +264,7 @@ impl StateWithConfig {
     /// # Side effects
     /// Some randomness is consumed from rng.  The state is completely
     /// unchanged.
-    pub fn deal_with_incorrect_algorithm_id_should_fail(&mut self, rng: &mut ChaCha20Rng) {
+    pub fn deal_with_incorrect_algorithm_id_should_fail(&self, rng: &mut ChaCha20Rng) {
         // Note: We assume that any change in algorithm id makes this invalid.  At
         // present this is true, however if we introduce a new algorithm that uses the
         // same type of forward secure encryption key, this would have to change.
@@ -285,7 +285,7 @@ impl StateWithConfig {
         let dealer_node = self
             .network
             .nodes_by_node_id
-            .get_mut(&dealer_id)
+            .get(&dealer_id)
             .expect("Could not find dealer in nodes");
 
         let dealing = dealer_node.create_dealing(
@@ -321,7 +321,7 @@ impl StateWithConfig {
     ///
     /// # Side effects
     /// None, other than consuming randomness.
-    pub fn deal_with_incorrect_threshold_should_fail(&mut self, rng: &mut ChaCha20Rng) {
+    pub fn deal_with_incorrect_threshold_should_fail(&self, rng: &mut ChaCha20Rng) {
         let (_dealer_index, dealer_id) = self
             .config
             .dealers
@@ -332,7 +332,7 @@ impl StateWithConfig {
         let dealer_node = self
             .network
             .nodes_by_node_id
-            .get_mut(&dealer_id)
+            .get(&dealer_id)
             .expect("Could not find dealer in nodes");
 
         let num_receivers = self.config.receivers.count().get();
@@ -363,7 +363,7 @@ impl StateWithConfig {
     ///
     /// # Side effects
     /// None, other than consuming randomness.
-    pub fn deal_with_incorrect_receiver_ids_should_fail(&mut self, rng: &mut ChaCha20Rng) {
+    pub fn deal_with_incorrect_receiver_ids_should_fail(&self, rng: &mut ChaCha20Rng) {
         let (_dealer_index, dealer_id) = self
             .config
             .dealers
@@ -374,7 +374,7 @@ impl StateWithConfig {
         let dealer_node = self
             .network
             .nodes_by_node_id
-            .get_mut(&dealer_id)
+            .get(&dealer_id)
             .expect("Could not find dealer in nodes");
 
         // Choose another set of indices, leaving at least one gap in `[0..=n-1]`.

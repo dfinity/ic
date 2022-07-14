@@ -168,7 +168,7 @@ mod tls {
     #[test]
     fn should_insert_secret_key_into_store_in_der_format() {
         let sks = volatile_key_store();
-        let mut csp = Csp::of(rng(), sks);
+        let csp = Csp::of(rng(), sks);
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -195,14 +195,14 @@ mod tls {
                 [42; 32],
             ))));
 
-        let mut csp = Csp::of(rng(), sks_returning_error_on_insert);
+        let csp = Csp::of(rng(), sks_returning_error_on_insert);
 
         let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
     }
 
     #[test]
     fn should_return_der_encoded_self_signed_certificate() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -216,7 +216,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_subject_cn_as_node_id() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -231,7 +231,7 @@ mod tls {
 
     #[test]
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -243,7 +243,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_issuer_cn_as_node_id() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -261,7 +261,7 @@ mod tls {
 
     #[test]
     fn should_not_set_cert_subject_alt_name() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -273,7 +273,7 @@ mod tls {
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let mut csp = Csp::of(csprng_seeded_with(FIXED_SEED), volatile_key_store());
+        let csp = Csp::of(csprng_seeded_with(FIXED_SEED), volatile_key_store());
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -287,7 +287,7 @@ mod tls {
 
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
 
         const SAMPLE_SIZE: usize = 20;
         let mut serial_samples = BTreeSet::new();
@@ -302,7 +302,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_not_after_correctly() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
         let not_after = NOT_AFTER;
 
         let cert = csp
@@ -314,7 +314,7 @@ mod tls {
 
     #[test]
     fn should_panic_on_invalid_not_after_date() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
@@ -327,7 +327,7 @@ mod tls {
 
     #[test]
     fn should_panic_if_not_after_date_is_in_the_past() {
-        let mut csp = Csp::of(rng(), volatile_key_store());
+        let csp = Csp::of(rng(), volatile_key_store());
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);

@@ -42,7 +42,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
     /// Creates a key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.
     fn create_forward_secure_key_pair(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>

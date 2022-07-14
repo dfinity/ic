@@ -71,7 +71,7 @@ pub trait ThresholdSignatureCspClient {
     ///   generate and store keys.
     #[cfg(test)]
     fn threshold_keygen(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
         signatory_eligibility: &[bool],
@@ -639,7 +639,7 @@ pub trait NiDkgCspClient {
     /// This method is infallible.  An error structure is included in the
     /// signature only for future use.
     fn create_forward_secure_key_pair(
-        &mut self,
+        &self,
         algorithm_id: AlgorithmId,
         node_id: NodeId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
