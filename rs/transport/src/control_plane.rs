@@ -50,7 +50,7 @@ impl TransportImpl {
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
         self.allowed_clients.write().unwrap().remove(peer_id);
-        let mut peer_map = self.peer_map.write().unwrap();
+        let mut peer_map = self.peer_map.blocking_write();
         let peer_state = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
             None => {
@@ -100,7 +100,7 @@ impl TransportImpl {
             self.allowed_clients.write().unwrap().insert(*peer_id);
         }
         *self.registry_version.write().unwrap() = registry_version;
-        let mut peer_map = self.peer_map.write().unwrap();
+        let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
         }
@@ -120,8 +120,6 @@ impl TransportImpl {
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
                 let flow_label = get_flow_label(&peer_ip, peer_id);
                 let flow_state = FlowState::new(
-                    *peer_id,
-                    flow_tag,
                     flow_config.flow_tag.to_string(),
                     flow_label.clone(),
                     ConnectionState::Listening,
@@ -182,8 +180,6 @@ impl TransportImpl {
                 connecting_task,
             };
             let flow_state = FlowState::new(
-                *peer_id,
-                flow_tag,
                 flow_endpoint.flow_tag.to_string(),
                 flow_label.clone(),
                 ConnectionState::Connecting(connecting_state),
@@ -274,7 +270,6 @@ impl TransportImpl {
                                 peer_id,
                                 ConnectionRole::Server,
                                 flow_tag,
-                                local_addr,
                                 peer_addr,
                                 tls_stream,
                             )
@@ -360,7 +355,6 @@ impl TransportImpl {
                             peer_id,
                             ConnectionRole::Client,
                             flow_tag,
-                            local_addr,
                             peer_addr,
                             tls_stream,
                         )
@@ -435,7 +429,7 @@ impl TransportImpl {
     }
 
     /// Retries to establish a connection
-    pub(crate) fn retry_connection(
+    pub(crate) async fn retry_connection(
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
@@ -452,7 +446,7 @@ impl TransportImpl {
             .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
             .inc();
 
-        let mut peer_map = self.peer_map.write().unwrap();
+        let mut peer_map = self.peer_map.write().await;
         let peer_state = peer_map
             .get_mut(&peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
@@ -708,8 +702,8 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn should_handshake() {
+    #[test]
+    fn should_handshake() {
         let registry_version = REG_V1;
         let (connected_1, done_1) = bounded(0);
         let (connected_2, done_2) = bounded(0);
@@ -721,6 +715,8 @@ mod tests {
             let crypto_2 =
                 temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
             registry_and_data.registry.update_to_latest_version();
+
+            let rt = tokio::runtime::Runtime::new().unwrap();
 
             let mut client_config_1 = TransportConfig {
                 node_ip: "0.0.0.0".to_string(),
@@ -738,7 +734,7 @@ mod tests {
                 registry_version,
                 MetricsRegistry::new(),
                 Arc::new(crypto_1),
-                tokio::runtime::Handle::current(),
+                rt.handle().clone(),
                 logger.clone(),
             );
 
@@ -758,7 +754,7 @@ mod tests {
                 registry_version,
                 MetricsRegistry::new(),
                 Arc::new(crypto_2),
-                tokio::runtime::Handle::current(),
+                rt.handle().clone(),
                 logger.clone(),
             );
 

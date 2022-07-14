@@ -369,7 +369,7 @@ impl TransportImpl {
         flow_tag: FlowTag,
         mut event_handler: TransportEventHandler,
     ) {
-        if let Err(e) = self.retry_connection(peer_id, flow_tag) {
+        if let Err(e) = self.retry_connection(peer_id, flow_tag).await {
             warn!(
                 self.log,
                 "DataPlane::on_disconnect(): retry_connection error {:?}: peer_id: {:?}, flow_tag: {:?}", peer_id, flow_tag, e
@@ -384,17 +384,55 @@ impl TransportImpl {
     }
 
     /// Handle connection setup. Starts flow read and write tasks.
-    fn on_connect_setup(
+    fn create_connected_state(
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
+        flow_label: String,
+        send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         role: ConnectionRole,
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
         event_handler: TransportEventHandler,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Connected {
         let (tls_reader, tls_writer) = tls_stream.split();
-        let mut peer_map = self.peer_map.write().unwrap();
+        // Spawn write task
+        let event_handler_cl = event_handler.clone();
+        let write_task = self.flow_write_task(
+            peer_id,
+            flow_tag,
+            flow_label.clone(),
+            send_queue_reader,
+            Box::new(tls_writer),
+            event_handler_cl,
+        );
+
+        let read_task = self.flow_read_task(
+            peer_id,
+            flow_tag,
+            flow_label,
+            event_handler,
+            Box::new(tls_reader),
+        );
+
+        Connected {
+            peer_addr,
+            read_task,
+            write_task,
+            role,
+        }
+    }
+
+    /// Handle peer connection
+    pub(crate) async fn on_connect(
+        &self,
+        peer_id: NodeId,
+        role: ConnectionRole,
+        flow_tag: FlowTag,
+        peer_addr: SocketAddr,
+        tls_stream: TlsStream,
+    ) -> Result<(), TransportErrorCode> {
+        let mut peer_map = self.peer_map.write().await;
         let peer_state = match peer_map.get_mut(&peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
@@ -409,47 +447,6 @@ impl TransportImpl {
             return Err(TransportErrorCode::FlowConnectionUp);
         }
 
-        // Spawn write task
-        let send_queue_reader = flow_state.send_queue.get_reader();
-        let event_handler_cl = event_handler.clone();
-        let write_task = self.flow_write_task(
-            flow_state.peer_id,
-            flow_state.flow_tag,
-            flow_state.flow_label.clone(),
-            send_queue_reader,
-            Box::new(tls_writer),
-            event_handler_cl,
-        );
-
-        let event_handler_cl = event_handler;
-        let read_task = self.flow_read_task(
-            flow_state.peer_id,
-            flow_state.flow_tag,
-            flow_state.flow_label.clone(),
-            event_handler_cl,
-            Box::new(tls_reader),
-        );
-
-        let connected_state = Connected {
-            peer_addr,
-            read_task,
-            write_task,
-            role,
-        };
-        flow_state.update(ConnectionState::Connected(connected_state));
-        Ok(())
-    }
-
-    /// Handle peer connection
-    pub(crate) async fn on_connect(
-        &self,
-        peer_id: NodeId,
-        role: ConnectionRole,
-        flow_tag: FlowTag,
-        local_addr: SocketAddr,
-        peer_addr: SocketAddr,
-        tls_stream: TlsStream,
-    ) -> Result<(), TransportErrorCode> {
         let mut event_handler = self
             .event_handler
             .lock()
@@ -458,37 +455,24 @@ impl TransportImpl {
             .ok_or(TransportErrorCode::TransportClientNotFound)?
             .clone();
 
-        self.on_connect_setup(
+        let connected_state = self.create_connected_state(
             peer_id,
             flow_tag,
+            flow_state.flow_label.clone(),
+            flow_state.send_queue.get_reader(),
             role,
             peer_addr,
             tls_stream,
             event_handler.clone(),
-        )
-        .map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::handshake_result(): failed to add flow: \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
-                 error = {:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_id,
-                peer_addr,
-                role,
-                e
-            );
-            e
-        })?;
+        );
+
         let _ = event_handler
             // Notify the client that peer flow is up.
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowUp(peer_id),
             ))
             .await;
+        flow_state.update(ConnectionState::Connected(connected_state));
         Ok(())
     }
 }

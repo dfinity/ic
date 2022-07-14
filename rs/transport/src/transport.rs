@@ -110,7 +110,7 @@ impl TransportImpl {
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
 
-            peer_map: RwLock::new(HashMap::new()),
+            peer_map: tokio::sync::RwLock::new(HashMap::new()),
             accept_ports: RwLock::new(HashMap::new()),
             event_handler: Mutex::new(None),
             weak_self: RwLock::new(Weak::new()),
@@ -167,7 +167,7 @@ impl Transport for TransportImpl {
         flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode> {
-        let peer_map = self.peer_map.read().unwrap();
+        let peer_map = self.peer_map.blocking_read();
         let peer_state = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
@@ -183,7 +183,7 @@ impl Transport for TransportImpl {
     }
 
     fn clear_send_queues(&self, peer_id: &NodeId) {
-        let mut peer_map = self.peer_map.write().unwrap();
+        let mut peer_map = self.peer_map.blocking_write();
         let peer_state = peer_map
             .get_mut(peer_id)
             .expect("Transport client not found");
