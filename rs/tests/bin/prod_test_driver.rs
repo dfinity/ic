@@ -5,7 +5,9 @@ use ic_fondue::slack::Alertable;
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
-use ic_tests::driver::config::{self, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL};
+use ic_tests::driver::config::{
+    self, ENG_CONSENSUS_CHANNEL, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL,
+};
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources};
@@ -256,7 +258,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
-        .with_alert(TEST_FAILURE_CHANNEL),
+        .with_alert(ENG_CONSENSUS_CHANNEL),
     );
 
     m.add_suite(suite(
@@ -739,7 +741,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "test_threshold_ecdsa_signature_same_subnet",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
                     )])
-                ),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_from_other_subnet_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -747,7 +749,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "test_threshold_ecdsa_signature_from_other_subnet",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
                     )])
-                ),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_fails_without_cycles_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -755,7 +757,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "test_threshold_ecdsa_signature_fails_without_cycles",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
                     )])
-                ),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_from_nns_without_cycles_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -763,7 +765,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "test_threshold_ecdsa_signature_from_nns_without_cycles",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
                     )])
-                ),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "unassigned_node_upgrade_test_pot",
                     orchestrator::unassigned_node_upgrade_test::config,
