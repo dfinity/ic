@@ -61,7 +61,9 @@ impl BlockPayload {
     /// Return true if it is a normal block and empty
     pub fn is_empty(&self) -> bool {
         match self {
-            BlockPayload::Data(data) => data.batch.is_empty() && data.dealings.messages.is_empty(),
+            BlockPayload::Data(data) => {
+                data.batch.is_empty() && data.dealings.messages.is_empty() && data.ecdsa.is_none()
+            }
             _ => false,
         }
     }

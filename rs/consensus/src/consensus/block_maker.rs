@@ -331,21 +331,6 @@ impl BlockMaker {
                         None => return None,
                         Some(payload) => payload,
                     };
-                    let ecdsa_data = ecdsa::create_data_payload(
-                        self.replica_config.subnet_id,
-                        &*self.registry_client,
-                        &*self.crypto,
-                        pool,
-                        self.ecdsa_pool.clone(),
-                        &*self.state_manager,
-                        &context,
-                        &parent,
-                        &self.ecdsa_payload_metrics,
-                        self.log.clone(),
-                    )
-                    .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
-                    .ok()
-                    .flatten();
                     if is_upgrade_pending(
                         height,
                         self.registry_client.as_ref(),
@@ -359,8 +344,25 @@ impl BlockMaker {
                             batch_payload.xnet.count_bytes(),
                             batch_payload.ingress.count_bytes(),
                         );
-                        (batch_payload, new_dealings, ecdsa_data).into()
+                        (batch_payload, new_dealings, None).into()
                     } else {
+                        let ecdsa_data = ecdsa::create_data_payload(
+                            self.replica_config.subnet_id,
+                            &*self.registry_client,
+                            &*self.crypto,
+                            pool,
+                            self.ecdsa_pool.clone(),
+                            &*self.state_manager,
+                            &context,
+                            &parent,
+                            &self.ecdsa_payload_metrics,
+                            self.log.clone(),
+                        )
+                        .map_err(|err| {
+                            warn!(self.log, "Payload construction has failed: {:?}", err)
+                        })
+                        .ok()
+                        .flatten();
                         self.metrics.report_byte_estimate_metrics(
                             batch_payload.xnet.count_bytes(),
                             batch_payload.ingress.count_bytes(),
