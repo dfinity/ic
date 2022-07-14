@@ -104,8 +104,8 @@ fn test_canisters_are_created_and_installed() {
             .unwrap();
 
         let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rosetta-api/ledger_canister",
-            "ledger-canister",
+            "rosetta-api/icrc1/ledger",
+            "ic-icrc1-ledger",
             &[],
         );
         let ledger_hash = Sha256::hash(&ledger_wasm.clone().bytes()).to_vec();

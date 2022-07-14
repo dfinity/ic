@@ -37,6 +37,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces = { path = "../../interfaces" }
 
 [dev-dependencies]
+ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-sns-wasm-proto-generator = { path = "./proto_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }

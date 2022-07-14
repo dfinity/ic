@@ -2,25 +2,32 @@ use async_trait::async_trait;
 use dfn_core::CanisterId;
 use futures::future::FutureExt;
 use ic_base_types::{ic_types::principal::Principal, PrincipalId};
-use ic_nervous_system_common::ledger::{self, Ledger};
-use ic_nervous_system_common::NervousSystemError;
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::Tokens;
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
-use ic_sns_governance::pb::v1::{
-    governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+use ic_sns_governance::{
+    ledger::Ledger,
+    pb::v1::{
+        governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+    },
 };
 use ic_sns_swap::{
     pb::v1::{
         Lifecycle::{Committed, Pending},
         *,
     },
-    swap::{SnsGovernanceClient, TransferResult, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS},
+    swap::{
+        principal_to_subaccount, SnsGovernanceClient, TransferResult, SECONDS_PER_DAY,
+        START_OF_2022_TIMESTAMP_SECONDS,
+    },
 };
 
 use lazy_static::lazy_static;
-use ledger_canister::Tokens;
-use ledger_canister::{AccountIdentifier, Subaccount};
 use maplit::{btreemap, hashset};
 
 use std::{
@@ -70,15 +77,8 @@ fn fallback_controller_principal_ids_must_not_be_empty() {
 /// Expectation of one call on the mock Ledger.
 #[derive(Debug, Clone)]
 enum LedgerExpect {
-    AccountBalance(AccountIdentifier, Result<Tokens, i32>),
-    TransferFunds(
-        u64,
-        u64,
-        Option<Subaccount>,
-        AccountIdentifier,
-        u64,
-        Result<u64, i32>,
-    ),
+    AccountBalance(Account, Result<Tokens, i32>),
+    TransferFunds(u64, u64, Option<Subaccount>, Account, u64, Result<u64, i32>),
 }
 
 struct MockLedger {
@@ -98,7 +98,7 @@ impl Ledger for MockLedger {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
+        to: Account,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
         match self.pop() {
@@ -128,10 +128,7 @@ impl Ledger for MockLedger {
         unimplemented!()
     }
 
-    async fn account_balance(
-        &self,
-        account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         match self.pop() {
             Some(LedgerExpect::AccountBalance(account_, result)) => {
                 assert_eq!(account_, account);
@@ -202,13 +199,16 @@ fn test_open() {
     let mut swap = new_swap(init());
     // Cannot open as the swap has not received its initial funding yet.
     assert!(open_at_start(&mut swap).is_err());
-    let account = AccountIdentifier::new(SWAP_CANISTER_ID.get(), None);
+    let account = Account {
+        of: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
     // Refresh yielding zero tokens...
     assert!(swap
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                account,
+                account.clone(),
                 Ok(Tokens::ZERO)
             )])
         )
@@ -221,7 +221,7 @@ fn test_open() {
     assert!(swap
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(account, Err(13))])
+            &mock_stub(vec![LedgerExpect::AccountBalance(account.clone(), Err(13))])
         )
         .now_or_never()
         .unwrap()
@@ -266,7 +266,10 @@ fn test_min_icp() {
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(SWAP_CANISTER_ID.get(), None),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
                 Ok(Tokens::from_e8s(100000 * E8))
             )])
         )
@@ -284,10 +287,10 @@ fn test_min_icp() {
             *TEST_USER1_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(2 * E8))
             )])
         )
@@ -308,10 +311,10 @@ fn test_min_icp() {
             *TEST_USER2_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(2 * E8))
             )])
         )
@@ -347,16 +350,22 @@ fn test_min_icp() {
                     LedgerExpect::TransferFunds(
                         2 * E8 - fee,
                         fee,
-                        Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
-                        AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None),
+                        Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                        Account {
+                            of: *TEST_USER2_PRINCIPAL,
+                            subaccount: None,
+                        },
                         0,
                         Ok(1066),
                     ),
                     LedgerExpect::TransferFunds(
                         2 * E8 - fee,
                         fee,
-                        Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
-                        AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None),
+                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                        Account {
+                            of: *TEST_USER1_PRINCIPAL,
+                            subaccount: None,
+                        },
                         0,
                         Ok(1067),
                     ),
@@ -388,7 +397,10 @@ fn test_min_max_icp_per_buyer() {
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(SWAP_CANISTER_ID.get(), None),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
                 Ok(Tokens::from_e8s(100000 * E8))
             )])
         )
@@ -407,10 +419,10 @@ fn test_min_max_icp_per_buyer() {
                 *TEST_USER1_PRINCIPAL,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    AccountIdentifier::new(
-                        SWAP_CANISTER_ID.get(),
-                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
-                    ),
+                    Account {
+                        of: SWAP_CANISTER_ID.get(),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                    },
                     Ok(Tokens::from_e8s(99999999)),
                 )]),
             )
@@ -430,10 +442,10 @@ fn test_min_max_icp_per_buyer() {
                 *TEST_USER1_PRINCIPAL,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    AccountIdentifier::new(
-                        SWAP_CANISTER_ID.get(),
-                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
-                    ),
+                    Account {
+                        of: SWAP_CANISTER_ID.get(),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                    },
                     Ok(Tokens::from_e8s(6 * E8)),
                 )]),
             )
@@ -455,10 +467,10 @@ fn test_min_max_icp_per_buyer() {
                 *TEST_USER1_PRINCIPAL,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    AccountIdentifier::new(
-                        SWAP_CANISTER_ID.get(),
-                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
-                    ),
+                    Account {
+                        of: SWAP_CANISTER_ID.get(),
+                        subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                    },
                     Ok(Tokens::from_e8s(10 * E8)),
                 )]),
             )
@@ -495,7 +507,10 @@ fn test_max_icp() {
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(SWAP_CANISTER_ID.get(), None),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
                 Ok(Tokens::from_e8s(100000 * E8))
             )])
         )
@@ -513,10 +528,10 @@ fn test_max_icp() {
             *TEST_USER1_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(6 * E8))
             )])
         )
@@ -537,10 +552,10 @@ fn test_max_icp() {
             *TEST_USER2_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(6 * E8))
             )])
         )
@@ -595,7 +610,10 @@ fn test_scenario_happy() {
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(SWAP_CANISTER_ID.get(), None),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
                 Ok(Tokens::from_e8s(200000 * E8))
             )])
         )
@@ -614,10 +632,10 @@ fn test_scenario_happy() {
             *TEST_USER1_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(1000 * E8))
             )])
         )
@@ -640,10 +658,10 @@ fn test_scenario_happy() {
             *TEST_USER2_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(600 * E8))
             )])
         )
@@ -670,10 +688,10 @@ fn test_scenario_happy() {
             *TEST_USER3_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER3_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(400 * E8))
             )])
         )
@@ -736,24 +754,33 @@ fn test_scenario_happy() {
                     LedgerExpect::TransferFunds(
                         600 * E8 - 1,
                         1,
-                        Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
-                        AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                        Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                        Account {
+                            of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            subaccount: None,
+                        },
                         0,
                         Err(77),
                     ),
                     LedgerExpect::TransferFunds(
                         1000 * E8 - 1,
                         1,
-                        Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
-                        AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                        Account {
+                            of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            subaccount: None,
+                        },
                         0,
                         Ok(1067),
                     ),
                     LedgerExpect::TransferFunds(
                         400 * E8 - 1,
                         1,
-                        Some(Subaccount::from(&*TEST_USER3_PRINCIPAL)),
-                        AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                        Some(principal_to_subaccount(&*TEST_USER3_PRINCIPAL)),
+                        Account {
+                            of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            subaccount: None,
+                        },
                         0,
                         Ok(1066),
                     ),
@@ -774,8 +801,11 @@ fn test_scenario_happy() {
                 &mock_stub(vec![LedgerExpect::TransferFunds(
                     600 * E8 - 2,
                     2,
-                    Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
-                    AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                    Some(principal_to_subaccount(&*TEST_USER2_PRINCIPAL)),
+                    Account {
+                        of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                        subaccount: None,
+                    },
                     0,
                     Ok(1068),
                 )]),
@@ -786,11 +816,11 @@ fn test_scenario_happy() {
         assert_eq!(success, 1);
         assert_eq!(failure, 0);
         // "Sweep" all SNS tokens, going to the buyers.
-        fn dst(x: PrincipalId) -> AccountIdentifier {
-            AccountIdentifier::new(
-                SNS_GOVERNANCE_CANISTER_ID.get(),
-                Some(ledger::compute_neuron_staking_subaccount(x, 0)),
-            )
+        fn dst(x: PrincipalId) -> Account {
+            Account {
+                of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(x, 0)),
+            }
         }
         let SweepResult {
             success,
@@ -889,7 +919,7 @@ async fn test_finalize_swap() {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
+        to: Account,
         memo: u64,
     }
 
@@ -909,7 +939,7 @@ async fn test_finalize_swap() {
             amount_e8s: u64,
             fee_e8s: u64,
             from_subaccount: Option<Subaccount>,
-            to: AccountIdentifier,
+            to: Account,
             memo: u64,
         ) -> Result</* block_height: */ u64, NervousSystemError> {
             self.calls.lock().unwrap().push(LedgerTransferCall {
@@ -928,13 +958,13 @@ async fn test_finalize_swap() {
             unimplemented!();
         }
 
-        async fn account_balance(
-            &self,
-            account_id: AccountIdentifier,
-        ) -> Result<Tokens, NervousSystemError> {
+        async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
             assert_eq!(
                 account_id,
-                AccountIdentifier::new((*SWAP_CANISTER_ID).into(), None,)
+                Account {
+                    of: (*SWAP_CANISTER_ID).into(),
+                    subaccount: None,
+                }
             );
 
             Ok(Tokens::from_e8s(10 * E8))
@@ -1019,7 +1049,7 @@ async fn test_finalize_swap() {
 
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
-        .finalize(&mut sns_governance_client, ledger_factory)
+        .finalize(&mut sns_governance_client, ledger_factory, ledger_factory)
         .await;
 
     // Step 3: Inspect the results.
@@ -1117,10 +1147,10 @@ async fn test_finalize_swap() {
         .filter(|t| t.canister_id.to_string() == ICP_LEDGER_CANISTER_ID.to_string())
         .map(Clone::clone)
         .collect::<HashSet<_>>();
-    let expected_to = AccountIdentifier::new(
-        PrincipalId::from_str(&SNS_GOVERNANCE_CANISTER_ID).unwrap(),
-        None,
-    );
+    let expected_to = Account {
+        of: PrincipalId::from_str(&SNS_GOVERNANCE_CANISTER_ID).unwrap(),
+        subaccount: None,
+    };
     for t in &observed_nns_ledger_calls {
         assert_eq!(t.to, expected_to, "{t:#?}");
     }
@@ -1131,7 +1161,7 @@ async fn test_finalize_swap() {
     }
     .into_iter()
     .map(|(buyer, icp_amount)| {
-        let from_subaccount = Some(Subaccount::from(
+        let from_subaccount = Some(principal_to_subaccount(
             &PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap(),
         ));
         let amount_e8s = icp_amount * E8 - FEE_E8S;
@@ -1165,10 +1195,12 @@ async fn test_finalize_swap() {
     .map(|(buyer, sns_amount)| {
         let buyer = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
 
-        let to = AccountIdentifier::new(
-            PrincipalId::from_str(&*SNS_GOVERNANCE_CANISTER_ID).unwrap(),
-            Some(ic_nervous_system_common::ledger::compute_neuron_staking_subaccount(buyer, 0)),
-        );
+        let to = Account {
+            of: PrincipalId::from_str(&*SNS_GOVERNANCE_CANISTER_ID).unwrap(),
+            subaccount: Some(
+                ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes(buyer, 0),
+            ),
+        };
         let amount_e8s = sns_amount * E8 - FEE_E8S;
 
         (to, amount_e8s)
@@ -1177,7 +1209,7 @@ async fn test_finalize_swap() {
     assert_eq!(
         observed_sns_ledger_calls
             .iter()
-            .map(|t| (t.to, t.amount_e8s))
+            .map(|t| (t.to.clone(), t.amount_e8s))
             .collect::<HashMap<_, _>>(),
         expected_sns_ledger_calls,
         "{observed_sns_ledger_calls:#?}",
@@ -1201,7 +1233,10 @@ fn test_error_refund() {
         .refresh_sns_token_e8s(
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(SWAP_CANISTER_ID.get(), None),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
                 Ok(Tokens::from_e8s(100000 * E8))
             )])
         )
@@ -1219,10 +1254,10 @@ fn test_error_refund() {
             *TEST_USER1_PRINCIPAL,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
-                AccountIdentifier::new(
-                    SWAP_CANISTER_ID.get(),
-                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
-                ),
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
+                },
                 Ok(Tokens::from_e8s(6 * E8))
             )])
         )
@@ -1281,8 +1316,11 @@ fn test_error_refund() {
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 10 * E8 - fee,
                 fee,
-                Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone())),
-                AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None),
+                Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone())),
+                Account {
+                    of: *TEST_USER2_PRINCIPAL,
+                    subaccount: None,
+                },
                 0,
                 Ok(1066),
             )]),
@@ -1303,8 +1341,11 @@ fn test_error_refund() {
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 10 * E8 - fee,
                 fee,
-                Some(Subaccount::from(&TEST_USER3_PRINCIPAL.clone())),
-                AccountIdentifier::new(*TEST_USER3_PRINCIPAL, None),
+                Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
+                Account {
+                    of: *TEST_USER3_PRINCIPAL,
+                    subaccount: None,
+                },
                 0,
                 Err(100),
             )]),
@@ -1342,8 +1383,11 @@ fn test_error_refund() {
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 6 * E8 - fee,
                 fee,
-                Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
-                AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                Account {
+                    of: SNS_GOVERNANCE_CANISTER_ID.get(),
+                    subaccount: None,
+                },
                 0,
                 Ok(1067),
             )]),
@@ -1374,8 +1418,11 @@ fn test_error_refund() {
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 10 * E8 - fee,
                 fee,
-                Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
-                AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None),
+                Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
+                Account {
+                    of: *TEST_USER1_PRINCIPAL,
+                    subaccount: None,
+                },
                 0,
                 Ok(1066),
             )]),

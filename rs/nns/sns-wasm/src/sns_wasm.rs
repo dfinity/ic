@@ -783,9 +783,9 @@ mod test {
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
+    use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
     use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
-    use ledger_canister::LedgerCanisterInitPayload;
     use pretty_assertions::{assert_eq, assert_ne};
     use std::sync::{Arc, Mutex};
     use std::vec;
@@ -1707,19 +1707,9 @@ mod test {
         // which have non-deterministic ordering (and therefore serialization results)
         let (ledger_canister, ledger_wasm, ledger_init_args) =
             canister_api.install_wasm_calls.lock().unwrap().remove(0);
-        assert_eq!(
-            (
-                ledger_canister,
-                ledger_wasm,
-                Decode!(&ledger_init_args, LedgerCanisterInitPayload).unwrap()
-            ),
-            (
-                // ledger
-                ledger_id,
-                vec![0, 97, 115, 109, 1, 0, 0, 2],
-                ledger
-            )
-        );
+        assert_eq!(ledger_canister, ledger_id);
+        assert_eq!(ledger_wasm, vec![0, 97, 115, 109, 1, 0, 0, 2]);
+        assert_ledger_init_args_eq(Decode!(&ledger_init_args, LedgerInitArgs).unwrap(), ledger);
 
         let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
 
@@ -1735,6 +1725,19 @@ mod test {
             ],
             set_controllers_calls
         );
+    }
+
+    fn assert_ledger_init_args_eq(left: LedgerInitArgs, right: LedgerInitArgs) {
+        fn canonicalize(l: LedgerInitArgs) -> LedgerInitArgs {
+            let mut l = l;
+            l.initial_balances
+                .sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
+            l.metadata
+                .sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
+            l
+        }
+
+        assert_eq!(canonicalize(left), canonicalize(right));
     }
 
     #[tokio::test]

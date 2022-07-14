@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::Tokens;
+use ic_nervous_system_common::NervousSystemError;
 use ic_sns_governance::governance::{
     governance_minting_account, neuron_account_id, Governance, TimeWarp, ValidGovernanceProto,
 };
+use ic_sns_governance::ledger::Ledger;
 use ic_sns_governance::pb::v1::manage_neuron::MergeMaturity;
 use ic_sns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use ic_sns_governance::pb::v1::neuron::{DissolveState, Followees};
@@ -15,7 +18,6 @@ use ic_sns_governance::pb::v1::{
     NeuronId, NeuronPermission, NeuronPermissionType, Proposal, ProposalId, Vote,
 };
 use ic_sns_governance::types::{native_action_ids, Environment, HeapGrowthPotential};
-use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::BTreeMap;
@@ -25,7 +27,7 @@ use std::sync::Mutex;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
-type LedgerMap = BTreeMap<AccountIdentifier, u64>;
+type LedgerMap = BTreeMap<Account, u64>;
 
 /// Constructs a test principal id from an NeuronId.
 /// Convenience functions to make creating neurons more concise.
@@ -88,25 +90,28 @@ impl LedgerBuilder {
         self.ledger_fixture
     }
 
-    pub fn minting_account() -> AccountIdentifier {
+    pub fn minting_account() -> Account {
         governance_minting_account()
     }
 
-    pub fn add_account(&mut self, ident: AccountIdentifier, amount: u64) -> &mut Self {
+    pub fn add_account(&mut self, ident: Account, amount: u64) -> &mut Self {
         self.ledger_fixture.accounts.insert(ident, amount);
         self
     }
 
-    pub fn try_add_account(&mut self, ident: AccountIdentifier, amount: u64) -> &mut Self {
+    pub fn try_add_account(&mut self, ident: Account, amount: u64) -> &mut Self {
         self.ledger_fixture.accounts.entry(ident).or_insert(amount);
         self
     }
 
-    pub fn account_id(ident: PrincipalId) -> AccountIdentifier {
-        AccountIdentifier::new(ident, None)
+    pub fn account_id(ident: PrincipalId) -> Account {
+        Account {
+            of: ident,
+            subaccount: None,
+        }
     }
 
-    pub fn get_account_balance(&self, ident: AccountIdentifier) -> Option<u64> {
+    pub fn get_account_balance(&self, ident: Account) -> Option<u64> {
         self.ledger_fixture.accounts.get(&ident).copied()
     }
 }
@@ -282,13 +287,13 @@ impl Ledger for SNSFixture {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to_account: AccountIdentifier,
+        to_account: Account,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
         let from_account = from_subaccount.map_or(governance_minting_account(), neuron_account_id);
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
+            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), |a| format!("{:#?}", a)), to_account, amount_e8s, fee_e8s
         );
         let accounts = &mut self.sns_state.try_lock().unwrap().ledger.accounts;
 
@@ -319,10 +324,7 @@ impl Ledger for SNSFixture {
         Ok(self.sns_state.try_lock().unwrap().ledger.get_supply())
     }
 
-    async fn account_balance(
-        &self,
-        account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.sns_state.try_lock().unwrap().ledger.accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
@@ -589,7 +591,7 @@ impl SNS {
         }
     }
 
-    pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
+    pub fn get_account_balance(&self, account: Account) -> u64 {
         self.account_balance(account)
             .now_or_never()
             .unwrap()
@@ -597,7 +599,7 @@ impl SNS {
             .get_e8s()
     }
 
-    pub fn get_neuron_account_id(&self, neuron_id: &NeuronId) -> AccountIdentifier {
+    pub fn get_neuron_account_id(&self, neuron_id: &NeuronId) -> Account {
         neuron_account_id(neuron_id.subaccount().unwrap())
     }
 
@@ -613,7 +615,7 @@ impl Ledger for SNS {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to_account: AccountIdentifier,
+        to_account: Account,
         arg: u64,
     ) -> Result<u64, NervousSystemError> {
         self.fixture
@@ -625,10 +627,7 @@ impl Ledger for SNS {
         self.fixture.total_supply().await
     }
 
-    async fn account_balance(
-        &self,
-        account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         self.fixture.account_balance(account).await
     }
 }
@@ -749,19 +748,29 @@ impl SNSBuilder {
     }
 
     pub fn add_account_for(mut self, principal_id: PrincipalId, amount: u64) -> Self {
-        self.ledger_builder
-            .add_account(AccountIdentifier::new(principal_id, None), amount);
+        self.ledger_builder.add_account(
+            Account {
+                of: principal_id,
+                subaccount: None,
+            },
+            amount,
+        );
         self
     }
 
-    pub fn get_account_balance(&self, ident: AccountIdentifier) -> Option<u64> {
+    pub fn get_account_balance(&self, ident: Account) -> Option<u64> {
         self.ledger_builder.get_account_balance(ident)
     }
 
     pub fn add_neuron(mut self, neuron: NeuronBuilder) -> Self {
         if let Some(owner) = neuron.get_owner() {
-            self.ledger_builder
-                .try_add_account(AccountIdentifier::new(owner, None), 0);
+            self.ledger_builder.try_add_account(
+                Account {
+                    of: owner,
+                    subaccount: None,
+                },
+                0,
+            );
         }
 
         if let Some(ref neuron_id) = neuron.id {

@@ -3,12 +3,12 @@
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender as USender;
 use futures::channel::oneshot::{self, Sender as OSender};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::Tokens;
+use ic_nervous_system_common::NervousSystemError;
+use ic_sns_governance::ledger::Ledger;
 use std::sync::atomic;
 use std::sync::atomic::Ordering as AtomicOrdering;
-
-use ledger_canister::Subaccount;
-use ledger_canister::{AccountIdentifier, Tokens};
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
@@ -18,11 +18,11 @@ pub enum LedgerMessage {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
+        to: Account,
         memo: u64,
     },
     TotalSupply,
-    BalanceQuery(AccountIdentifier),
+    BalanceQuery(Account),
 }
 
 pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
@@ -67,14 +67,14 @@ impl Ledger for InterleavingTestLedger {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
+        to: Account,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
         let msg = LedgerMessage::Transfer {
             amount_e8s,
             fee_e8s,
             from_subaccount,
-            to,
+            to: to.clone(),
             memo,
         };
         atomic::fence(AtomicOrdering::SeqCst);
@@ -90,12 +90,10 @@ impl Ledger for InterleavingTestLedger {
         self.underlying.total_supply().await
     }
 
-    async fn account_balance(
-        &self,
-        account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AtomicOrdering::SeqCst);
-        self.notify(LedgerMessage::BalanceQuery(account)).await?;
+        self.notify(LedgerMessage::BalanceQuery(account.clone()))
+            .await?;
         self.underlying.account_balance(account).await
     }
 }

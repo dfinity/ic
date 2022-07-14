@@ -3,6 +3,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod icrc1;
 pub mod itest_helpers;
 
 pub const NUM_SNS_CANISTERS: usize = 3;

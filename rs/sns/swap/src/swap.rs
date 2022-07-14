@@ -8,17 +8,19 @@ use chrono::Duration;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 
-use ic_nervous_system_common::ledger::{self, Ledger};
-use ic_sns_governance::pb::v1::{
-    governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::Tokens;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+use ic_sns_governance::{
+    ledger::Ledger,
+    pb::v1::{
+        governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+    },
+    types::DEFAULT_TRANSFER_FEE,
 };
 
 use lazy_static::lazy_static;
 use std::{ops::RangeInclusive, str::FromStr};
-
-use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
-
-use ledger_canister::Tokens;
 
 // As a sanity check, start and end time cannot be less than this.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640995200;
@@ -383,7 +385,10 @@ impl Swap {
             );
         }
         // Look for the token balanace of 'this' canister.
-        let account = AccountIdentifier::new(this_canister.get(), None);
+        let account = Account {
+            of: this_canister.get(),
+            subaccount: None,
+        };
         let e8s = ledger_stub(self.init().sns_ledger())
             .account_balance(account)
             .await
@@ -431,7 +436,10 @@ impl Swap {
             return Err("The ICP target for this token swap has already been reached.".to_string());
         }
         // Look for the token balanace of the specified principal's subaccount on 'this' canister.
-        let account = AccountIdentifier::new(this_canister.get(), Some(Subaccount::from(&buyer)));
+        let account = Account {
+            of: this_canister.get(),
+            subaccount: Some(principal_to_subaccount(&buyer)),
+        };
         let e8s = ledger_stub(self.init().icp_ledger())
             .account_balance(account)
             .await
@@ -538,8 +546,11 @@ impl Swap {
         let init = self.init().clone();
         if let Some(buyer_state) = self.state_mut().buyers.get_mut(&principal.to_string()) {
             // Observe: memo == 0. Could be specified as an argument instead.
-            let dst_subaccount = ledger::compute_neuron_staking_subaccount(principal, 0);
-            let dst = AccountIdentifier::new(init.sns_governance().get(), Some(dst_subaccount));
+            let dst_subaccount = compute_neuron_staking_subaccount_bytes(principal, 0);
+            let dst = Account {
+                of: init.sns_governance().get(),
+                subaccount: Some(dst_subaccount),
+            };
             let result = buyer_state
                 .sns_transfer_helper(&init, fee, dst, &ledger_stub)
                 .await;
@@ -566,8 +577,11 @@ impl Swap {
         // TODO: get rid of logically unneccessary clone
         let init = self.init().clone();
         if let Some(buyer_state) = self.state_mut().buyers.get_mut(&principal.to_string()) {
-            let subaccount = Subaccount::from(&principal);
-            let dst = AccountIdentifier::new(principal, None);
+            let subaccount = principal_to_subaccount(&principal);
+            let dst = Account {
+                of: principal,
+                subaccount: None,
+            };
             buyer_state
                 .icp_transfer_helper(&init, fee, subaccount, dst, &ledger_stub)
                 .await
@@ -591,7 +605,8 @@ impl Swap {
     pub async fn finalize(
         &mut self,
         sns_governance_client: &mut impl SnsGovernanceClient,
-        ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
+        icp_ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
+        icrc1_ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
     ) -> FinalizeSwapResponse {
         let lifecycle = self.state().lifecycle();
         assert!(
@@ -600,7 +615,9 @@ impl Swap {
             lifecycle
         );
 
-        let sweep_icp = self.sweep_icp(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
+        let sweep_icp = self
+            .sweep_icp(DEFAULT_TRANSFER_FEE, &icp_ledger_factory)
+            .await;
         if lifecycle != Lifecycle::Committed {
             return FinalizeSwapResponse {
                 sweep_icp: Some(sweep_icp),
@@ -610,7 +627,9 @@ impl Swap {
             };
         }
 
-        let sweep_sns = self.sweep_sns(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
+        let sweep_sns = self
+            .sweep_sns(DEFAULT_TRANSFER_FEE, &icrc1_ledger_factory)
+            .await;
 
         let create_neuron = self.claim_neurons(sns_governance_client).await;
 
@@ -735,28 +754,31 @@ impl Swap {
                 ));
             }
         }
-        let subaccount = Subaccount::from(&principal);
-        let dst = AccountIdentifier::new(principal, None);
+        let subaccount = principal_to_subaccount(&principal);
+        let dst = Account {
+            of: principal,
+            subaccount: None,
+        };
         let result = ledger_stub(self.init().icp_ledger())
             .transfer_funds(
                 amount.get_e8s().saturating_sub(fee.get_e8s()),
                 fee.get_e8s(),
                 Some(subaccount),
-                dst,
+                dst.clone(),
                 0,
             )
             .await;
         match result {
             Ok(h) => {
                 println!(
-                    "{}INFO: error refund - transferred {} ICP from subaccount {} to {} at height {}",
+                    "{}INFO: error refund - transferred {} ICP from subaccount {:#?} to {} at height {}",
                     LOG_PREFIX, amount, subaccount, dst, h
                 );
                 TransferResult::Success(h)
             }
             Err(e) => {
                 println!(
-                    "{}ERROR: error refund - failed to transfer {} from subaccount {}: {}",
+                    "{}ERROR: error refund - failed to transfer {} from subaccount {:#?}: {}",
                     LOG_PREFIX, amount, subaccount, e
                 );
                 TransferResult::Failure(e.to_string())
@@ -797,11 +819,17 @@ impl Swap {
                     continue;
                 }
             };
-            let subaccount = Subaccount::from(&principal);
+            let subaccount = principal_to_subaccount(&principal);
             let dst = if lifecycle == Lifecycle::Committed {
-                AccountIdentifier::new(sns_governance.get(), None)
+                Account {
+                    of: sns_governance.get(),
+                    subaccount: None,
+                }
             } else {
-                AccountIdentifier::new(principal, None)
+                Account {
+                    of: principal,
+                    subaccount: None,
+                }
             };
             let result = buyer_state
                 .icp_transfer_helper(&init, fee, subaccount, dst, &ledger_stub)
@@ -857,8 +885,11 @@ impl Swap {
                 }
             };
             // Observe: memo == 0. Could be specified as an argument instead.
-            let dst_subaccount = ledger::compute_neuron_staking_subaccount(principal, 0);
-            let dst = AccountIdentifier::new(sns_governance.get(), Some(dst_subaccount));
+            let dst_subaccount = compute_neuron_staking_subaccount_bytes(principal, 0);
+            let dst = Account {
+                of: sns_governance.get(),
+                subaccount: Some(dst_subaccount),
+            };
             let result = buyer_state
                 .sns_transfer_helper(&init, fee, dst, &ledger_stub)
                 .await;
@@ -1065,7 +1096,7 @@ impl BuyerState {
         init: &Init,
         fee: Tokens,
         subaccount: Subaccount,
-        dst: AccountIdentifier,
+        dst: Account,
         ledger_stub: &'_ dyn Fn(CanisterId) -> Box<dyn Ledger>,
     ) -> TransferResult {
         let amount = Tokens::from_e8s(self.amount_icp_e8s);
@@ -1083,7 +1114,7 @@ impl BuyerState {
                 amount.get_e8s().saturating_sub(fee.get_e8s()),
                 fee.get_e8s(),
                 Some(subaccount),
-                dst,
+                dst.clone(),
                 0,
             )
             .await;
@@ -1095,14 +1126,14 @@ impl BuyerState {
             Ok(h) => {
                 self.amount_icp_e8s = 0;
                 println!(
-                    "{}INFO: transferred {} ICP from subaccount {} to {} at height {}",
+                    "{}INFO: transferred {} ICP from subaccount {:#?} to {} at height {}",
                     LOG_PREFIX, amount, subaccount, dst, h
                 );
                 TransferResult::Success(h)
             }
             Err(e) => {
                 println!(
-                    "{}ERROR: failed to transfer {} from subaccount {}: {}",
+                    "{}ERROR: failed to transfer {} from subaccount {:#?}: {}",
                     LOG_PREFIX, amount, subaccount, e
                 );
                 TransferResult::Failure(e.to_string())
@@ -1114,7 +1145,7 @@ impl BuyerState {
         &mut self,
         init: &Init,
         fee: Tokens,
-        dst: AccountIdentifier,
+        dst: Account,
         ledger_stub: &'_ dyn Fn(CanisterId) -> Box<dyn Ledger>,
     ) -> TransferResult {
         let sns_ledger = init.sns_ledger();
@@ -1133,7 +1164,7 @@ impl BuyerState {
                 amount.get_e8s().saturating_sub(fee.get_e8s()),
                 fee.get_e8s(),
                 None,
-                dst,
+                dst.clone(),
                 0,
             )
             .await;
@@ -1216,6 +1247,14 @@ impl SetOpenTimeWindowRequest {
 
         true
     }
+}
+
+pub fn principal_to_subaccount(principal_id: &PrincipalId) -> Subaccount {
+    let mut subaccount = [0; std::mem::size_of::<Subaccount>()];
+    let principal_id = principal_id.as_slice();
+    subaccount[0] = principal_id.len().try_into().unwrap();
+    subaccount[1..1 + principal_id.len()].copy_from_slice(principal_id);
+    subaccount
 }
 
 // Tools needed (Pete):

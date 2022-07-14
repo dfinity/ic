@@ -2,6 +2,11 @@ use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Projec
 use dfn_candid::{candid_one, CandidOne};
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
+use ic_icrc1::endpoints::TransferArg;
+use ic_icrc1::{Account, Subaccount};
+use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::Tokens;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::{
@@ -12,22 +17,17 @@ use ic_sns_governance::pb::v1::{
         AddNeuronPermissions, ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay,
         RegisterVote, RemoveNeuronPermissions,
     },
-    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
-    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-    ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList,
-    Proposal, ProposalData, ProposalId, Vote,
+    Account as AccountProto, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    Governance, GovernanceError, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters,
+    Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData, ProposalId,
+    Subaccount as SubaccountProto, Vote,
 };
 use ic_sns_governance::pb::v1::{ListNervousSystemFunctionsResponse, RewardEvent};
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init;
-use ledger_canister as ledger;
-use ledger_canister::{
-    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
-    AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
-};
 use on_wire::IntoWire;
-use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
 use std::thread;
@@ -35,7 +35,6 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use crate::{NUM_SNS_CANISTERS, SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES};
-use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_root::{CanisterStatusResult, CanisterStatusType};
@@ -45,7 +44,6 @@ use ic_sns_governance::pb::v1::manage_neuron::{Disburse, Split, StartDissolving}
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{CanisterId, PrincipalId};
-use maplit::hashset;
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
 /// allows the testing environment to calculate what a given subaccount will
@@ -63,7 +61,7 @@ pub struct SnsCanisters<'a> {
 /// Builder to help create the initial payloads for the SNS canisters in tests.
 pub struct SnsTestsInitPayloadBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
-    pub ledger: LedgerCanisterInitPayload,
+    pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
     pub swap: Init,
 }
@@ -81,14 +79,14 @@ impl UserInfo {
     /// Note: Even though this methods calculates the NeuronId, the Neuron will still
     /// need to be staked and claimed for it to exist in the SNS.
     pub fn new(sender: Sender) -> Self {
-        let subaccount = Subaccount({
+        let subaccount = {
             let mut state = Sha256::new();
             state.write(&[0x0c]);
             state.write(b"neuron-stake");
             state.write(sender.get_principal_id().as_slice());
             state.write(&NONCE.to_be_bytes());
             state.finish()
-        });
+        };
 
         let neuron_id = NeuronId {
             id: subaccount.to_vec(),
@@ -107,11 +105,14 @@ impl SnsTestsInitPayloadBuilder {
     pub fn new() -> SnsTestsInitPayloadBuilder {
         SnsTestsInitPayloadBuilder {
             governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload {
+            ledger: LedgerInitArgs {
                 // minting_account will be set when the Governance canister ID is allocated
-                minting_account: AccountIdentifier { hash: [0; 28] },
-                initial_values: HashMap::new(),
-                archive_options: Some(ledger::ArchiveOptions {
+                minting_account: Account {
+                    of: PrincipalId::default(),
+                    subaccount: None,
+                },
+                initial_balances: vec![],
+                archive_options: ArchiveOptions {
                     trigger_threshold: 2000,
                     num_blocks_to_archive: 1000,
                     // 1 GB, which gives us 3 GB space when upgrading
@@ -121,38 +122,34 @@ impl SnsTestsInitPayloadBuilder {
                     // controller_id will be set when the Root canister ID is allocated
                     controller_id: CanisterId::from_u64(0).into(),
                     cycles_for_archive_creation: Some(0),
-                }),
-                max_message_size_bytes: Some(128 * 1024),
-                // 24 hour transaction window
-                transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
-                // send_whitelist will be populated with SNS canister IDs when they're allocated
-                send_whitelist: hashset! {},
-                transfer_fee: Some(DEFAULT_TRANSFER_FEE),
-                token_symbol: None,
-                token_name: None,
+                },
+                transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
+                token_symbol: "TKX".to_string(),
+                token_name: "Token Example".to_string(),
+                metadata: vec![],
             },
             root: SnsRootCanister::default(),
             swap: Init::default(),
         }
     }
 
-    pub fn with_ledger_init_state(&mut self, state: LedgerCanisterInitPayload) -> &mut Self {
+    pub fn with_ledger_init_state(&mut self, state: LedgerInitArgs) -> &mut Self {
         self.ledger = state;
         self
     }
 
-    pub fn with_ledger_account(&mut self, account: AccountIdentifier, icpts: Tokens) -> &mut Self {
-        self.ledger.initial_values.insert(account, icpts);
+    pub fn with_ledger_account(&mut self, account: Account, icpts: Tokens) -> &mut Self {
+        self.ledger
+            .initial_balances
+            .push((account, icpts.get_e8s()));
         self
     }
 
-    pub fn with_ledger_accounts(
-        &mut self,
-        accounts: Vec<AccountIdentifier>,
-        tokens: Tokens,
-    ) -> &mut Self {
+    pub fn with_ledger_accounts(&mut self, accounts: Vec<Account>, tokens: Tokens) -> &mut Self {
         for account in accounts {
-            self.ledger.initial_values.insert(account, tokens);
+            self.ledger
+                .initial_balances
+                .push((account, tokens.get_e8s()));
         }
         self
     }
@@ -221,21 +218,18 @@ impl SnsCanisters<'_> {
         init_payloads.governance.root_canister_id = Some(root_canister_id.into());
 
         // Ledger canister_init args.
-        init_payloads.ledger.minting_account = governance_canister_id.into();
-        init_payloads.ledger.send_whitelist =
-            hashset! { governance_canister_id, ledger_canister_id };
-        init_payloads
-            .ledger
-            .archive_options
-            .as_mut()
-            .expect("Archive options not set")
-            .controller_id = root.canister_id().into();
+        init_payloads.ledger.minting_account = Account {
+            of: governance_canister_id.get(),
+            subaccount: None,
+        };
 
-        assert!(init_payloads
-            .ledger
-            .initial_values
-            .get(&governance_canister_id.get().into())
-            .is_none());
+        init_payloads.ledger.archive_options.controller_id = root.canister_id().into();
+
+        assert!(!init_payloads.ledger.initial_balances.iter().any(|(a, _)| a
+            == &Account {
+                of: governance_canister_id.get(),
+                subaccount: None
+            }));
 
         // Root canister_init args.
         if init_payloads.root.governance_canister_id.is_none() {
@@ -253,13 +247,14 @@ impl SnsCanisters<'_> {
             let sub = n
                 .subaccount()
                 .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
-            let aid = ledger::AccountIdentifier::new(governance_canister_id.get(), Some(sub));
-            let previous_value = init_payloads
+            let aid = Account {
+                of: governance_canister_id.get(),
+                subaccount: Some(sub),
+            };
+            init_payloads
                 .ledger
-                .initial_values
-                .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
-
-            assert_eq!(previous_value, None);
+                .initial_balances
+                .push((aid, n.cached_neuron_stake_e8s));
         }
 
         // Install canisters
@@ -396,14 +391,14 @@ impl SnsCanisters<'_> {
     ) -> NeuronId {
         // Stake a neuron by transferring to a subaccount of the neurons
         // canister and claiming the neuron on the governance canister..
-        let to_subaccount = Subaccount({
+        let to_subaccount = {
             let mut state = Sha256::new();
             state.write(&[0x0c]);
             state.write(b"neuron-stake");
             state.write(sender.get_principal_id().as_slice());
             state.write(&NONCE.to_be_bytes());
             state.finish()
-        });
+        };
 
         self.stake_neuron_account(sender, &to_subaccount, token_amount)
             .await;
@@ -472,27 +467,20 @@ impl SnsCanisters<'_> {
     ) -> u64 {
         // Stake the neuron.
         let stake = Tokens::from_tokens(token_amount).unwrap();
-        let block_height: u64 = self
-            .ledger
-            .update_from_sender(
-                "send_pb",
-                protobuf,
-                SendArgs {
-                    memo: Memo(NONCE),
-                    amount: stake,
-                    fee: DEFAULT_TRANSFER_FEE,
-                    from_subaccount: None,
-                    to: AccountIdentifier::new(
-                        PrincipalId::from(self.governance.canister_id()),
-                        Some(*to_subaccount),
-                    ),
-                    created_at_time: None,
-                },
-                sender,
-            )
-            .await
-            .expect("Couldn't send funds.");
-
+        let block_height = crate::icrc1::transfer(
+            &self.ledger,
+            sender,
+            TransferArg {
+                amount: stake.get_e8s(),
+                fee: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+                from_subaccount: None,
+                to_principal: PrincipalId::from(self.governance.canister_id()),
+                to_subaccount: Some(*to_subaccount),
+                created_at_time: None,
+            },
+        )
+        .await
+        .expect("Couldn't send funds.");
         block_height
     }
 
@@ -598,12 +586,17 @@ impl SnsCanisters<'_> {
         sender: &Sender,
         subaccount: &Subaccount,
         amount_e8s: Option<u64>,
-        to_account: Option<AccountIdentifier>,
+        to_account: Option<Account>,
     ) -> ManageNeuronResponse {
         let amount = amount_e8s.map(|e8s| Amount { e8s });
 
-        let to_account: Option<AccountIdentifierProto> =
-            to_account.map(|to_account| to_account.into());
+        let to_account: Option<AccountProto> =
+            to_account.map(|Account { of, subaccount }| AccountProto {
+                of: Some(of),
+                subaccount: subaccount.map(|s| SubaccountProto {
+                    subaccount: s.to_vec(),
+                }),
+            });
 
         self.send_manage_neuron(
             sender,
@@ -656,18 +649,16 @@ impl SnsCanisters<'_> {
     }
 
     pub async fn get_user_account_balance(&self, sender: &Sender) -> Tokens {
-        // The balance now should have been deducted the stake.
-        self.ledger
-            .query_(
-                "account_balance_pb",
-                protobuf,
-                AccountBalanceArgs {
-                    account: sender.get_principal_id().into(),
-                },
-            )
-            .await
-            .map(tokens_from_proto)
-            .expect("Error calling the Ledger's get_account_balancer")
+        crate::icrc1::balance_of(
+            &self.ledger,
+            Account {
+                of: sender.get_principal_id(),
+                subaccount: None,
+            },
+        )
+        .await
+        .map(Tokens::from_e8s)
+        .expect("Error calling the Ledger's get_account_balancer")
     }
 
     pub async fn list_neurons(&self, sender: &Sender) -> Vec<Neuron> {
@@ -1032,13 +1023,13 @@ pub async fn set_up_governance_canister(
 /// Compiles the ledger canister, builds it's initial payload and installs it
 pub async fn install_ledger_canister<'runtime, 'a>(
     canister: &mut Canister<'runtime>,
-    args: LedgerCanisterInitPayload,
+    args: LedgerInitArgs,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "rosetta-api/ledger_canister",
-        "ledger-canister",
-        &["notify-method"],
+        "rosetta-api/icrc1/ledger",
+        "ic-icrc1-ledger",
+        &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )
@@ -1046,10 +1037,7 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 }
 
 /// Creates and installs the ledger canister.
-pub async fn set_up_ledger_canister(
-    runtime: &'_ Runtime,
-    args: LedgerCanisterInitPayload,
-) -> Canister<'_> {
+pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister

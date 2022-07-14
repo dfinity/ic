@@ -23,11 +23,13 @@ use dfn_core::{
     over, over_async, over_init, println,
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::ledger::{Ledger, LedgerCanister};
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
+use ic_sns_governance::ledger::{Ledger, LedgerCanister};
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_swap::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
     FinalizeSwapResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
@@ -36,8 +38,6 @@ use ic_sns_swap::pb::v1::{
     SetOpenTimeWindowResponse, Swap,
 };
 use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
-use ledger_canister::Tokens;
-use ledger_canister::DEFAULT_TRANSFER_FEE;
 
 use std::str::FromStr;
 
@@ -114,7 +114,7 @@ fn refresh_sns_tokens() {
 #[candid_method(update, rename = "refresh_sns_tokens")]
 async fn refresh_sns_tokens_(_: RefreshSnsTokensRequest) -> RefreshSnsTokensResponse {
     println!("{}refresh_sns_tokens", LOG_PREFIX);
-    let ledger_factory = &create_real_ledger;
+    let ledger_factory = &create_real_icrc1_ledger;
     match swap_mut().refresh_sns_token_e8s(id(), ledger_factory).await {
         Ok(()) => RefreshSnsTokensResponse {},
         Err(msg) => panic!("{}", msg),
@@ -136,7 +136,7 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
-    let ledger_factory = &create_real_ledger;
+    let ledger_factory = &create_real_icp_ledger;
     match swap_mut()
         .refresh_buyer_token_e8s(p, id(), ledger_factory)
         .await
@@ -198,10 +198,15 @@ fn finalize_swap() {
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     // Helpers.
     let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
-    let ledger_factory = create_real_ledger;
+    let icp_ledger_factory = create_real_icp_ledger;
+    let icrc1_ledger_factory = create_real_icrc1_ledger;
 
     swap_mut()
-        .finalize(&mut sns_governance_client, ledger_factory)
+        .finalize(
+            &mut sns_governance_client,
+            icp_ledger_factory,
+            icrc1_ledger_factory,
+        )
         .await
 }
 
@@ -221,7 +226,7 @@ async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse
             } else {
                 DEFAULT_TRANSFER_FEE
             },
-            &create_real_ledger,
+            &create_real_icp_ledger,
         )
         .await;
     ErrorRefundIcpResponse {}
@@ -315,7 +320,19 @@ fn now_seconds() -> u64 {
 /// object is returned. What distinguishes this from other possible Ledger
 /// factories is that this produces objects that are suitable for use in
 /// production.
-fn create_real_ledger(id: CanisterId) -> Box<dyn Ledger> {
+fn create_real_icp_ledger(id: CanisterId) -> Box<dyn Ledger> {
+    Box::new(ic_nervous_system_common::ledger::LedgerCanister::new(id))
+}
+
+/// Returns a function that (when passed the canister ID of a presumptive
+/// Ledger) returns a Ledger implementation suitable for use in
+/// production. I.e. calls out to another canister.
+///
+/// This function is a "Ledger factory" in that you call this, and a Ledger
+/// object is returned. What distinguishes this from other possible Ledger
+/// factories is that this produces objects that are suitable for use in
+/// production.
+fn create_real_icrc1_ledger(id: CanisterId) -> Box<dyn Ledger> {
     Box::new(LedgerCanister::new(id))
 }
 

@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.42"
 candid = "0.7.4"
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -12,6 +13,11 @@ futures = "0.3.8"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
+ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-sns-governance = { path = "../governance" }
@@ -21,7 +27,6 @@ ic-sns-swap = { path = "../swap" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 lazy_static = "1.4.0"
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"

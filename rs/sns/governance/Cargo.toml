@@ -27,6 +27,9 @@ hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = { path = "../../types/ic00_types" }
+ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-common-build-metadata = {path = "../../nervous_system/common/build_metadata"}
@@ -70,11 +73,10 @@ ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 lazy_static = "1.4.0"
-ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
 tokio = { version = "1.18.0", features = [ "full" ] }
 
 [features]
-test = ["ic-base-types/test", "ledger-canister/test"]
+test = ["ic-base-types/test"]

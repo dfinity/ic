@@ -985,7 +985,7 @@ pub mod manage_neuron {
         pub amount: ::core::option::Option<disburse::Amount>,
         /// The ledger account to which the disbursed tokens are transferred.
         #[prost(message, optional, tag="2")]
-        pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+        pub to_account: ::core::option::Option<super::Account>,
     }
     /// Nested message and enum types in `Disburse`.
     pub mod disburse {
@@ -1041,7 +1041,7 @@ pub mod manage_neuron {
         pub percentage_to_disburse: u32,
         /// The (optional) principal to which to transfer the stake.
         #[prost(message, optional, tag="2")]
-        pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
+        pub to_account: ::core::option::Option<super::Account>,
     }
     /// The operation that adds a new follow relation to a neuron, specifying
     /// that it follows a set of followee neurons for a given proposal function.
@@ -1472,6 +1472,27 @@ pub struct SetMode {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetModeResponse {
+}
+/// A Ledger subaccount.
+#[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Subaccount {
+    #[prost(bytes="vec", tag="1")]
+    pub subaccount: ::prost::alloc::vec::Vec<u8>,
+}
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag="1")]
+    pub of: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag="2")]
+    pub subaccount: ::core::option::Option<Subaccount>,
 }
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.

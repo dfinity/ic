@@ -2,15 +2,17 @@ use crate::pb::v1::{
     DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution, SwapDistribution,
     TreasuryDistribution,
 };
-use crate::{AirdropDistribution, SnsCanisterIds, Tokens};
+use crate::{AirdropDistribution, SnsCanisterIds};
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
+use ic_icrc1::Account;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::{
-    compute_distribution_subaccount, compute_neuron_staking_subaccount,
+    compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
+    compute_neuron_staking_subaccount_bytes,
 };
 use ic_sns_governance::pb::v1::neuron::DissolveState;
-use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronPermission};
-use ledger_canister::AccountIdentifier;
+use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronId, NeuronPermission};
 use maplit::btreemap;
 use std::collections::{BTreeMap, HashMap};
 
@@ -29,7 +31,7 @@ impl FractionalDeveloperVotingPower {
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
+    ) -> anyhow::Result<HashMap<Account, Tokens>> {
         let mut accounts = HashMap::new();
 
         self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
@@ -85,7 +87,9 @@ impl FractionalDeveloperVotingPower {
                 .expect("NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be present");
 
             let neuron = Neuron {
-                id: Some(subaccount.into()),
+                id: Some(NeuronId {
+                    id: subaccount.to_vec(),
+                }),
                 permissions: vec![permission],
                 cached_neuron_stake_e8s: stake_e8s,
                 followees: default_followees,
@@ -238,7 +242,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_developer_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<AccountIdentifier, Tokens>,
+        accounts: &mut HashMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.developer_distribution()?.developer_neurons {
             let principal_id = neuron_distribution.controller()?;
@@ -257,7 +261,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_treasury_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<AccountIdentifier, Tokens>,
+        accounts: &mut HashMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let treasury = self.treasury_distribution()?;
 
@@ -279,11 +283,14 @@ impl FractionalDeveloperVotingPower {
     fn insert_swap_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<AccountIdentifier, Tokens>,
+        accounts: &mut HashMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let swap = self.swap_distribution()?;
 
-        let swap_canister_account = AccountIdentifier::new(sns_canister_ids.swap, None);
+        let swap_canister_account = Account {
+            of: sns_canister_ids.swap,
+            subaccount: None,
+        };
         let initial_swap_amount_tokens = Tokens::from_e8s(swap.initial_swap_amount_e8s);
         accounts.insert(swap_canister_account, initial_swap_amount_tokens);
 
@@ -303,7 +310,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_airdrop_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<AccountIdentifier, Tokens>,
+        accounts: &mut HashMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
             let principal_id = neuron_distribution.controller()?;
@@ -324,10 +331,13 @@ impl FractionalDeveloperVotingPower {
         governance_canister: &PrincipalId,
         distribution_account_nonce: u64,
         amount_e8s: u64,
-    ) -> (AccountIdentifier, Tokens) {
+    ) -> (Account, Tokens) {
         let subaccount =
-            compute_distribution_subaccount(*governance_canister, distribution_account_nonce);
-        let account = AccountIdentifier::new(*governance_canister, Some(subaccount));
+            compute_distribution_subaccount_bytes(*governance_canister, distribution_account_nonce);
+        let account = Account {
+            of: *governance_canister,
+            subaccount: Some(subaccount),
+        };
         let tokens = Tokens::from_e8s(amount_e8s);
 
         (account, tokens)
@@ -339,9 +349,13 @@ impl FractionalDeveloperVotingPower {
         governance_canister: &PrincipalId,
         claimer: &PrincipalId,
         amount_e8s: u64,
-    ) -> (AccountIdentifier, Tokens) {
-        let subaccount = compute_neuron_staking_subaccount(*claimer, DEFAULT_NEURON_STAKING_NONCE);
-        let account = AccountIdentifier::new(*governance_canister, Some(subaccount));
+    ) -> (Account, Tokens) {
+        let subaccount =
+            compute_neuron_staking_subaccount_bytes(*claimer, DEFAULT_NEURON_STAKING_NONCE);
+        let account = Account {
+            of: *governance_canister,
+            subaccount: Some(subaccount),
+        };
         let tokens = Tokens::from_e8s(amount_e8s);
 
         (account, tokens)
@@ -409,15 +423,15 @@ mod test {
     };
     use crate::{AirdropDistribution, SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
+    use ic_icrc1::Account;
     use ic_nervous_system_common::ledger::{
-        compute_distribution_subaccount, compute_neuron_staking_subaccount,
+        compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes,
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
-    use ledger_canister::AccountIdentifier;
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -433,26 +447,38 @@ mod test {
         canister: PrincipalId,
         principal_id: Option<PrincipalId>,
         nonce: Option<u64>,
-    ) -> AccountIdentifier {
+    ) -> Account {
         let mut subaccount = None;
         if let Some(pid) = principal_id {
-            subaccount = Some(compute_distribution_subaccount(pid, nonce.unwrap_or(0)))
+            subaccount = Some(compute_distribution_subaccount_bytes(
+                pid,
+                nonce.unwrap_or(0),
+            ))
         }
 
-        AccountIdentifier::new(canister, subaccount)
+        Account {
+            of: canister,
+            subaccount,
+        }
     }
 
     fn get_neuron_account_identifier(
         canister: PrincipalId,
         principal_id: Option<PrincipalId>,
         nonce: Option<u64>,
-    ) -> AccountIdentifier {
+    ) -> Account {
         let mut subaccount = None;
         if let Some(pid) = principal_id {
-            subaccount = Some(compute_neuron_staking_subaccount(pid, nonce.unwrap_or(0)))
+            subaccount = Some(compute_neuron_staking_subaccount_bytes(
+                pid,
+                nonce.unwrap_or(0),
+            ))
         }
 
-        AccountIdentifier::new(canister, subaccount)
+        Account {
+            of: canister,
+            subaccount,
+        }
     }
 
     #[test]
@@ -525,7 +551,10 @@ mod test {
             Some(canister_ids.governance),
             Some(SWAP_SUBACCOUNT_NONCE),
         );
-        let swap_canister_account = AccountIdentifier::new(canister_ids.swap, None);
+        let swap_canister_account = Account {
+            of: canister_ids.swap,
+            subaccount: None,
+        };
 
         let locked_swap_account_balance =
             initial_ledger_accounts.get(&locked_swap_account).unwrap();
@@ -599,15 +628,15 @@ mod test {
             .get_initial_neurons(&parameters)
             .unwrap();
 
-        let neuron_id_1 = NeuronId::from(compute_neuron_staking_subaccount(
+        let neuron_id_1 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_1_OWNER_PRINCIPAL,
             DEFAULT_NEURON_STAKING_NONCE,
         ));
-        let neuron_id_2 = NeuronId::from(compute_neuron_staking_subaccount(
+        let neuron_id_2 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_2_OWNER_PRINCIPAL,
             DEFAULT_NEURON_STAKING_NONCE,
         ));
-        let neuron_id_3 = NeuronId::from(compute_neuron_staking_subaccount(
+        let neuron_id_3 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_3_OWNER_PRINCIPAL,
             DEFAULT_NEURON_STAKING_NONCE,
         ));
