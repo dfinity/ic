@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use ic_fondue::slack::Alertable;
 use tokio::time::sleep;
 
 use crate::{
@@ -95,6 +96,38 @@ pub fn get_e2e_suites() -> Vec<Suite> {
                 ),
             ],
         ),
+        suite(
+            "suite_to_fail_with_alerts",
+            vec![
+                pot_with_setup(
+                    "pot_fail_1",
+                    setup_success,
+                    par(vec![
+                        sys_t(
+                            "test_fail_1",
+                            test_with_panic("test from pot_fail_1.".to_string()),
+                        ),
+                        sys_t("test_success_1", test_success),
+                    ]),
+                ),
+                pot_with_setup(
+                    "pot_fail_2",
+                    setup_success,
+                    par(vec![sys_t(
+                        "test_fail_1",
+                        test_with_panic("test from pot_fail_2.".to_string()),
+                    )]),
+                )
+                .with_alert("channel_1")
+                .with_alert("channel_2"),
+                pot_with_setup(
+                    "pot_success_3",
+                    setup_success,
+                    par(vec![sys_t("test_success_1", test_success)]),
+                ),
+            ],
+        )
+        .with_alert("channel_1"),
     ]
 }
 

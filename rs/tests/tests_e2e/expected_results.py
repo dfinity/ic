@@ -138,6 +138,35 @@ suite_contract_to_fail_in_pot_setup = {
     ],
 }
 
+suite_contract_to_fail_with_alerts = {
+    "name": "suite_to_fail_with_alerts",
+    "is_skipped": False,
+    "alert_channels": [],
+    "children": [
+        {
+            "name": "pot_fail_1",
+            "is_skipped": False,
+            "alert_channels": ["channel_1"],
+            "children": [
+                {"name": "test_fail_1", "is_skipped": False, "alert_channels": [], "children": []},
+                {"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []},
+            ],
+        },
+        {
+            "name": "pot_fail_2",
+            "is_skipped": False,
+            "alert_channels": ["channel_1", "channel_2"],
+            "children": [{"name": "test_fail_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+        {
+            "name": "pot_success_3",
+            "is_skipped": False,
+            "alert_channels": ["channel_1"],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+    ],
+}
+
 
 suite_result_to_succeed = {
     "name": "suite_to_succeed",
@@ -312,6 +341,76 @@ suite_result_to_timeout = {
     "alert_channels": [],
 }
 
+suite_result_to_fail_with_alerts = {
+    "name": "suite_to_fail_with_alerts",
+    "started_at": mock.ANY,
+    "duration": mock.ANY,
+    "result": {"Failed": ""},
+    "children": [
+        {
+            "name": "pot_fail_1",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": {"Failed": ""},
+            "children": [
+                {
+                    "name": "test_fail_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": {"Failed": "test from pot_fail_1."},
+                    "children": [],
+                    "alert_channels": [],
+                },
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                },
+            ],
+            "alert_channels": ["channel_1"],
+        },
+        {
+            "name": "pot_fail_2",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": {"Failed": ""},
+            "children": [
+                {
+                    "name": "test_fail_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": {"Failed": "test from pot_fail_2."},
+                    "children": [],
+                    "alert_channels": [],
+                }
+            ],
+            "alert_channels": ["channel_1", "channel_2"],
+        },
+        {
+            "name": "pot_success_3",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": "Passed",
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                }
+            ],
+            "alert_channels": ["channel_1"],
+        },
+    ],
+    "alert_channels": [],
+}
+
+
 suite_result_include_pattern_case_1 = {
     "name": "suite_to_succeed",
     "started_at": mock.ANY,
@@ -450,4 +549,20 @@ suite_result_to_fail_in_pot_setup = {
         },
     ],
     "alert_channels": [],
+}
+
+# Failure of pot=pot_fail_2 is sent to two channels.
+suite_to_fail_with_alerts_notifications = {
+    "1": {
+        "channel": "channel_1",
+        "message": mock.ANY,
+    },
+    "2": {
+        "channel": "channel_2",
+        "message": mock.ANY,
+    },
+    "0": {
+        "channel": "channel_1",
+        "message": mock.ANY,
+    },
 }

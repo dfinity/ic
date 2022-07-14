@@ -1,7 +1,7 @@
 use clap::Parser;
 use ic_fondue::pot::execution::TestResult;
 use ic_fondue::result::{propagate_children_results_to_parents, TestResultNode};
-use ic_fondue::slack::Alertable;
+use ic_fondue::slack::{Alertable, SlackAlert};
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
@@ -51,7 +51,7 @@ fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
 }
 
 fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow::Result<()> {
-    let working_dir: PathBuf = validated_args.working_dir;
+    let working_dir: PathBuf = validated_args.working_dir.clone();
     // Final result object to be populated/updated with individual test results and saved.
     let mut suite_result: TestResultNode = {
         let suite_contract_file = working_dir
@@ -114,6 +114,13 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
         .unwrap_or_else(|e| panic!("Could not serialize suite result to string. error={:?}", e));
     fs::write(suite_result_file, content)
         .unwrap_or_else(|e| panic!("Could not save test suite result to a file. error={:?}", e));
+    // Generate and save slack alerts for failed pots.
+    let alerts = generate_alerts(&suite_result, &validated_args);
+    let alerts_serialized = serde_json::to_string_pretty(&alerts)
+        .unwrap_or_else(|e| panic!("Could not serialize slack alerts to string: {:?}", e));
+    let slack_alert_file = working_dir.join(config::SLACK_FAILURE_ALERTS_FILE);
+    fs::write(&slack_alert_file, alerts_serialized)
+        .unwrap_or_else(|e| panic!("Could not save {:?} file: {:?}", &slack_alert_file, e));
     if suite_result.result != TestResult::Passed {
         anyhow::bail!(format!("Test suite {} failed", suite_result.name))
     } else {
@@ -945,4 +952,34 @@ impl TestCatalog for HashMap<String, Suite> {
             panic!("Redefinition of suite {:?}", suite.name)
         }
     }
+}
+
+fn generate_alerts(
+    suite_result: &TestResultNode,
+    validated_args: &ValidatedCliProcessTestsArgs,
+) -> HashMap<usize, SlackAlert> {
+    let mut alerts: HashMap<usize, SlackAlert> = HashMap::new();
+    let mut alert_id: usize = 0;
+    for failed_pot in suite_result
+        .children
+        .iter()
+        .filter(|p| matches!(p.result, TestResult::Failed(_)))
+    {
+        let message = format!(
+            r#"Pot `{pot_name}` *failed*. <{ci_job_url}|log>.
+Commit: <{ci_project_url}/-/commit/{ci_commit_sha}|{ci_commit_short_sha}>.
+IC_VERSION_ID: `{ic_version_id}`."#,
+            pot_name = failed_pot.name,
+            ci_job_url = validated_args.ci_job_url,
+            ci_project_url = validated_args.ci_project_url,
+            ci_commit_sha = validated_args.ci_commit_sha,
+            ci_commit_short_sha = validated_args.ci_commit_short_sha,
+            ic_version_id = validated_args.ic_version_id
+        );
+        failed_pot.alert_channels.iter().for_each(|channel| {
+            alerts.insert(alert_id, SlackAlert::new(channel.clone(), message.clone()));
+            alert_id += 1;
+        });
+    }
+    alerts
 }

@@ -162,4 +162,16 @@ pub mod slack {
             Self(name.to_string())
         }
     }
+
+    #[derive(Serialize)]
+    pub struct SlackAlert {
+        channel: SlackChannel,
+        message: String,
+    }
+
+    impl SlackAlert {
+        pub fn new(channel: SlackChannel, message: String) -> Self {
+            Self { channel, message }
+        }
+    }
 }
