@@ -19,8 +19,6 @@ use std::fmt;
 
 pub type Subaccount = [u8; 32];
 
-pub type ApprovalId = u64;
-
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]

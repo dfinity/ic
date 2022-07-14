@@ -6,7 +6,7 @@ use ic_ledger_core::block::BlockHeight;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
-use crate::{Account, ApprovalId, Subaccount};
+use crate::{Account, Subaccount};
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum TransferError {
@@ -65,60 +65,6 @@ impl TransferArg {
             subaccount: self.to_subaccount,
         }
     }
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub struct ApproveTransferArg {
-    pub from_subaccount: Option<Subaccount>,
-    pub to_principal: PrincipalId,
-    #[serde(default)]
-    pub fee: Option<u64>,
-    #[serde(default)]
-    pub created_at_time: Option<u64>,
-    #[serde(default)]
-    pub expires_at_time: Option<u64>,
-    pub amount: u64,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub enum ApproveTransferError {
-    BadFee { expected_fee: u64 },
-    InsufficientFunds { balance: u64 },
-    TooOld { allowed_window_nanos: u64 },
-    CreatedInFuture,
-    Throttled,
-    Duplicate { duplicate_of: ApprovalId },
-    GenericError { error_code: u64, message: String },
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub struct CommitTransferArg {
-    pub approval: ApprovalId,
-    pub to_principal: PrincipalId,
-    #[serde(default)]
-    pub to_subaccount: Option<Subaccount>,
-    pub amount: u64,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub enum CommitTransferError {
-    InsufficientFunds { balance: u64 },
-    ApprovalNotFound,
-    NotAuthorized,
-    GenericError { error_code: u64, message: String },
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub enum RevokeApprovalError {
-    ApprovalNotFound,
-    NotAuthorized,
-    GenericError { error_code: u64, message: String },
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub struct ApprovalDetails {
-    pub amount: u64,
-    pub expires_at_time: u64,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]

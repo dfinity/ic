@@ -1,12 +1,8 @@
 use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Principal;
-use ic_icrc1::endpoints::{
-    ApprovalDetails, ApproveTransferArg, ApproveTransferError, CommitTransferArg,
-    CommitTransferError, RevokeApprovalError, TransferArg, TransferError, Value,
-};
+use ic_icrc1::endpoints::{TransferArg, TransferError, Value};
 pub use ic_icrc1::Account;
-use ic_icrc1::ApprovalId;
 use ic_ledger_core::block::BlockHeight;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
@@ -35,39 +31,9 @@ pub struct ICRC1Client<R: Runtime> {
 // the in and out structures as we can use the ones defined in ic_icrc1::endpoints.
 
 impl<R: Runtime> ICRC1Client<R> {
-    pub async fn allowance(
-        &self,
-        approval_id: ApprovalId,
-    ) -> Result<Option<ApprovalDetails>, (i32, String)> {
-        self.runtime
-            .call(self.ledger_canister_id, "icrc1_allowance", (approval_id,))
-            .await
-            .map(untuple)
-    }
-
-    pub async fn approve(
-        &self,
-        args: ApproveTransferArg,
-    ) -> Result<Result<ApprovalId, ApproveTransferError>, (i32, String)> {
-        self.runtime
-            .call(self.ledger_canister_id, "icrc1_approveTransfer", (args,))
-            .await
-            .map(untuple)
-    }
-
     pub async fn balance_of(&self, account: Account) -> Result<u64, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_balanceOf", (account,))
-            .await
-            .map(untuple)
-    }
-
-    pub async fn commit_transfer(
-        &self,
-        args: CommitTransferArg,
-    ) -> Result<Result<BlockHeight, CommitTransferError>, (i32, String)> {
-        self.runtime
-            .call(self.ledger_canister_id, "icrc1_commitTransfer", (args,))
             .await
             .map(untuple)
     }
@@ -89,20 +55,6 @@ impl<R: Runtime> ICRC1Client<R> {
     pub async fn metadata(&self) -> Result<Vec<(String, Value)>, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_metadata", ())
-            .await
-            .map(untuple)
-    }
-
-    pub async fn revoke_approval(
-        &self,
-        approval_id: ApprovalId,
-    ) -> Result<Result<BlockHeight, RevokeApprovalError>, (i32, String)> {
-        self.runtime
-            .call(
-                self.ledger_canister_id,
-                "icrc1_revokeApproval",
-                (approval_id,),
-            )
             .await
             .map(untuple)
     }
