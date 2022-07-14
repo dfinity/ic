@@ -173,7 +173,7 @@ impl TestClient {
     }
 
     // Waits for the flows/connections to be up
-    async fn wait_for_flow_up(&self) -> Result<(), TestClientErrorCode> {
+    fn wait_for_flow_up(&self) -> Result<(), TestClientErrorCode> {
         let expected_flows = 2;
         for _ in 0..10 {
             let num_flows = self.active_flows.lock().unwrap().len();
@@ -185,7 +185,7 @@ impl TestClient {
                 self.log,
                 "Flows up: {}/{}, to wait ...", num_flows, expected_flows
             );
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            std::thread::sleep(Duration::from_secs(3));
         }
 
         warn!(self.log, "All flows not up, exiting");
@@ -497,11 +497,11 @@ fn parse_topology(
     }
 }
 
-async fn do_work_source(
+fn do_work_source(
     test_client: &TestClient,
     message_count: usize,
 ) -> Result<(), TestClientErrorCode> {
-    test_client.wait_for_flow_up().await?;
+    test_client.wait_for_flow_up()?;
 
     for i in 1..=message_count {
         test_client
@@ -512,7 +512,7 @@ async fn do_work_source(
     Ok(())
 }
 
-async fn task_main(
+fn task_main(
     node_id_val: u8,
     message_count: usize,
     active_flag: Arc<AtomicBool>,
@@ -521,6 +521,7 @@ async fn task_main(
     let subnet_id = SubnetId::from(PrincipalId::try_from(v.as_slice()).unwrap());
     let node_id = to_node_id(node_id_val);
     let node_number = node_id_val as usize;
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
     let logger_config = LoggerConfig {
         target: LogTarget::File(PathBuf::from(format!(
@@ -545,9 +546,7 @@ async fn task_main(
 
     println!("creating crypto... [Node: {}]", node_id_val);
     let registry_version = REG_V1;
-    let crypto = match tokio::task::block_in_place(|| {
-        create_crypto(node_number, 3, node_id, registry_version)
-    }) {
+    let crypto = match create_crypto(node_number, 3, node_id, registry_version) {
         Ok(crypto) => crypto,
         Err(_) => {
             panic!("unable to create crypto");
@@ -562,7 +561,7 @@ async fn task_main(
         registry_version,
         MetricsRegistry::new(),
         crypto,
-        tokio::runtime::Handle::current(),
+        rt.handle().clone(),
         log.clone(),
     );
 
@@ -584,7 +583,7 @@ async fn task_main(
     println!("starting test... [Node: {}]", node_id_val);
     match role {
         Role::Source => {
-            let res = do_work_source(&test_client, message_count).await;
+            let res = do_work_source(&test_client, message_count);
             active_flag.store(false, Ordering::Relaxed);
             if let Err(e) = res {
                 info!(log, "Source thread failed, attempting to stop connections");
@@ -604,8 +603,7 @@ async fn task_main(
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), TestClientErrorCode> {
+fn main() {
     // Cmd line params.
     let matches = cmd_line_matches();
     let node_id_val = matches
@@ -618,7 +616,7 @@ async fn main() -> Result<(), TestClientErrorCode> {
         .unwrap()
         .parse::<usize>()
         .unwrap();
-    task_main(node_id_val, message_count, Arc::new(AtomicBool::new(true))).await
+    task_main(node_id_val, message_count, Arc::new(AtomicBool::new(true))).unwrap()
 }
 
 #[cfg(test)]
@@ -634,13 +632,12 @@ async fn test_transport_spawn_tasks() {
     // Spawn tokio tasks
     for node_id in 1..(TEST_NODE_COUNT + 1) {
         let flag = active_flag.clone();
-        let handle =
-            tokio::spawn(async move { task_main(node_id, TEST_MESSAGE_COUNT, flag).await });
+        let handle = std::thread::spawn(move || task_main(node_id, TEST_MESSAGE_COUNT, flag));
         handles.push(handle);
     }
 
-    let res = futures::future::join_all(handles).await;
-    let results = res.iter().map(|x| x.as_ref().unwrap());
-
-    results.for_each(|x| assert!(x.is_ok()));
+    for x in handles {
+        let res = x.join().unwrap();
+        assert!(res.is_ok());
+    }
 }

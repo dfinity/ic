@@ -89,7 +89,7 @@ pub(crate) struct TransportImpl {
     /// Ports used to accept connections for this transport-client
     pub accept_ports: RwLock<HashMap<FlowTag, ServerPortState>>,
     /// Mapping of peers to their corresponding state
-    pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
+    pub peer_map: tokio::sync::RwLock<HashMap<NodeId, PeerState>>,
     /// Event handler to report back to the transport client
     pub event_handler: Mutex<Option<TransportEventHandler>>,
 
@@ -147,10 +147,6 @@ pub(crate) struct PeerState {
 
 /// Per-flow state, specific to a transport-client and a peer.
 pub(crate) struct FlowState {
-    /// Peer id
-    pub peer_id: NodeId,
-    /// Flow tag
-    pub flow_tag: FlowTag,
     /// Flow tag as a metrics label
     pub flow_tag_label: String,
     /// Flow label, used for metrics
@@ -165,8 +161,6 @@ pub(crate) struct FlowState {
 
 impl FlowState {
     pub(crate) fn new(
-        peer_id: NodeId,
-        flow_tag: FlowTag,
         flow_tag_label: String,
         flow_label: String,
         connection_state: ConnectionState,
@@ -174,8 +168,6 @@ impl FlowState {
         control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
         let ret = Self {
-            peer_id,
-            flow_tag,
             flow_tag_label,
             flow_label,
             connection_state,
