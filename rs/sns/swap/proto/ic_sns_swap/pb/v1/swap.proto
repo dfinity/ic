@@ -179,17 +179,6 @@ message Swap {
 message GetCanisterStatusRequest {
 }
 
-message GetCanisterStatusResponse {
-  // Whatever ic0.canister_cycle_balance returns.
-  //
-  // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-cycles
-  //
-  // The number of cycles will remain after processing the current message -
-  // whatever refund we end up getting for cycles pre-charged to this message
-  // but didn't end up being used.
-  uint64 canister_cycle_balance = 1;
-}
-
 // TODO: introduce a limits on the number of buyers to include?
 message GetStateRequest {}
 message GetStateResponse {
@@ -205,7 +194,9 @@ message DerivedState {
 
 // See `set_open_time_window` for details.
 message SetOpenTimeWindowRequest {
-  // Duration must be between 1 and 90 days.
+  // Duration must be between 1 and 90 days. The TimeWindow's
+  // end time but be greater than or equal to the TimeWindow's
+  // start time.
   TimeWindow open_time_window = 1;
 }
 // Response if setting the open time window succeeded.

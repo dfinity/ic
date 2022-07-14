@@ -261,11 +261,12 @@ impl DirectSnsDeployerForTests {
         // Ledger must be controlled by only Root
         self.add_controller(self.sns_canisters.root, "sns_ledger");
 
-        // Swap must be controlled by the NNS root canister.
+        // Swap must be controlled by the NNS root canister and control itself.
         self.add_controller(NNS_ROOT_CANISTER_ID.get(), "sns_swap");
+        self.add_controller(self.sns_canisters.swap, "sns_swap");
 
         // Remove default controllers from SNS canisters
-        for sns_canister in ["sns_governance", "sns_root", "sns_ledger"] {
+        for sns_canister in ["sns_governance", "sns_root", "sns_ledger", "sns_swap"] {
             self.remove_controller(self.wallet_canister, sns_canister);
             self.remove_controller(self.dfx_identity, sns_canister);
         }

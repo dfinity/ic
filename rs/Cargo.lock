@@ -7643,7 +7643,6 @@ dependencies = [
  "build-info-build",
  "bytes",
  "candid",
- "chrono",
  "comparable",
  "criterion",
  "dfn_candid",
@@ -7666,8 +7665,10 @@ dependencies = [
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-swap-protobuf-generator",
+ "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
  "lazy_static",
+ "ledger-canister",
  "maplit",
  "on_wire",
  "pretty_assertions 1.2.1",
@@ -7678,6 +7679,7 @@ dependencies = [
  "serde",
  "strum 0.18.0",
  "strum_macros 0.18.0",
+ "tempfile",
  "tokio",
 ]
 

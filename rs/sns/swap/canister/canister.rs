@@ -32,15 +32,16 @@ use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, Set
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_swap::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
-    FinalizeSwapResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
-    GetStateResponse, Init, Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-    RefreshSnsTokensRequest, RefreshSnsTokensResponse, SetOpenTimeWindowRequest,
-    SetOpenTimeWindowResponse, Swap,
+    FinalizeSwapResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
+    Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
+    RefreshSnsTokensResponse, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
 };
 use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
 
 use std::str::FromStr;
 
+use ic_ic00_types::CanisterStatusResultV2;
+use ic_sns_swap::GetCanisterStatusResponse;
 use prost::Message;
 use std::time::{Duration, SystemTime};
 
@@ -232,40 +233,52 @@ async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse
     ErrorRefundIcpResponse {}
 }
 
-trait Ic0 {
-    fn canister_cycle_balance(&self) -> u64;
+/// A trait that wraps calls to the IC's Management Canister. More details on the management
+/// canister can be found in the InternetComputer spec:
+///
+/// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-management-canister
+#[async_trait]
+trait ManagementCanister {
+    async fn canister_status(&self, canister_id: &CanisterId) -> CanisterStatusResultV2;
 }
 
-struct ProdIc0 {}
+struct ProdManagementCanister {}
 
-impl ProdIc0 {
+impl ProdManagementCanister {
     fn new() -> Self {
         Self {}
     }
 }
 
-impl Ic0 for ProdIc0 {
-    fn canister_cycle_balance(&self) -> u64 {
-        dfn_core::api::canister_cycle_balance()
+#[async_trait]
+impl ManagementCanister for ProdManagementCanister {
+    async fn canister_status(&self, canister_id: &CanisterId) -> CanisterStatusResultV2 {
+        let result = ic_nervous_system_common::get_canister_status(canister_id.get()).await;
+        result.unwrap_or_else(|err| {
+            panic!(
+                "Couldn't get canister_status of {}. Err: {:#?}",
+                canister_id, err
+            )
+        })
     }
 }
 
-#[export_name = "canister_query get_canister_status"]
+#[export_name = "canister_update get_canister_status"]
 fn get_canister_status() {
-    over(candid_one, get_canister_status_)
+    over_async(candid_one, get_canister_status_)
 }
 
 #[candid_method(update, rename = "get_canister_status")]
-fn get_canister_status_(request: GetCanisterStatusRequest) -> GetCanisterStatusResponse {
-    do_get_canister_status(request, &ProdIc0::new())
+async fn get_canister_status_(_request: GetCanisterStatusRequest) -> GetCanisterStatusResponse {
+    do_get_canister_status(&id(), &ProdManagementCanister::new()).await
 }
 
-fn do_get_canister_status(
-    _request: GetCanisterStatusRequest,
-    ic0: &impl Ic0,
+async fn do_get_canister_status(
+    canister_id: &CanisterId,
+    management_canister: &impl ManagementCanister,
 ) -> GetCanisterStatusResponse {
     GetCanisterStatusResponse {
-        canister_cycle_balance: ic0.canister_cycle_balance(),
+        status: management_canister.canister_status(canister_id).await,
     }
 }
 
@@ -419,6 +432,7 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_ic00_types::CanisterStatusType;
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
@@ -439,21 +453,38 @@ mod tests {
         }
     }
 
-    struct StubIc0 {}
+    fn basic_canister_status() -> CanisterStatusResultV2 {
+        CanisterStatusResultV2::new(
+            CanisterStatusType::Running,
+            None,
+            Default::default(),
+            vec![],
+            Default::default(),
+            0,
+            0,
+            None,
+            0,
+            0,
+        )
+    }
 
-    impl Ic0 for StubIc0 {
-        fn canister_cycle_balance(&self) -> u64 {
-            42
+    struct StubManagementCanister {}
+
+    #[async_trait]
+    impl ManagementCanister for StubManagementCanister {
+        async fn canister_status(&self, _canister_id: &CanisterId) -> CanisterStatusResultV2 {
+            basic_canister_status()
         }
     }
 
-    #[test]
-    fn test_get_canister_status() {
-        let response = do_get_canister_status(GetCanisterStatusRequest {}, &StubIc0 {});
+    #[tokio::test]
+    async fn test_get_canister_status() {
+        let response =
+            do_get_canister_status(&CanisterId::from_u64(1), &StubManagementCanister {}).await;
         assert_eq!(
             response,
             GetCanisterStatusResponse {
-                canister_cycle_balance: 42
+                status: basic_canister_status(),
             }
         );
     }

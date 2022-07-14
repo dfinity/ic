@@ -5,6 +5,25 @@ type BuyerState = record {
   sns_disbursing : bool;
 };
 type CanisterCallError = record { code : opt int32; description : text };
+type CanisterStatusResultV2 = record {
+  controller : principal;
+  status : CanisterStatusType;
+  freezing_threshold : nat;
+  balance : vec record { vec nat8; nat };
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettingsArgs;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+};
+type CanisterStatusType = variant { stopped; stopping; running };
+type DefiniteCanisterSettingsArgs = record {
+  controller : principal;
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
 type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
@@ -19,7 +38,7 @@ type FinalizeSwapResponse = record {
   sweep_sns : opt SweepResult;
   create_neuron : opt SweepResult;
 };
-type GetCanisterStatusResponse = record { canister_cycle_balance : nat64 };
+type GetCanisterStatusResponse = record { status : CanisterStatusResultV2 };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;

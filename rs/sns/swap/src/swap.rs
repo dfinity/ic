@@ -4,9 +4,9 @@ use crate::pb::v1::{
     SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
-use chrono::Duration;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
+use std::time::Duration;
 
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
@@ -31,7 +31,8 @@ pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 lazy_static! {
     // The duration of a swap can be as little as 1 day, and at most 90 days.
-    static ref VALID_DURATION_RANGE: RangeInclusive<Duration> = Duration::days(1)..=Duration::days(90);
+    static ref VALID_DURATION_RANGE: RangeInclusive<Duration> = Duration::from_secs(SECONDS_PER_DAY)..=Duration::from_secs(90 * SECONDS_PER_DAY);
+    // static ref VALID_DURATION_RANGE: RangeInclusive<Duration> = Duration::days(1)..=Duration::days(90);
 }
 
 /// Result of a token transfer (commit or abort) on a ledger (ICP or SNS) for a single buyer.
@@ -1204,20 +1205,10 @@ impl TimeWindow {
         (self.start_timestamp_seconds, self.end_timestamp_seconds)
     }
 
-    // Precondition: The (signed) difference between end and start must fit within i64.
+    // Precondition: The difference between end and start must fit within i64.
     pub fn duration(&self) -> Duration {
         let (start, end) = self.to_boundaries_timestamp_seconds();
-
-        if end >= start {
-            Duration::seconds((end - start).try_into().unwrap())
-        } else {
-            let result = -Duration::seconds((start - end).try_into().unwrap());
-            println!(
-                "{}WARNING: TimeWindow with negative duration ({}): {:#?}",
-                LOG_PREFIX, result, self
-            );
-            result
-        }
+        Duration::from_secs(end - start)
     }
 }
 
@@ -1233,15 +1224,21 @@ impl SetOpenTimeWindowRequest {
         };
 
         // Require that start time not be in the past.
-        let (start, _end) = window.to_boundaries_timestamp_seconds();
+        let (start, end) = window.to_boundaries_timestamp_seconds();
         if start < now_timestamp_seconds {
             println!("{}ERROR: Invalid SetOpenTimeWindowRequest: start time is in the past ({} vs. now={}): {:#?}", LOG_PREFIX, start, now_timestamp_seconds, self);
             return false;
         }
 
-        // Require that duratin be 1-90 days.
+        // Requires that start be less than or equal to end
+        if end < start {
+            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: start time is later than end time (start={} vs. end={}): {:#?}", LOG_PREFIX, start, end, self);
+            return false;
+        }
+
+        // Require that duration be 1-90 days.
         if !VALID_DURATION_RANGE.contains(&window.duration()) {
-            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: duration must be at least 1 day and at most 90 days but was {}: {:#?}", LOG_PREFIX, window.duration(), self);
+            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: duration must be at least 1 day and at most 90 days but was {:?}: {:#?}", LOG_PREFIX, window.duration(), self);
             return false;
         }
 
@@ -1267,13 +1264,15 @@ pub fn principal_to_subaccount(principal_id: &PrincipalId) -> Subaccount {
 mod tests {
     use super::*;
 
+    pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+
     #[test]
     fn test_time_window_round_trip() {
         let s = 100;
         let e = 200;
 
         let w = TimeWindow::from_boundaries_timestamp_seconds(s, e);
-        assert_eq!(w.duration(), Duration::seconds((e - s).try_into().unwrap()));
+        assert_eq!(w.duration(), Duration::from_secs(e - s));
 
         let b = w.to_boundaries_timestamp_seconds();
         assert_eq!(b, (s, e));
@@ -1342,5 +1341,25 @@ mod tests {
         };
 
         assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_not_is_valid_negative_duration() {
+        let now_timestamp_seconds = 50;
+        let mut request = SetOpenTimeWindowRequest {
+            open_time_window: Some(TimeWindow {
+                start_timestamp_seconds: 100,
+                end_timestamp_seconds: 75,
+            }),
+        };
+
+        assert!(!request.is_valid(now_timestamp_seconds), "{request:#?}",);
+
+        request.open_time_window = Some(TimeWindow {
+            start_timestamp_seconds: 75,
+            end_timestamp_seconds: 75 + ONE_DAY_SECONDS,
+        });
+
+        assert!(request.is_valid(now_timestamp_seconds), "{request:#?}",);
     }
 }
