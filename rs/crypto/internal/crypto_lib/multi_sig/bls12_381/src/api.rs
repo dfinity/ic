@@ -23,14 +23,8 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, Pub
 ///
 /// Note: This hashes the message to be signed.  If we pre-hash, the hashing
 /// can be skipped. https://docs.rs/threshold_crypto/0.3.2/threshold_crypto/struct.SecretKey.html#method.sign
-///
-/// # Errors
-/// This function is not expected to return an error.
-pub fn sign(
-    message: &[u8],
-    secret_key: SecretKeyBytes,
-) -> Result<IndividualSignatureBytes, CryptoError> {
-    Ok(crypto::sign_message(message, secret_key.into()).into())
+pub fn sign(message: &[u8], secret_key: SecretKeyBytes) -> IndividualSignatureBytes {
+    crypto::sign_message(message, secret_key.into()).into()
 }
 
 /// Creates a proof of possession (PoP) of `secret_key_bytes`.
