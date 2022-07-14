@@ -161,19 +161,6 @@ pub struct Swap {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetCanisterStatusRequest {
 }
-#[derive(candid::CandidType, candid::Deserialize)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetCanisterStatusResponse {
-    /// Whatever ic0.canister_cycle_balance returns.
-    ///
-    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-cycles>
-    ///
-    /// The number of cycles will remain after processing the current message -
-    /// whatever refund we end up getting for cycles pre-charged to this message
-    /// but didn't end up being used.
-    #[prost(uint64, tag="1")]
-    pub canister_cycle_balance: u64,
-}
 /// TODO: introduce a limits on the number of buyers to include?
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -200,7 +187,9 @@ pub struct DerivedState {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetOpenTimeWindowRequest {
-    /// Duration must be between 1 and 90 days.
+    /// Duration must be between 1 and 90 days. The TimeWindow's
+    /// end time but be greater than or equal to the TimeWindow's
+    /// start time.
     #[prost(message, optional, tag="1")]
     pub open_time_window: ::core::option::Option<TimeWindow>,
 }
