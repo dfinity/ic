@@ -14,6 +14,8 @@ enum SnsCanisterType {
   SNS_CANISTER_TYPE_GOVERNANCE = 2;
   // The type for the ledger canister
   SNS_CANISTER_TYPE_LEDGER = 3;
+  // The type for the swap canister
+  SNS_CANISTER_TYPE_SWAP = 4;
 }
 
 // The SNS-WASM canister state that is persisted to stable memory on pre-upgrade and read on
@@ -139,6 +141,9 @@ message SnsVersion {
 
   // The hash of the Ledger canister WASM
   bytes ledger_wasm_hash = 3;
+
+  // The hash of the Swap canister WASM
+  bytes swap_wasm_hash = 4;
 }
 
 // The request type accepted by the get_next_sns_version canister method

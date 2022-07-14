@@ -1,9 +1,11 @@
 use candid::{Decode, Encode};
 use canister_test::{Canister, Project, Runtime, Wasm};
+use dfn_candid::candid_one;
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_interfaces::registry::RegistryClient;
+use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, set_up_sns_wasm_canister, set_up_universal_canister,
     try_call_with_cycles_via_universal_canister,
@@ -16,6 +18,8 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{
     CanisterStatusType::Running, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
+use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
+use ic_sns_swap::GetCanisterStatusResponse;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -125,6 +129,25 @@ fn test_canisters_are_created_and_installed() {
             .await
             .unwrap();
 
+        let swap_wasm =
+            Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+        let swap_hash = Sha256::hash(&swap_wasm.clone().bytes()).to_vec();
+        canister
+            .update_(
+                "add_wasm",
+                bytes,
+                Encode!(&AddWasmRequest {
+                    wasm: Some(SnsWasm {
+                        wasm: swap_wasm.clone().bytes(),
+                        canister_type: SnsCanisterType::Swap.into()
+                    }),
+                    hash: swap_hash.clone()
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
         let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
 
         let result = try_call_with_cycles_via_universal_canister(
@@ -162,16 +185,19 @@ fn test_canisters_are_created_and_installed() {
             }
         );
 
-        let root_canister_principal = response.canisters.unwrap().root.unwrap();
+        let canisters_returned = response.canisters.unwrap();
+        let root_canister_principal = canisters_returned.root.unwrap();
+        let swap_canister_principal = canisters_returned.swap.unwrap();
+
         let mut root_canister =
             Canister::new(&runtime, CanisterId::new(root_canister_principal).unwrap());
         root_canister.set_wasm(root_wasm.bytes());
 
-        let result = root_canister
+        let response: GetSnsCanistersSummaryResponse = root_canister
             .update_(
                 "get_sns_canisters_summary",
-                bytes,
-                Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
+                candid_one,
+                GetSnsCanistersSummaryRequest {},
             )
             .await
             .unwrap();
@@ -180,7 +206,6 @@ fn test_canisters_are_created_and_installed() {
         // through CanisterApiImpl::install_wasm, since governance has to know root canister_id
         // in order to respond to root's request for its own status from governance
         // more detailed coverage of the initialization parameters is done through unit tests
-        let response = Decode!(&result, GetSnsCanistersSummaryResponse).unwrap();
 
         // Assert that the canisters are installed in the same configuration that our response
         // told us above and controllers and installed wasms are correct
@@ -226,8 +251,24 @@ fn test_canisters_are_created_and_installed() {
             ledger_hash
         );
 
-        // TODO - how do we check canister cycles balance in tests...???
+        let mut swap_canister =
+            Canister::new(&runtime, CanisterId::new(swap_canister_principal).unwrap());
+        swap_canister.set_wasm(swap_wasm.bytes());
 
+        // Check Swap status
+        let response: GetCanisterStatusResponse = swap_canister
+            .update_(
+                "get_canister_status",
+                candid_one,
+                GetCanisterStatusRequest {},
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status.controllers(),
+            vec![ROOT_CANISTER_ID.get(), swap_canister_id.get()]
+        );
         Ok(())
     });
 }

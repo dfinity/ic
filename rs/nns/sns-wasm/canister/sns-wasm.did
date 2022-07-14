@@ -52,6 +52,7 @@ type SnsInitPayload = record {
 };
 type SnsVersion = record {
   root_wasm_hash : vec nat8;
+  swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
   governance_wasm_hash : vec nat8;
 };

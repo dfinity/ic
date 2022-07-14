@@ -143,6 +143,10 @@ pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id
     let ledger_wasm = test_wasm(SnsCanisterType::Ledger);
     let ledger_hash = ledger_wasm.sha256_hash();
     add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
+
+    let swap_wasm = test_wasm(SnsCanisterType::Swap);
+    let swap_hash = swap_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, swap_wasm, &swap_hash);
 }
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests
@@ -158,6 +162,10 @@ pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id:
     let ledger_wasm = build_ledger_sns_wasm();
     let ledger_hash = ledger_wasm.sha256_hash();
     add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
+
+    let swap_wasm = build_swap_sns_wasm();
+    let swap_hash = swap_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, swap_wasm, &swap_hash);
 }
 
 /// Builds the SnsWasm for the root canister.
@@ -193,5 +201,15 @@ pub fn build_ledger_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: ledger_wasm.bytes(),
         canister_type: SnsCanisterType::Ledger.into(),
+    }
+}
+
+/// Builds the SnsWasm for the Swap Canister
+pub fn build_swap_sns_wasm() -> SnsWasm {
+    let swap_wasm =
+        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+    SnsWasm {
+        wasm: swap_wasm.bytes(),
+        canister_type: SnsCanisterType::Swap.into(),
     }
 }
