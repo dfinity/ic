@@ -42,12 +42,11 @@ fn test_happy_path(
         .iter()
         .map(|(secret_key, public_key)| multi_sig::create_pop(*public_key, *secret_key))
         .collect();
-    let signatures: CryptoResult<Vec<IndividualSignatureBytes>> = keys
+    let signatures: Vec<IndividualSignatureBytes> = keys
         .iter()
         .map(|(secret_key, _)| multi_sig::sign(message, *secret_key))
         .collect();
     let pops = pops.expect("PoP generation failed");
-    let signatures = signatures.expect("Signature generation failed");
     let signature = multi_sig::combine(&signatures);
     let signature = signature.expect("Signature combination failed");
     let public_keys: Vec<PublicKeyBytes> = keys
@@ -99,7 +98,7 @@ proptest! {
       evil_signature in arbitrary::individual_signature_bytes()
     ) {
         let (secret_key, public_key) = keys;
-        let signature = multi_sig::sign(&message, secret_key).expect("Failed to sign");
+        let signature = multi_sig::sign(&message, secret_key);
         prop_assume!(evil_signature != signature);
         assert!(multi_sig::verify_individual(&message, evil_signature, public_key).is_err())
     }
