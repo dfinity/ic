@@ -25,6 +25,7 @@ use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT};
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
     SubnetSnapshot,
@@ -223,10 +224,20 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            assert_agent_observes_canister_module(agent, &nns_canister).await;
+            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+                assert_agent_observes_canister_module(agent, &nns_canister).await;
+                Ok(())
+            })
+            .await
+            .unwrap();
         }
         for agent in app_agents.iter() {
-            assert_agent_observes_canister_module(agent, &app_canister).await;
+            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+                assert_agent_observes_canister_module(agent, &app_canister).await;
+                Ok(())
+            })
+            .await
+            .unwrap();
         }
     });
     info!(&log, "All agents observe the installed canister module.");
