@@ -285,10 +285,6 @@ EOF
     done
 }
 
-function restart_systemd_networkd() {
-    timeout 3 systemctl restart systemd-networkd || true
-}
-
 function main() {
     # Establish run order
     validate_arguments
@@ -296,7 +292,6 @@ function main() {
     detect_network_interfaces
     generate_ipv6_address
     generate_network_config
-    restart_systemd_networkd
 }
 
 main
