@@ -918,6 +918,8 @@ impl Validator {
         }
 
         // If the replica is upgrading, block payload should be empty.
+        // If that is the case, skip_empty_payload_validation becomes true.
+        let mut skip_empty_payload_validation = false;
         match pool_reader
             .registry_version(proposal.height())
             .and_then(|registry_version| {
@@ -934,6 +936,7 @@ impl Validator {
                     if !payload.is_summary() && !payload.is_empty() {
                         Err(PermanentError::NonEmptyPayloadPastUpgradePoint)?
                     }
+                    skip_empty_payload_validation = true;
                 }
             }
             None => Err(TransientError::FailedToGetRegistryVersion)?,
@@ -963,6 +966,11 @@ impl Validator {
             ))?
         }
 
+        if skip_empty_payload_validation {
+            return Ok(());
+        }
+
+        // Below are all the payload validations
         let payloads = pool_reader.get_payloads_from_height(
             proposal.context.certified_height.increment(),
             parent.clone(),
