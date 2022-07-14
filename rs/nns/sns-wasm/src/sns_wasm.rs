@@ -12,6 +12,7 @@ use candid::Encode;
 use dfn_core::println;
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
+use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
@@ -49,6 +50,7 @@ struct SnsWasms {
     root: Vec<u8>,
     governance: Vec<u8>,
     ledger: Vec<u8>,
+    swap: Vec<u8>,
 }
 
 /// Helper function to create a DeployError::Validation(ValidationDeployError {})
@@ -442,6 +444,20 @@ where
                         e
                     )
                 }),
+
+            // Set NNS-Root and Swap as controller of Swap
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    vec![this_canister_id, canisters.swap.unwrap(), ROOT_CANISTER_ID.get()],
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Unable to set NNS-Root and Swap canister (itself) as Swap canister controller: {}",
+                        e
+                    )
+                }),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -482,6 +498,14 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
+            // Removing self, leaving NNS-Root and Swap
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    vec![canisters.swap.unwrap(), ROOT_CANISTER_ID.get()],
+                )
+                .await
+                .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -511,6 +535,11 @@ where
                     CanisterId::new(canisters.ledger.unwrap()).unwrap(),
                     latest_wasms.ledger,
                     Encode!(&init_payloads.ledger).unwrap(),
+                ),
+                canister_api.install_wasm(
+                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    latest_wasms.swap,
+                    Encode!(&init_payloads.swap).unwrap(),
                 ),
             ])
             .await,
@@ -705,10 +734,19 @@ where
             .ok_or_else(|| "Ledger wasm for this version not found in storage.".to_string())?
             .wasm;
 
+        let swap = self
+            .read_wasm(
+                &vec_to_hash(version.swap_wasm_hash.clone())
+                    .map_err(|_| "No swap wasm set for this version.".to_string())?,
+            )
+            .ok_or_else(|| "Swap wasm for this version not found in storage.".to_string())?
+            .wasm;
+
         Ok(SnsWasms {
             root,
             governance,
             ledger,
+            swap,
         })
     }
 
@@ -767,6 +805,7 @@ impl UpgradePath {
                 new_latest_version.governance_wasm_hash = wasm_hash.to_vec()
             }
             SnsCanisterType::Ledger => new_latest_version.ledger_wasm_hash = wasm_hash.to_vec(),
+            SnsCanisterType::Swap => new_latest_version.swap_wasm_hash = wasm_hash.to_vec(),
         }
 
         self.upgrade_path
@@ -784,6 +823,7 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
     use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+    use ic_nns_constants::ROOT_CANISTER_ID;
     use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
     use pretty_assertions::{assert_eq, assert_ne};
@@ -985,6 +1025,15 @@ mod test {
             wasm: Some(ledger),
             hash: ledger_hash.to_vec(),
         });
+        let swap = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 3],
+            canister_type: i32::from(SnsCanisterType::Swap),
+        };
+        let swap_hash = swap.sha256_hash();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(swap),
+            hash: swap_hash.to_vec(),
+        });
     }
 
     #[test]
@@ -1132,6 +1181,14 @@ mod test {
         wasm.canister_type = i32::from(SnsCanisterType::Ledger);
 
         canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Add a Swap WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Swap);
+
+        canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
             hash: valid_hash.to_vec(),
         });
@@ -1152,6 +1209,14 @@ mod test {
             governance_wasm_hash: valid_hash.to_vec(),
             root_wasm_hash: valid_hash.to_vec(),
             ledger_wasm_hash: valid_hash.to_vec(),
+            ..Default::default()
+        };
+
+        let expected_next_sns_version4 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            root_wasm_hash: valid_hash.to_vec(),
+            ledger_wasm_hash: valid_hash.to_vec(),
+            swap_wasm_hash: valid_hash.to_vec(),
         };
 
         assert_eq!(
@@ -1166,7 +1231,12 @@ mod test {
 
         assert_eq!(
             canister.get_next_sns_version(expected_next_sns_version2.into()),
-            expected_next_sns_version3.into()
+            expected_next_sns_version3.clone().into()
+        );
+
+        assert_eq!(
+            canister.get_next_sns_version(expected_next_sns_version3.into()),
+            expected_next_sns_version4.into()
         );
     }
 
@@ -1405,6 +1475,10 @@ mod test {
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()],
+                ),
             ],
             DeployNewSnsResponse {
                 subnet_id: None,
@@ -1423,6 +1497,7 @@ mod test {
     async fn fail_remove_self_as_controllers() {
         let canister_api = new_canister_api();
         let mut errors = vec![
+            None,
             None,
             None,
             None,
@@ -1464,9 +1539,14 @@ mod test {
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()],
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
+                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()]),
             ],
             DeployNewSnsResponse {
                 subnet_id: Some(subnet_test_id(1).get()),
@@ -1719,9 +1799,14 @@ mod test {
                 (governance_id, vec![this_id.get(), root_id.get()]),
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()]
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
+                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()])
             ],
             set_controllers_calls
         );

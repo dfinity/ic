@@ -23,6 +23,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.5.2"
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = {path = "../../types/ic00_types"}
+ic-nns-constants = { path = "../constants" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types"}
@@ -47,6 +48,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 pretty_assertions = "1.2.1"

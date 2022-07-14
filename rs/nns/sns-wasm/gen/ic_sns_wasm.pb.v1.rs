@@ -178,6 +178,9 @@ pub struct SnsVersion {
     /// The hash of the Ledger canister WASM
     #[prost(bytes="vec", tag="3")]
     pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The hash of the Swap canister WASM
+    #[prost(bytes="vec", tag="4")]
+    pub swap_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// The request type accepted by the get_next_sns_version canister method
 #[derive(candid::CandidType, candid::Deserialize)]
@@ -205,4 +208,6 @@ pub enum SnsCanisterType {
     Governance = 2,
     /// The type for the ledger canister
     Ledger = 3,
+    /// The type for the swap canister
+    Swap = 4,
 }
