@@ -28,6 +28,11 @@ impl SelfValidatingPayload {
         }
         res
     }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
