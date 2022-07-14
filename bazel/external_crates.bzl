@@ -93,12 +93,13 @@ def external_crates_repository(name, annotations):
                 version = "^1.2.1",
             ),
             "bls12_381": crate.spec(
-                version = "^0.5.0",
+                version = "^0.7.0",
                 features = [
                     "alloc",
                     "experimental",
                     "groups",
                     "pairings",
+                    "zeroize",
                 ],
                 default_features = False,
             ),
@@ -217,7 +218,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.10.0",
             ),
             "ff": crate.spec(
-                version = "^0.10.0",
+                version = "^0.12.0",
                 features = [
                     "std",
                 ],
@@ -483,7 +484,7 @@ def external_crates_repository(name, annotations):
                 default_features = False,
             ),
             "pairing": crate.spec(
-                version = "^0.20",
+                version = "^0.22",
             ),
             "parity-wasm": crate.spec(
                 version = "^0.42.2",

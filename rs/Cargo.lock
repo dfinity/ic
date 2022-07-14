@@ -912,16 +912,17 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "bls12_381"
-version = "0.5.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54757888b09a69be70b5ec303e382a74227392086ba808cb01eeca29233a2397"
+checksum = "62250ece575fa9b22068b3a8d59586f01d426dd7785522efd97632959e71c986"
 dependencies = [
  "digest 0.9.0",
- "ff 0.10.1",
- "group 0.10.0",
+ "ff",
+ "group",
  "pairing",
  "rand_core 0.6.2",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -2639,9 +2640,9 @@ dependencies = [
  "crypto-bigint 0.4.7",
  "der 0.6.0",
  "digest 0.10.3",
- "ff 0.12.0",
+ "ff",
  "generic-array 0.14.5",
- "group 0.12.0",
+ "group",
  "pem-rfc7468 0.6.0",
  "pkcs8 0.9.0",
  "rand_core 0.6.2",
@@ -2837,16 +2838,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83072b3c84e55f9d0c0ff36a4575d0fd2e543ae4a56e04e7f5a9222188d574e3"
 dependencies = [
  "bitflags",
-]
-
-[[package]]
-name = "ff"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f40b2dcd8bc322217a5f6559ae5f9e9d1de202a2ecee2e9eafcbece7562a4f"
-dependencies = [
- "rand_core 0.6.2",
- "subtle",
 ]
 
 [[package]]
@@ -3331,23 +3322,12 @@ dependencies = [
 
 [[package]]
 name = "group"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c363a5301b8f153d80747126a04b3c82073b9fe3130571a9d170cacdeaf7912"
-dependencies = [
- "byteorder",
- "ff 0.10.1",
- "rand_core 0.6.2",
- "subtle",
-]
-
-[[package]]
-name = "group"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7391856def869c1c81063a03457c676fbcd419709c3dfb33d8d319de484b154d"
 dependencies = [
- "ff 0.12.0",
+ "byteorder",
+ "ff",
  "rand_core 0.6.2",
  "subtle",
 ]
@@ -4833,6 +4813,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.9.9",
+ "zeroize",
 ]
 
 [[package]]
@@ -10186,11 +10167,11 @@ dependencies = [
 
 [[package]]
 name = "pairing"
-version = "0.20.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7de9d09263c9966e8196fe0380c9dbbc7ea114b5cf371ba29004bc1f9c6db7f3"
+checksum = "135590d8bdba2b31346f9cd1fb2a912329f5135e832a4f422942eb6ead8b6b3b"
 dependencies = [
- "group 0.10.0",
+ "group",
 ]
 
 [[package]]
