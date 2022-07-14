@@ -34,7 +34,14 @@ pub struct AdapterServer(Router<Identity>);
 
 impl AdapterServer {
     // The 'enforce_http' flat is used to execute unit tests with http.
-    // It should be removed in the future. NET-1074
+    // If we didn't have to support socks proxy then for testing we could use
+    // dependency injection pattern and inject the HttpsConnector.
+    // (We can't do this now because 'HttpsConnector' is not a generic).
+    // If we have to support a socks proxy and still remove the enforce_https,
+    // there is pretty much no other way but still to do a dependency injection
+    // but in this case it would be some certificate store to be used by the http
+    // client. This complicates unnecessary the production code. For now we decide
+    // to keep the 'enforce_https' flag.
     pub fn new(config: Config, logger: ReplicaLogger, enforce_https: bool) -> Self {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
