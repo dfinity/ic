@@ -126,7 +126,7 @@ impl TransportImpl {
 
     /// Per-flow send task. Reads the requests from the send queue and writes to
     /// the socket.
-    fn flow_write_task(
+    fn spawn_write_task(
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
@@ -223,7 +223,7 @@ impl TransportImpl {
 
     /// Per-flow receive task. Reads the messages from the socket and passes to
     /// the client.
-    fn flow_read_task(
+    fn spawn_read_task(
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
@@ -369,18 +369,33 @@ impl TransportImpl {
         flow_tag: FlowTag,
         mut event_handler: TransportEventHandler,
     ) {
-        if let Err(e) = self.retry_connection(peer_id, flow_tag).await {
-            warn!(
-                self.log,
-                "DataPlane::on_disconnect(): retry_connection error {:?}: peer_id: {:?}, flow_tag: {:?}", peer_id, flow_tag, e
-            );
-            return;
-        }
+        let mut peer_map = self.peer_map.write().await;
+        let peer_state = match peer_map.get_mut(&peer_id) {
+            Some(peer_state) => peer_state,
+            None => return,
+        };
+        let flow_state = match peer_state.flow_map.get_mut(&flow_tag) {
+            Some(flow_state) => flow_state,
+            None => return,
+        };
+
+        let connected = match &flow_state.connection_state {
+            ConnectionState::Connected(connected) => connected,
+            _ => {
+                // Flow is already disconnected/reconnecting, skip reconnect processing
+                return;
+            }
+        };
+
+        let connection_state = self
+            .retry_connection(peer_id, flow_tag, connected.peer_addr)
+            .await;
         let _ = event_handler
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowDown(peer_id),
             ))
             .await;
+        flow_state.update(connection_state);
     }
 
     /// Handle connection setup. Starts flow read and write tasks.
@@ -398,7 +413,7 @@ impl TransportImpl {
         let (tls_reader, tls_writer) = tls_stream.split();
         // Spawn write task
         let event_handler_cl = event_handler.clone();
-        let write_task = self.flow_write_task(
+        let write_task = self.spawn_write_task(
             peer_id,
             flow_tag,
             flow_label.clone(),
@@ -407,7 +422,7 @@ impl TransportImpl {
             event_handler_cl,
         );
 
-        let read_task = self.flow_read_task(
+        let read_task = self.spawn_read_task(
             peer_id,
             flow_tag,
             flow_label,
@@ -423,8 +438,10 @@ impl TransportImpl {
         }
     }
 
-    /// Handle peer connection
-    pub(crate) async fn on_connect(
+    /// The function will try to transition to Connected state for the given peer.
+    /// If the transition is successful then the old ConnectionState will be dropped
+    /// which will result in abort of the tokio task executing the call.
+    pub(crate) async fn try_transition_to_connected(
         &self,
         peer_id: NodeId,
         role: ConnectionRole,
