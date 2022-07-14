@@ -257,9 +257,7 @@ impl RegistryReplicator {
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(poll_delay);
             while !cancelled.load(Ordering::Relaxed) {
-                let tick_time = interval.tick().await;
                 // The relevant I/O-operation of the poll() function is querying
                 // a node on the NNS for updates. As we set the query timeout to
                 // `poll_delay` when constructing the underlying
@@ -271,19 +269,7 @@ impl RegistryReplicator {
                     debug!(logger, "Polling the NNS succeeded.");
                 }
 
-                // Ticks happen at _absolute_ points in time. Thus, if the
-                // delay between ticks (because, for example, under load the
-                // scheduler cannot schedule this thread) is _longer_ than the
-                // interval length, the intervals "pile up" and tick() will
-                // immediately return a number of times.
-                //
-                // To prevent a situation where nodes start flooding the NNS
-                // with requests, we simply reset the interval if the "skew"
-                // becomes larger than poll_delay (or 2*poll_delay, accounting
-                // for the maximum delay of poll() after the tick_time).
-                if tokio::time::Instant::now().duration_since(tick_time) > 2 * poll_delay {
-                    interval = tokio::time::interval(poll_delay);
-                }
+                tokio::time::sleep(poll_delay).await;
             }
         });
         res
