@@ -266,7 +266,7 @@ impl TransportImpl {
                                     return;
                                 }
                             };
-                            if let Ok(()) = arc_self.on_connect(
+                            if let Ok(()) = arc_self.try_transition_to_connected(
                                 peer_id,
                                 ConnectionRole::Server,
                                 flow_tag,
@@ -351,7 +351,7 @@ impl TransportImpl {
                                 return;
                             }
                         };
-                        match arc_self.on_connect(
+                        match arc_self.try_transition_to_connected(
                             peer_id,
                             ConnectionRole::Client,
                             flow_tag,
@@ -433,7 +433,8 @@ impl TransportImpl {
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
-    ) -> Result<(), TransportErrorCode> {
+        socket_addr: SocketAddr,
+    ) -> ConnectionState {
         warn!(
             self.log,
             "ControlPlane::retry_connection(): node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
@@ -446,26 +447,8 @@ impl TransportImpl {
             .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
             .inc();
 
-        let mut peer_map = self.peer_map.write().await;
-        let peer_state = peer_map
-            .get_mut(&peer_id)
-            .ok_or(TransportErrorCode::PeerNotFound)?;
-        let flow_state = peer_state
-            .flow_map
-            .get_mut(&flow_tag)
-            .ok_or(TransportErrorCode::FlowNotFound)?;
-
-        let sa = match &flow_state.connection_state {
-            ConnectionState::Connected(sa) => sa,
-            _ => {
-                // Flow is already disconnected/reconnecting, skip reconnect processing
-                return Err(TransportErrorCode::FlowConnectionDown);
-            }
-        };
-
         if Self::connection_role(&self.node_id, &peer_id) == ConnectionRole::Server {
             // We are the server, wait for the peer to connect
-            flow_state.update(ConnectionState::Listening);
             warn!(
                 self.log,
                 "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
@@ -474,37 +457,32 @@ impl TransportImpl {
                 flow_tag,
                 peer_id
             );
+            ConnectionState::Listening
         } else {
             // reconnect if we have a listener
-            if self.accept_ports.read().unwrap().contains_key(&flow_tag) {
-                let socket_addr = sa.peer_addr;
-                let connecting_task = self.spawn_connect_task(
-                    flow_tag,
-                    peer_id,
-                    socket_addr.ip(),
-                    ServerPort::from(socket_addr.port()),
-                );
-                let connecting_state = Connecting {
-                    peer_addr: socket_addr,
-                    connecting_task,
-                };
-                flow_state.update(ConnectionState::Connecting(connecting_state));
-
-                warn!(
-                    self.log,
-                    "ControlPlane::process_disconnect(): spawning reconnect task: node = {:?}/{:?}, \
+            let connecting_task = self.spawn_connect_task(
+                flow_tag,
+                peer_id,
+                socket_addr.ip(),
+                ServerPort::from(socket_addr.port()),
+            );
+            let connecting_state = Connecting {
+                peer_addr: socket_addr,
+                connecting_task,
+            };
+            warn!(
+                self.log,
+                "ControlPlane::process_disconnect(): spawning reconnect task: node = {:?}/{:?}, \
                     flow_tag = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
-                    self.node_id,
-                    self.node_ip,
-                    flow_tag,
-                    peer_id,
-                    socket_addr.ip(),
-                    socket_addr.port(),
-                );
-            }
+                self.node_id,
+                self.node_ip,
+                flow_tag,
+                peer_id,
+                socket_addr.ip(),
+                socket_addr.port(),
+            );
+            ConnectionState::Connecting(connecting_state)
         }
-
-        Ok(())
     }
 
     /// Set up the client socket, and connect to the specified server peer
