@@ -7,7 +7,7 @@
 # - Construct the actual target image (IC-OS root filesystem)
 #
 # Update below image when new dfinity/genericos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
-FROM dfinity/genericos-base@sha256:64d13fcf6b26ae33a187477fb2f0d25ae53e5ad859c088bfeab01dc70107463e
+FROM dfinity/genericos-base@sha256:e1bae1b0785932c3cbb065a4ac04c0b40c1b38fbd59abe3217e5780e12691787
 
 RUN mkdir -p /boot/{efi,grub}
 

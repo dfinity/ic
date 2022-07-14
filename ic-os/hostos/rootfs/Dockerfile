@@ -3,35 +3,13 @@
 # Build steps:
 # - `docker build --pull -t dfinity/hostos-main -f Dockerfile .`
 #
+
+#
 # First build stage:
-# - Download 3rd party tools
-FROM ubuntu:20.04 AS download
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    curl \
-    perl
-
-# Download and verify journalbeat
-RUN cd /tmp/ && \
-    curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.14.0-linux-x86_64.tar.gz && \
-    echo "3c97e8706bd0d2e30678beee7537b6fe6807cf858a0dd2e7cfce5beccb621eb0fefe6871027bc7b55e2ea98d7fe2ca03d4d92a7b264abbb0d6d54ecfa6f6a305  journalbeat-oss-7.14.0-linux-x86_64.tar.gz" > journalbeat.sha512 && \
-    shasum -c journalbeat.sha512
-
-# Download and verify node_exporter
-RUN cd /tmp/ && \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
-    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
-    shasum -c node_exporter.sha256
-
-# Second build stage:
 # - Construct the actual target image (IC-OS root filesystem)
-# - Copy downloaded archives from first build stage into the target image
 #
 # Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
-FROM dfinity/hostos-base@sha256:41fbe48028138dd5b90c2e51decc44c7df6597f779e3f6da8a848c23e58f8a99
+FROM dfinity/hostos-base@sha256:f744cac1e9f7110ed46defa6ab3877dfd8dac9881f153af6898dab9c3ad2f3cd
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -150,23 +128,7 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
 RUN addgroup journalbeat && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
     adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal
-
-# The "node_exporter" account. Used to run node_exporter binary to export
-# telemetry metrics of the GuestOS.
-RUN addgroup node_exporter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
-    adduser node_exporter node_exporter
-
-# Install journalbeat
-COPY --from=download /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /etc/journalbeat \
-             /var/lib/journalbeat \
-             /var/log/journalbeat && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/fields.yml && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat.reference.yml && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat && \
+    adduser journalbeat systemd-journal && \
     chown root:root /etc/journalbeat/*.yml \
                     /usr/local/bin/journalbeat && \
     chown journalbeat:journalbeat /var/lib/journalbeat \
@@ -174,21 +136,19 @@ RUN cd /tmp/ && \
     chmod 0755 /etc/journalbeat && \
     chmod 0750 /var/lib/journalbeat \
                /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml && \
-    rm /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
+    chmod 0644 /etc/journalbeat/*.yml
 
-# Install node_exporter
-COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
+# The "node_exporter" account. Used to run node_exporter binary to export
+# telemetry metrics of the GuestOS.
+RUN addgroup node_exporter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
+    adduser node_exporter node_exporter && \
     chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
-               /etc/node_exporter/web.yml && \
-    rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+               /etc/node_exporter/web.yml
 
 # Compile locale specification
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8

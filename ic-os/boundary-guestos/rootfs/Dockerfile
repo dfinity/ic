@@ -8,75 +8,9 @@
 # argument MUST be given by the build script, otherwise build will fail.
 ARG BASE_IMAGE=
 
-# Service worker verion and sha256
-ARG sw_version=1.2.0
-ARG sw_sha256=2f84ab0b02e3ac45b2c4de31789ccf7f6389887931970326842bfefb07073b55
-
-# First build stage: download software, build and verify it (such that it
-# does not change under our noses).
-FROM ubuntu:20.04 AS download
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    curl \
-    pkg-config \
-    libffi-dev \
-    libssl-dev \
-    ssl-cert \
-    rustc \
-    cargo \
-    perl
-
-WORKDIR /tmp
-
-# Download and verify journalbeat
-RUN \
-    curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.14.0-linux-x86_64.tar.gz && \
-    echo "3c97e8706bd0d2e30678beee7537b6fe6807cf858a0dd2e7cfce5beccb621eb0fefe6871027bc7b55e2ea98d7fe2ca03d4d92a7b264abbb0d6d54ecfa6f6a305  journalbeat-oss-7.14.0-linux-x86_64.tar.gz" | shasum -c
-
-# Download and verify vector
-RUN \
-    curl -L -O https://packages.timber.io/vector/0.21.0/vector_0.21.0-1_amd64.deb && \
-    echo "bd713a9e739cca53f9aa1e49e4abf0f0a3ba68a1c5f5f42106ed9b98282f2f06f009e0779c24368aea9d4e829af7614043ae9625dcc849717931c20a6812ede7  vector_0.21.0-1_amd64.deb" | shasum -c
-
-# Download and verify node_exporter
-RUN \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
-    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" | shasum -c
-
-# Download and verify nginx_exporter
-RUN \
-    curl -L -O https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v0.10.0/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz && \
-    echo "30e664006dbc2d1185d3a5445942cd8158d1bb58  nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz" | shasum -c
-
-# Download libnginx-mod-http-ndk.deb
-RUN \
-   curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
-   echo "6a496d8c7f3357fda9e5adeb7a729e76c453f32c6d67bc0ec563b0f71e2a0aca  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
-
-# Download libnginx-mod-http-cbor-input.deb
-RUN \
-   curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
-   echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" | shasum -c
-
-# Download icx-proxy.deb 
-RUN \
-    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-dcaa135/icx-proxy.deb && \
-    echo "e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c  icx-proxy.deb" | shasum -c
-
-# Download and check service worker
-ARG sw_version
-ARG sw_sha256
-RUN \
-   curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
-   echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
-
 #
-# Second build stage:
+# First build stage:
 # - Construct the actual target image (IC-OS root filesystem)
-# - Copy downloaded archives from first build stage into the target image
 #
 FROM $BASE_IMAGE
 
@@ -192,8 +126,7 @@ RUN addgroup journalbeat && \
     adduser journalbeat systemd-journal
 
 # The "vector" account. Used to run vector binary
-RUN addgroup vector && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
+RUN adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
     adduser vector vector
 
 # The "node_exporter" account. Used to run node_exporter binary to export
@@ -221,41 +154,22 @@ RUN \
     chmod 755 /var/log/prober
 
 # Install journalbeat
-COPY --from=download /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /etc/journalbeat \
-             /var/lib/journalbeat \
-             /var/log/journalbeat && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/fields.yml && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat.reference.yml && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat && \
-    chown root:root /etc/journalbeat/*.yml \
+RUN chown root:root /etc/journalbeat/*.yml \
                     /usr/local/bin/journalbeat && \
     chown journalbeat:journalbeat /var/lib/journalbeat \
                                   /var/log/journalbeat && \
     chmod 0755 /etc/journalbeat && \
     chmod 0750 /var/lib/journalbeat \
                /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml && \
-    rm /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
-
-# Install vector
-COPY --from=download /tmp/vector_0.21.0-1_amd64.deb /tmp/vector_0.21.0-1_amd64.deb
-RUN dpkg -i --force-confold /tmp/vector_0.21.0-1_amd64.deb && \
-    rm /tmp/vector_0.21.0-1_amd64.deb
+    chmod 0644 /etc/journalbeat/*.yml
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
-    chown root:root /etc/node_exporter \
+RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
-               /etc/node_exporter/web.yml && \
-    rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+               /etc/node_exporter/web.yml
 
 # install nginx_exporter
 RUN \
@@ -263,19 +177,10 @@ RUN \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "nginx_exporter" nginx_exporter && \
     adduser nginx_exporter nginx_exporter
 
-COPY --from=download /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
 RUN \
-    tar \
-        -C /usr/local/bin \
-        -zvxf /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz \
-        nginx-prometheus-exporter && \
-    mv \
-        /usr/local/bin/nginx-prometheus-exporter \
-        /usr/local/bin/nginx_exporter && \
     chown \
         nginx_exporter:nginx_exporter \
-        /usr/local/bin/nginx_exporter && \
-    rm /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
+        /usr/local/bin/nginx_exporter
 
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.
@@ -283,28 +188,7 @@ COPY opt /opt
 
 RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
 
-# Install libnginx-mod-http-ndk 
-COPY --from=download /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb /tmp/
-RUN dpkg -i /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb &&\
-    rm /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb
-
-# Install libnginx-mod-http-cbor-input
-COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
-RUN dpkg -i /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb &&\
-    rm /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
-
-# Install icx-proxy
-COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
-RUN dpkg -i /tmp/icx-proxy.deb &&\
-    rm /tmp/icx-proxy.deb
-
 # Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
-ARG sw_version
-COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
-RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
-    mkdir -p /var/www/html/ &&\
-    cp -rf /tmp/package/dist-prod/* /var/www/html/ &&\
-    rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
 # Install other files (e.g. the uninstall-script)
