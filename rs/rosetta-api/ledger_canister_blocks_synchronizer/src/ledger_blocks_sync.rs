@@ -6,7 +6,7 @@ use core::ops::Deref;
 
 use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
 use ledger_canister::{Block, TipOfChainRes};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
 
 use crate::blocks::Blocks;
@@ -21,8 +21,11 @@ const PRUNE_DELAY: u64 = 10000;
 
 const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 
+// Max number of retry in case of query failure while retrieving blocks.
+const MAX_RETRY: u8 = 5;
+
 /// The LedgerBlocksSynchronizer will use this to output the metrics while
-/// synchronizing with the Leddger
+/// synchronizing with the Ledger
 pub trait LedgerBlocksSynchronizerMetrics {
     fn set_target_height(&self, height: u64);
     fn set_synced_height(&self, height: u64);
@@ -298,14 +301,25 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
 
             debug!("Asking for blocks [{},{})", i, range.end);
-            let batch = canister
-                .clone()
-                .multi_query_blocks(Range {
-                    start: i,
-                    end: range.end,
-                })
-                .await
-                .map_err(Error::InternalError)?;
+            let retry = 0;
+            let batch = loop {
+                let batch = canister
+                    .clone()
+                    .multi_query_blocks(Range {
+                        start: i,
+                        end: range.end,
+                    })
+                    .await
+                    .map_err(Error::InternalError);
+                if batch.is_ok() || retry == MAX_RETRY {
+                    break batch;
+                }
+                let retry = retry + 1;
+                warn!(
+                    "Failed query while retrieving blocks, retry {}/{}",
+                    retry, MAX_RETRY
+                );
+            }?;
 
             debug!("Got batch of len: {}", batch.len());
             if batch.is_empty() {
