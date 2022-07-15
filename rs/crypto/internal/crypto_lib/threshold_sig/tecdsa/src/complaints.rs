@@ -6,8 +6,8 @@ use std::convert::TryFrom;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IDkgComplaintInternal {
-    proof: zk::ProofOfDLogEquivalence,
-    shared_secret: EccPoint,
+    pub(crate) proof: zk::ProofOfDLogEquivalence,
+    pub(crate) shared_secret: EccPoint,
 }
 
 impl IDkgComplaintInternal {

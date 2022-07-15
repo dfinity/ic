@@ -223,6 +223,7 @@ pub use ic_types::NodeIndex;
 pub enum ThresholdEcdsaError {
     CurveMismatch,
     InconsistentCiphertext,
+    InconsistentOpeningAndCommitment,
     InsufficientDealings,
     InsufficientOpenings(usize, usize),
     InterpolationError,
@@ -230,7 +231,6 @@ pub enum ThresholdEcdsaError {
     InvalidCommitment,
     InvalidComplaint,
     InvalidFieldElement,
-    InvalidOpening,
     InvalidPoint,
     InvalidProof,
     InvalidRandomOracleInput,
@@ -890,13 +890,13 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             ThresholdEcdsaError::InvalidArguments(s) => Self::InvalidArgument(s),
             ThresholdEcdsaError::CurveMismatch
             | ThresholdEcdsaError::InconsistentCiphertext
+            | ThresholdEcdsaError::InconsistentOpeningAndCommitment
             | ThresholdEcdsaError::InsufficientDealings
             | ThresholdEcdsaError::InsufficientOpenings(_, _)
             | ThresholdEcdsaError::InterpolationError
             | ThresholdEcdsaError::InvalidCommitment
             | ThresholdEcdsaError::InvalidComplaint
             | ThresholdEcdsaError::InvalidFieldElement
-            | ThresholdEcdsaError::InvalidOpening
             | ThresholdEcdsaError::InvalidPoint
             | ThresholdEcdsaError::InvalidProof
             | ThresholdEcdsaError::InvalidRandomOracleInput
@@ -1073,14 +1073,15 @@ pub fn open_dealing(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdVerifyOpeningInternalError {
-    InconsistentCommitments,
+    InvalidOpening,
+    MismatchingType,
     InternalError(String),
 }
 
 impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InconsistentOpeningAndCommitment => Self::MismatchingType,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1093,15 +1094,24 @@ impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
 ///
 /// # Preconditions
 /// * The dealing has already been publically verified
+/// # Errors
+/// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
+/// not match with the polynomial commitment.
+/// * `ThresholdVerifyOpeningInternalError::MismatchingType` if the opening
+/// has a type that is inconsistent with the polynomial commitment.
+/// * `ThresholdVerifyOpeningInternalError::InternalError` if there is an
+/// unexpected internal error.
 pub fn verify_dealing_opening(
     verified_dealing: &IDkgDealingInternal,
     opener_index: NodeIndex,
     opening: &CommitmentOpening,
 ) -> Result<(), ThresholdVerifyOpeningInternalError> {
-    verified_dealing
+    let is_invalid = !verified_dealing
         .commitment
         .check_opening(opener_index, opening)?;
-
+    if is_invalid {
+        return Err(ThresholdVerifyOpeningInternalError::InvalidOpening);
+    }
     Ok(())
 }
 
