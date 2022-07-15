@@ -1,3 +1,4 @@
+use crate::ingress::IngressWithPrinter;
 use crate::{
     backup,
     validator::{InvalidArtifact, ReplayValidator},
@@ -55,7 +56,7 @@ use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     consensus::{catchup::CUPWithOriginalProtobuf, CatchUpPackage, HasHeight, HasVersion},
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, SignedIngress, UserQuery},
+    messages::UserQuery,
     time::current_time,
     CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
     Time, UserId,
@@ -141,8 +142,6 @@ impl Player {
             .as_ref()
             .expect("No registry provider found");
 
-        // In the special case where we start from the Genesis height, we want to clean
-        // up the execution state before.
         if start_height == 0 {
             let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
             // Because we use the LocalStoreImpl, we know that we get the
@@ -378,7 +377,10 @@ impl Player {
     /// block has been replayed. Note that this will advance the executed
     /// batch height but not advance finalized block height in consensus
     /// pool.
-    pub fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) -> ReplayResult {
+    pub fn replay<F: FnMut(&Player, Time) -> Vec<IngressWithPrinter>>(
+        &self,
+        extra: F,
+    ) -> ReplayResult {
         let mut invalid_artifacts = Vec::new();
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
@@ -438,20 +440,27 @@ impl Player {
             extra,
         );
 
-        if let Some((last_batch_height, msg_ids)) = extra_batch_delivery {
+        if let Some((last_batch_height, msgs)) = extra_batch_delivery {
             self.wait_for_state(last_batch_height);
             // We only want to persist the checkpoint after the latest batch.
             self.state_manager.remove_states_below(last_batch_height);
 
             // check if the extra messages have been delivered successfully
             let get_latest_status = self.ingress_history_reader.get_latest_status();
-            for msg_id in msg_ids {
-                match get_latest_status(&msg_id) {
+            for msg in msgs {
+                match get_latest_status(&msg.ingress.id()) {
                     IngressStatus::Known {
                         state: IngressState::Completed(WasmResult::Reply(bytes)),
                         ..
-                    } => println!("Ingress id={} response={}", &msg_id, hex::encode(bytes)),
-                    status => panic!("Execution of {} has failed: {:?}", msg_id, status),
+                    } => match msg.print {
+                        Some(printer) => printer(bytes),
+                        _ => println!(
+                            "Ingress id={} response={}",
+                            &msg.ingress.id(),
+                            hex::encode(bytes)
+                        ),
+                    },
+                    status => panic!("Execution of {} has failed: {:?}", msg.ingress.id(), status),
                 }
             }
         }
@@ -583,12 +592,12 @@ impl Player {
         last_batch_height
     }
 
-    fn deliver_extra_batch<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(
+    fn deliver_extra_batch<F: FnMut(&Player, Time) -> Vec<IngressWithPrinter>>(
         &self,
         message_routing: &dyn MessageRouting,
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
-    ) -> (Time, Option<(Height, Vec<MessageId>)>) {
+    ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
         let (registry_version, time, randomness) = match pool {
             None => (
                 self.registry.get_latest_version(),
@@ -631,9 +640,13 @@ impl Player {
         if extra_msgs.is_empty() {
             return (context_time, None);
         }
-        let extra_msg_ids = extra_msgs.iter().map(|msg| msg.id()).collect::<Vec<_>>();
         if !extra_msgs.is_empty() {
-            extra_batch.payload.ingress = IngressPayload::from(extra_msgs);
+            extra_batch.payload.ingress = IngressPayload::from(
+                extra_msgs
+                    .iter()
+                    .map(|fm| fm.ingress.clone())
+                    .collect::<Vec<_>>(),
+            );
             println!("extra_batch created with new ingress");
         }
         let batch_number = extra_batch.batch_number;
@@ -649,10 +662,7 @@ impl Player {
                 }
             }
         }
-        (
-            context_time,
-            Some((extra_batch.batch_number, extra_msg_ids)),
-        )
+        (context_time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     /// Return latest BlessedReplicaVersions record by querying the registry

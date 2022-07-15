@@ -92,7 +92,7 @@ impl Upgrade {
             let subnet_id =
                 get_subnet_id(&*self.registry.registry_client, &cup.cup).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
-                        "Couldn't extract the subnet id from the local CUP: {:?}",
+                        "Couldn't determine the subnet id: {:?}",
                         err
                     ))
                 })?;
@@ -128,7 +128,9 @@ impl Upgrade {
         if cup.cup.signature.signature.clone().get().0.is_empty() {
             info!(
                 self.logger,
-                "The latest CUP is unsigned: a subnet genesis/recovery is in progress"
+                "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
+                cup.cup.content.registry_version(),
+                cup.cup.height(),
             );
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
@@ -426,10 +428,10 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // the subnet id from the registry.
     match dkg_id.target_subnet {
         NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
-        // If we hit this case, than the local CUP is a genesis or recovery CUP of an application
-        // subnet. We cannot derive the subnet id from it, so we use the registry version of
-        // that CUP and the node id of one of the high-threshold committee members, to find
-        // out to which subnet this node belongs to.
+        // If we hit this case, then the local CUP is a genesis or recovery CUP of an application
+        // subnet or of the NNS subnet recovered on failover nodes. We cannot derive the subnet id
+        // from it, so we use the registry version of that CUP and the node id of one of the
+        // high-threshold committee members, to find out to which subnet this node belongs to.
         NiDkgTargetSubnet::Remote(_) => {
             let node_id = dkg_summary
                 .current_transcripts()
@@ -444,8 +446,8 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
             match registry.get_subnet_id_from_node_id(*node_id, dkg_summary.registry_version) {
                 Ok(Some(subnet_id)) => Ok(subnet_id),
                 other => Err(format!(
-                    "Couldn't get the subnet id from the registry for node {:?}: {:?}",
-                    node_id, other
+                    "Couldn't get the subnet id from the registry for node {:?} at registry version {}: {:?}",
+                    node_id, dkg_summary.registry_version, other
                 )),
             }
         }

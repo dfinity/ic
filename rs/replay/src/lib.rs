@@ -19,6 +19,7 @@ use crate::ingress::*;
 use crate::player::{Player, ReplayResult};
 
 use ic_canister_client::{Agent, Sender};
+use ic_config::registry_client::DataProviderConfig;
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_types::ReplicaVersion;
@@ -51,6 +52,8 @@ mod validator;
 ///     config: PathBuf::from("/path/to/ic.json5"),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
+///     state_root: None,
+///     local_registry_store: None,
 ///     subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {
 ///         registry_local_store_path: PathBuf::from("/path/to/ic_registry_local_store"),
 ///         backup_spool_path: PathBuf::from("/path/to/spool"),
@@ -69,10 +72,18 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
         let source = ConfigSource::File(args.config);
-        let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
+        let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             println!("Failed to load config:\n  {}", err);
             std::process::exit(1);
         });
+
+        // Override config
+        if let Some(path) = args.local_registry_store {
+            cfg.registry_client.data_provider = Some(DataProviderConfig::LocalStore(path));
+        }
+        if let Some(path) = args.state_root {
+            cfg.state_manager = ic_config::state_manager::Config::new(path);
+        }
 
         let canister_caller_id = args.canister_caller_id.unwrap_or(GOVERNANCE_CANISTER_ID);
         let subnet_id = args.subnet_id.0;
@@ -122,7 +133,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 return;
             }
 
-            let extra = move |player: &Player, time| {
+            let extra = move |player: &Player, time| -> Vec<IngressWithPrinter> {
                 // Use a dummy URL here because we don't send any outgoing ingress.
                 // The agent is only used to construct ingress messages.
                 let agent = &Agent::new(
@@ -131,24 +142,43 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 );
                 match subcmd {
                     Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
-                        cmd_add_and_bless_replica_version(agent, player, cmd, time).unwrap()
+                        cmd_add_and_bless_replica_version(agent, player, cmd, time)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
                     }
                     Some(SubCommand::AddRegistryContent(cmd)) => {
-                        cmd_add_registry_content(agent, cmd, player.subnet_id, time).unwrap()
+                        cmd_add_registry_content(agent, cmd, player.subnet_id, time)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
                     }
                     Some(SubCommand::RemoveSubnetNodes) => {
                         if let Some(msg) = cmd_remove_subnet(agent, player, time).unwrap() {
                             vec![msg]
+                                .into_iter()
+                                .map(|ingress| ingress.into())
+                                .collect()
                         } else {
                             Vec::new()
                         }
                     }
                     Some(SubCommand::WithNeuronForTests(cmd)) => cmd_add_neuron(time, cmd).unwrap(),
                     Some(SubCommand::WithLedgerAccountForTests(cmd)) => {
-                        cmd_add_ledger_account(time, cmd).unwrap()
+                        cmd_add_ledger_account(time, cmd)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
                     }
                     Some(SubCommand::WithTrustedNeuronsFollowingNeuronForTests(cmd)) => {
-                        cmd_make_trusted_neurons_follow_neuron(time, cmd).unwrap()
+                        cmd_make_trusted_neurons_follow_neuron(time, cmd)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
                     }
                     _ => Vec::new(),
                 }

@@ -181,10 +181,10 @@ impl CatchUpPackageProvider {
         let cup_file_path = self.get_cup_path();
         info!(
             self.logger,
-            "Persisting CUP to file: {}, replica version={}, height={}",
-            &cup_file_path.display(),
+            "Persisting CUP (registry version={}, height={}) to file {}",
             cup.cup.content.registry_version(),
-            cup.cup.height()
+            cup.cup.height(),
+            &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
             OrchestratorError::IoError(

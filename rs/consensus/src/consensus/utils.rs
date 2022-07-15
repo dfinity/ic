@@ -533,8 +533,8 @@ pub(crate) fn get_subnet_record(
             warn!(
                 logger,
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
+                registry_version,
                 subnet_id,
-                registry_version
             );
             None
         })

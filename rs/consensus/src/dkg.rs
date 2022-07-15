@@ -1277,7 +1277,13 @@ fn get_dkg_summary_from_cup_contents(
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Summary {
-    let transcripts = DkgTranscripts {
+    // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
+    // NNS we're recovering.
+    let registry_version_of_original_registry = cup_contents
+        .registry_store_uri
+        .as_ref()
+        .map(|v| RegistryVersion::from(v.registry_version));
+    let mut transcripts = DkgTranscripts {
         low_threshold: cup_contents
             .initial_ni_dkg_transcript_low_threshold
             .map(initial_ni_dkg_transcript_from_registry_record)
@@ -1287,6 +1293,15 @@ fn get_dkg_summary_from_cup_contents(
             .map(initial_ni_dkg_transcript_from_registry_record)
             .expect("Missing initial high-threshold DKG transcript"),
     };
+
+    // If we're in a NNS subnet recovery with failover nodes, we set the transcript versions to the
+    // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
+    // computed incorrectly.
+    if let Some(version) = registry_version_of_original_registry {
+        transcripts.low_threshold.registry_version = version;
+        transcripts.high_threshold.registry_version = version;
+    }
+
     let transcripts = vec![
         (NiDkgTag::LowThreshold, transcripts.low_threshold),
         (NiDkgTag::HighThreshold, transcripts.high_threshold),
@@ -1303,7 +1318,10 @@ fn get_dkg_summary_from_cup_contents(
         committee,
         height,
         &transcripts,
-        registry_version,
+        // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
+        // the recovered NNS so that the DKG configs point to the correct registry version and new
+        // dealings can be created in the first DKG interval.
+        registry_version_of_original_registry.unwrap_or(registry_version),
     )
     .expect("Couldn't generate configs for the genesis summary");
     // For the first 2 intervals we use the length value contained in the
@@ -1316,7 +1334,9 @@ fn get_dkg_summary_from_cup_contents(
         transcripts,
         BTreeMap::new(), // next transcripts
         BTreeMap::new(), // transcripts for other subnets
-        registry_version,
+        // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
+        // the recovered NNS as a DKG summary version which is used as the CUP version.
+        registry_version_of_original_registry.unwrap_or(registry_version),
         interval_length,
         next_interval_length,
         height,
@@ -1420,6 +1440,15 @@ pub fn make_registry_cup_from_cup_contents(
     let high_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::HighThreshold)
         .dkg_id;
+
+    // In a NNS subnet recovery case the block validation context needs to reference a registry
+    // version of the NNS to be recovered. Otherwise the validation context points to a registry
+    // version without the NNS subnet record.
+    let block_registry_version = cup_contents
+        .registry_store_uri
+        .as_ref()
+        .map(|v| RegistryVersion::from(v.registry_version))
+        .unwrap_or(registry_version);
     let block = Block::new_with_replica_version(
         replica_version.clone(),
         Id::from(CryptoHash(Vec::new())),
@@ -1428,7 +1457,7 @@ pub fn make_registry_cup_from_cup_contents(
         Rank(0),
         ValidationContext {
             certified_height: cup_height,
-            registry_version,
+            registry_version: block_registry_version,
             time: Time::from_nanos_since_unix_epoch(cup_contents.time),
         },
     );

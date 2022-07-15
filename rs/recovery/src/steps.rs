@@ -775,6 +775,9 @@ impl Step for DownloadRegistryStoreStep {
             ssh_helper.account, self.node_ip, IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE
         );
 
+        // TODO (OR-207): Fix the race condition
+        std::thread::sleep(time::Duration::from_secs(25));
+
         rsync(
             &self.logger,
             vec![],
@@ -818,7 +821,7 @@ impl Step for UploadAndHostTarStep {
 
         let upload_dir = "/tmp/recovery_registry";
 
-        ssh_helper.ssh("sudo apt update && sudo apt -y install daemonize python3".to_string())?;
+        ssh_helper.ssh("sudo mount -o remount,rw / && sudo apt update && sudo apt -y install daemonize python3".to_string())?;
         ssh_helper.ssh(format!("mkdir -p {}", upload_dir))?;
 
         let target = format!("{}@[{}]:{}/", self.aux_host, self.aux_ip, upload_dir);
