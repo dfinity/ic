@@ -4811,6 +4811,7 @@ dependencies = [
  "getrandom 0.2.2",
  "hex",
  "ic-crypto-internal-types",
+ "miracl_core_bls12381",
  "pairing",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4822,9 +4823,12 @@ dependencies = [
 name = "ic-crypto-internal-bls12381-serde-miracl"
 version = "0.8.0"
 dependencies = [
+ "criterion",
  "hex",
+ "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-types",
  "miracl_core_bls12381",
+ "rand 0.8.5",
 ]
 
 [[package]]

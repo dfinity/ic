@@ -77,6 +77,22 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+
+    group.bench_function("to_miracl", |b| {
+        b.iter_batched_ref(
+            || G1Affine::from(random_g1()),
+            |pt| pt.to_miracl(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("from_miracl", |b| {
+        b.iter_batched_ref(
+            || G1Affine::from(random_g1()).to_miracl(),
+            |pt| G1Affine::from_miracl(pt),
+            BatchSize::SmallInput,
+        )
+    });
 }
 
 fn bls12_381_g2_ops(c: &mut Criterion) {
@@ -132,6 +148,22 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || random_g2(),
             |pt| G2Affine::from(*pt),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("to_miracl", |b| {
+        b.iter_batched_ref(
+            || G2Affine::from(random_g2()),
+            |pt| pt.to_miracl(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("from_miracl", |b| {
+        b.iter_batched_ref(
+            || G2Affine::from(random_g2()).to_miracl(),
+            |pt| G2Affine::from_miracl(pt),
             BatchSize::SmallInput,
         )
     });
