@@ -35,12 +35,6 @@ pub type QueueSize = AmountOf<QueueSizeTag, usize>;
 /// The size (in bytes) of the transport header
 pub const TRANSPORT_HEADER_SIZE: usize = 8;
 
-/// Flag: sender-indicated error
-///
-/// When a message has this flag on, it means that the sender of this message
-/// has experienced an error sending some messages and may have dropped messages
-/// (e.g., due to congestion). The message may still contain some payload.
-pub const TRANSPORT_FLAGS_SENDER_ERROR: u8 = 1;
 /// Flag: message is a heartbeat
 ///
 /// When a message has this flag on, it means that the message contains no
@@ -354,9 +348,6 @@ pub(crate) trait SendQueueReader {
 pub(crate) struct DequeuedMessage {
     /// Message payload
     pub(crate) payload: TransportPayload,
-
-    /// Error: the sender indicated an error on its end
-    pub(crate) sender_error: bool,
 }
 
 #[cfg(test)]

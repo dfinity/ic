@@ -80,7 +80,6 @@ pub(crate) struct DataPlaneMetrics {
     pub(crate) socket_heart_beat_timeouts: IntCounterVec,
     pub(crate) heart_beats_sent: IntCounterVec,
     pub(crate) heart_beats_received: IntCounterVec,
-    pub(crate) send_errors_received: IntCounterVec,
     pub(crate) write_tasks: IntGauge,
     pub(crate) read_tasks: IntGauge,
     pub(crate) write_task_overhead_time_msec: HistogramVec,
@@ -141,11 +140,6 @@ impl DataPlaneMetrics {
             socket_heart_beat_timeouts: metrics_registry.int_counter_vec(
                 "transport_heart_beat_timeouts",
                 "Number of times the heart beat timed out.",
-                &["flow_peer_id", "flow_tag"],
-            ),
-            send_errors_received: metrics_registry.int_counter_vec(
-                "transport_send_errors_received",
-                "Number of peer send error notifications",
                 &["flow_peer_id", "flow_tag"],
             ),
             heart_beats_received: metrics_registry.int_counter_vec(

@@ -21,8 +21,7 @@ use crate::{
     metrics::DataPlaneMetrics,
     types::{
         Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader,
-        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_FLAGS_SENDER_ERROR,
-        TRANSPORT_HEADER_SIZE,
+        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
 use ic_base_types::NodeId;
@@ -73,11 +72,7 @@ enum ReadError {
 /// Implementation for the transport data plane
 impl TransportImpl {
     /// Create header bytes to send with payload.
-    fn pack_header(
-        payload: Option<&TransportPayload>,
-        sender_err: bool,
-        heartbeat: bool,
-    ) -> Vec<u8> {
+    fn pack_header(payload: Option<&TransportPayload>, heartbeat: bool) -> Vec<u8> {
         let mut result = Vec::<u8>::new();
         let mut header = TransportHeader {
             version: 0,
@@ -88,9 +83,6 @@ impl TransportImpl {
                 None => 0,
             },
         };
-        if sender_err {
-            header.flags = TRANSPORT_FLAGS_SENDER_ERROR;
-        }
         if heartbeat {
             header.flags |= TRANSPORT_FLAGS_IS_HEARTBEAT;
         }
@@ -157,7 +149,7 @@ impl TransportImpl {
                 let mut to_send = Vec::<u8>::new();
                 if dequeued.is_empty() {
                     // There is nothing to send, so issue a heartbeat message
-                    to_send.append(&mut Self::pack_header(None, false, true));
+                    to_send.append(&mut Self::pack_header(None, true));
                     arc_self
                         .data_plane_metrics
                         .heart_beats_sent
@@ -167,7 +159,6 @@ impl TransportImpl {
                     for mut msg in dequeued {
                         to_send.append(&mut Self::pack_header(
                             Some(&msg.payload),
-                            msg.sender_error,
                             false,
                         ));
                         to_send.append(&mut msg.payload.0);
@@ -273,14 +264,6 @@ impl TransportImpl {
                         .with_label_values(&[&flow_label, &flow_tag_str])
                         .inc();
                     continue;
-                }
-
-                // Pass up sender indicated error
-                if header.flags & TRANSPORT_FLAGS_SENDER_ERROR != 0 {
-                    arc_self.data_plane_metrics
-                        .send_errors_received
-                        .with_label_values(&[&flow_label, &flow_tag_str])
-                        .inc();
                 }
 
                 // Pass up the received message
