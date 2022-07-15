@@ -898,21 +898,23 @@ def external_crates_repository(name, annotations):
                 version = "^0.2",
             ),
             "wasmtime": crate.spec(
-                version = "^0.35.3",
+                version = "^0.37",
+                default_features = False,
                 features = [
                     "cranelift",
                     "parallel-compilation",
                     "posix-signals-on-macos",
+                    "wasm-backtrace",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^0.35.3",
+                version = "^0.37",
+            ),
+            "wasmtime-runtime": crate.spec(
+                version = "^0.37",
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",
-            ),
-            "wasmtime-runtime": crate.spec(
-                version = "^0.35.3",
             ),
             "which": crate.spec(
                 version = "^4.2.2",

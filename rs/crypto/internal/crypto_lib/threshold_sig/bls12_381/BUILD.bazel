@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = [
     "//rs/certified_vars/test-utils:__subpackages__",
     "//rs/crypto:__subpackages__",
+    "//rs/state_machine_tests:__pkg__",
 ])
 
 filegroup(
