@@ -12,7 +12,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES,
+    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
 };
@@ -2125,4 +2125,44 @@ fn ecdsa_signature_queue_fills_up() {
                 .to_string()
         )
     );
+}
+
+#[test]
+fn canister_output_queue_does_not_overflow_when_calling_ic00() {
+    let own_subnet = subnet_test_id(1);
+    let other_subnet = subnet_test_id(2);
+    let other_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(own_subnet)
+        .with_caller(other_subnet, other_canister)
+        .with_initial_canister_cycles(1_000_000_000_000_000_000)
+        .with_manual_execution()
+        .build();
+
+    let uc = test.universal_canister().unwrap();
+
+    for i in 1..=2 * DEFAULT_QUEUE_CAPACITY {
+        let target = if i < DEFAULT_QUEUE_CAPACITY / 2 {
+            other_subnet.get()
+        } else {
+            ic00::IC_00.get()
+        };
+        let args = Encode!(&CanisterIdRecord::from(other_canister)).unwrap();
+        let payload = wasm()
+            .call_simple(
+                target,
+                Method::CanisterStatus,
+                call_args().other_side(args.clone()),
+            )
+            .build();
+        test.ingress_raw(uc, "update", payload);
+        test.execute_message(uc);
+        let system_state = &mut test.canister_state_mut(uc).system_state;
+        assert_eq!(1, system_state.queues().output_queues_len());
+        assert_eq!(
+            i.min(DEFAULT_QUEUE_CAPACITY),
+            system_state.queues().output_message_count()
+        );
+    }
 }

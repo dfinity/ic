@@ -35,7 +35,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
+    CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState, SubnetTopology,
 };
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
@@ -1116,6 +1116,26 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             tmpdir.path().to_path_buf(),
         );
+
+        let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
+        subnets.extend(self.caller_subnet_id.iter().copied());
+
+        for subnet in subnets {
+            let mut subnet_type = SubnetType::System;
+            if subnet == self.own_subnet_id {
+                subnet_type = self.subnet_type;
+            }
+            state.metadata.network_topology.subnets.insert(
+                subnet,
+                SubnetTopology {
+                    public_key: vec![1, 2, 3, 4],
+                    nodes: btreemap! {},
+                    subnet_type,
+                    subnet_features: SubnetFeatures::default(),
+                    ecdsa_keys_held: BTreeSet::new(),
+                },
+            );
+        }
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
 
