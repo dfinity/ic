@@ -1,0 +1,14 @@
+---
+
+- name: shutdown guest
+  shell: |
+    set -eExu
+    virsh shutdown "{{ item }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop_control:
+    label:
+  args:
+    executable: /bin/bash
+  timeout: 60
+  ignore_errors: yes
+  tags: [ "ic_guest" ]

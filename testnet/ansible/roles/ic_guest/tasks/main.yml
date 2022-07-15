@@ -40,6 +40,11 @@
   when: ic_state == "start"
   tags: [ "ic_guest" ]
 
+- name: import tasks shutdown
+  import_tasks: "shutdown.yml"
+  when: ic_state == "shutdown"
+  tags: [ "ic_guest" ]
+
 - name: import tasks install
   import_tasks: "install.yml"
   when: ic_state == "install"
