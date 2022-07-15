@@ -12,12 +12,17 @@ use serde::{Deserialize, Serialize};
 const B: u64 = 1_000_000_000;
 const M: u64 = 1_000_000;
 
+// The limit on the number of instructions a message is allowed to executed.
+// Going above the limit results in an `InstructionLimitExceeded` error.
+// Note that without deterministic time slicing this limit must be the same as
+// `MAX_INSTRUCTIONS_PER_SLICE`.
+pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
+
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU one message has
 // approximately 2.5 seconds to be processed.
-//
-// Note that decreasing this value may break existing canisters that run
-// long messages.
-pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
+// Note that without deterministic time slicing this limit must be the same as
+// `MAX_INSTRUCTIONS_PER_MESSAGE`.
+const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes
 // at most 1ms to enter and exit the Wasm engine.
@@ -92,9 +97,12 @@ pub struct SchedulerConfig {
     /// thread).
     pub max_instructions_per_round: NumInstructions,
 
-    /// Maximum amount of instructions a single message's execution can consume.
-    /// This should be significantly smaller than `max_instructions_per_round`.
+    /// Maximum amount of instructions a single message execution can consume.
     pub max_instructions_per_message: NumInstructions,
+
+    /// Maximum amount of instructions a single slice of execution can consume.
+    /// This should not exceed `max_instructions_per_round`.
+    pub max_instructions_per_slice: NumInstructions,
 
     /// The overhead of entering and exiting the Wasm engine to execute a
     /// message. The overhead is measured in instructions that are counted
@@ -151,6 +159,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -170,6 +179,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
+            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE * SYSTEM_SUBNET_FACTOR,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -192,6 +202,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
