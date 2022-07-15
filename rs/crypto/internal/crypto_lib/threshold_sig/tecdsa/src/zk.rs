@@ -310,8 +310,8 @@ impl ProofOfProduct {
 /// `A = g*x` and `B = h*x`
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofOfDLogEquivalence {
-    challenge: EccScalar,
-    response: EccScalar,
+    pub(crate) challenge: EccScalar,
+    pub(crate) response: EccScalar,
 }
 
 #[derive(Debug, Copy, Clone)]

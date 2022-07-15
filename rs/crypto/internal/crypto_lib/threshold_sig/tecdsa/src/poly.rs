@@ -637,7 +637,7 @@ impl PolynomialCommitment {
                 c.check_opening(eval_point, value, mask)
             }
 
-            _ => Err(ThresholdEcdsaError::InvalidOpening),
+            _ => Err(ThresholdEcdsaError::InconsistentOpeningAndCommitment),
         }
     }
 }
