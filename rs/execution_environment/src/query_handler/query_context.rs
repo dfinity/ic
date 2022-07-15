@@ -39,7 +39,7 @@ use super::query_allocations::QueryAllocationsUsed;
 use crate::{
     execution::common,
     execution::nonreplicated_query::execute_non_replicated_query,
-    execution_environment::RoundLimits,
+    execution_environment::{as_round_instructions, RoundLimits},
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
     NonReplicatedQueryKind,
@@ -133,6 +133,7 @@ impl<'a> QueryContext<'a> {
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
+            instructions: as_round_instructions(max_instructions_per_message),
             subnet_available_memory,
         };
         Self {

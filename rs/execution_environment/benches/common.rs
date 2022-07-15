@@ -3,6 +3,7 @@
 ///
 use criterion::{BatchSize, Criterion};
 use ic_error_types::RejectCode;
+use ic_execution_environment::{as_round_instructions, RoundLimits};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
@@ -62,11 +63,16 @@ where
     let canister_root = ee_test.state().root.clone();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
+        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+    };
     let (_, execution_state) = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
             canister_root,
             canister_id,
+            &mut round_limits,
         )
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);

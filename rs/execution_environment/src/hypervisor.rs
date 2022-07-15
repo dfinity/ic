@@ -26,7 +26,7 @@ use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
-use crate::execution_environment::RoundLimits;
+use crate::execution_environment::{as_round_instructions, RoundLimits};
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -166,6 +166,7 @@ impl Hypervisor {
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
+        round_limits: &mut RoundLimits,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         let canister_module = CanisterModule::new(wasm_binary);
         let (execution_state, compilation_cost, compilation_result) =
@@ -179,6 +180,7 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
+        round_limits.instructions -= as_round_instructions(compilation_cost);
         Ok((compilation_cost, execution_state))
     }
 
@@ -277,7 +279,7 @@ impl Hypervisor {
             *self.cycles_account_manager,
             network_topology,
         );
-
+        let slice_instruction_limit = execution_parameters.slice_instruction_limit;
         let (compilation_result, execution_state, execution_result) =
             Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
                 api_type,
@@ -309,6 +311,8 @@ impl Hypervisor {
             .subnet_available_memory
             .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
             .unwrap();
+        round_limits.instructions -=
+            as_round_instructions(slice_instruction_limit - output.num_instructions_left);
         system_state_changes.apply_changes(
             time,
             &mut system_state,
@@ -340,7 +344,7 @@ impl Hypervisor {
             *self.cycles_account_manager,
             network_topology,
         );
-
+        let slice_instruction_limit = execution_parameters.slice_instruction_limit;
         let (compilation_result, execution_state, execution_result) =
             Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
                 api_type,
@@ -352,6 +356,17 @@ impl Hypervisor {
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),
             });
+
+        // TODO(RUN-268): Use the actual slice instructions left here.
+        match &execution_result {
+            WasmExecutionResult::Finished(output, _) => {
+                round_limits.instructions -=
+                    as_round_instructions(slice_instruction_limit - output.num_instructions_left);
+            }
+            WasmExecutionResult::Paused(_) => {
+                unreachable!("DTS is not enabled yet.");
+            }
+        };
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);

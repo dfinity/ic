@@ -34,7 +34,6 @@ fn early_error_to_result(
     user_error: UserError,
     canister: CanisterState,
     req: RequestOrIngress,
-    cycles: NumInstructions,
     time: Time,
 ) -> ExecuteMessageResult {
     let result = match req {
@@ -60,7 +59,6 @@ fn early_error_to_result(
     };
     ExecuteMessageResult {
         canister,
-        num_instructions_left: cycles,
         response: result,
         heap_delta: NumBytes::from(0),
     }
@@ -115,7 +113,7 @@ pub fn execute_call(
         instruction_limit,
     ) {
         let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-        return early_error_to_result(user_error, canister, req, instruction_limit, time);
+        return early_error_to_result(user_error, canister, req, time);
     }
 
     let mut execution_parameters = ExecutionParameters {
@@ -128,10 +126,10 @@ pub fn execute_call(
     };
 
     if let Err(user_error) = validate_message(&canister, &req, time, round.log) {
-        let mut result = early_error_to_result(user_error, canister, req, instruction_limit, time);
+        let mut result = early_error_to_result(user_error, canister, req, time);
         round.cycles_account_manager.refund_execution_cycles(
             &mut result.canister.system_state,
-            result.num_instructions_left,
+            instruction_limit,
             instruction_limit,
         );
         result
@@ -224,7 +222,6 @@ fn process_update_result(
             });
             ExecuteMessageResult {
                 canister,
-                num_instructions_left: NumInstructions::from(0),
                 response: ExecutionResponse::Paused(paused_execution),
                 heap_delta: NumBytes::from(0),
             }
@@ -270,7 +267,6 @@ fn process_update_result(
             );
             ExecuteMessageResult {
                 canister,
-                num_instructions_left: output.num_instructions_left,
                 response,
                 heap_delta,
             }
@@ -362,12 +358,11 @@ fn execute_query_method(
     round.cycles_account_manager.refund_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
-        execution_parameters.slice_instruction_limit,
+        execution_parameters.total_instruction_limit,
     );
 
     ExecuteMessageResult {
         canister,
-        num_instructions_left: output.num_instructions_left,
         response,
         heap_delta: NumBytes::from(0),
     }

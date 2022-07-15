@@ -110,7 +110,7 @@ impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
 /// which currently wraps `AvailableMemory` in an `Arc<RwLock>`. Based on how it is
 /// currently used this wrapping is not strictly necessary and one could alternatively
 /// pass a mutable reference to `AvailableMemory` in the respective places.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
 pub struct AvailableMemory {
     /// The total memory available on the subnet
     total_memory: i64,
@@ -159,7 +159,7 @@ impl ops::Div<i64> for AvailableMemory {
 
 /// This struct is used to manage the current amount of memory available on the
 /// subnet.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SubnetAvailableMemory(AvailableMemory);
 
 impl From<AvailableMemory> for SubnetAvailableMemory {

@@ -1,4 +1,4 @@
-use crate::execution_environment::RoundLimits;
+use crate::execution_environment::{as_round_instructions, RoundLimits};
 use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
@@ -58,6 +58,7 @@ pub fn execute_inspect_message(
         time,
     );
     let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(execution_parameters.total_instruction_limit),
         subnet_available_memory,
     };
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(

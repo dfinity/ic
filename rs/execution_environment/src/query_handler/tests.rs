@@ -2,6 +2,7 @@ use crate::{
     canister_manager::tests::InstallCodeContextBuilder,
     canister_manager::{CanisterManager, CanisterMgrConfig},
     canister_settings::CanisterSettings,
+    execution_environment::as_round_instructions,
     hypervisor::Hypervisor,
     IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundLimits,
 };
@@ -132,6 +133,7 @@ fn universal_canister(
             execution_mode: ExecutionMode::Replicated,
         },
         &mut RoundLimits {
+            instructions: as_round_instructions(INSTRUCTION_LIMIT),
             subnet_available_memory: AvailableMemory::new(
                 MEMORY_CAPACITY.get() as i64,
                 MEMORY_CAPACITY.get() as i64,

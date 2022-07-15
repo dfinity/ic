@@ -254,28 +254,31 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
     let layout = canister_layout(&canister_layout_path, &canister_id);
-    let (instructions_from_compilation, execution_state) = match round
-        .hypervisor
-        .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
-    {
-        Err(err) => {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    instructions_left,
-                    Err((canister_id, err).into()),
-                )),
-            };
-        }
-        Ok((instructions_from_compilation, mut execution_state)) => {
-            let stable_memory = match new_canister.execution_state {
-                Some(es) => es.stable_memory,
-                None => Memory::default(),
-            };
-            execution_state.stable_memory = stable_memory;
-            (instructions_from_compilation, execution_state)
-        }
-    };
+    let (instructions_from_compilation, execution_state) =
+        match round.hypervisor.create_execution_state(
+            context.wasm_module,
+            layout.raw_path(),
+            canister_id,
+            round_limits,
+        ) {
+            Err(err) => {
+                return DtsInstallCodeResult {
+                    old_canister,
+                    response: InstallCodeResponse::Result((
+                        instructions_left,
+                        Err((canister_id, err).into()),
+                    )),
+                };
+            }
+            Ok((instructions_from_compilation, mut execution_state)) => {
+                let stable_memory = match new_canister.execution_state {
+                    Some(es) => es.stable_memory,
+                    None => Memory::default(),
+                };
+                execution_state.stable_memory = stable_memory;
+                (instructions_from_compilation, execution_state)
+            }
+        };
     new_canister.execution_state = Some(execution_state);
 
     let instructions_left =

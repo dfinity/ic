@@ -16,7 +16,8 @@ pub mod util;
 
 use crate::anonymous_query_handler::AnonymousQueryHandler;
 pub use execution_environment::{
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, RoundLimits,
+    as_num_instructions, as_round_instructions, CanisterHeartbeatError, ExecutionEnvironment,
+    ExecutionResponse, RoundInstructions, RoundLimits,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
