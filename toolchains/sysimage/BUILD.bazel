@@ -5,4 +5,5 @@ exports_files([
     "build_vfat_image.py",
     "build_ext4_image.py",
     "build_disk_image.py",
+    "build_upgrade_image.py",
 ])

@@ -201,6 +201,54 @@ disk_image = rule(
     },
 )
 
+def _upgrade_image_impl(ctx):
+    tool_file = ctx.files._build_upgrade_image_tool[0]
+
+    in_boot_partition = ctx.files.boot_partition[0]
+    in_root_partition = ctx.files.root_partition[0]
+    in_version_file = ctx.files.version_file[0]
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    ctx.actions.run_shell(
+        inputs = [in_boot_partition, in_root_partition, in_version_file],
+        outputs = [out],
+        command = "python3 %s -b %s -r %s -v %s -c %s -o %s" % (
+            tool_file.path,
+            in_boot_partition.path,
+            in_root_partition.path,
+            in_version_file.path,
+            ctx.attr.compression,
+            out.path,
+        ),
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+upgrade_image = rule(
+    implementation = _upgrade_image_impl,
+    attrs = {
+        "boot_partition": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "root_partition": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "version_file": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "compression": attr.string(
+            default = "gz",
+        ),
+        "_build_upgrade_image_tool": attr.label(
+            allow_files = True,
+            default = ":build_upgrade_image.py",
+        ),
+    },
+)
+
 def _tar_extract_impl(ctx):
     in_tar = ctx.files.src[0]
     out = ctx.actions.declare_file(ctx.label.name)
