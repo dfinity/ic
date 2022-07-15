@@ -2,13 +2,11 @@
 
 use crate::metrics::SendQueueMetrics;
 use crate::types::{DequeuedMessage, QueueSize, SendQueue, SendQueueReader};
+use async_trait::async_trait;
 use ic_base_types::NodeId;
 use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportPayload};
 use ic_protobuf::registry::node::v1::NodeRecord;
-
-use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
@@ -99,9 +97,6 @@ pub(crate) struct SendQueueImpl {
     send_end: SendEnd,
     receive_end: Arc<ReceiveEndContainer>,
 
-    /// Error flag
-    error: Arc<AtomicBool>,
-
     /// Metrics
     metrics: SendQueueMetrics,
 }
@@ -120,7 +115,6 @@ impl SendQueueImpl {
         Self {
             flow_label,
             flow_tag: flow_tag.to_string(),
-            error: Arc::new(AtomicBool::new(false)),
             queue_size,
             send_end,
             receive_end: Arc::new(receieve_end_wrapper),
@@ -143,7 +137,6 @@ impl SendQueue for SendQueueImpl {
             flow_tag: self.flow_tag.clone(),
             receive_end_container: self.receive_end.clone(),
             cur_receive_end: None,
-            error: self.error.clone(),
             metrics: self.metrics.clone(),
         };
         Box::new(reader)
@@ -162,7 +155,6 @@ impl SendQueue for SendQueueImpl {
         match self.send_end.try_send((Instant::now(), message)) {
             Ok(_) => None,
             Err(TrySendError::Full((_, unsent))) => {
-                self.error.store(true, Ordering::Release);
                 self.metrics
                     .queue_full
                     .with_label_values(&[&self.flow_label, &self.flow_tag])
@@ -170,7 +162,6 @@ impl SendQueue for SendQueueImpl {
                 Some(unsent)
             }
             Err(TrySendError::Closed((_, unsent))) => {
-                self.error.store(true, Ordering::Release);
                 self.metrics
                     .no_receiver
                     .with_label_values(&[&self.flow_label, &self.flow_tag])
@@ -197,7 +188,6 @@ struct SendQueueReaderImpl {
     flow_tag: String,
     receive_end_container: Arc<ReceiveEndContainer>,
     cur_receive_end: Option<ReceiveEnd>,
-    error: Arc<AtomicBool>,
     metrics: SendQueueMetrics,
 }
 
@@ -255,16 +245,7 @@ impl SendQueueReader for SendQueueReaderImpl {
             removed += 1;
             removed_bytes += payload.0.len();
 
-            let sender_error = if removed == 1 {
-                // Return bool present in error and set error to false.
-                self.error.fetch_and(false, Ordering::Acquire)
-            } else {
-                false
-            };
-            let msg = DequeuedMessage {
-                payload,
-                sender_error,
-            };
+            let msg = DequeuedMessage { payload };
             result.push(msg);
 
             if removed_bytes >= bytes_limit {
