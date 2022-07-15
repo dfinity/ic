@@ -36,7 +36,7 @@ struct PrintMetrics {}
 impl LedgerBlocksSynchronizerMetrics for PrintMetrics {
     fn set_target_height(&self, _height: u64) {}
     fn set_synced_height(&self, height: u64) {
-        println!("Synched blocks up to height {}", height);
+        println!("Synced blocks up to height {}", height);
     }
     fn set_verified_height(&self, height: u64) {
         println!("Verified blocks up to height {}", height);
