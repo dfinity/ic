@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//rs/crypto:__subpackages__"])
-
 filegroup(
     name = "sources",
     srcs = glob(
@@ -21,6 +19,10 @@ rust_library(
     edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
+    ],
+    visibility = [
+        "//rs/crypto:__subpackages__",
+        "//rs/test_utilities:__pkg__",
     ],
     deps = [
         "//rs/crypto/internal/csp_test_utils",
