@@ -109,10 +109,7 @@ impl Wasm {
             .read_to_end(&mut wasm_data)
             .unwrap_or_else(|e| panic!("{}", e.to_string()));
 
-        // It's not very consistent with the other `from_xx` functions to
-        // optimize wasms here. This is because canisters are not optimized
-        // on CI; see OPS-178.
-        Wasm::from_bytes(wasm_data).strip_debug_info()
+        Wasm::from_bytes(wasm_data)
     }
 
     pub fn from_wat(content: &str) -> Wasm {
@@ -125,7 +122,7 @@ impl Wasm {
     }
 
     /// Strip the debug info out of the wasm binaries.
-    fn strip_debug_info(self) -> Self {
+    pub fn strip_debug_info(self) -> Self {
         // The WAT format does not have any support for custom sections. So they are
         // removed (including any debug info) when converting a WASM to a WAT.
         let bytes =

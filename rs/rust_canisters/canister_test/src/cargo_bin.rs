@@ -159,7 +159,7 @@ impl Project {
             .run()
             .expect("Cargo failed to compile the wasm binary");
 
-        let wasm = Wasm::from_file(binary.path());
+        let wasm = Wasm::from_file(binary.path()).strip_debug_info();
         eprintln!("Compiling {} took {:.1} s", bin_name, since_start_secs());
         wasm
     }

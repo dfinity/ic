@@ -5727,6 +5727,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-core",
  "serde",
+ "stable-structures",
 ]
 
 [[package]]
