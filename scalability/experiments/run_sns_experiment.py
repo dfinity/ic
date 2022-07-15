@@ -22,7 +22,7 @@ gflags.DEFINE_boolean("deploy", True, "Should the NNS be deployed")
 
 TMPDIR = "/tmp"
 DFX_VERSION = "0.11.0-beta.1"
-SNS_BRANCH = "origin/sns-inf"
+SNS_BRANCH = "origin/main"
 
 
 class SnsExperiment(base_experiment.BaseExperiment):
@@ -82,6 +82,19 @@ class SnsExperiment(base_experiment.BaseExperiment):
         subprocess.check_output(["./deploy.sh", "--sns", FLAGS.testnet], cwd=self.nns_dapp_dir, env=deploy_env)
 
     def generate_dfx_json(self, testnet, nns_url):
+
+        curr_git_revision = (
+            subprocess.check_output(
+                [
+                    "./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh",
+                    "HEAD",
+                ],
+                cwd="..",
+            )
+            .decode()
+            .replace("\n", "")
+        )
+
         dfx_json_file = os.path.join(self.nns_dapp_dir, "dfx.json")
         print(f"Reading existing dfx.json file from {dfx_json_file}")
 
@@ -100,6 +113,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
                     "providers": [nns_url],
                     "type": "persistent",
                 }
+            old_dfx_json["defaults"]["build"]["config"]["IC_COMMIT"] = str(curr_git_revision)
             print("Generated new content for dfx.json file")
 
         with open(dfx_json_file, "w") as dfx_file:
@@ -167,6 +181,13 @@ if __name__ == "__main__":
 
     exp.ensure_checkout_nns_dapp()
     if FLAGS.deploy:
+        print(exp.get_subnets())
+        res = subprocess.check_output(
+            [exp._get_ic_admin_path(), "--nns-url", nns_url, "get-subnet", exp.get_subnets()[0]],
+            encoding="utf-8",
+        )
+
+        nns_subnet_json = json.loads(res)["records"][0]["value"]
         res = subprocess.check_output(
             [
                 exp._get_ic_admin_path(),
@@ -177,7 +198,13 @@ if __name__ == "__main__":
                 sns_subnet,
                 "--test-neuron-proposer",
                 "--initial-notary-delay-millis",
-                "1000",
+                str(nns_subnet_json["initial_notary_delay_mills"]),
+                "--unit-delay-millis",
+                str(nns_subnet_json["unit_delay_millis"]),
+                "--max-ingress-bytes-per-message",
+                str(nns_subnet_json["max_ingress_bytes_per_message"]),
+                "--dkg-interval-length",
+                str(nns_subnet_json["dkg_interval_length"]),
             ],
             encoding="utf-8",
         )
