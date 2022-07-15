@@ -5,6 +5,8 @@
 #![warn(rust_2018_idioms)]
 #![warn(future_incompatible)]
 
+mod miracl;
+
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use rand::{CryptoRng, RngCore};

@@ -17,6 +17,7 @@ rust_library(
     crate_name = "ic_crypto_internal_bls12381_serde_miracl",
     edition = "2018",
     deps = [
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
         "@crate_index//:miracl_core_bls12381",
     ],
