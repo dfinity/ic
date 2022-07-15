@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -34,4 +34,10 @@ rust_library(
     ],
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "client_test",
+    crate = ":client",
+    deps = [
+        "//rs/test_utilities",
+    ],
+)
