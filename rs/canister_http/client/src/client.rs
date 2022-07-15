@@ -315,6 +315,7 @@ mod tests {
         messages::{Blob, CallbackId},
         Time,
     };
+    use std::convert::TryFrom;
     use std::{
         convert::Infallible,
         future::Future,
