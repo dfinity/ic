@@ -44,6 +44,42 @@ bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
 tls.enabled = true
 tls.verify_certificate = false
 
+[transforms.nginx_error]
+type = "filter"
+inputs = ["nginx"]
+condition = ".SYSLOG_IDENTIFIER == \"error\""
+
+[transforms.nginx_error_json]
+type = "remap"
+inputs = ["nginx_error"]
+source = """
+.@timestamp, err = to_int(.__REALTIME_TIMESTAMP)
+if err != null {
+    .@timestamp = null
+}
+
+.@timestamp, err = .@timestamp / 1000
+if err != null {
+    .timestamp = null
+}
+.@timestamp = to_int(.@timestamp)
+
+. = {
+    "@timestamp": .@timestamp,
+    "host": .host,
+    "message": .message
+}
+"""
+
+[sinks.elasticsearch_nginx_error]
+type = "elasticsearch"
+inputs = ["nginx_error_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-nginx-error-%Y.%m.%d"
+tls.enabled = true
+tls.verify_certificate = false
+
 # prober
 
 [sources.prober]
