@@ -453,6 +453,7 @@ fn setup_artifact_manager(
                         Arc::clone(&consensus_crypto),
                         ReplicaConfig { subnet_id, node_id },
                         Arc::clone(&registry_client),
+                        metrics_registry.clone(),
                         replica_logger.clone(),
                     ),
                     canister_http::CanisterHttpGossipImpl::new(
@@ -465,7 +466,7 @@ fn setup_artifact_manager(
             Arc::clone(&artifact_pools.consensus_pool_cache),
             Arc::clone(&artifact_pools.canister_http_pool),
             replica_logger.clone(),
-            metrics_registry,
+            metrics_registry.clone(),
         );
         artifact_manager_maker.add_client(canister_http_client, actor);
     }
