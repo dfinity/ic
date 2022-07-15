@@ -41,6 +41,15 @@ fn ledger_wasm() -> Vec<u8> {
     proj.cargo_bin("ic-icrc1-ledger", &[]).bytes()
 }
 
+fn archive_wasm() -> Vec<u8> {
+    Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "rosetta-api/icrc1/archive",
+        "ic-icrc1-archive",
+        &[],
+    )
+    .bytes()
+}
+
 fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> CanisterId {
     let args = InitArgs {
         minting_account: MINTER.clone(),
@@ -386,17 +395,55 @@ fn test_archiving() {
     assert_eq!(archive_info.len(), 1);
     assert_eq!(archive_info[0].block_range_start, 0);
     assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
+
+    let archive_canister_id = archive_info[0].canister_id;
+
+    for i in 1..NUM_BLOCKS_TO_ARCHIVE {
+        assert_eq!(
+            get_archive_block(&env, archive_canister_id, i)
+                .unwrap()
+                .transaction
+                .operation,
+            CandidOperation::Transfer {
+                from: p1.into(),
+                to: p2.into(),
+                amount: 10_000 + i - 1,
+                fee: FEE
+            }
+        );
+    }
+
+    // Upgrade the archive and check that the data is still available.
+
+    env.upgrade_canister(archive_canister_id, archive_wasm(), vec![])
+        .expect("failed to upgrade the archive canister");
+
+    for i in 1..NUM_BLOCKS_TO_ARCHIVE {
+        assert_eq!(
+            get_archive_block(&env, archive_canister_id, i)
+                .unwrap()
+                .transaction
+                .operation,
+            CandidOperation::Transfer {
+                from: p1.into(),
+                to: p2.into(),
+                amount: 10_000 + i - 1,
+                fee: FEE
+            }
+        );
+    }
+
+    // Check that we can append more blocks after the upgrade.
+    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE) {
+        transfer(&env, canister_id, p1.into(), p2.into(), 20_000 + i).expect("transfer failed");
+    }
+
+    let archive_info = list_archives(&env, canister_id);
+    assert_eq!(archive_info.len(), 1);
+    assert_eq!(archive_info[0].block_range_start, 0);
     assert_eq!(
-        get_archive_block(&env, archive_info[0].canister_id, /*block_index=*/ 1)
-            .unwrap()
-            .transaction
-            .operation,
-        CandidOperation::Transfer {
-            from: p1.into(),
-            to: p2.into(),
-            amount: 10_000,
-            fee: FEE
-        }
+        archive_info[0].block_range_end,
+        2 * NUM_BLOCKS_TO_ARCHIVE - 1
     );
 }
 
@@ -483,6 +530,7 @@ fn block_encoding_agrees_with_the_schema() {
         })
         .unwrap();
 }
+
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
