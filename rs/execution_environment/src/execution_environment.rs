@@ -1654,7 +1654,6 @@ impl ExecutionEnvironment {
 
         let time = state.time();
         let canister_layout_path = state.path().to_path_buf();
-        let compute_allocation_used = state.total_compute_allocation();
         let memory_taken = state.total_memory_taken();
         let network_topology = state.metadata.network_topology.clone();
 
@@ -1672,7 +1671,6 @@ impl ExecutionEnvironment {
                         old_canister,
                         time,
                         canister_layout_path,
-                        compute_allocation_used,
                         memory_taken,
                         &network_topology,
                         execution_parameters,
