@@ -183,8 +183,8 @@ RUN \
 		# Create soft link for vmlinuz and initrd.img pointing to the updated images
 		unlink /boot/vmlinuz && \
 		unlink /boot/initrd.img && \
-		ln -s /boot/vmlinuz-${snp_kernel_version}/boot/vmlinuz && \
-		ln -s /boot/initrd.img-${snp_kernel_version}/boot/initrd.img ; \
+		ln -s /boot/vmlinuz-${snp_kernel_version} /boot/vmlinuz && \
+		ln -s /boot/initrd.img-${snp_kernel_version} /boot/initrd.img ; \
      fi
 
 # Cleanup
