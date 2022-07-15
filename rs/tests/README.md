@@ -87,6 +87,17 @@ IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern b
 If your test is supposed to run for more than 50min, you need to set the 
 `SYSTEM_TESTS_TIMEOUT` environment variable to a suitable value in seconds.
 
+Changing the replica log level for system test runs, e.g., to facilitate debugging, can
+be achieved by using log overrides. E.g., using the `DEBUG` level in certain modules
+you can use the following:
+
+```bash
+IC_VERSION_ID=<version> ./run-system-tests.py \
+    --include-pattern=http_basic_remote \
+    --suite=staging \
+    --log-debug-overrides "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors"
+```
+
 If you have further questions, please contact the testing team on #eng-testing.
 
 # How to write a system test
