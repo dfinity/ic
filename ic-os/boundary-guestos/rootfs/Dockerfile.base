@@ -181,10 +181,11 @@ RUN \
 		# Create initrd for the new kernel
 		update-initramfs -b /boot -c -k ${snp_kernel_version} && \
 		# Create soft link for vmlinuz and initrd.img pointing to the updated images
-		unlink /boot/vmlinuz && \
-		unlink /boot/initrd.img && \
-		ln -s /boot/vmlinuz-${snp_kernel_version} /boot/vmlinuz && \
-		ln -s /boot/initrd.img-${snp_kernel_version} /boot/initrd.img ; \
+        cd /boot && \
+		unlink vmlinuz && \
+		unlink initrd.img && \
+		ln -s vmlinuz-${snp_kernel_version} vmlinuz && \
+		ln -s initrd.img-${snp_kernel_version} initrd.img ; \
      fi
 
 # Cleanup
