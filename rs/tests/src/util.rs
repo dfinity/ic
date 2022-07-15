@@ -938,18 +938,15 @@ pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &ic_fondue:
     }
 }
 
-pub async fn assert_agent_observes_canister_module(agent: &Agent, canister_id: &Principal) {
-    let has_module_hash = || async {
-        ManagementCanister::create(agent)
-            .canister_status(canister_id)
-            .call_and_wait(delay())
-            .await
-            .unwrap()
-            .0
-            .module_hash
-            .is_some()
-    };
-    assert!(has_module_hash().await);
+pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
+    let status = ManagementCanister::create(agent)
+        .canister_status(canister_id)
+        .call_and_wait(delay())
+        .await;
+    match status {
+        Ok(s) => s.0.module_hash.is_some(),
+        Err(_) => false,
+    }
 }
 
 pub(crate) async fn assert_canister_counter_with_retries(

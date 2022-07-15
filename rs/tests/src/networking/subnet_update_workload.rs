@@ -30,12 +30,12 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
     SubnetSnapshot,
 };
-
 use crate::util::{
-    assert_agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+    agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
     create_agent_mapping,
 };
 use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
+use anyhow::bail;
 use ic_agent::{export::Principal, Agent};
 use ic_prep_lib::subnet_configuration::constants;
 
@@ -134,7 +134,7 @@ pub fn long_duration_test(env: TestEnv) {
         1000, //payload size bytes
         Duration::from_secs(6 * 60 * 60),
         true, //use boundary nodes
-        0.95, //min_success_ratio
+        0.90, //min_success_ratio
     );
 }
 
@@ -224,17 +224,21 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
-                assert_agent_observes_canister_module(agent, &nns_canister).await;
-                Ok(())
+            retry_async(&log, Duration::from_secs(11), RETRY_BACKOFF, || async {
+                match agent_observes_canister_module(agent, &nns_canister).await {
+                    true => Ok(()),
+                    false => bail!("Canister module not available yet"),
+                }
             })
             .await
             .unwrap();
         }
         for agent in app_agents.iter() {
             retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
-                assert_agent_observes_canister_module(agent, &app_canister).await;
-                Ok(())
+                match agent_observes_canister_module(agent, &app_canister).await {
+                    true => Ok(()),
+                    false => bail!("Canister module not available yet"),
+                }
             })
             .await
             .unwrap();

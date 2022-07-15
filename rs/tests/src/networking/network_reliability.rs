@@ -24,7 +24,7 @@ use crate::driver::test_env_api::{
     SshSession, ADMIN, DEVICE_NAME,
 };
 use crate::util::{
-    self, assert_agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+    self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
 };
 use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
@@ -202,10 +202,16 @@ pub fn test(env: TestEnv, config: Config) {
     );
     block_on(async {
         for agent in agents_nns.iter() {
-            assert_agent_observes_canister_module(agent, &canister_nns).await;
+            assert!(
+                agent_observes_canister_module(agent, &canister_nns).await,
+                "Canister module not available"
+            );
         }
         for agent in agents_app.iter() {
-            assert_agent_observes_canister_module(agent, &canister_app).await;
+            assert!(
+                agent_observes_canister_module(agent, &canister_app).await,
+                "Canister module not available"
+            );
         }
     });
     info!(&log, "All agents observe the installed canister module.");
