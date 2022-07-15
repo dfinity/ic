@@ -1,7 +1,8 @@
 use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
     execution_environment::{
-        execute_canister, ExecuteCanisterResult, ExecutionEnvironment, RoundLimits,
+        as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
+        ExecutionEnvironment, RoundInstructions, RoundLimits,
     },
     metrics::MeasurementScope,
     util::{self, process_responses},
@@ -57,7 +58,6 @@ pub(crate) mod tests;
 
 #[derive(Clone)]
 pub(crate) struct CanisterExecutionLimits {
-    total_instruction_limit: NumInstructions,
     max_heap_delta_per_iteration: NumBytes,
     instruction_limit_per_message: NumInstructions,
     instruction_overhead_per_message: NumInstructions,
@@ -68,7 +68,6 @@ pub(crate) struct CanisterExecutionLimits {
 impl CanisterExecutionLimits {
     pub fn from(config: &SchedulerConfig) -> Self {
         Self {
-            total_instruction_limit: config.max_instructions_per_round,
             max_heap_delta_per_iteration: config.max_heap_delta_per_iteration,
             instruction_limit_per_message: config.max_instructions_per_message,
             instruction_overhead_per_message: config.instruction_overhead_per_message,
@@ -325,10 +324,6 @@ impl SchedulerImpl {
         let mut is_first_iteration = true;
         let mut round_filtered_canisters = FilteredCanisters::new();
 
-        // Keep executing till either the execution of a round does not actually
-        // consume any additional instructions or the maximum allowed instructions
-        // per round have been consumed.
-        let mut total_instructions_consumed = NumInstructions::from(0);
         let mut total_heap_delta = NumBytes::from(0);
 
         // Add `Heartbeat` tasks to be executed before input messages.
@@ -353,9 +348,6 @@ impl SchedulerImpl {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-
-            let mut loop_config = self.config.clone();
-            loop_config.max_instructions_per_round -= total_instructions_consumed;
 
             // Update subnet available memory before taking out the canisters.
             round_limits.subnet_available_memory =
@@ -387,20 +379,17 @@ impl SchedulerImpl {
             }
             drop(preparation_timer);
 
-            let (
-                executed_canisters,
-                mut loop_ingress_execution_results,
-                instructions_consumed,
-                heap_delta,
-            ) = self.execute_canisters_in_inner_round(
-                active_canisters_partitioned_by_cores,
-                loop_config.clone(),
-                current_round,
-                state.time(),
-                Arc::new(state.metadata.network_topology.clone()),
-                &measurement_scope,
-                round_limits,
-            );
+            let instructions_before = round_limits.instructions;
+            let (executed_canisters, mut loop_ingress_execution_results, heap_delta) = self
+                .execute_canisters_in_inner_round(
+                    active_canisters_partitioned_by_cores,
+                    current_round,
+                    state.time(),
+                    Arc::new(state.metadata.network_topology.clone()),
+                    &measurement_scope,
+                    round_limits,
+                );
+            let instructions_consumed = instructions_before - round_limits.instructions;
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
@@ -414,24 +403,27 @@ impl SchedulerImpl {
             );
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            total_instructions_consumed += instructions_consumed
-                + self
-                    .config
+            round_limits.instructions -= as_round_instructions(
+                self.config
                     .instruction_overhead_per_canister_for_finalization
-                    * state.num_canisters() as u64;
-            if instructions_consumed == NumInstructions::from(0) {
+                    * state.num_canisters() as u64,
+            );
+
+            if instructions_consumed == RoundInstructions::from(0) {
                 break state;
             } else {
                 self.metrics
                     .inner_loop_consumed_non_zero_instructions_count
                     .inc();
             }
-            if total_instructions_consumed >= self.config.max_instructions_per_round {
+
+            if round_limits.instructions <= RoundInstructions::from(0) {
                 self.metrics
                     .inner_round_loop_consumed_max_instructions
                     .inc();
                 break state;
             }
+
             if total_heap_delta >= self.config.max_heap_delta_per_iteration {
                 break state;
             }
@@ -511,7 +503,6 @@ impl SchedulerImpl {
     fn execute_canisters_in_inner_round(
         &self,
         canisters_by_thread: Vec<Vec<CanisterState>>,
-        current_config: SchedulerConfig,
         round_id: ExecutionRound,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -520,22 +511,18 @@ impl SchedulerImpl {
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
-        NumInstructions,
         NumBytes,
     ) {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
-        let canister_execution_limits = CanisterExecutionLimits::from(&current_config);
+        let canister_execution_limits = CanisterExecutionLimits::from(&self.config);
 
-        // If we don't have enough instructions to execute a single message,
-        // then skip execution and return unchanged canisters.
-        if canister_execution_limits.total_instruction_limit
-            < canister_execution_limits.instruction_limit_per_message
-        {
+        // If there are no more instructions left, then skip execution and
+        // return unchanged canisters.
+        if round_limits.instructions <= RoundInstructions::from(0) {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 vec![],
-                NumInstructions::from(0),
                 NumBytes::from(0),
             );
         }
@@ -548,6 +535,7 @@ impl SchedulerImpl {
 
         // Distribute subnet available memory equaly between the threads.
         let round_limits_per_thread = RoundLimits {
+            instructions: round_limits.instructions,
             subnet_available_memory: (round_limits.subnet_available_memory.get()
                 / self.config.scheduler_cores as i64)
                 .into(),
@@ -569,6 +557,7 @@ impl SchedulerImpl {
                 let canister_execution_limits = canister_execution_limits.clone();
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let round_limits = RoundLimits {
+                    instructions: round_limits.instructions,
                     subnet_available_memory: round_limits_per_thread
                         .subnet_available_memory
                         .get()
@@ -601,25 +590,32 @@ impl SchedulerImpl {
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             ingress_results.append(&mut result.ingress_results);
-            total_instructions_executed += result.instructions_executed;
-            max_instructions_executed_per_thread = std::cmp::max(
-                max_instructions_executed_per_thread,
-                result.instructions_executed,
+            let instructions_executed = as_num_instructions(
+                round_limits_per_thread.instructions - result.round_limits.instructions,
             );
+            total_instructions_executed += instructions_executed;
+            max_instructions_executed_per_thread =
+                max_instructions_executed_per_thread.max(instructions_executed);
+
+            self.metrics.compute_utilization_per_core.observe(
+                instructions_executed.get() as f64
+                    / round_limits_per_thread.instructions.get() as f64,
+            );
+
             // Propagate the metrics from `execution_round_inner_iteration_thread`
             // to `execution_round_inner_iteration`.
-            measurement_scope.add(result.instructions_executed, result.messages_executed);
+            measurement_scope.add(instructions_executed, result.messages_executed);
             heap_delta += result.heap_delta;
         }
+
+        // Since there are multiple threads, we update the global limit using
+        // the thread that executed the most instructions.
+        round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+
         self.metrics
             .instructions_consumed_per_round
             .observe(total_instructions_executed.get() as f64);
-        (
-            canisters,
-            ingress_results,
-            max_instructions_executed_per_thread,
-            heap_delta,
-        )
+        (canisters, ingress_results, heap_delta)
     }
 
     fn process_stopping_canisters(&self, state: ReplicatedState) -> ReplicatedState {
@@ -937,10 +933,6 @@ impl Scheduler for SchedulerImpl {
             }
         }
 
-        let mut round_limits = RoundLimits {
-            subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
-        };
-
         // Invoke the heartbeat of the bitcoin canister.
         {
             let bitcoin_state: BitcoinState = state.take_bitcoin_state();
@@ -955,6 +947,19 @@ impl Scheduler for SchedulerImpl {
             state.put_bitcoin_state(bitcoin_state);
         }
 
+        // Ideally we would split the per-round limit between subnet messages and
+        // canister messages, so that their sum cannot exceed the limit. That would
+        // make the limit for canister messages variable, which would break assumptions
+        // of the scheduling algorithm. The next best thing we can do is to limit
+        // subnet messages on top of the fixed limit for canister messages.
+        // The value of the limit for subnet messages is chosen quite arbitrarily
+        // as 1/16 of the fixed limit. Any other value in the same ballpark would
+        // work here.
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(self.config.max_instructions_per_round / 16),
+            subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
+        };
+
         // Execute subnet messages.
         {
             // Drain the consensus queue.
@@ -966,7 +971,8 @@ impl Scheduler for SchedulerImpl {
             // For now, we assume all subnet messages need the entire replicated
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
-                let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+                let instructions_before = round_limits.instructions;
+                state = self.exec_env.execute_subnet_message(
                     CanisterInputMessage::Response(response.into()),
                     state,
                     self.config.max_instructions_per_message,
@@ -975,11 +981,12 @@ impl Scheduler for SchedulerImpl {
                     registry_settings,
                     &mut round_limits,
                 );
-
-                state = new_state;
-                let instructions_consumed =
-                    self.config.max_instructions_per_message - instructions_left;
-                measurement_scope.add(instructions_consumed, NumMessages::from(1));
+                let instructions_executed =
+                    as_num_instructions(instructions_before - round_limits.instructions);
+                measurement_scope.add(instructions_executed, NumMessages::from(1));
+                if round_limits.instructions <= RoundInstructions::from(0) {
+                    break;
+                }
             }
         }
 
@@ -988,17 +995,6 @@ impl Scheduler for SchedulerImpl {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
 
-            // Ideally we would split the per-round limit between subnet messages and
-            // canister messages, so that their sum cannot exceed the limit. That would
-            // make the limit for canister messages variable, which would break assumptions
-            // of the scheduling algorithm. The next best thing we can do is to limit
-            // subnet messages on top of the fixed limit for canister messages.
-            // The value of the limit for subnet messages is chosen quite arbitrarily
-            // as 1/16th of the fixed limit. Any other value in the same ballpark would
-            // work here.
-            let max_instructions_per_round_for_subnet_messages =
-                self.config.max_instructions_per_round / 16;
-            let mut total_instructions_consumed = NumInstructions::from(0);
             let mut total_bitcoin_requests = 0;
 
             while let Some(msg) = state.pop_subnet_input() {
@@ -1009,7 +1005,8 @@ impl Scheduler for SchedulerImpl {
                     total_bitcoin_requests += 1;
                 }
 
-                let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+                let instructions_before = round_limits.instructions;
+                state = self.exec_env.execute_subnet_message(
                     msg,
                     state,
                     instructions_limit_per_message,
@@ -1018,18 +1015,10 @@ impl Scheduler for SchedulerImpl {
                     registry_settings,
                     &mut round_limits,
                 );
-
-                state = new_state;
-                let instructions_consumed = instructions_limit_per_message - instructions_left;
-                total_instructions_consumed += instructions_consumed;
-                measurement_scope.add(instructions_consumed, NumMessages::from(1));
-                // We check for the limit after the subnet message execution to ensure progress
-                // in the case when `instruction_limit_per_message` >
-                // `max_instructions_per_round_for_subnet_messages`.
-                // This means that we will exceed the limit by at most
-                // `instruction_limit_per_message` and that is okay since the limit was set as
-                // a heuristic anyway.
-                if total_instructions_consumed >= max_instructions_per_round_for_subnet_messages {
+                let instructions_executed =
+                    as_num_instructions(instructions_before - round_limits.instructions);
+                measurement_scope.add(instructions_executed, NumMessages::from(1));
+                if round_limits.instructions <= RoundInstructions::from(0) {
                     break;
                 }
 
@@ -1048,6 +1037,22 @@ impl Scheduler for SchedulerImpl {
                 }
             }
         }
+
+        // Reset the round limit after executing all subnet messages.
+        //
+        // The round will stop as soon as the counter reaches zero.
+        // We can compute the initial value `X` of the counter based on:
+        // - `R = max_instructions_per_round`,
+        // - `M = max_instructions_per_message`.
+        // In the worst case, we start a new Wasm execution when then counter
+        // reaches 1 and the execution uses the maximum `M` instructions. After
+        // the execution the counter will be set to `1 - M`.
+        //
+        // We want the total number executed instructions to not exceed `R`,
+        // which gives us: `X - (1 - M) <= R` or `X <= R - M + 1`.
+        round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
+            - as_round_instructions(self.config.max_instructions_per_message)
+            + RoundInstructions::from(1);
 
         let ordered_canister_ids;
         {
@@ -1220,9 +1225,9 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
-    instructions_executed: NumInstructions,
     messages_executed: NumMessages,
     heap_delta: NumBytes,
+    round_limits: RoundLimits,
 }
 
 /// Executes the given canisters one by one. For each canister it
@@ -1251,16 +1256,13 @@ fn execute_canisters_on_thread(
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut ingress_results = vec![];
-    let mut total_instructions_executed = NumInstructions::from(0);
     let mut total_messages_executed = NumMessages::from(0);
     let mut total_heap_delta = NumBytes::from(0);
 
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
-        // If there are not enough instructions to execute a message or if we already
-        // have large heap delta, then skip the execution of the canister and
-        // keep its old state.
-        if total_instructions_executed + canister_execution_limits.instruction_limit_per_message
-            > canister_execution_limits.total_instruction_limit
+        // If no more instructions are left or if heap delta is already too
+        // large, then skip execution of the canister and keep its old state.
+        if round_limits.instructions <= RoundInstructions::from(0)
             || total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration
         {
             canisters.push(canister);
@@ -1271,9 +1273,7 @@ fn execute_canisters_on_thread(
         // - it has not tasks and input messages to execute
         // - or the instruction limit is reached.
         while canister.is_active() {
-            if total_instructions_executed + canister_execution_limits.instruction_limit_per_message
-                > canister_execution_limits.total_instruction_limit
-            {
+            if round_limits.instructions <= RoundInstructions::from(0) {
                 canister
                     .system_state
                     .canister_metrics
@@ -1286,9 +1286,9 @@ fn execute_canisters_on_thread(
             );
             let timer = metrics.msg_execution_duration.start_timer();
 
+            let instructions_before = round_limits.instructions;
             let ExecuteCanisterResult {
                 canister: new_canister,
-                num_instructions_left,
                 heap_delta,
                 ingress_status,
                 description,
@@ -1301,20 +1301,19 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
             );
             ingress_results.extend(ingress_status);
-
-            let instructions_consumed =
-                canister_execution_limits.instruction_limit_per_message - num_instructions_left;
-            measurement_scope.add(instructions_consumed, NumMessages::from(1));
+            let instructions_executed =
+                as_num_instructions(instructions_before - round_limits.instructions);
+            measurement_scope.add(instructions_executed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &logger,
                 &metrics,
                 &new_canister,
-                instructions_consumed,
+                instructions_executed,
                 canister_execution_limits.instruction_limit_per_message,
             );
             canister = new_canister;
-            total_instructions_executed +=
-                instructions_consumed + canister_execution_limits.instruction_overhead_per_message;
+            round_limits.instructions -=
+                as_round_instructions(canister_execution_limits.instruction_overhead_per_message);
             total_messages_executed.inc_assign();
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
@@ -1349,17 +1348,12 @@ fn execute_canisters_on_thread(
         canisters.push(canister);
     }
 
-    metrics.compute_utilization_per_core.observe(
-        total_instructions_executed.get() as f64
-            / canister_execution_limits.total_instruction_limit.get() as f64,
-    );
-
     ExecutionThreadResult {
         canisters,
         ingress_results,
-        instructions_executed: total_instructions_executed,
         messages_executed: total_messages_executed,
         heap_delta: total_heap_delta,
+        round_limits,
     }
 }
 

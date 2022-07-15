@@ -11,7 +11,7 @@ use ic_replicated_state::{CanisterState, CanisterStatus, ReplicatedState};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, Payload, StopCanisterContext},
-    CanisterId, NumInstructions,
+    CanisterId,
 };
 use std::{mem, sync::Arc};
 
@@ -52,12 +52,7 @@ pub fn process_responses(
 /// The function also returns other fields of the given result.
 pub fn process_result(
     mut result: ExecuteMessageResult,
-) -> (
-    CanisterState,
-    NumInstructions,
-    NumBytes,
-    Option<(MessageId, IngressStatus)>,
-) {
+) -> (CanisterState, NumBytes, Option<(MessageId, IngressStatus)>) {
     let ingress_status = match result.response {
         ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
         ExecutionResponse::Request(response) => {
@@ -71,13 +66,9 @@ pub fn process_result(
         }
         ExecutionResponse::Empty | ExecutionResponse::Paused(_) => None,
     };
-    (
-        result.canister,
-        result.num_instructions_left,
-        result.heap_delta,
-        ingress_status,
-    )
+    (result.canister, result.heap_delta, ingress_status)
 }
+
 /// Checks for stopping canisters and, if any of them are ready to stop,
 /// transitions them to be fully stopped. Responses to the pending stop
 /// message(s) are written to ingress history.

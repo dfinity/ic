@@ -7,7 +7,9 @@ mod common_wat;
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_error_types::ErrorCode;
-use ic_execution_environment::{ExecutionResponse, RoundLimits};
+use ic_execution_environment::{
+    as_num_instructions, as_round_instructions, ExecutionResponse, RoundLimits,
+};
 use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
@@ -373,8 +375,10 @@ pub fn bench_execute_update(c: &mut Criterion) {
              ..
          }| {
             let mut round_limits = RoundLimits {
+                instructions: as_round_instructions(execution_parameters.total_instruction_limit),
                 subnet_available_memory,
             };
+            let instructions_before = round_limits.instructions;
             let res = ee_test.execution_environment().execute_canister_message(
                 canister_state,
                 execution_parameters.total_instruction_limit,
@@ -383,7 +387,8 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
             );
-            let instructions = res.num_instructions_left;
+            let executed_instructions =
+                as_num_instructions(instructions_before - round_limits.instructions);
             match res.response {
                 ExecutionResponse::Ingress((_, status)) => match status {
                     IngressStatus::Known { state, .. } => {
@@ -397,7 +402,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
             }
             assert_eq!(
                 expected_instructions,
-                common::MAX_NUM_INSTRUCTIONS.get() - instructions.get(),
+                executed_instructions.get(),
                 "Error comparing number of actual and expected instructions"
             );
         },

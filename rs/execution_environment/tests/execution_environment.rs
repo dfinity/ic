@@ -28,7 +28,6 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm},
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
-use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     canister_http::CanisterHttpMethod,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -37,6 +36,7 @@ use ic_types::{
     },
     CanisterId, Cycles, RegistryVersion, Time,
 };
+use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
 
 // A Wasm module calling call_simple
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -1790,7 +1790,7 @@ fn execute_response_with_incorrect_canister_status() {
     );
 
     // Execute response when canister status is not Running.
-    let (_, result) = test.execute_response(canister_id, response);
+    let result = test.execute_response(canister_id, response);
     assert_matches!(result, ExecutionResponse::Empty);
 }
 
@@ -1816,14 +1816,18 @@ fn execute_response_with_unknown_callback_id() {
     }
 
     // Execute response when callback id cannot be found.
-    let (_, result) = test.execute_response(canister_id, response);
+    let result = test.execute_response(canister_id, response);
     assert_matches!(result, ExecutionResponse::Empty);
 }
 
 #[test]
 fn execute_response_refunds_cycles() {
     // This test uses manual execution to get finer control over the execution.
-    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let instruction_limit = 1_000_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_manual_execution()
+        .build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
 
     // Create two canisters: A and B.
@@ -1852,7 +1856,10 @@ fn execute_response_refunds_cycles() {
 
     // Execute response.
     let balance_before = test.canister_state(a_id).system_state.balance();
-    let (num_instructions_left, _) = test.execute_response(a_id, response);
+    let instructions_before = test.canister_executed_instructions(a_id);
+    test.execute_response(a_id, response);
+    let instructions_after = test.canister_executed_instructions(a_id);
+    let instructions_executed = instructions_after - instructions_before;
     let balance_after = test.canister_state(a_id).system_state.balance();
 
     // The balance is equivalent to the amount of cycles before executing`execute_response`
@@ -1863,7 +1870,8 @@ fn execute_response_refunds_cycles() {
     let response_transmission_refund =
         mgr.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
     mgr.xnet_call_bytes_transmitted_fee(response_payload_size);
-    let execution_refund = mgr.convert_instructions_to_cycles(num_instructions_left);
+    let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
+    let execution_refund = mgr.convert_instructions_to_cycles(instructions_left);
     assert_eq!(
         balance_after,
         balance_before + cycles_sent + response_transmission_refund + execution_refund
@@ -1913,7 +1921,7 @@ fn execute_response_when_call_context_deleted() {
         .is_deleted());
 
     // Execute response with deleted call context.
-    let (_, result) = test.execute_response(a_id, response);
+    let result = test.execute_response(a_id, response);
     assert_matches!(result, ExecutionResponse::Empty);
 }
 
@@ -1954,7 +1962,7 @@ fn execute_response_successfully() {
         .is_deleted(),);
 
     // Execute response returns successfully.
-    let (_, result) = test.execute_response(a_id, response);
+    let result = test.execute_response(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -2002,7 +2010,7 @@ fn execute_response_traps() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let (_, result) = test.execute_response(a_id, response);
+    let result = test.execute_response(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -2057,7 +2065,7 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let (_, result) = test.execute_response(a_id, response);
+    let result = test.execute_response(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();

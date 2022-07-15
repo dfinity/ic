@@ -531,6 +531,7 @@ fn test_multiple_iterations_of_inner_loop() {
     let metrics = &test.scheduler().metrics;
 
     assert_eq!(metrics.execute_round_called.get(), 1);
+    assert!(metrics.round_inner_iteration_fin_induct.get_sample_count() >= 3);
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
     assert_eq!(
         metrics
@@ -1276,7 +1277,6 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert!(metrics.round_inner_iteration_prep.get_sample_count() >= 1);
     assert!(metrics.round_inner_iteration_fin.get_sample_count() >= 1);
-    assert!(metrics.round_inner_iteration_fin_induct.get_sample_count() >= 1);
     assert_eq!(metrics.round_finalization_duration.get_sample_count(), 1);
     assert_eq!(
         metrics.round_finalization_stop_canisters.get_sample_count(),
@@ -1663,8 +1663,8 @@ fn execution_round_does_not_end_too_early() {
     // In this test we have 2 canisters with 10 input messages that execute 10
     // instructions each. There are two scheduler cores, so each canister gets
     // its own thread for running. With the round limit of 150 instructions and
-    // each canister executing 100 instructions, we expect two iterations
-    // because the canisters are executing in parallel.
+    // each canister executing 100 instructions, we expect two messages to be
+    // executed because the canisters are executing in parallel.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -1686,7 +1686,7 @@ fn execution_round_does_not_end_too_early() {
     let metrics = &test.scheduler().metrics;
 
     assert_eq!(
-        2,
+        1,
         metrics
             .round_inner_iteration
             .instructions

@@ -7,6 +7,7 @@ mod common_wat;
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_execution_environment::{
+    as_num_instructions, as_round_instructions,
     execution::nonreplicated_query::execute_non_replicated_query, NonReplicatedQueryKind,
     RoundLimits,
 };
@@ -55,9 +56,11 @@ pub fn bench_execute_query(c: &mut Criterion) {
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
             let mut round_limits = RoundLimits {
+                instructions: as_round_instructions(execution_parameters.total_instruction_limit),
                 subnet_available_memory,
             };
-            let (_, instructions_left, result) = execute_non_replicated_query(
+            let instructions_before = round_limits.instructions;
+            let (_, _, result) = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
                 "test",
                 &[],
@@ -69,10 +72,12 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 ee_test.hypervisor_deprecated(),
                 &mut round_limits,
             );
+            let executed_instructions =
+                as_num_instructions(instructions_before - round_limits.instructions);
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(
                 expected_instructions,
-                common::MAX_NUM_INSTRUCTIONS.get() - instructions_left.get(),
+                executed_instructions.get(),
                 "Error comparing number of actual and expected instructions"
             );
         },

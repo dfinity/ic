@@ -12,9 +12,10 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
+    as_num_instructions,
     util::{process_result, process_stopping_canisters},
     CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, Hypervisor,
-    IngressHistoryWriterImpl, RoundLimits,
+    IngressHistoryWriterImpl, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterStatusType, EcdsaKeyId, EmptyBlob,
@@ -537,15 +538,19 @@ impl ExecutionTest {
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
         };
-        let (canister, num_instructions_left, result) = self.exec_env.execute_canister_heartbeat(
+        let instructions_before = round_limits.instructions;
+        let (canister, result) = self.exec_env.execute_canister_heartbeat(
             canister,
             self.instruction_limit,
             network_topology,
             self.time,
             &mut round_limits,
         );
+        let instructions_executed =
+            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
         state.put_canister_state(canister);
@@ -553,7 +558,7 @@ impl ExecutionTest {
             state.metadata.heap_delta_estimate += heap_delta;
         }
         self.state = Some(state);
-        self.update_execution_stats(canister_id, self.instruction_limit, num_instructions_left);
+        self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
         result?;
         Ok(())
     }
@@ -584,13 +589,15 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         response: Response,
-    ) -> (NumInstructions, ExecutionResponse) {
+    ) -> ExecutionResponse {
         let mut state = self.state.take().unwrap();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
         };
+        let instructions_before = round_limits.instructions;
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
@@ -599,18 +606,16 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
         );
+        let instructions_executed =
+            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
 
         state.metadata.heap_delta_estimate += result.heap_delta;
-        self.update_execution_stats(
-            canister_id,
-            self.instruction_limit,
-            result.num_instructions_left,
-        );
+        self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
         state.put_canister_state(result.canister);
         self.state = Some(state);
-        (result.num_instructions_left, result.response)
+        result.response
     }
 
     // A low-level helper to send subnet messages to the IC management canister.
@@ -670,9 +675,11 @@ impl ExecutionTest {
         };
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
         let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
         };
-        let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+        let instructions_before = round_limits.instructions;
+        let new_state = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limit,
@@ -681,6 +688,8 @@ impl ExecutionTest {
             &self.registry_settings,
             &mut round_limits,
         );
+        let instructions_executed =
+            as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
         self.state = Some(new_state);
@@ -688,7 +697,7 @@ impl ExecutionTest {
             self.update_execution_stats(
                 canister_id,
                 self.install_code_instruction_limit,
-                instructions_left,
+                instructions_executed,
             );
         }
         true
@@ -716,6 +725,7 @@ impl ExecutionTest {
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
         };
         for canister_id in canister_ids {
@@ -723,6 +733,7 @@ impl ExecutionTest {
             let mut canister = canisters.remove(&canister_id).unwrap();
             while canister.has_input() {
                 let message = canister.pop_input().unwrap();
+                let instructions_before = round_limits.instructions;
                 let result = self.exec_env.execute_canister_message(
                     canister,
                     self.instruction_limit,
@@ -731,13 +742,14 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     &mut round_limits,
                 );
-                let (new_canister, num_instructions_left, heap_delta, ingress) =
-                    process_result(result);
+                let instructions_executed =
+                    as_num_instructions(instructions_before - round_limits.instructions);
+                let (new_canister, heap_delta, ingress) = process_result(result);
                 state.metadata.heap_delta_estimate += heap_delta;
                 self.update_execution_stats(
                     canister_id,
                     self.instruction_limit,
-                    num_instructions_left,
+                    instructions_executed,
                 );
                 canister = new_canister;
                 if let Some(ir) = ingress {
@@ -764,8 +776,10 @@ impl ExecutionTest {
         if canister.has_input() {
             let message = canister.pop_input().unwrap();
             let mut round_limits = RoundLimits {
+                instructions: RoundInstructions::from(i64::MAX),
                 subnet_available_memory: self.subnet_available_memory.get().into(),
             };
+            let instructions_before = round_limits.instructions;
             let result = self.exec_env.execute_canister_message(
                 canister,
                 self.instruction_limit,
@@ -774,11 +788,13 @@ impl ExecutionTest {
                 Arc::clone(&network_topology),
                 &mut round_limits,
             );
+            let instructions_executed =
+                as_num_instructions(instructions_before - round_limits.instructions);
             self.subnet_available_memory
                 .set(round_limits.subnet_available_memory.get());
-            let (new_canister, num_instructions_left, heap_delta, ingress) = process_result(result);
+            let (new_canister, heap_delta, ingress) = process_result(result);
             state.metadata.heap_delta_estimate += heap_delta;
-            self.update_execution_stats(canister_id, self.instruction_limit, num_instructions_left);
+            self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
             canister = new_canister;
             if let Some(ir) = ingress {
                 self.ingress_history_writer
@@ -795,8 +811,9 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         limit: NumInstructions,
-        left: NumInstructions,
+        executed: NumInstructions,
     ) {
+        let left = limit - executed;
         let mgr = &self.cycles_account_manager;
         *self
             .executed_instructions

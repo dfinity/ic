@@ -38,6 +38,7 @@ memory_tracker = { path = "../memory_tracker" }
 nix = "0.23.0"
 num-rational = "0.2.2"
 num-traits = "0.2.12"
+phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.8"
 scoped_threadpool = "0.1.*"

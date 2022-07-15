@@ -74,21 +74,24 @@ pub(crate) fn execute_install(
     let canister_id = context.canister_id;
     let layout = canister_layout(&canister_layout_path, &canister_id);
 
-    let (instructions_from_compilation, execution_state) = match round
-        .hypervisor
-        .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
-    {
-        Ok(result) => result,
-        Err(err) => {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
-                    Err((canister_id, err).into()),
-                )),
-            };
-        }
-    };
+    let (instructions_from_compilation, execution_state) =
+        match round.hypervisor.create_execution_state(
+            context.wasm_module,
+            layout.raw_path(),
+            canister_id,
+            round_limits,
+        ) {
+            Ok(result) => result,
+            Err(err) => {
+                return DtsInstallCodeResult {
+                    old_canister,
+                    response: InstallCodeResponse::Result((
+                        execution_parameters.total_instruction_limit,
+                        Err((canister_id, err).into()),
+                    )),
+                };
+            }
+        };
 
     let instructions_left = deduct_compilation_instructions(
         execution_parameters.total_instruction_limit,

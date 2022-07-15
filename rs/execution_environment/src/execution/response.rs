@@ -130,11 +130,8 @@ pub fn execute_response(
             instruction_limit,
             instruction_limit,
         );
-        // TODO(RUN-59): We need to distinguish between instructions left from
-        // the total limit and instructions left from the slice limit.
         ExecuteMessageResult {
             canister,
-            num_instructions_left: instruction_limit,
             response,
             heap_delta: NumBytes::from(0),
         }
@@ -148,7 +145,6 @@ pub fn execute_response(
             None => {
                 return ExecuteMessageResult {
                     canister,
-                    num_instructions_left: execution_parameters.slice_instruction_limit,
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
                 };
@@ -348,7 +344,6 @@ fn process_response_result(
             });
             ExecuteMessageResult {
                 canister,
-                num_instructions_left: NumInstructions::from(0),
                 response: ExecutionResponse::Paused(paused_execution),
                 heap_delta: NumBytes::from(0),
             }
@@ -430,7 +425,6 @@ fn process_response_result(
             );
             ExecuteMessageResult {
                 canister,
-                num_instructions_left,
                 response,
                 heap_delta,
             }
@@ -456,7 +450,6 @@ fn process_cleanup_result(
             });
             ExecuteMessageResult {
                 canister,
-                num_instructions_left: NumInstructions::from(0),
                 response: ExecutionResponse::Paused(paused_execution),
                 heap_delta: NumBytes::from(0),
             }
@@ -527,7 +520,6 @@ fn process_cleanup_result(
             );
             ExecuteMessageResult {
                 canister,
-                num_instructions_left,
                 response,
                 heap_delta,
             }

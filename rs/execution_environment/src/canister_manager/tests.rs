@@ -4,6 +4,7 @@ use crate::{
         CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
+    execution_environment::as_round_instructions,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     IngressHistoryWriterImpl, RoundLimits,
@@ -265,6 +266,7 @@ fn install_code(
         state,
         EXECUTION_PARAMETERS.clone(),
         &mut RoundLimits {
+            instructions: as_round_instructions((*EXECUTION_PARAMETERS).total_instruction_limit),
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
         },
     )
@@ -289,6 +291,7 @@ fn install_code_with_instruction_limit(
             ..EXECUTION_PARAMETERS.clone()
         },
         &mut RoundLimits {
+            instructions: as_round_instructions(instruction_limit),
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
         },
     )
