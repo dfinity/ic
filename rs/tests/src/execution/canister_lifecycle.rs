@@ -1034,17 +1034,25 @@ pub fn total_compute_allocation_cannot_be_exceeded(
                         .canister_id
                 })
                 .expect("Could not create canister.");
-            let res = universal_canister
+
+            universal_canister
                 .update(
                     wasm().call(
-                        management::install_code(created_canister, UNIVERSAL_CANISTER_WASM)
-                            .with_compute_allocation(MAX_COMP_ALLOC.unwrap())
-                            .on_reply(wasm().inter_update(
-                                created_canister,
-                                call_args().other_side(wasm().reply_data(reply_data)),
-                            )),
+                        management::update_settings(created_canister)
+                            .with_compute_allocation(MAX_COMP_ALLOC.unwrap()),
                     ),
                 )
+                .await?;
+
+            let res = universal_canister
+                .update(wasm().call(
+                    management::install_code(created_canister, UNIVERSAL_CANISTER_WASM).on_reply(
+                        wasm().inter_update(
+                            created_canister,
+                            call_args().other_side(wasm().reply_data(reply_data)),
+                        ),
+                    ),
+                ))
                 .await;
             res.map(|r| (created_canister, r))
         }
