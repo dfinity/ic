@@ -125,7 +125,7 @@ mod client_cert_verifier_tests {
             result.err(),
             Some(TLSError::General(
                 "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"Principal ID parse error: Text must be a base 32 string.\" }".to_string(),
+                { internal_error: \"Principal ID parse error: Text must be in valid Base32 encoding.\" }".to_string(),
             ))
         );
     }

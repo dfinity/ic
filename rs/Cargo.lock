@@ -982,7 +982,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "ic-agent",
- "ic-utils 0.17.0",
+ "ic-utils 0.20.0",
  "indoc",
  "mockall 0.11.1",
  "opentelemetry 0.17.0",
@@ -1165,9 +1165,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.7.14"
+version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba9e536514a3c655568e23e36e68cbef20ee6595f641719ade03a849a13ed0ac"
+checksum = "a4f5cdd24185c6d6edba09bcfe06cf9c1e7fd579cbe5e4ae2dffba9c474a5a7f"
 dependencies = [
  "anyhow",
  "binread",
@@ -1175,7 +1175,7 @@ dependencies = [
  "candid_derive",
  "codespan-reporting",
  "hex",
- "ic-types 0.3.0",
+ "ic-types 0.4.0",
  "lalrpop",
  "lalrpop-util",
  "leb128",
@@ -3314,7 +3314,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-init",
  "ic-types 0.8.0",
- "ic-utils 0.17.0",
+ "ic-utils 0.20.0",
  "on_wire",
  "tokio",
  "url",
@@ -3526,9 +3526,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff4f84919677303da5f147645dbea6b1881f368d03ac84e1dc09031ebd7b2c6"
+checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes",
  "http",
@@ -3777,19 +3777,21 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.17.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a0cabf758d04a2389ffba0700bd7099de9b5cd47a04255063de1b0f9aac1f6e"
+checksum = "665da6fb50b32661c306ddc538ee5aa6f6d68f3d54b1649c1595403acaa552cb"
 dependencies = [
  "async-trait",
  "base32",
  "base64 0.13.0",
  "byteorder",
+ "futures-util",
  "garcon",
  "hex",
  "http",
+ "http-body",
  "hyper-rustls",
- "ic-types 0.3.0",
+ "ic-types 0.4.0",
  "k256",
  "leb128",
  "mime",
@@ -5773,9 +5775,9 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.17.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f23185559fafa2c475db99df789191c7494627184425726080788bd8ff1e6b1"
+checksum = "d8b8c272724cd8b723746b55336a4b2aeba86d20f4d28d7e8ddfb0f975431cd7"
 dependencies = [
  "hex",
  "ic-agent",
@@ -8174,16 +8176,16 @@ dependencies = [
 
 [[package]]
 name = "ic-types"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e78ec6f58886cdc252d6f912dc794211bd6bbc39ddc9dcda434b2dc16c335b3"
+checksum = "a67e4edc28c09d29ab97b50410245c91d71756eaf3956212e3488cd6eb75fda4"
 dependencies = [
- "base32",
  "crc32fast",
+ "data-encoding",
  "hex",
  "serde",
  "serde_bytes",
- "sha2 0.9.9",
+ "sha2 0.10.2",
  "thiserror",
 ]
 
@@ -8276,9 +8278,9 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.17.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f84ea6aad8345896eb336fe2757cbe14a8c476a0e586403b84a61a2106053cd"
+checksum = "e2ff623519da2958ce6c4c8623ef5530db7878ef0082556b3c1cc1cfde7ba9d6"
 dependencies = [
  "async-trait",
  "candid",
@@ -13123,7 +13125,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.17.0",
+ "ic-utils 0.20.0",
  "ic-utils 0.8.0",
  "itertools 0.10.3",
  "json5",
