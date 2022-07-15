@@ -16,7 +16,7 @@ build --bes_backend=bes.buildfarm.dfinity.systems
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
-build --copt='-std=c++17'
+build --cxxopt='-std=c++17'
 
 build:ci --noremote_local_fallback
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
