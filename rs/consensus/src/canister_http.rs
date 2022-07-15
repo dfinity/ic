@@ -33,7 +33,8 @@ use ic_types::{
     CountBytes, Height, NumBytes, RegistryVersion, SubnetId,
 };
 pub use pool_manager::CanisterHttpPoolManagerImpl;
-use prometheus::HistogramVec;
+use prometheus::{HistogramVec, IntGauge};
+use std::convert::TryInto;
 use std::{
     collections::{BTreeSet, HashSet},
     mem::size_of,
@@ -320,10 +321,16 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // in a second step
         let mut candidates = {
             let pool_access = self.pool.read().unwrap();
+            let mut total_share_count = 0;
+            let mut active_shares = 0;
 
             // Get share candidates to include in the block
             let share_candidates = pool_access
                 .get_validated_shares()
+                .map(|v| {
+                    total_share_count += 1;
+                    v
+                })
                 // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
                     self.check_share_against_context(
@@ -332,12 +339,26 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                         validation_context,
                     )
                 })
-                // Filter out shares, that contains Ids which we already have consensus on
+                .map(|v| {
+                    active_shares += 1;
+                    v
+                })
+                // Filter out shares for responses to requests that already have
+                // responses in the block chain up to the point we are creating a
+                // new payload.
                 .filter(|&response| !delivered_ids.contains(&response.content.id))
                 .cloned();
 
             // Group the shares by their metadata
             let response_candidates = group_shares(share_candidates);
+
+            self.metrics.total_shares.set(total_share_count);
+            self.metrics.active_shares.set(active_shares);
+
+            self.metrics
+                .unique_responses
+                .set(response_candidates.len().try_into().unwrap());
+
             let response_candidates = response_candidates
                 .iter()
                 // Filter out groups that don't have enough shares to have consensus
@@ -352,8 +373,10 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             // From the response candidates, we select the ones, that will fit into the payload
             let mut accumulated_size = 0;
             let mut candidates = vec![];
+            let mut unique_includable_responses = 0;
 
             for (metadata, shares, content) in response_candidates {
+                unique_includable_responses += 1;
                 // FIXME: This MUST be the same size calculation as CanisterHttpResponseWithConsensus::count_bytes.
                 // This should be explicit in the code
                 let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
@@ -362,6 +385,10 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                     accumulated_size += candidate_size;
                 }
             }
+
+            self.metrics
+                .unique_includable_responses
+                .set(unique_includable_responses);
 
             candidates
         };
@@ -469,8 +496,19 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 }
 
 struct CanisterHttpPayloadBuilderMetrics {
-    // Records the time it took to perform an operation
+    /// Records the time it took to perform an operation
     op_duration: HistogramVec,
+    /// The total number of validated shares in the pool
+    total_shares: IntGauge,
+    /// The number of shares which are not timed out or have ineligible registry
+    /// versions.
+    active_shares: IntGauge,
+    /// The number of unique responses
+    unique_responses: IntGauge,
+    /// The number of unique responses which are includable in the latest
+    /// attempt to create a block for which there are shares in the pool. In
+    /// particular, these responses have met the threshold for inclusion.
+    unique_includable_responses: IntGauge,
 }
 
 impl CanisterHttpPayloadBuilderMetrics {
@@ -483,6 +521,22 @@ impl CanisterHttpPayloadBuilderMetrics {
                 decimal_buckets(-4, 0),
                 &["operation"],
             ),
+            total_shares: metrics_registry.int_gauge(
+                "canister_http_total_validated_shares",
+                "The total number of validated shares in the pool",
+            ),
+            active_shares: metrics_registry.int_gauge(
+                "canister_http_total_active_validated_shares",
+                "The total number of validated shares that are not timed out or made with invalid registry version."
+            ),
+            unique_responses: metrics_registry.int_gauge(
+                "canister_http_unique_responses",
+                "The total number of unique responses that are currently active"
+            ),
+            unique_includable_responses: metrics_registry.int_gauge(
+                "canister_http_unique_includable_responses",
+                "The total number of unique responses that could be included in a block"
+            )
         }
     }
 }

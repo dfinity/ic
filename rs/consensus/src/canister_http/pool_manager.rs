@@ -10,15 +10,53 @@ use ic_interfaces::{
 use ic_interfaces_canister_http_adapter_client::*;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::*;
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig,
 };
+use prometheus::{HistogramVec, IntCounter, IntGauge};
 use std::collections::BTreeSet;
+use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+struct CanisterHttpPoolManagerMetrics {
+    /// Records the time it took to perform an operation
+    op_duration: HistogramVec,
+    /// The total number of requests that are currently in flight according to
+    /// the latest state.
+    in_flight_requests: IntGauge,
+    /// The total number of requests for which we are currently waiting for responses.
+    in_client_requests: IntGauge,
+    /// A count of the total number of shares signed.
+    signed_share_count: IntCounter,
+}
+
+impl CanisterHttpPoolManagerMetrics {
+    fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            op_duration: metrics_registry.histogram_vec(
+                "canister_http_pool_manager_op_duration",
+                "The time it took the pool manager to perform an operation",
+                // 0.1ms - 5s
+                decimal_buckets(-4, 0),
+                &["operation"],
+            ),
+            in_flight_requests: metrics_registry.int_gauge(
+                "canister_http_in_flight_requests", "The total number of requests that are currently in flight according to the latest state."
+            ),
+        in_client_requests: metrics_registry.int_gauge(
+            "canister_http_in_client_requests", "The total number of requests for which we are currently waiting for responses from the http client."
+        ),
+        signed_share_count: metrics_registry.int_counter(
+            "canister_http_signed_shares", "A count of the total number of shares signed."
+        )
+        }
+    }
+}
 
 /// CanisterHttpPoolManagerImpl implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -34,6 +72,7 @@ pub struct CanisterHttpPoolManagerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     replica_config: ReplicaConfig,
     requested_id_cache: BTreeSet<CallbackId>,
+    metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
 }
 
@@ -45,6 +84,7 @@ impl CanisterHttpPoolManagerImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
+        metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -53,17 +93,24 @@ impl CanisterHttpPoolManagerImpl {
             crypto,
             replica_config,
             registry_client,
+            metrics: CanisterHttpPoolManagerMetrics::new(&metrics_registry),
             log,
             requested_id_cache: BTreeSet::new(),
         }
     }
 
-    /// Make a purge change action if consensus time has advanced.
+    /// Purge shares of responses for requests that have already been processed.
     fn purge_shares_of_processed_requests(
         &mut self,
         _consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["purge_shares"])
+            .start_timer();
+
         let active_callback_ids: BTreeSet<_> = self
             .state_manager
             .get_latest_state()
@@ -114,6 +161,12 @@ impl CanisterHttpPoolManagerImpl {
 
     /// Inform the HttpAdapterShim of any new requests that must be made.
     fn make_new_requests(&mut self, canister_http_pool: &dyn CanisterHttpPool) {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["make_new_requests"])
+            .start_timer();
+
         let http_requests = self
             .state_manager
             .get_latest_state()
@@ -122,6 +175,10 @@ impl CanisterHttpPoolManagerImpl {
             .subnet_call_context_manager
             .canister_http_request_contexts
             .clone();
+
+        self.metrics
+            .in_flight_requests
+            .set(http_requests.len().try_into().unwrap());
 
         let request_ids_in_pool: BTreeSet<_> = canister_http_pool
             .get_validated_shares()
@@ -169,6 +226,11 @@ impl CanisterHttpPoolManagerImpl {
         &mut self,
         consensus_cache: &dyn ConsensusPoolCache,
     ) -> CanisterHttpChangeSet {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["create_shares_from_responses"])
+            .start_timer();
         let registry_version = if let Some(registry_version) =
             registry_version_at_height(consensus_cache, consensus_cache.finalized_block().height())
         {
@@ -209,6 +271,7 @@ impl CanisterHttpPoolManagerImpl {
                         signature,
                     };
                     self.requested_id_cache.remove(&response.id);
+                    self.metrics.signed_share_count.inc();
                     change_set.push(CanisterHttpChangeAction::AddToValidated(share, response));
                 }
             }
@@ -222,6 +285,11 @@ impl CanisterHttpPoolManagerImpl {
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["validate_shares"])
+            .start_timer();
         // TODO: Selection of registry version may technically need to be more deterministic.
         let registry_version = if let Some(registry_version) =
             registry_version_at_height(consensus_cache, consensus_cache.finalized_block().height())
@@ -257,6 +325,11 @@ impl CanisterHttpPoolManagerImpl {
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["generate_change_set"])
+            .start_timer();
         // Make any requests that need to be made
         self.make_new_requests(canister_http_pool);
 
@@ -269,6 +342,10 @@ impl CanisterHttpPoolManagerImpl {
 
         // Attempt to validate unvalidated shares
         change_set.extend(self.validate_shares(consensus_cache, canister_http_pool));
+
+        self.metrics
+            .in_client_requests
+            .set(self.requested_id_cache.len().try_into().unwrap());
 
         change_set
     }
@@ -431,6 +508,7 @@ pub mod test {
                     crypto,
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
                     log,
                 );
 
@@ -491,6 +569,7 @@ pub mod test {
                     crypto,
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
                     log,
                 );
                 let change_set =
@@ -561,6 +640,7 @@ pub mod test {
                     crypto.clone(),
                     replica_config.clone(),
                     Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
                     log,
                 );
                 let mut canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
