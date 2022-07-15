@@ -21,6 +21,6 @@ tokio = { version = "1.15.0", features = ["full"] }
 candid = "0.7.4"
 url = { version = "2.1.1", features = ["serde"] }
 
-ic-identity-hsm = "=0.17.0"
-ic-agent = "=0.17.0"
-ic-utils = "=0.17.0"
+ic-identity-hsm = "=0.20.0"
+ic-agent = "=0.20.0"
+ic-utils = "=0.20.0"

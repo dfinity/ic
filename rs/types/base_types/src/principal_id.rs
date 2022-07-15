@@ -55,7 +55,7 @@ pub struct PrincipalIdError(pub PrincipalError);
 impl PrincipalIdError {
     #[allow(non_snake_case)]
     pub fn TooLong(_: usize) -> Self {
-        PrincipalIdError(PrincipalError::BufferTooLong())
+        PrincipalIdError(PrincipalError::BytesTooLong())
     }
 }
 
@@ -187,7 +187,7 @@ impl PrincipalId {
     pub(crate) fn new_opaque(blob: &[u8]) -> Self {
         let mut bytes = blob.to_vec();
         bytes.push(Self::TYPE_OPAQUE);
-        PrincipalId(Principal::from_slice(&bytes[..]))
+        PrincipalId(Principal::try_from_slice(&bytes[..]).expect("Input blob too long."))
     }
 
     /// Creates an opaque id from the first `len` bytes of `blob`.
@@ -263,14 +263,19 @@ impl PrincipalId {
         }
 
         //PrincipalId(Principal::from_slice(&data[0..len]))
-        PrincipalId(Principal::from_slice(range(&data, 0..len)))
+        // PrincipalId(Principal::from_slice(range(&data, 0..len)));
+        match Principal::try_from_slice(range(&data, 0..len)) {
+            Ok(v) => PrincipalId(v),
+            _ => panic!("slice length exceeds capacity"),
+        }
     }
 
     pub fn new_self_authenticating(pubkey: &[u8]) -> Self {
         let mut id: [u8; 29] = [0; 29];
         id[..28].copy_from_slice(&Sha224::hash(pubkey));
         id[28] = Self::TYPE_SELF_AUTH;
-        PrincipalId(Principal::from_slice(&id))
+        // id has fixed length of 29, safe to unwrap here
+        PrincipalId(Principal::try_from_slice(&id).unwrap())
     }
 
     pub fn new_derived(registerer: &PrincipalId, seed: &[u8]) -> Self {
@@ -467,13 +472,9 @@ mod tests {
 
     #[test]
     fn parse_bad_checksum() {
-        let good =
-            PrincipalId::from_str("bfozs-kwa73-7nadi").expect("PrincipalId::from_str failed");
         assert_eq!(
             PrincipalId::from_str("5h74t-uga73-7nadi"),
-            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
-                good.into()
-            )))
+            Err(PrincipalIdError(PrincipalError::CheckSequenceNotMatch()))
         );
     }
 
@@ -481,11 +482,11 @@ mod tests {
     fn parse_too_short() {
         assert_eq!(
             PrincipalId::from_str(""),
-            Err(PrincipalIdError(PrincipalError::TextTooSmall()))
+            Err(PrincipalIdError(PrincipalError::TextTooShort()))
         );
         assert_eq!(
             PrincipalId::from_str("vpgq"),
-            Err(PrincipalIdError(PrincipalError::TextTooSmall()))
+            Err(PrincipalIdError(PrincipalError::TextTooShort()))
         );
     }
 
@@ -495,7 +496,7 @@ mod tests {
             PrincipalId::from_str(
                 "fmakz-kp753-o4zo5-ktgeh-ozsvi-qzsee-ia77x-n3tf3-vkmyq-53gkv-cdgiq"
             ),
-            Err(PrincipalIdError(PrincipalError::BufferTooLong()))
+            Err(PrincipalIdError(PrincipalError::TextTooLong()))
         )
     }
 
@@ -503,21 +504,18 @@ mod tests {
     fn parse_not_normalized() {
         let good =
             PrincipalId::from_str("bfozs-kwa73-7nadi").expect("PrincipalId::from_str failed");
-        assert_eq!(
-            PrincipalId::from_str("BFOZS-KWA73-7NADI"),
-            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
-                good.into()
-            )))
-        );
+        // In the SPEC:
+        // The textual representation is conventionally printed with lower case letters, but parsed case-insensitively.
+        assert_eq!(PrincipalId::from_str("BFOZS-KWA73-7NADI"), Ok(good));
         assert_eq!(
             PrincipalId::from_str("bfozskwa737nadi"),
-            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+            Err(PrincipalIdError(PrincipalError::AbnormalGrouped(
                 good.into()
             )))
         );
         assert_eq!(
             PrincipalId::from_str("bf-oz-sk-wa737-nadi"),
-            Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
+            Err(PrincipalIdError(PrincipalError::AbnormalGrouped(
                 good.into()
             )))
         );

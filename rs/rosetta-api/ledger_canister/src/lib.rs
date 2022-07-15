@@ -1919,8 +1919,9 @@ pub struct QueryArchiveFn {
 
 impl From<QueryArchiveFn> for candid::types::reference::Func {
     fn from(archive_fn: QueryArchiveFn) -> Self {
+        let p: &PrincipalId = archive_fn.canister_id.as_ref();
         Self {
-            principal: candid::Principal::from_slice(archive_fn.canister_id.as_ref()),
+            principal: p.0,
             method: archive_fn.method,
         }
     }
