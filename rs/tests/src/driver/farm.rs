@@ -19,9 +19,20 @@ use super::ic::ImageSizeGiB;
 
 pub type FarmResult<T> = Result<T, FarmError>;
 
-const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(300);
-const LINEAR_BACKOFF_RETRY_DELAY: Duration = Duration::from_secs(6);
-const MAX_NUMBER_OF_RETRIES: usize = 5;
+/// Some requests like createVm might take a long time to complete.
+const TIMEOUT_SETTINGS_LONG: TimeoutSettings = TimeoutSettings {
+    retry_timeout: Duration::from_secs(500),
+    min_http_timeout: Duration::from_secs(20),
+    max_http_timeout: Duration::from_secs(400),
+    linear_backoff: Duration::from_secs(10),
+};
+
+const TIMEOUT_SETTINGS: TimeoutSettings = TimeoutSettings {
+    retry_timeout: Duration::from_secs(120),
+    min_http_timeout: Duration::from_secs(5),
+    max_http_timeout: Duration::from_secs(30),
+    linear_backoff: Duration::from_secs(5),
+};
 
 /// Farm managed resources that make up the Internet Computer under test. The
 /// `Farm`-structure translates abstract requests (for resources) to concrete
@@ -36,7 +47,7 @@ pub struct Farm {
 impl Farm {
     pub fn new(base_url: Url, logger: Logger) -> Self {
         let client = reqwest::blocking::ClientBuilder::new()
-            .timeout(DEFAULT_REQ_TIMEOUT)
+            .timeout(TIMEOUT_SETTINGS.max_http_timeout)
             .build()
             .expect("This should not fail.");
         Farm {
@@ -60,7 +71,7 @@ impl Farm {
     pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<VMCreateResponse> {
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
-        let resp = self.retry_until_success(rb)?;
+        let resp = self.retry_until_success_long(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
         let ipv6 = created_vm.ipv6;
         info!(
@@ -181,15 +192,31 @@ impl Farm {
         Url::parse(&format!("{}{}", self.base_url, path)).expect("should not fail!")
     }
 
+    fn retry_until_success_long(
+        &self,
+        rb: RequestBuilder,
+    ) -> FarmResult<reqwest::blocking::Response> {
+        self.retry_until_success_(rb, TIMEOUT_SETTINGS_LONG)
+    }
+
     fn retry_until_success(&self, rb: RequestBuilder) -> FarmResult<reqwest::blocking::Response> {
+        self.retry_until_success_(rb, TIMEOUT_SETTINGS)
+    }
+
+    fn retry_until_success_(
+        &self,
+        rb: RequestBuilder,
+        t_settings: TimeoutSettings,
+    ) -> FarmResult<reqwest::blocking::Response> {
         let started_at = Instant::now();
-        for _ in 0..MAX_NUMBER_OF_RETRIES {
+        loop {
             let mut req = rb.try_clone().expect("could not clone a request builder");
-            if let Some(t) = DEFAULT_REQ_TIMEOUT.checked_sub(started_at.elapsed()) {
-                req = req.timeout(t);
-            } else {
-                break;
-            }
+            let http_timeout = match t_settings.retry_timeout.checked_sub(started_at.elapsed()) {
+                Some(t) if t > t_settings.min_http_timeout => t.min(t_settings.max_http_timeout),
+                _ => break,
+            };
+            // cond: MIN_HTTP_REQ_TIMEOUT < http_timeout <= MAX_HTTP_REQ_TIMEOUT
+            req = req.timeout(http_timeout);
             match req.send() {
                 Err(e) => {
                     error!(self.logger, "sending a request to Farm failed: {:?}", e);
@@ -205,7 +232,7 @@ impl Farm {
                     }
                 }
             }
-            std::thread::sleep(LINEAR_BACKOFF_RETRY_DELAY);
+            std::thread::sleep(t_settings.linear_backoff);
         }
         Err(FarmError::TooManyRetries {
             message: String::from(
@@ -213,6 +240,16 @@ impl Farm {
             ),
         })
     }
+}
+
+struct TimeoutSettings {
+    /// The maximum duration for which a request is being retried.
+    retry_timeout: Duration,
+    /// The maximum http request timeout.
+    min_http_timeout: Duration,
+    /// The minimum http request timeout.
+    max_http_timeout: Duration,
+    linear_backoff: Duration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
