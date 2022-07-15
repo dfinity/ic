@@ -161,6 +161,10 @@ impl Engine {
         periodic_output: bool,
     ) -> Vec<Fact> {
         let requests: usize = time_secs * rps;
+        if requests == 0 {
+            debug!("Not executing any requests");
+            return vec![];
+        }
         debug!("⏱️  Executing {} requests at {} rps", requests, rps);
 
         let plan = Plan::new(
