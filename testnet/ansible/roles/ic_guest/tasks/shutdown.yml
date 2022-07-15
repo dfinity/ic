@@ -2,13 +2,20 @@
 
 - name: shutdown guest
   shell: |
-    set -eExu
+    set -Exu
     virsh shutdown "{{ item }}"
+    # virsh shutdown command is asynchronous, so the next command waits upto 70sec for the VM to shutdown
+    counter=0
+    until [[ $counter -gt 70 ]] ||  sudo virsh domstate "{{ item }}" | grep shut || sudo virsh domstate "{{ item }}" | grep "failed to get domain";
+       do 
+          echo Waiting for shutdown: $counter/70;
+          ((counter++));
+          sleep 1;
+       done
   loop: "{{ hostvars[inventory_hostname].ic_guests }}"
   loop_control:
     label:
   args:
     executable: /bin/bash
-  timeout: 60
   ignore_errors: yes
   tags: [ "ic_guest" ]
