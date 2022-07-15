@@ -215,8 +215,10 @@ pub fn nns_recovery_failover_nodes(
             }
             nns_recovery_failover_nodes::StepType::ProposeToCreateSubnet => {
                 if nns_recovery.params.parent_nns_host_ip.is_none() {
-                    nns_recovery.params.parent_nns_host_ip =
-                        read_optional_ip(&logger, "Enter parent NNS IP:");
+                    nns_recovery.params.parent_nns_host_ip = read_optional_ip(
+                        &logger,
+                        "Enter parent NNS IP to download the registry store from:",
+                    );
                 }
             }
             nns_recovery_failover_nodes::StepType::CreateRegistryTar => {

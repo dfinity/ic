@@ -29,6 +29,8 @@ pub async fn replay(
         canister_caller_id,
         replay_until_height: None,
         subcmd,
+        state_root: None,
+        local_registry_store: None,
     };
     // Since replay output needs to be persisted anyway in case the recovery process
     // is restarted, we avoid declaring a return value and moving out of the

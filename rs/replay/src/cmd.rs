@@ -32,6 +32,14 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     pub subnet_id: ClapSubnetId,
 
+    /// State root directory; if not specified, the value from the replica config is used
+    #[clap(long)]
+    pub state_root: Option<PathBuf>,
+
+    /// Local registry store directory; if not specified, the value from the replica config is used
+    #[clap(long)]
+    pub local_registry_store: Option<PathBuf>,
+
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
@@ -138,6 +146,8 @@ pub struct WithLedgerAccountCmd {
 pub struct WithTrustedNeuronsFollowingNeuronCmd {
     /// The neuron id of the neuron that the trusted neurons should follow.
     pub neuron_id: u64,
+    /// The controller of the neuron.
+    pub neuron_controller: PrincipalId,
 }
 
 #[derive(Clone, Parser)]
