@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,39 +7,51 @@ filegroup(
     srcs = glob(["**"]),
 )
 
-DEPENDENCIES = [
-    "//rs/canonical_state/certification_version",
-    "//rs/config",
-    "//rs/constants",
-    "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig_der",
-    "//rs/cycles_account_manager",
-    "//rs/interfaces",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/registry/helpers",
-    "//rs/registry/keys",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_features",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/state_layout",
-    "//rs/types/base_types",
-    "//rs/types/error_types",
-    "//rs/types/ic00_types",
-    "//rs/types/types",
-    "//rs/utils",
-    "@crate_index//:prometheus",
-    "@crate_index//:slog",
-]
-
 rust_library(
     name = "messaging",
     srcs = glob(["src/**"]),
     crate_name = "ic_messaging",
     edition = "2018",
-    deps = DEPENDENCIES,
+    deps = [
+        "//rs/canonical_state/certification_version",
+        "//rs/config",
+        "//rs/constants",
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/state_layout",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_test(
+    name = "messaging_test",
+    crate = ":messaging",
+    deps = [
+        "//rs/test_utilities",
+        "//rs/test_utilities/metrics",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:mockall",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
+    ],
 )
