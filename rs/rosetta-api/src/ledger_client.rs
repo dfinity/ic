@@ -120,7 +120,9 @@ impl LedgerClient {
         let canister_access = if offline {
             None
         } else {
-            Some(Arc::new(CanisterAccess::new(ic_url.clone(), canister_id)))
+            let canister_access = CanisterAccess::new(ic_url.clone(), canister_id);
+            LedgerClient::check_ledger_symbol(&token_symbol, &canister_access).await?;
+            Some(Arc::new(canister_access))
         };
         let verification_info = root_key.map(|root_key| VerificationInfo {
             root_key,
@@ -134,9 +136,6 @@ impl LedgerClient {
             Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
         )
         .await?;
-        if let Some(canister_access) = &canister_access {
-            LedgerClient::check_ledger_symbol(&token_symbol, canister_access).await?;
-        }
 
         Ok(Self {
             ledger_blocks_synchronizer,
