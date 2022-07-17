@@ -578,7 +578,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot_with_setup(
                     "canister_http_fault_tolerance",
-                    canister_http::http_fault_tolerance::config,
+                    canister_http::lib::config,
                     par(vec![sys_t(
                         "http_fault_tolerance",
                         canister_http::http_fault_tolerance::test,
