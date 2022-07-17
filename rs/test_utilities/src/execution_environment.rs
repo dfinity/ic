@@ -15,8 +15,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     as_num_instructions,
     util::{process_result, process_stopping_canisters},
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, Hypervisor,
-    IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    CanisterHeartbeatError, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
+    Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
@@ -642,20 +642,30 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
         );
+        let (canister, response, heap_delta) = match result {
+            ExecuteMessageResult::Finished {
+                canister,
+                response,
+                heap_delta,
+            } => (canister, response, heap_delta),
+            ExecuteMessageResult::Paused { .. } => {
+                unreachable!("Unexpected paused execution")
+            }
+        };
         let instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
         self.subnet_available_memory
             .set(round_limits.subnet_available_memory.get());
 
-        state.metadata.heap_delta_estimate += result.heap_delta;
+        state.metadata.heap_delta_estimate += heap_delta;
         self.update_execution_stats(
             canister_id,
             self.instruction_limits.message(),
             instructions_executed,
         );
-        state.put_canister_state(result.canister);
+        state.put_canister_state(canister);
         self.state = Some(state);
-        result.response
+        response
     }
 
     // A low-level helper to send subnet messages to the IC management canister.

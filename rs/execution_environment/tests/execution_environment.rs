@@ -1980,7 +1980,7 @@ fn execute_response_successfully() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result")
         }
     }
@@ -2030,7 +2030,7 @@ fn execute_response_traps() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result.")
         }
     }
@@ -2090,7 +2090,7 @@ fn execute_response_with_trapping_cleanup() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result.")
         }
     }

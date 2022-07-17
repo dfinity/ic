@@ -56,7 +56,7 @@ fn early_error_to_result(
             ExecutionResponse::Ingress((ingress.message_id.clone(), status))
         }
     };
-    ExecuteMessageResult {
+    ExecuteMessageResult::Finished {
         canister,
         response: result,
         heap_delta: NumBytes::from(0),
@@ -220,10 +220,9 @@ fn process_update_result(
                 paused_wasm_execution,
                 original,
             });
-            ExecuteMessageResult {
+            ExecuteMessageResult::Paused {
                 canister,
-                response: ExecutionResponse::Paused(paused_execution),
-                heap_delta: NumBytes::from(0),
+                paused_execution,
             }
         }
         WasmExecutionResult::Finished(slice, output, system_state_changes) => {
@@ -266,7 +265,7 @@ fn process_update_result(
                 output.num_instructions_left,
                 original.message_instruction_limit,
             );
-            ExecuteMessageResult {
+            ExecuteMessageResult::Finished {
                 canister,
                 response,
                 heap_delta,
@@ -362,7 +361,7 @@ fn execute_query_method(
         execution_parameters.instruction_limits.message(),
     );
 
-    ExecuteMessageResult {
+    ExecuteMessageResult::Finished {
         canister,
         response,
         heap_delta: NumBytes::from(0),

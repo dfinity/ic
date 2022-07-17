@@ -93,20 +93,31 @@ const LOG_FIRST_N_HEARTBEAT: u64 = 50;
 pub enum ExecutionResponse {
     Ingress((MessageId, IngressStatus)),
     Request(Response),
-    Paused(Box<dyn PausedExecution>),
     Empty,
 }
 
 /// The data structure returned by
 /// `ExecutionEnvironment.execute_canister_message()`.
-pub struct ExecuteMessageResult {
-    /// The `CanisterState` after message execution
-    pub canister: CanisterState,
-    /// The response of the executed message. The caller needs to either push it
-    /// to the output queue of the canister or update the ingress status.
-    pub response: ExecutionResponse,
-    /// The size of the heap delta the canister produced
-    pub heap_delta: NumBytes,
+pub enum ExecuteMessageResult {
+    Finished {
+        /// The new state of the canister after execution.
+        canister: CanisterState,
+
+        /// The response of the executed message. The caller needs to either push it
+        /// to the output queue of the canister or update the ingress status.
+        response: ExecutionResponse,
+
+        /// The size of the heap delta the canister produced
+        heap_delta: NumBytes,
+    },
+    Paused {
+        /// The old state of the canister before execution
+        /// with some changes necessary for DTS.
+        canister: CanisterState,
+
+        /// The paused execution that the caller can either resume or abort.
+        paused_execution: Box<dyn PausedExecution>,
+    },
 }
 
 /// Contains round-specific context necessary for resuming a paused execution.

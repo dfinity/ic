@@ -8,7 +8,8 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions, ExecutionResponse, RoundLimits,
+    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionResponse,
+    RoundLimits,
 };
 use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
@@ -391,7 +392,11 @@ pub fn bench_execute_update(c: &mut Criterion) {
             );
             let executed_instructions =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            match res.response {
+            let response = match res {
+                ExecuteMessageResult::Finished { response, .. } => response,
+                ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused exectuion"),
+            };
+            match response {
                 ExecutionResponse::Ingress((_, status)) => match status {
                     IngressStatus::Known { state, .. } => {
                         if let IngressState::Failed(err) = state {

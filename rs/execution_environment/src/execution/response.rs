@@ -139,7 +139,7 @@ pub fn execute_response(
             message_instruction_limit,
             message_instruction_limit,
         );
-        ExecuteMessageResult {
+        ExecuteMessageResult::Finished {
             canister,
             response,
             heap_delta: NumBytes::from(0),
@@ -150,7 +150,7 @@ pub fn execute_response(
         match common::get_call_context_and_callback(&mut canister, &response, round.log) {
             Some((callback, call_context)) => (callback, call_context),
             None => {
-                return ExecuteMessageResult {
+                return ExecuteMessageResult::Finished {
                     canister,
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
@@ -354,10 +354,9 @@ fn process_response_result(
                 execution_parameters,
                 original,
             });
-            ExecuteMessageResult {
+            ExecuteMessageResult::Paused {
                 canister,
-                response: ExecutionResponse::Paused(paused_execution),
-                heap_delta: NumBytes::from(0),
+                paused_execution,
             }
         }
         WasmExecutionResult::Finished(slice, response_output, system_state_changes) => {
@@ -437,7 +436,7 @@ fn process_response_result(
                 num_instructions_left,
                 original.message_instruction_limit,
             );
-            ExecuteMessageResult {
+            ExecuteMessageResult::Finished {
                 canister,
                 response,
                 heap_delta,
@@ -463,10 +462,9 @@ fn process_cleanup_result(
                 callback_err,
                 original,
             });
-            ExecuteMessageResult {
+            ExecuteMessageResult::Paused {
                 canister,
-                response: ExecutionResponse::Paused(paused_execution),
-                heap_delta: NumBytes::from(0),
+                paused_execution,
             }
         }
         WasmExecutionResult::Finished(slice, cleanup_output, system_state_changes) => {
@@ -534,7 +532,7 @@ fn process_cleanup_result(
                 num_instructions_left,
                 original.message_instruction_limit,
             );
-            ExecuteMessageResult {
+            ExecuteMessageResult::Finished {
                 canister,
                 response,
                 heap_delta,
