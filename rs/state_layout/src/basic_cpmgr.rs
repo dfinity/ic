@@ -1,6 +1,6 @@
 use crate::state_layout::CheckpointManager;
 use crate::utils::do_copy;
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
 use ic_utils::thread::parallel_map;
 use std::convert::identity;
@@ -153,6 +153,9 @@ impl BasicCheckpointManager {
         // We first move the checkpoint directory into a temporary directory to
         // maintain the invariant that <root>/checkpoints/<height> are always
         // internally consistent.
+        if let Some(parent) = tmp_path.parent() {
+            self.ensure_dir_exists(parent)?;
+        }
         match std::fs::rename(path, tmp_path) {
             Ok(_) => {
                 if let Some(parent) = path.parent() {
@@ -160,6 +163,13 @@ impl BasicCheckpointManager {
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                error!(
+                    self.log,
+                    "Failed to move checkpoint to tmp dir. Source: {}, Destination: {}, Error: {}.",
+                    path.display(),
+                    tmp_path.display(),
+                    err
+                );
                 return Ok(());
             }
             Err(err) => return Err(err),

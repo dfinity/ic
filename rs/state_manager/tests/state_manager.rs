@@ -77,6 +77,52 @@ fn label<T: Into<Label>>(t: T) -> Label {
 }
 
 #[test]
+fn rejoining_node_doesnt_accumulate_states() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            for i in 1..=3 {
+                let mut state = src_state_manager.take_tip().1;
+                insert_dummy_canister(&mut state, canister_test_id(100 + i));
+                src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+
+                let hash = wait_for_checkpoint(&src_state_manager, height(i));
+                let id = StateSyncArtifactId {
+                    height: height(i),
+                    hash,
+                };
+                let msg = src_state_manager
+                    .get_validated_by_identifier(&id)
+                    .expect("failed to get state sync messages");
+
+                let chunkable = dst_state_manager.create_chunkable_state(&id);
+                let dst_msg = pipe_state_sync(msg.clone(), chunkable);
+                dst_state_manager
+                    .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                    .expect("Failed to process state sync artifact");
+
+                assert_eq!(
+                    src_state_manager.get_latest_state().take(),
+                    dst_state_manager.get_latest_state().take()
+                );
+                assert_eq!(
+                    dst_state_manager.checkpoint_heights(),
+                    (1..=i).into_iter().map(|i| height(i)).collect::<Vec<_>>()
+                );
+            }
+
+            dst_state_manager.remove_states_below(height(3));
+            assert_eq!(
+                dst_state_manager.checkpoint_heights(),
+                vec![height(2), height(3)]
+            );
+
+            assert_error_counters(src_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn temporary_directory_gets_cleaned() {
     state_manager_restart_test(|state_manager, restart_fn| {
         // write something to some file in the tmp directory

@@ -2042,7 +2042,7 @@ impl StateManagerImpl {
         }
     }
 
-    fn checkpoint_heights(&self) -> Vec<Height> {
+    pub fn checkpoint_heights(&self) -> Vec<Height> {
         let result = self
             .state_layout
             .checkpoint_heights()
