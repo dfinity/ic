@@ -12,8 +12,9 @@ use ic_nervous_system_common::stable_mem_utils::{
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
 use ic_sns_root::{
     pb::v1::{
-        CanisterCallError, RegisterDappCanisterRequest, RegisterDappCanisterResponse,
-        SetDappControllersRequest, SetDappControllersResponse, SnsRootCanister,
+        CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
+        RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
+        SetDappControllersResponse, SnsRootCanister,
     },
     CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
     GetSnsCanistersSummaryResponse, ManagementCanisterClient, UpdateSettingsArgs,
@@ -149,6 +150,24 @@ async fn get_sns_canisters_summary_(
         dfn_core::api::id(),
     )
     .await
+}
+
+/// Return the `PrincipalId`s of all SNS canisters that this root canister
+/// is part of, as well as of all registered dapp canisters (See
+/// SnsRootCanister::register_dapp_canister).
+#[export_name = "canister_query list_sns_canisters"]
+fn list_sns_canisters() {
+    println!("{}list_sns_canisters", LOG_PREFIX);
+    over(candid_one, list_sns_canisters_)
+}
+
+#[candid_method(query, rename = "list_sns_canisters")]
+fn list_sns_canisters_(_request: ListSnsCanistersRequest) -> ListSnsCanistersResponse {
+    STATE.with(|sns_root_canister| {
+        sns_root_canister
+            .borrow()
+            .list_sns_canisters(dfn_core::api::id())
+    })
 }
 
 #[export_name = "canister_update change_canister"]
