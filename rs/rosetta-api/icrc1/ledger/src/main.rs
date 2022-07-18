@@ -4,7 +4,7 @@ use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
+    endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
     Account, Transaction,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger};
@@ -91,14 +91,14 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 
-#[query(name = "icrc1_balanceOf")]
-#[candid_method(query, rename = "icrc1_balanceOf")]
+#[query(name = "icrc1_balance_of")]
+#[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
     Access::with_ledger(|ledger| Nat::from(ledger.balances().account_balance(&account).get_e8s()))
 }
 
-#[query(name = "icrc1_totalSupply")]
-#[candid_method(query, rename = "icrc1_totalSupply")]
+#[query(name = "icrc1_total_supply")]
+#[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| Nat::from(ledger.balances().total_supply().get_e8s()))
 }
@@ -203,6 +203,15 @@ fn archives() -> Vec<ArchiveInfo> {
             })
             .collect()
     })
+}
+
+#[query(name = "icrc1_supported_standards")]
+#[candid_method(query, rename = "icrc1_supported_standards")]
+fn supported_standards() -> Vec<StandardRecord> {
+    vec![StandardRecord {
+        name: "ICRC-1".to_string(),
+        url: "https://github.com/dfinity/ICRC-1".to_string(),
+    }]
 }
 
 fn main() {}

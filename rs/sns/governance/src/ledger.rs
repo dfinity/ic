@@ -118,7 +118,7 @@ impl Ledger for LedgerCanister {
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
-                        "Error calling method 'icrc1_totalSupply' of the ledger canister. Code: {:?}. Message: {}",
+                        "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
                         code, msg
                     )
                 )
@@ -131,7 +131,7 @@ impl Ledger for LedgerCanister {
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
-                        "Error calling method 'icrc1_balanceOf' of the ledger canister. Code: {:?}. Message: {}",
+                        "Error calling method 'icrc1_balance_of' of the ledger canister. Code: {:?}. Message: {}",
                         code, msg
                     )
                 )

@@ -43,7 +43,7 @@ pub struct ICRC1Client<R: Runtime> {
 impl<R: Runtime> ICRC1Client<R> {
     pub async fn balance_of(&self, account: Account) -> Result<u64, (i32, String)> {
         self.runtime
-            .call(self.ledger_canister_id, "icrc1_balanceOf", (account,))
+            .call(self.ledger_canister_id, "icrc1_balance_of", (account,))
             .await
             .map(untuple)
             .map(nat_to_u64)
@@ -79,7 +79,7 @@ impl<R: Runtime> ICRC1Client<R> {
 
     pub async fn total_supply(&self) -> Result<u64, (i32, String)> {
         self.runtime
-            .call(self.ledger_canister_id, "icrc1_totalSupply", ())
+            .call(self.ledger_canister_id, "icrc1_total_supply", ())
             .await
             .map(untuple)
             .map(nat_to_u64)

@@ -67,8 +67,9 @@ service : (InitArgs) -> {
     icrc1_symbol : () -> (text) query;
     icrc1_decimals : () -> (nat8) query;
     icrc1_metadata : () -> (vec record { text; Value }) query;
-    icrc1_totalSupply : () -> (Tokens) query;
+    icrc1_total_supply : () -> (Tokens) query;
 
-    icrc1_balanceOf : (Account) -> (Tokens) query;
+    icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
+    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
 }

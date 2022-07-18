@@ -3,7 +3,7 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
+    endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
     Account, Block, CandidBlock, CandidOperation, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
@@ -80,12 +80,12 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
 
 fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
     Decode!(
-        &env.query(ledger, "icrc1_balanceOf", Encode!(&acc).unwrap())
+        &env.query(ledger, "icrc1_balance_of", Encode!(&acc).unwrap())
             .expect("failed to query balance")
             .bytes(),
         Nat
     )
-    .expect("failed to decode balanceOf response")
+    .expect("failed to decode balance_of response")
     .0
     .to_u64()
     .unwrap()
@@ -93,7 +93,7 @@ fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
 
 fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
     Decode!(
-        &env.query(ledger, "icrc1_totalSupply", Encode!().unwrap())
+        &env.query(ledger, "icrc1_total_supply", Encode!().unwrap())
             .expect("failed to query total supply")
             .bytes(),
         Nat
@@ -114,6 +114,16 @@ fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
     .expect("failed to decode metadata response")
     .into_iter()
     .collect()
+}
+
+fn supported_standards(env: &StateMachine, ledger: CanisterId) -> Vec<StandardRecord> {
+    Decode!(
+        &env.query(ledger, "icrc1_supported_standards", Encode!().unwrap())
+            .expect("failed to query supported standards")
+            .bytes(),
+        Vec<StandardRecord>
+    )
+    .expect("failed to decode icrc1_supported_standards response")
 }
 
 fn send_transfer(
@@ -250,6 +260,15 @@ fn test_metadata() {
     assert_eq!(
         lookup(&metadata, BLOB_META_KEY),
         &Value::from(BLOB_META_VALUE)
+    );
+
+    let standards = supported_standards(&env, canister_id);
+    assert_eq!(
+        standards,
+        vec![StandardRecord {
+            name: "ICRC-1".to_string(),
+            url: "https://github.com/dfinity/ICRC-1".to_string(),
+        }]
     );
 }
 
