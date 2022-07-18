@@ -40,6 +40,14 @@ type GetSnsCanistersSummaryResponse = record {
   root_canister_summary : opt CanisterSummary;
   dapp_canister_summaries : vec CanisterSummary;
 };
+type ListSnsCanistersResponse = record {
+  root : opt principal;
+  swap : opt principal;
+  ledger : opt principal;
+  governance : opt principal;
+  dapps : vec principal;
+  archives : vec principal;
+};
 type RegisterDappCanisterRequest = record { canister_id : opt principal };
 type SetDappControllersRequest = record {
   controller_principal_ids : vec principal;
@@ -55,6 +63,7 @@ service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (record {}) -> (GetSnsCanistersSummaryResponse);
+  list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (
       SetDappControllersResponse,

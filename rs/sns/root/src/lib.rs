@@ -1,9 +1,9 @@
 pub mod pb;
 
 use crate::pb::v1::{
-    set_dapp_controllers_response, CanisterCallError, RegisterDappCanisterRequest,
-    RegisterDappCanisterResponse, SetDappControllersRequest, SetDappControllersResponse,
-    SnsRootCanister,
+    set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
+    RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
+    SetDappControllersResponse, SnsRootCanister,
 };
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize};
@@ -387,6 +387,21 @@ impl SnsRootCanister {
         }
     }
 
+    /// Return the `PrincipalId`s of all SNS canisters that this root canister
+    /// is part of, as well as of all registered dapp canisters (See
+    /// SnsRootCanister::register_dapp_canister).
+    pub fn list_sns_canisters(&self, root_canister_id: CanisterId) -> ListSnsCanistersResponse {
+        ListSnsCanistersResponse {
+            root: Some(root_canister_id.get()),
+            governance: self.governance_canister_id,
+            ledger: self.ledger_canister_id,
+            swap: self.swap_canister_id,
+            dapps: self.dapp_canister_ids.clone(),
+            // TODO NNS1-1488 Add archive canister ids to root
+            archives: vec![],
+        }
+    }
+
     /// Tells this canister (SNS root) about a dapp canister that it controls.
     ///
     /// The canister must not be one of the distinguished SNS canisters
@@ -585,6 +600,7 @@ async fn get_root_status(governance_id: PrincipalId) -> CanisterStatusResultV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::ListSnsCanistersResponse;
     use ic_base_types::NumBytes;
     use std::collections::VecDeque;
 
@@ -1085,5 +1101,30 @@ mod tests {
         // State should be unchanged, because sns root is STILL a controller of dapp_canisters.
         let state = STATE.with(|state| state.borrow().clone());
         assert_eq!(state, original_state, "{state:#?}");
+    }
+
+    #[test]
+    fn test_list_sns_canisters() {
+        let state = SnsRootCanister {
+            governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+            ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+            swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
+            dapp_canister_ids: vec![PrincipalId::new_user_test_id(4)],
+        };
+        let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(5)).unwrap();
+
+        let response = state.list_sns_canisters(sns_root_canister_id);
+
+        assert_eq!(
+            response,
+            ListSnsCanistersResponse {
+                root: Some(sns_root_canister_id.get()),
+                governance: state.governance_canister_id,
+                ledger: state.ledger_canister_id,
+                swap: state.swap_canister_id,
+                dapps: state.dapp_canister_ids,
+                archives: vec![],
+            }
+        )
     }
 }

@@ -68,3 +68,31 @@ pub struct CanisterCallError {
     #[prost(string, tag="2")]
     pub description: ::prost::alloc::string::String,
 }
+/// Request struct for the ListSnsCanisters API on the
+/// SNS Root canister. ListSnsCanisters will return Principals
+/// of all the associated canisters in an SNS.
+///
+/// This struct intentionally left blank (for now).
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListSnsCanistersRequest {
+}
+/// Response struct for the ListSnsCanisters API on the
+/// SNS Root canister. ListSnsCanisters will return Principals
+/// of all the associated canisters in an SNS.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListSnsCanistersResponse {
+    #[prost(message, optional, tag="1")]
+    pub root: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag="2")]
+    pub governance: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag="3")]
+    pub ledger: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag="4")]
+    pub swap: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag="5")]
+    pub dapps: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag="6")]
+    pub archives: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
