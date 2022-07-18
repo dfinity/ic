@@ -11,7 +11,7 @@ use num_traits::ToPrimitive;
 
 pub async fn balance_of<'a>(canister: &Canister<'a>, account: Account) -> Result<u64, String> {
     canister
-        .query_("icrc1_balanceOf", candid_one, account)
+        .query_("icrc1_balance_of", candid_one, account)
         .await
         .map(|n: Nat| n.0.to_u64().unwrap())
 }

@@ -140,3 +140,9 @@ impl<'a> From<&'a [u8]> for Value {
         Value::Blob(ByteBuf::from(bytes.to_vec()))
     }
 }
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct StandardRecord {
+    pub name: String,
+    pub url: String,
+}
