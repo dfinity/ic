@@ -89,6 +89,22 @@ impl<'a> UniversalCanister<'a> {
         Self::new_with_params(agent, None, None, None).await
     }
 
+    pub async fn new_with_retries(
+        agent: &'a Agent,
+        log: &slog::Logger,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> UniversalCanister<'a> {
+        retry_async(log, timeout, backoff, || async {
+            match Self::new_with_params(agent, None, None, None).await {
+                Ok(c) => Ok(c),
+                Err(e) => anyhow::bail!(e),
+            }
+        })
+        .await
+        .expect("Could not create universal canister.")
+    }
+
     pub async fn new_with_params(
         agent: &'a Agent,
         compute_allocation: Option<u64>,
@@ -117,7 +133,6 @@ impl<'a> UniversalCanister<'a> {
             .call_and_wait(delay())
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
-
         Ok(Self { agent, canister_id })
     }
 

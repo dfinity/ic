@@ -73,8 +73,15 @@ pub fn test(env: TestEnv) {
     let ucan_ids: Vec<_> = nodes
         .iter()
         .map(|node| {
+            let inner_log = log.clone();
             node.with_default_agent(|agent| async move {
-                let ucan = UniversalCanister::new(&agent).await;
+                let ucan = UniversalCanister::new_with_retries(
+                    &agent,
+                    &inner_log,
+                    RETRY_TIMEOUT,
+                    RETRY_BACKOFF,
+                )
+                .await;
 
                 // send a query call to it
                 assert_eq!(ucan.try_read_stable(0, 0).await, Vec::<u8>::new());
