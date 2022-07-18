@@ -371,6 +371,7 @@ impl PausedWasmExecution for PausedSandboxExecution {
         let result = rx.recv().unwrap();
         SandboxedExecutionController::process_completion(
             self.controller,
+            self.exec_id,
             self.canister_id,
             execution_state,
             result,
@@ -383,7 +384,15 @@ impl PausedWasmExecution for PausedSandboxExecution {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.sandbox_process
+            .history
+            .record(format!("AbortExecution(exec_id={}", self.exec_id,));
+        self.sandbox_process
+            .sandbox_service
+            .abort_execution(protocol::sbxsvc::AbortExecutionRequest {
+                exec_id: self.exec_id,
+            })
+            .on_completion(|_| {});
     }
 }
 
@@ -545,6 +554,7 @@ impl WasmExecutor for SandboxedExecutionController {
             .start_timer();
         let (execution_state, execution_result) = Self::process_completion(
             self,
+            exec_id,
             canister_id,
             execution_state,
             result,
@@ -862,6 +872,7 @@ impl SandboxedExecutionController {
     #[allow(clippy::too_many_arguments)]
     fn process_completion(
         self: Arc<Self>,
+        exec_id: ExecId,
         canister_id: CanisterId,
         mut execution_state: ExecutionState,
         result: CompletionResult,
@@ -872,9 +883,18 @@ impl SandboxedExecutionController {
         sandbox_process: Arc<SandboxProcess>,
     ) -> (ExecutionState, WasmExecutionResult) {
         let mut exec_output = match result {
-            CompletionResult::Paused(_slice) => {
-                // TODO(863): Propagate the paused result to the callers of `process()`.
-                unreachable!("This case cannot happen because DTS is not enabled yet.");
+            CompletionResult::Paused(slice) => {
+                let paused = Box::new(PausedSandboxExecution {
+                    canister_id,
+                    sandbox_process,
+                    exec_id,
+                    next_wasm_memory_id,
+                    next_stable_memory_id,
+                    initial_num_instructions_left,
+                    api_type_label,
+                    controller: self,
+                });
+                return (execution_state, WasmExecutionResult::Paused(slice, paused));
             }
             CompletionResult::Finished(exec_output) => exec_output,
         };
