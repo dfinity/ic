@@ -50,6 +50,12 @@ load("//bazel:external_crates.bzl", "external_crates_repository")
 external_crates_repository(
     name = "crate_index",
     annotations = {
+        "bls12_381": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
         "miracl_core_bls12381": [crate.annotation(
             rustc_flags = [
                 "-C",

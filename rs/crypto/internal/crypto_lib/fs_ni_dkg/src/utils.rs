@@ -3,9 +3,7 @@
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
-use miracl_core::bls12381::fp::FP;
-use miracl_core::bls12381::{ecp, rom};
-use miracl_core::hmac;
+use miracl_core::bls12381::rom::CURVE_ORDER;
 use miracl_core::rand::RAND;
 use rand_chacha::rand_core::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -15,7 +13,7 @@ mod tests;
 
 /// Order of the prime order subgroup of curve BLS12_381.
 pub fn curve_order() -> BIG {
-    BIG::new_ints(&rom::CURVE_ORDER)
+    BIG::new_ints(&CURVE_ORDER)
 }
 
 /// Point at infinity on G1 of curve BLS12_381.
@@ -50,68 +48,6 @@ pub fn field_add(left: &BIG, right: &BIG) -> BIG {
 /// Multiplication of two field elements modulo the prime order of the group.
 pub fn field_mul(left: &BIG, right: &BIG) -> BIG {
     BIG::modmul(left, right, &curve_order())
-}
-
-fn ceil(a: usize, b: usize) -> usize {
-    (a - 1) / b + 1
-}
-
-fn hash_to_field2_bls12381(
-    hash: usize,
-    hlen: usize,
-    dst: &[u8],
-    msg: &[u8],
-    ctr: usize,
-) -> [miracl_core::bls12381::fp2::FP2; 2] {
-    use miracl_core::bls12381::dbig::DBIG;
-    use miracl_core::bls12381::fp2::FP2;
-
-    let mut spec_u: [FP2; 2] = [FP2::new(), FP2::new()];
-
-    let q = BIG::new_ints(&rom::MODULUS);
-    let k = q.nbits();
-    let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
-    let m = spec_r.nbits();
-    let ll = ceil(k + ceil(m, 2), 8);
-    let mut okm: [u8; 512] = [0; 512];
-    hmac::xmd_expand(hash, hlen, &mut okm, 2 * ll * ctr, dst, msg);
-    let mut fd: [u8; 256] = [0; 256];
-    for i in 0..ctr {
-        for j in 0..ll {
-            fd[j] = okm[2 * i * ll + j];
-        }
-        let mut dx = DBIG::frombytes(&fd[0..ll]);
-        let w1 = FP::new_big(&dx.dmod(&q));
-
-        for j in 0..ll {
-            fd[j] = okm[(2 * i + 1) * ll + j];
-        }
-        dx = DBIG::frombytes(&fd[0..ll]);
-        let w2 = FP::new_big(&dx.dmod(&q));
-        spec_u[i].copy(&FP2::new_fps(&w1, &w2));
-    }
-    spec_u
-}
-
-/// Hash a message onto the BLS12-381 G2 curve
-///
-/// Uses <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/>
-///
-/// # Arguments
-/// * `dst` a domain seperator (see the internet draft for guidance on
-///   formatting)
-/// * `mess` is a message that will be hashed onto G2
-/// # Returns
-/// An element of BLS12-381 G2
-pub fn htp2_bls12381(dst: &[u8], mess: &str) -> ECP2 {
-    let m = mess.as_bytes();
-    let spec_u = hash_to_field2_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, m, 2);
-    let mut x = ECP2::map2point(&spec_u[0]);
-    let x1 = ECP2::map2point(&spec_u[1]);
-    x.add(&x1);
-    x.cfp();
-    x.affine();
-    x
 }
 
 /// A random number generator based on the ChaCha20 stream cipher
