@@ -4812,6 +4812,7 @@ dependencies = [
  "getrandom 0.2.2",
  "hex",
  "ic-crypto-internal-types",
+ "lazy_static",
  "miracl_core_bls12381",
  "pairing",
  "rand 0.8.5",
