@@ -571,11 +571,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
-                pot(
-                    "xnet_120_subnets_pot",
-                    xnet_120_subnets.build(),
-                    par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-                ),
                 pot_with_setup(
                     "canister_http_fault_tolerance",
                     canister_http::http_fault_tolerance::config,
@@ -584,41 +579,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         canister_http::http_fault_tolerance::test,
                     )]),
                 ),
-                pot_with_setup(
-                    "canister_http_remote",
-                    canister_http::lib::config,
-                    par(vec![sys_t(
-                        "http_basic_remote",
-                        canister_http::http_basic_remote::test,
-                    )]),
-                ),
-                pot_with_setup(
-                    "canister_http_time_out",
-                    canister_http::lib::config,
-                    seq(vec![sys_t(
-                        "http_time_out",
-                        canister_http::http_time_out::test,
-                    )]),
-                ),
-                pot_with_setup(
-                    "default_subnet_workload_pot",
-                    networking::subnet_update_workload::default_config,
-                    par(vec![
-                        sys_t(
-                            "default_subnet_query_workload_long_duration_test",
-                            networking::subnet_query_workload::long_duration_test,
-                        ),
-                        sys_t(
-                            "default_subnet_update_workload_long_duration_test",
-                            networking::subnet_update_workload::long_duration_test,
-                        ),
-                        sys_t(
-                            "default_subnet_update_workload_large_payload",
-                            networking::subnet_update_workload::large_payload_test,
-                        ),
-                    ]),
-                ),
-                //.with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
                 pot_with_setup(
                     "large_subnet_workload_pot",
                     networking::subnet_update_workload::large_config,
@@ -660,6 +620,45 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_29_subnets_test",
                     xnet_nightly_29_subnets.test(),
                 )]),
+            ),
+            pot(
+                "xnet_120_subnets_pot",
+                xnet_120_subnets.build(),
+                par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+            ),
+            pot_with_setup(
+                "canister_http_remote",
+                canister_http::lib::config,
+                par(vec![sys_t(
+                    "http_basic_remote",
+                    canister_http::http_basic_remote::test,
+                )]),
+            ),
+            pot_with_setup(
+                "canister_http_time_out",
+                canister_http::lib::config,
+                seq(vec![sys_t(
+                    "http_time_out",
+                    canister_http::http_time_out::test,
+                )]),
+            ),
+            pot_with_setup(
+                "default_subnet_workload_pot",
+                networking::subnet_update_workload::default_config,
+                par(vec![
+                    sys_t(
+                        "default_subnet_query_workload_long_duration_test",
+                        networking::subnet_query_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_long_duration_test",
+                        networking::subnet_update_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_large_payload",
+                        networking::subnet_update_workload::large_payload_test,
+                    ),
+                ]),
             ),
             pot(
                 "two_third_latency_pot",
