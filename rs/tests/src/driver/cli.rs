@@ -88,6 +88,20 @@ used."#
     ic_os_img_url: Url,
 
     #[clap(
+        long = "ic-os-update-img-sha256",
+        help = r#"The sha256 hash sum of the IC-OS update image."#
+    )]
+    ic_os_update_img_sha256: String,
+
+    #[clap(
+            long = "ic-os-update-img-url",
+            help = r#"The URL of the IC-OS update disk image used by default for all IC nodes
+            version."#,
+            parse(try_from_str = url::Url::parse)
+        )]
+    ic_os_update_img_url: Url,
+
+    #[clap(
         long = "boundary-node-img-sha256",
         help = r#"The SHA-256 hash of the Boundary Node disk image"#
     )]
@@ -222,9 +236,9 @@ impl RunTestsArgs {
             None
         };
 
-        if !is_sha256_hex(&self.ic_os_img_sha256) {
-            bail!("Invalid base image hash: {:?}", self.ic_os_img_sha256)
-        }
+        bail_if_sha256_invalid(&self.ic_os_img_sha256, "ic_os_img")?;
+        bail_if_sha256_invalid(&self.ic_os_update_img_sha256, "ic_os_update_img")?;
+        bail_if_sha256_invalid(&self.boundary_node_img_sha256, "boundary_node_img")?;
 
         let include_pattern = parse_pattern(self.include_pattern)?;
         let skip_pattern = parse_pattern(self.skip_pattern)?;
@@ -240,6 +254,8 @@ impl RunTestsArgs {
             initial_replica_version,
             ic_os_img_sha256: self.ic_os_img_sha256,
             ic_os_img_url: self.ic_os_img_url,
+            ic_os_update_img_sha256: self.ic_os_update_img_sha256,
+            ic_os_update_img_url: self.ic_os_update_img_url,
             boundary_node_img_sha256: self.boundary_node_img_sha256,
             boundary_node_img_url: self.boundary_node_img_url,
             farm_base_url: self.farm_base_url,
@@ -283,6 +299,8 @@ pub struct ValidatedCliRunTestsArgs {
     pub initial_replica_version: ReplicaVersion,
     pub ic_os_img_sha256: String,
     pub ic_os_img_url: Url,
+    pub ic_os_update_img_sha256: String,
+    pub ic_os_update_img_url: Url,
     pub boundary_node_img_sha256: String,
     pub boundary_node_img_url: Url,
     pub farm_base_url: Option<Url>,
@@ -298,9 +316,12 @@ pub struct ValidatedCliRunTestsArgs {
     pub working_dir: PathBuf,
 }
 
-fn is_sha256_hex(s: &str) -> bool {
-    let l = s.len();
-    l == 64 && s.chars().all(|c| c.is_ascii_hexdigit())
+fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
+    let l = sha256.len();
+    if !(l == 64 || sha256.chars().all(|c| c.is_ascii_hexdigit())) {
+        bail!("option '{}': invalid sha256 value: {:?}", opt_name, sha256);
+    }
+    Ok(())
 }
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
