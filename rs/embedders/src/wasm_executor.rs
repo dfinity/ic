@@ -7,6 +7,7 @@ use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemSta
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::IntCounter;
+use serde::{Deserialize, Serialize};
 
 use crate::wasm_utils::compile;
 use crate::wasm_utils::instrumentation::Segments;
@@ -108,6 +109,13 @@ impl WasmExecutorMetrics {
     }
 }
 
+/// Contains information about execution of the current slice.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SliceExecutionOutput {
+    /// The number of instructions executed by the slice.
+    pub executed_instructions: NumInstructions,
+}
+
 /// Represents a paused WebAssembly execution that can be resumed or aborted.
 pub trait PausedWasmExecution: std::fmt::Debug {
     /// Resumes the paused execution.
@@ -133,8 +141,12 @@ pub trait PausedWasmExecution: std::fmt::Debug {
 /// Otherwise, it contains an opaque object representing the paused execution.
 #[allow(clippy::large_enum_variant)]
 pub enum WasmExecutionResult {
-    Finished(WasmExecutionOutput, SystemStateChanges),
-    Paused(Box<dyn PausedWasmExecution>),
+    Finished(
+        SliceExecutionOutput,
+        WasmExecutionOutput,
+        SystemStateChanges,
+    ),
+    Paused(SliceExecutionOutput, Box<dyn PausedWasmExecution>),
 }
 
 /// An executor that can process any message (query or not) in the current
@@ -181,10 +193,15 @@ impl WasmExecutor for WasmExecutorImpl {
         } = match self.get_embedder_cache(&execution_state.wasm_binary, compilation_cache) {
             Ok(cache_result) => cache_result,
             Err(err) => {
+                // TODO(RUN-269): The `num_instructions_left` should be set to
+                // the limit, not zero here.
                 return (
                     None,
                     execution_state,
                     WasmExecutionResult::Finished(
+                        SliceExecutionOutput {
+                            executed_instructions: execution_parameters.slice_instruction_limit,
+                        },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
                             num_instructions_left: NumInstructions::from(0),
@@ -197,13 +214,18 @@ impl WasmExecutor for WasmExecutorImpl {
                         },
                         sandbox_safe_system_state.changes(),
                     ),
-                )
+                );
             }
         };
 
         let wasm_reserved_pages = get_wasm_reserved_pages(&execution_state);
 
-        let (wasm_execution_output, wasm_state_changes, instance_or_system_api) = process(
+        let (
+            slice_execution_output,
+            wasm_execution_output,
+            wasm_state_changes,
+            instance_or_system_api,
+        ) = process(
             func_ref,
             api_type,
             canister_current_memory_usage,
@@ -238,7 +260,11 @@ impl WasmExecutor for WasmExecutorImpl {
         (
             compilation_result,
             execution_state,
-            WasmExecutionResult::Finished(wasm_execution_output, system_state_changes),
+            WasmExecutionResult::Finished(
+                slice_execution_output,
+                wasm_execution_output,
+                system_state_changes,
+            ),
         )
     }
 
@@ -515,6 +541,7 @@ pub fn process(
     wasm_reserved_pages: NumWasmPages,
     out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
 ) -> (
+    SliceExecutionOutput,
     WasmExecutionOutput,
     Option<WasmStateChanges>,
     Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
@@ -544,7 +571,12 @@ pub fn process(
     ) {
         Ok(instance) => instance,
         Err((err, system_api)) => {
+            // TODO(RUN-269): The `num_instructions_left` should be set to
+            // the limit, not zero here.
             return (
+                SliceExecutionOutput {
+                    executed_instructions: instruction_limit,
+                },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left: NumInstructions::from(0),
@@ -620,7 +652,12 @@ pub fn process(
         Err(_) => None,
     };
 
+    let executed_instructions = instruction_limit - num_instructions_left.min(instruction_limit);
+
     (
+        SliceExecutionOutput {
+            executed_instructions,
+        },
         WasmExecutionOutput {
             wasm_result,
             num_instructions_left,

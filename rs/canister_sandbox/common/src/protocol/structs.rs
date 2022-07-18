@@ -1,3 +1,4 @@
+use ic_embedders::wasm_executor::SliceExecutionOutput;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionParameters, WasmExecutionOutput,
 };
@@ -34,6 +35,7 @@ pub struct SandboxExecInput {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SandboxExecOutput {
+    pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
     pub state: Option<StateModifications>,
     pub execute_total_duration: std::time::Duration,

@@ -7,7 +7,8 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
+    get_wasm_reserved_pages, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
+    WasmExecutor,
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
@@ -450,6 +451,11 @@ impl WasmExecutor for SandboxedExecutionController {
                     None,
                     execution_state,
                     WasmExecutionResult::Finished(
+                        // TODO(RUN-269): The `num_instructions_left` should be set to
+                        // the limit, not zero here.
+                        SliceExecutionOutput {
+                            executed_instructions: execution_parameters.slice_instruction_limit,
+                        },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
                             num_instructions_left: NumInstructions::from(0),
@@ -866,7 +872,7 @@ impl SandboxedExecutionController {
         sandbox_process: Arc<SandboxProcess>,
     ) -> (ExecutionState, WasmExecutionResult) {
         let mut exec_output = match result {
-            CompletionResult::Paused => {
+            CompletionResult::Paused(_slice) => {
                 // TODO(863): Propagate the paused result to the callers of `process()`.
                 unreachable!("This case cannot happen because DTS is not enabled yet.");
             }
@@ -899,7 +905,11 @@ impl SandboxedExecutionController {
 
         (
             execution_state,
-            WasmExecutionResult::Finished(exec_output.wasm, system_state_changes),
+            WasmExecutionResult::Finished(
+                exec_output.slice,
+                exec_output.wasm,
+                system_state_changes,
+            ),
         )
     }
 

@@ -1,4 +1,5 @@
 use crate::{fdenum::EnumerateInnerFileDescriptors, protocol::logging::LogRequest};
+use ic_embedders::wasm_executor::SliceExecutionOutput;
 use serde::{Deserialize, Serialize};
 
 use super::{id::ExecId, structs::SandboxExecOutput};
@@ -22,6 +23,7 @@ pub struct ExecutionFinishedReply {}
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ExecutionPausedRequest {
     pub exec_id: ExecId,
+    pub slice: SliceExecutionOutput,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

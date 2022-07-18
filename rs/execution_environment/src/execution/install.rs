@@ -6,7 +6,7 @@ use crate::canister_manager::{
     canister_layout, CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
     InstallCodeResponse, InstallCodeResult,
 };
-use crate::execution::common::deduct_compilation_instructions;
+use crate::execution::common::{deduct_compilation_instructions, update_round_limits};
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
@@ -181,7 +181,8 @@ pub(crate) fn execute_install(
         new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 install_stage_2a_process_start_result(
                     output,
                     context.sender,
@@ -195,7 +196,8 @@ pub(crate) fn execute_install(
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
                     new_canister,
@@ -341,7 +343,8 @@ fn install_stage_2b_continue_install_after_start(
     );
     new_canister.execution_state = Some(output_execution_state);
     match wasm_execution_result {
-        WasmExecutionResult::Finished(output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            update_round_limits(round_limits, &slice);
             install_stage_3_process_init_result(
                 old_canister,
                 new_canister,
@@ -353,7 +356,8 @@ fn install_stage_2b_continue_install_after_start(
                 round_limits,
             )
         }
-        WasmExecutionResult::Paused(paused_wasm_execution) => {
+        WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedInitExecution {
                 new_canister,
                 paused_wasm_execution,
@@ -459,7 +463,8 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 install_stage_3_process_init_result(
                     old_canister,
                     new_canister,
@@ -471,7 +476,8 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
                     new_canister,
                     paused_wasm_execution,
@@ -516,7 +522,8 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 install_stage_2a_process_start_result(
                     output,
                     self.context_sender,
@@ -530,7 +537,8 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     new_canister,
                     paused_wasm_execution,
