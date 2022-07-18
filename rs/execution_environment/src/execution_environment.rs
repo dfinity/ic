@@ -787,7 +787,7 @@ impl ExecutionEnvironment {
                         }
                     }
                 };
-                Some((res, Cycles::zero()))
+                Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
@@ -801,7 +801,7 @@ impl ExecutionEnvironment {
                         &registry_settings.provisional_whitelist,
                     ),
                 };
-                Some((res, Cycles::zero()))
+                Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::BitcoinGetBalance) => {
