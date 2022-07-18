@@ -3,7 +3,7 @@
 use candid::parser::value::IDLValue;
 use candid::Decode;
 use candid::Encode;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -12,6 +12,8 @@ use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
 use std::str::FromStr;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
+
+const SNS_CREATION_FEE: u64 = 50_000_000_000_000;
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
 /// SNS canisters and return their canister IDs.
@@ -97,6 +99,7 @@ pub struct SnsWasmSnsDeployer {
     pub args: DeployArgs,
     pub sns_init_payload: SnsInitPayload,
     pub sns_wasms_canister_id: PrincipalId,
+    pub wallet_canister: CanisterId,
 }
 
 impl SnsWasmSnsDeployer {
@@ -107,10 +110,14 @@ impl SnsWasmSnsDeployer {
             .map(|principal| PrincipalId::from_str(principal).unwrap())
             .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get());
 
+        let wallet_canister = CanisterId::new(get_identity("get-wallet", &args.network))
+            .expect("Could not convert wallet identity to CanisterId format");
+
         Self {
             args,
             sns_init_payload,
             sns_wasms_canister_id,
+            wallet_canister,
         }
     }
 
@@ -136,7 +143,11 @@ impl SnsWasmSnsDeployer {
             "canister",
             "--network",
             &self.args.network,
+            "--wallet",
+            &format!("{}", self.wallet_canister),
             "call",
+            "--with-cycles",
+            &SNS_CREATION_FEE.to_string(),
             &self.sns_wasms_canister_id.to_string(),
             "deploy_new_sns",
             &request_idl,
