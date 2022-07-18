@@ -185,6 +185,7 @@ fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         "root" => SnsCanisterType::Root,
         "governance" => SnsCanisterType::Governance,
         "ledger" => SnsCanisterType::Ledger,
+        "swap" => SnsCanisterType::Swap,
         _ => panic!("Uknown canister type."),
     };
 
