@@ -15,7 +15,6 @@ use crate::{NeuronArgs, Recovery, Step};
 pub enum StepType {
     Halt,
     DownloadState,
-    UpdateConfig,
     ICReplay,
     ValidateReplayOutput,
     BlessVersion,
@@ -118,8 +117,6 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     Err(RecoveryError::StepSkipped)
                 }
             }
-
-            StepType::UpdateConfig => Ok(Box::new(self.recovery.get_update_config_step())),
 
             StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
                 self.params.subnet_id,

@@ -23,7 +23,6 @@ pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 pub enum StepType {
     StopReplica,
     DownloadState,
-    UpdateConfig,
     ProposeToCreateSubnet,
     DownloadParentNNSStore,
     ICReplayWithRegistryContent,
@@ -138,8 +137,6 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                     Err(RecoveryError::StepSkipped)
                 }
             }
-
-            StepType::UpdateConfig => Ok(Box::new(self.recovery.get_update_config_step())),
 
             StepType::ProposeToCreateSubnet => {
                 if let (Some(version), Some(nodes)) = (

@@ -52,8 +52,7 @@ mod validator;
 ///     config: PathBuf::from("/path/to/ic.json5"),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
-///     state_root: None,
-///     local_registry_store: None,
+///     data_root: None,
 ///     subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {
 ///         registry_local_store_path: PathBuf::from("/path/to/ic_registry_local_store"),
 ///         backup_spool_path: PathBuf::from("/path/to/spool"),
@@ -78,11 +77,12 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         });
 
         // Override config
-        if let Some(path) = args.local_registry_store {
-            cfg.registry_client.data_provider = Some(DataProviderConfig::LocalStore(path));
-        }
-        if let Some(path) = args.state_root {
-            cfg.state_manager = ic_config::state_manager::Config::new(path);
+        if let Some(path) = args.data_root {
+            cfg.registry_client.data_provider = Some(DataProviderConfig::LocalStore(
+                path.join("ic_registry_local_store"),
+            ));
+            cfg.state_manager = ic_config::state_manager::Config::new(path.join("ic_state"));
+            cfg.artifact_pool.consensus_pool_path = path.join("ic_consensus_pool");
         }
 
         let canister_caller_id = args.canister_caller_id.unwrap_or(GOVERNANCE_CANISTER_ID);

@@ -17,7 +17,6 @@ use crate::{Recovery, Step};
 pub enum StepType {
     StopReplica,
     DownloadState,
-    UpdateConfig,
     ICReplay,
     ValidateReplayOutput,
     UpdateRegistryLocalStore,
@@ -115,8 +114,6 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
                     Err(RecoveryError::StepSkipped)
                 }
             }
-
-            StepType::UpdateConfig => Ok(Box::new(self.recovery.get_update_config_step())),
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
