@@ -761,7 +761,8 @@ impl Step for DownloadRegistryStoreStep {
             "Waiting until subnet with original NNS id is up."
         );
         for i in 0..50 {
-            if let Err(e) = self.recovery.get_member_ips(self.original_nns_id) {
+            if let Err(e) = ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
+            {
                 info!(self.logger, "Try {}: {}", i, e);
             } else {
                 info!(self.logger, "Found subnet with original NNS id!");
@@ -774,9 +775,6 @@ impl Step for DownloadRegistryStoreStep {
             "{}@[{}]:{}/{}",
             ssh_helper.account, self.node_ip, IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE
         );
-
-        // TODO (OR-207): Fix the race condition
-        std::thread::sleep(time::Duration::from_secs(25));
 
         rsync(
             &self.logger,
