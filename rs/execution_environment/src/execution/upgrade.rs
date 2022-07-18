@@ -7,7 +7,7 @@ use crate::canister_manager::{
     canister_layout, CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
     InstallCodeResponse, InstallCodeResult,
 };
-use crate::execution::common::deduct_compilation_instructions;
+use crate::execution::common::{deduct_compilation_instructions, update_round_limits};
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
@@ -133,7 +133,8 @@ pub(crate) fn execute_upgrade(
         new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_1_process_pre_upgrade_result(
                     output,
                     system_state_changes,
@@ -148,7 +149,8 @@ pub(crate) fn execute_upgrade(
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     paused_wasm_execution,
                     new_canister,
@@ -354,7 +356,8 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_3b_process_start_result(
                     output,
                     context.sender,
@@ -368,7 +371,8 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
                     new_canister,
@@ -500,7 +504,8 @@ fn upgrade_stage_4a_call_post_upgrade(
         );
         new_canister.execution_state = Some(output_execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_4b_process_post_upgrade_result(
                     output,
                     system_state_changes,
@@ -512,7 +517,8 @@ fn upgrade_stage_4a_call_post_upgrade(
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPostUpgradeExecution {
                     paused_wasm_execution,
                     new_canister,
@@ -666,7 +672,8 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_1_process_pre_upgrade_result(
                     output,
                     system_state_changes,
@@ -681,7 +688,8 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
                     new_canister,
                     paused_wasm_execution,
@@ -727,7 +735,8 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_3b_process_start_result(
                     output,
                     self.context_sender,
@@ -741,7 +750,8 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     new_canister,
                     paused_wasm_execution,
@@ -784,7 +794,8 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+                update_round_limits(round_limits, &slice);
                 upgrade_stage_4b_process_post_upgrade_result(
                     output,
                     system_state_changes,
@@ -796,7 +807,8 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     round_limits,
                 )
             }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
+            WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+                update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPostUpgradeExecution {
                     new_canister,
                     paused_wasm_execution,

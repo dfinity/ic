@@ -1,6 +1,8 @@
+use ic_embedders::wasm_executor::SliceExecutionOutput;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, OutOfInstructionsHandler,
 };
+use ic_types::NumInstructions;
 use std::sync::{Arc, Condvar, Mutex};
 
 // Indicates the current state of execution.
@@ -153,7 +155,7 @@ impl DeterministicTimeSlicing {
     // - transitions to `Paused` if it is possible to continue the execution in
     //   the next slice.
     // - or returns the `InstructionLimitExceeded` error.
-    fn try_pause(&self, instruction_counter: i64) -> Result<(), HypervisorError> {
+    fn try_pause(&self, instruction_counter: i64) -> Result<SliceExecutionOutput, HypervisorError> {
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
         if state.is_last_slice() {
@@ -168,9 +170,12 @@ impl DeterministicTimeSlicing {
 
         // At this pont we know that the next slice will be able to run, so we
         // can commit the state changes and pause now.
+        let newly_executed = state.newly_executed(instruction_counter);
         state.update(instruction_counter);
         state.execution_status = ExecutionStatus::Paused;
-        Ok(())
+        Ok(SliceExecutionOutput {
+            executed_instructions: NumInstructions::from(newly_executed as u64),
+        })
     }
 
     // Sleeps while the current execution state is `Paused`.
@@ -213,7 +218,7 @@ impl PausedExecution {
 
 // This callback is provided by the user of `DeterministicTimeSlicingHandler` to
 // send `PausedExecution` to the thread that controls pausing and aborting.
-pub type PauseCallback = dyn Fn(PausedExecution) + 'static;
+pub type PauseCallback = dyn Fn(SliceExecutionOutput, PausedExecution) + 'static;
 
 /// An implementation of `OutOfInstructionsHandler` that support
 /// deterministic time slicing. As input it expects:
@@ -233,7 +238,7 @@ impl DeterministicTimeSlicingHandler {
         pause_callback: F,
     ) -> Self
     where
-        F: Fn(PausedExecution) + 'static,
+        F: Fn(SliceExecutionOutput, PausedExecution) + 'static,
     {
         Self {
             dts: DeterministicTimeSlicing::new(total_instruction_limit, slice_instruction_limit),
@@ -244,10 +249,11 @@ impl DeterministicTimeSlicingHandler {
 
 impl OutOfInstructionsHandler for DeterministicTimeSlicingHandler {
     fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64> {
-        self.dts.try_pause(instruction_counter)?;
-        (self.pause_callback)(PausedExecution {
+        let slice = self.dts.try_pause(instruction_counter)?;
+        let paused = PausedExecution {
             dts: self.dts.clone(),
-        });
+        };
+        (self.pause_callback)(slice, paused);
         self.dts.wait_for_resume_or_abort()
     }
 }

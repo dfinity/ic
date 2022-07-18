@@ -116,18 +116,19 @@ impl Execution {
         let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
             i64::try_from(total_instruction_limit.get()).unwrap_or(i64::MAX),
             i64::try_from(slice_instruction_limit.get()).unwrap_or(i64::MAX),
-            move |paused_execution| {
+            move |slice, paused_execution| {
                 {
                     let mut guard = sandbox_manager.repr.lock().unwrap();
                     guard.paused_executions.insert(exec_id, paused_execution);
                 }
                 sandbox_manager
                     .controller
-                    .execution_paused(protocol::ctlsvc::ExecutionPausedRequest { exec_id });
+                    .execution_paused(protocol::ctlsvc::ExecutionPausedRequest { exec_id, slice });
             },
         );
 
         let (
+            slice,
             WasmExecutionOutput {
                 wasm_result,
                 num_instructions_left,
@@ -202,6 +203,7 @@ impl Execution {
                     protocol::ctlsvc::ExecutionFinishedRequest {
                         exec_id: self.exec_id,
                         exec_output: SandboxExecOutput {
+                            slice,
                             wasm: wasm_output,
                             state: state_modifications,
                             execute_total_duration: total_timer.elapsed(),
@@ -223,6 +225,7 @@ impl Execution {
                     protocol::ctlsvc::ExecutionFinishedRequest {
                         exec_id: self.exec_id,
                         exec_output: SandboxExecOutput {
+                            slice,
                             wasm: wasm_output,
                             state: None,
                             execute_total_duration: total_timer.elapsed(),

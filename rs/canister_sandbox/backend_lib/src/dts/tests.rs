@@ -62,7 +62,7 @@ fn dts_state_updates_saturating() {
 #[test]
 fn pause_and_resume_works() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |paused| {
+    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |_slice, paused| {
         tx.send(paused).unwrap();
     });
     let control_thread = thread::spawn(move || {
@@ -88,7 +88,7 @@ fn pause_and_resume_works() {
 #[test]
 fn early_exit_if_slice_does_not_any_instructions_left() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(10000, 1000, move |paused| {
+    let dts = DeterministicTimeSlicingHandler::new(10000, 1000, move |_slice, paused| {
         tx.send(paused).unwrap();
     });
     let control_thread = thread::spawn(move || {
@@ -110,7 +110,7 @@ fn early_exit_if_slice_does_not_any_instructions_left() {
 #[test]
 fn invalid_instructions() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |paused| {
+    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |_slice, paused| {
         tx.send(paused).unwrap();
     });
     let control_thread = thread::spawn(move || {

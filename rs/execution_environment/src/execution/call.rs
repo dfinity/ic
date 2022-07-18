@@ -30,6 +30,8 @@ use ic_types::{
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, WasmMethod};
 
+use super::common::update_round_limits;
+
 fn early_error_to_result(
     user_error: UserError,
     canister: CanisterState,
@@ -215,7 +217,8 @@ fn process_update_result(
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
-        WasmExecutionResult::Paused(paused_wasm_execution) => {
+        WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCallExecution {
                 paused_wasm_execution,
                 original,
@@ -226,7 +229,8 @@ fn process_update_result(
                 heap_delta: NumBytes::from(0),
             }
         }
-        WasmExecutionResult::Finished(output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            update_round_limits(round_limits, &slice);
             let heap_delta = if output.wasm_result.is_ok() {
                 // TODO(RUN-265): Replace `unwrap` with a proper execution error
                 // here because subnet available memory may have changed since

@@ -2,6 +2,7 @@
 // TODO(RUN-60): Move helper functions here.
 
 use ic_base_types::CanisterId;
+use ic_embedders::wasm_executor::SliceExecutionOutput;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
@@ -13,6 +14,7 @@ use ic_types::methods::{Callback, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
+use crate::{as_round_instructions, RoundLimits};
 
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
@@ -350,4 +352,8 @@ pub fn get_call_context_and_callback(
     }
 
     Some((callback, call_context))
+}
+
+pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
+    round_limits.instructions -= as_round_instructions(slice.executed_instructions);
 }

@@ -14,7 +14,7 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
-    wasm_executor::{WasmExecutionResult, WasmExecutor},
+    wasm_executor::{SliceExecutionOutput, WasmExecutionResult, WasmExecutor},
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
@@ -775,6 +775,9 @@ impl TestWasmExecutorCore {
         // TODO(RUN-124): Use `slice_instruction_limit` and support DTS here.
         let instruction_limit = input.execution_parameters.total_instruction_limit;
         if message.instructions > instruction_limit {
+            let slice = SliceExecutionOutput {
+                executed_instructions: input.execution_parameters.total_instruction_limit,
+            };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
                 num_instructions_left: NumInstructions::from(0),
@@ -791,7 +794,7 @@ impl TestWasmExecutorCore {
             return (
                 None,
                 input.execution_state,
-                WasmExecutionResult::Finished(output, system_state_changes),
+                WasmExecutionResult::Finished(slice, output, system_state_changes),
             );
         }
         let instructions_left = instruction_limit - message.instructions;
@@ -809,6 +812,9 @@ impl TestWasmExecutorCore {
             accessed_pages: message.dirty_pages,
             dirty_pages: message.dirty_pages,
         };
+        let slice = SliceExecutionOutput {
+            executed_instructions: message.instructions,
+        };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
             allocated_bytes: NumBytes::from(0),
@@ -821,7 +827,7 @@ impl TestWasmExecutorCore {
         (
             None,
             input.execution_state,
-            WasmExecutionResult::Finished(output, system_state_changes),
+            WasmExecutionResult::Finished(slice, output, system_state_changes),
         )
     }
 

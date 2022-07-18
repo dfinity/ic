@@ -72,6 +72,7 @@ impl ControllerService for ControllerServiceImpl {
         req: protocol::ctlsvc::ExecutionPausedRequest,
     ) -> rpc::Call<protocol::ctlsvc::ExecutionPausedReply> {
         let exec_id = req.exec_id;
+        let slice = req.slice;
         let reply = self.registry.take(exec_id).map_or_else(
             || {
                 error!(
@@ -81,7 +82,7 @@ impl ControllerService for ControllerServiceImpl {
                 Err(rpc::Error::ServerError)
             },
             |completion| {
-                completion(exec_id, CompletionResult::Paused);
+                completion(exec_id, CompletionResult::Paused(slice));
                 Ok(protocol::ctlsvc::ExecutionPausedReply {})
             },
         );

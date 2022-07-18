@@ -20,6 +20,8 @@ use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use prometheus::IntCounter;
 use std::sync::Arc;
 
+use super::common::update_round_limits;
+
 /// Context variables that remain the same throughput the entire deterministic
 /// time slicing execution of a response.
 #[derive(Clone, Debug)]
@@ -337,7 +339,8 @@ fn process_response_result(
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
-        WasmExecutionResult::Paused(paused_wasm_execution) => {
+        WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
                 original,
@@ -348,7 +351,8 @@ fn process_response_result(
                 heap_delta: NumBytes::from(0),
             }
         }
-        WasmExecutionResult::Finished(response_output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, response_output, system_state_changes) => {
+            update_round_limits(round_limits, &slice);
             let (num_instructions_left, heap_delta, result) = match response_output.wasm_result {
                 Ok(_) => {
                     // TODO(RUN-265): Replace `unwrap` with a proper execution error
@@ -442,7 +446,8 @@ fn process_cleanup_result(
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
-        WasmExecutionResult::Paused(paused_wasm_execution) => {
+        WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
+            update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
                 callback_err,
@@ -454,7 +459,8 @@ fn process_cleanup_result(
                 heap_delta: NumBytes::from(0),
             }
         }
-        WasmExecutionResult::Finished(cleanup_output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, cleanup_output, system_state_changes) => {
+            update_round_limits(round_limits, &slice);
             let (num_instructions_left, heap_delta, result) = match cleanup_output.wasm_result {
                 Ok(_) => {
                     // TODO(RUN-265): Replace `unwrap` with a proper execution error
