@@ -135,6 +135,7 @@ impl ExecutionServices {
             config.clone(),
             metrics_registry,
             scheduler_config.max_instructions_per_message,
+            Arc::clone(&cycles_account_manager),
         ));
         let threadpool = threadpool::Builder::new()
             .num_threads(config.query_execution_threads)

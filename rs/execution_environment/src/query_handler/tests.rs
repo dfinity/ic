@@ -8,7 +8,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
-use ic_error_types::ErrorCode;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, QueryHandler,
 };
@@ -27,7 +27,7 @@ use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
 use maplit::btreemap;
 use std::{convert::TryFrom, path::Path, sync::Arc};
 
-const CYCLE_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const INSTRUCTION_LIMIT: NumInstructions = NumInstructions::new(1_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(1_000_000_000);
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
@@ -39,7 +39,7 @@ where
     fn canister_manager_config(subnet_id: SubnetId, subnet_type: SubnetType) -> CanisterMgrConfig {
         CanisterMgrConfig::new(
             MEMORY_CAPACITY,
-            CYCLE_BALANCE,
+            CYCLES_BALANCE,
             NumSeconds::from(100_000),
             subnet_id,
             subnet_type,
@@ -82,7 +82,7 @@ where
             Arc::clone(&hypervisor) as Arc<_>,
             log.clone(),
             canister_manager_config(subnet_id, subnet_type),
-            cycles_account_manager,
+            Arc::clone(&cycles_account_manager),
             ingress_history_writer,
         );
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
@@ -94,6 +94,7 @@ where
             Config::default(),
             &metrics_registry,
             INSTRUCTION_LIMIT,
+            cycles_account_manager,
         );
         f(query_handler, canister_manager, state);
     });
@@ -102,6 +103,8 @@ where
 fn universal_canister(
     canister_manager: &CanisterManager,
     state: &mut ReplicatedState,
+    initial_cycles: Cycles,
+    canister_settings: Option<CanisterSettings>,
 ) -> CanisterId {
     let sender = canister_test_id(1).get();
     let sender_subnet_id = subnet_test_id(1);
@@ -109,8 +112,8 @@ fn universal_canister(
         .create_canister(
             sender,
             sender_subnet_id,
-            CYCLE_BALANCE,
-            CanisterSettings::default(),
+            initial_cycles,
+            canister_settings.unwrap_or_default(),
             MAX_NUMBER_OF_CANISTERS,
             state,
         )
@@ -154,8 +157,10 @@ fn query_metrics_are_reported() {
             // In this test we have two canisters A and B.
             // Canister A handles the user query by calling canister B.
 
-            let canister_a = universal_canister(&canister_manager, &mut state);
-            let canister_b = universal_canister(&canister_manager, &mut state);
+            let canister_a =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
+            let canister_b =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
             let output = query_handler.query(
                 UserQuery {
                     source: user_test_id(2),
@@ -307,8 +312,10 @@ fn query_call_with_side_effects() {
             // Canister A does a side-effectful operation (stable_grow) and then
             // calls canister B. The side effect must happen once and only once.
 
-            let canister_a = universal_canister(&canister_manager, &mut state);
-            let canister_b = universal_canister(&canister_manager, &mut state);
+            let canister_a =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
+            let canister_b =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
             let output = query_handler.query(
                 UserQuery {
                     source: user_test_id(2),
@@ -343,8 +350,10 @@ fn query_calls_disabled_for_application_subnet() {
             // Canister A does a side-effectful operation (stable_grow) and then
             // calls canister B. The side effect must happen once and only once.
 
-            let canister_a = universal_canister(&canister_manager, &mut state);
-            let canister_b = universal_canister(&canister_manager, &mut state);
+            let canister_a =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
+            let canister_b =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
             let output = query_handler.query(
                 UserQuery {
                     source: user_test_id(2),
@@ -378,7 +387,8 @@ fn query_compiled_once() {
     with_setup(
         SubnetType::Application,
         |query_handler, canister_manager, mut state| {
-            let canister_id = universal_canister(&canister_manager, &mut state);
+            let canister_id =
+                universal_canister(&canister_manager, &mut state, CYCLES_BALANCE, None);
             let canister = state.canister_state_mut(&canister_id).unwrap();
             // The canister was compiled during installation.
             assert_eq!(1, query_handler.hypervisor.compile_count());
@@ -428,6 +438,88 @@ fn query_compiled_once() {
 
             // The last query should have reused the compiled code.
             assert_eq!(2, query_handler.hypervisor.compile_count());
+        },
+    );
+}
+
+#[test]
+fn queries_to_frozen_canisters_are_rejected() {
+    with_setup(
+        SubnetType::Application,
+        |query_handler, canister_manager, mut state| {
+            let freezing_threshold = Some(NumSeconds::from(3_000_000));
+
+            // Create two canisters A and B with different amount of cycles.
+            // Canister A will not have enough to process queries in contrast
+            // to Canister B which will have more than enough.
+            //
+            // The amount of cycles is calculated based on previous runs of
+            // the test. It needs to be _just_ enough to allow for the canister
+            // to be created and installed.
+            let low_cycles = Cycles::new(100_400_590_000);
+            let canister_a = universal_canister(
+                &canister_manager,
+                &mut state,
+                low_cycles,
+                Some(CanisterSettings::new(
+                    None,
+                    None,
+                    None,
+                    None,
+                    freezing_threshold,
+                )),
+            );
+
+            let high_cycles = Cycles::new(1_000_000_000_000);
+            let canister_b = universal_canister(
+                &canister_manager,
+                &mut state,
+                high_cycles,
+                Some(CanisterSettings::new(
+                    None,
+                    None,
+                    None,
+                    None,
+                    freezing_threshold,
+                )),
+            );
+
+            // Canister A is below its freezing threshold, so queries will be rejected.
+            let result = query_handler.query(
+                UserQuery {
+                    source: user_test_id(0),
+                    receiver: canister_a,
+                    method_name: "query".to_string(),
+                    method_payload: wasm().reply().build(),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+                Arc::new(state.clone()),
+                vec![],
+            );
+            assert_eq!(
+                result,
+                Err(UserError::new(
+                    ErrorCode::CanisterOutOfCycles,
+                    format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_a)
+                )),
+            );
+
+            // Canister B has a high cycles balance that's above its freezing
+            // threshold and so it can still process queries.
+            let result = query_handler.query(
+                UserQuery {
+                    source: user_test_id(1),
+                    receiver: canister_b,
+                    method_name: "query".to_string(),
+                    method_payload: wasm().reply().build(),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+                Arc::new(state.clone()),
+                vec![],
+            );
+            assert!(result.is_ok());
         },
     );
 }

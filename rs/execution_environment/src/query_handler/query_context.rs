@@ -45,6 +45,7 @@ use crate::{
     NonReplicatedQueryKind,
 };
 use ic_base_types::NumBytes;
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
@@ -167,11 +168,26 @@ impl<'a> QueryContext<'a> {
         &mut self,
         query: UserQuery,
         metrics: &'b QueryHandlerMetrics,
+        cycles_account_manager: Arc<CyclesAccountManager>,
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         debug!(self.log, "Executing query for {}", canister_id);
         let old_canister = self.state.get_active_canister(&canister_id)?;
+
+        if cycles_account_manager.freeze_threshold_cycles(
+            old_canister.system_state.freeze_threshold,
+            old_canister.system_state.memory_allocation,
+            old_canister.memory_usage(self.own_subnet_type),
+            old_canister.scheduler_state.compute_allocation,
+        ) > old_canister.system_state.balance()
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterOutOfCycles,
+                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
+            );
+        }
+
         let call_origin = CallOrigin::Query(query.source);
         // EXC-500: Contain the usage of inter-canister query calls to the subnets
         // that currently use it until we decide on the future of this feature and
