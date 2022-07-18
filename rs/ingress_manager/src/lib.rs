@@ -5,7 +5,7 @@
 mod ingress_handler;
 mod ingress_selector;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
 use ic_cycles_account_manager::CyclesAccountManager;

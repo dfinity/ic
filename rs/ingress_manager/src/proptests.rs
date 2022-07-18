@@ -44,13 +44,13 @@ const MAX_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 24,
+        cases: 512,
         max_shrink_time: 60000,
-        .. ProptestConfig::default()
+        ..ProptestConfig::default()
     })]
 
     #[test]
-    fn ingress_payload_builder_size_proptest(singed_ingress_vec in prop_signed_ingress_vec_for_size_test()) {
+    fn proptest_ingress_payload_builder_size(singed_ingress_vec in prop_signed_ingress_vec_for_size_test()) {
         setup_with_params(
             None,
             None,
