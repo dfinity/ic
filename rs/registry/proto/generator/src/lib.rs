@@ -13,4 +13,5 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
     config.compile_protos(&proto_files, &[def]).unwrap();
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

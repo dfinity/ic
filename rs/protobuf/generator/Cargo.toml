@@ -4,4 +4,5 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-utils-rustfmt = { path = "../../utils/rustfmt" }
 prost-build = "0.10.4"

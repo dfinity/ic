@@ -3953,6 +3953,7 @@ dependencies = [
 name = "ic-base-types-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -4901,6 +4902,7 @@ dependencies = [
 name = "ic-crypto-internal-csp-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6189,6 +6191,7 @@ dependencies = [
 name = "ic-nns-common-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6252,6 +6255,7 @@ dependencies = [
 name = "ic-nns-governance-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6298,6 +6302,7 @@ version = "0.8.0"
 name = "ic-nns-gtc-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6344,6 +6349,7 @@ dependencies = [
 name = "ic-nns-handler-root-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6720,6 +6726,7 @@ dependencies = [
 name = "ic-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -6850,6 +6857,7 @@ dependencies = [
 name = "ic-registry-common-proto-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7026,6 +7034,7 @@ dependencies = [
 name = "ic-registry-transport-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7525,6 +7534,7 @@ dependencies = [
 name = "ic-sns-governance-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7566,6 +7576,7 @@ dependencies = [
 name = "ic-sns-init-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7638,6 +7649,7 @@ dependencies = [
 name = "ic-sns-root-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7695,6 +7707,7 @@ dependencies = [
 name = "ic-sns-swap-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -7775,6 +7788,7 @@ dependencies = [
 name = "ic-sns-wasm-proto-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -8303,6 +8317,10 @@ dependencies = [
  "strum_macros 0.24.0",
  "thiserror",
 ]
+
+[[package]]
+name = "ic-utils-rustfmt"
+version = "0.8.0"
 
 [[package]]
 name = "ic-validator"
@@ -8898,6 +8916,7 @@ dependencies = [
 name = "ledger-canister-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 
@@ -11572,6 +11591,7 @@ dependencies = [
 name = "registry-canister-protobuf-generator"
 version = "0.8.0"
 dependencies = [
+ "ic-utils-rustfmt",
  "prost-build 0.10.4",
 ]
 

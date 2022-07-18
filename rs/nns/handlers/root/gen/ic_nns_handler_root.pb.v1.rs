@@ -3,5 +3,4 @@
 ///
 /// This proto is devoid of data, and is not even used in code.
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RootCanisterStableStorage {
-}
+pub struct RootCanisterStableStorage {}

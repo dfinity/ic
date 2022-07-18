@@ -236,6 +236,7 @@ members = [
   "types/wasm_types",
   "universal_canister/lib",
   "utils",
+  "utils/rustfmt",
   "validator",
   "workload_generator",
   "xnet/endpoint",

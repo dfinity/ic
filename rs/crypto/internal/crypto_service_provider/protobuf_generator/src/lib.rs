@@ -10,4 +10,5 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
 
     let proto_file = def.join("ic/crypto/v1/sks.proto");
     config.compile_protos(&[proto_file], &[def]).unwrap();
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

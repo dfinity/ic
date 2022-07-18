@@ -2,32 +2,32 @@
 /// This allows replicas to route their signing requests to the right subnets.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaSigningSubnetList {
-    #[prost(message, repeated, tag="2")]
+    #[prost(message, repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublicKey {
-    #[prost(uint32, tag="1")]
+    #[prost(uint32, tag = "1")]
     pub version: u32,
-    #[prost(enumeration="AlgorithmId", tag="2")]
+    #[prost(enumeration = "AlgorithmId", tag = "2")]
     pub algorithm: i32,
-    #[prost(bytes="vec", tag="3")]
+    #[prost(bytes = "vec", tag = "3")]
     pub key_value: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag="4")]
+    #[prost(message, optional, tag = "4")]
     pub proof_data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// DER-encoded X509 public key certificate
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct X509PublicKeyCert {
-    #[prost(bytes="vec", tag="1")]
+    #[prost(bytes = "vec", tag = "1")]
     pub certificate_der: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyId {
-    #[prost(enumeration="EcdsaCurve", tag="1")]
+    #[prost(enumeration = "EcdsaCurve", tag = "1")]
     pub curve: i32,
-    #[prost(string, tag="2")]
+    #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.

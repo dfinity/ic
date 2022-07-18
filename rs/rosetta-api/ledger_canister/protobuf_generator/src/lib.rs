@@ -32,4 +32,6 @@ pub fn generate_prost_files(paths: ProtoPaths<'_>, out: &Path) {
     config
         .compile_protos(&[proto_file], &[paths.ledger, paths.base_types])
         .unwrap();
+
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

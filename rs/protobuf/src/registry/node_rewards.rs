@@ -1,14 +1,15 @@
-#[rustfmt::skip]
 #[allow(clippy::all)]
 pub mod v2 {
     include!("../../gen/registry/registry.node_rewards.v2.rs");
-    use std::iter::Extend;
     use std::collections::BTreeMap;
     use std::fmt;
+    use std::iter::Extend;
 
     impl UpdateNodeRewardsTableProposalPayload {
         pub fn get_rewards_table(&self) -> NodeRewardsTable {
-            NodeRewardsTable { table: self.new_entries.clone() }
+            NodeRewardsTable {
+                table: self.new_entries.clone(),
+            }
         }
     }
 
@@ -20,10 +21,17 @@ pub mod v2 {
                 let mut rates: BTreeMap<String, NodeRewardRate> = BTreeMap::new();
 
                 for (node_type, &xdr_permyriad_per_node_per_month) in node_type_to_rewards_map {
-                    rates.insert(node_type.clone(), NodeRewardRate { xdr_permyriad_per_node_per_month });
+                    rates.insert(
+                        node_type.clone(),
+                        NodeRewardRate {
+                            xdr_permyriad_per_node_per_month,
+                        },
+                    );
                 }
 
-                payload.new_entries.insert(region.clone(), NodeRewardRates { rates });
+                payload
+                    .new_entries
+                    .insert(region.clone(), NodeRewardRates { rates });
             }
 
             payload
@@ -91,9 +99,30 @@ pub mod v2 {
             let us_west = payload.new_entries.get("us-west").unwrap();
             let france = payload.new_entries.get("france").unwrap();
 
-            assert_eq!(us_west.rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 10);
-            assert_eq!(us_west.rates.get("storage_upgrade").unwrap().xdr_permyriad_per_node_per_month, 24);
-            assert_eq!(france.rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 50);
+            assert_eq!(
+                us_west
+                    .rates
+                    .get("default")
+                    .unwrap()
+                    .xdr_permyriad_per_node_per_month,
+                10
+            );
+            assert_eq!(
+                us_west
+                    .rates
+                    .get("storage_upgrade")
+                    .unwrap()
+                    .xdr_permyriad_per_node_per_month,
+                24
+            );
+            assert_eq!(
+                france
+                    .rates
+                    .get("default")
+                    .unwrap()
+                    .xdr_permyriad_per_node_per_month,
+                50
+            );
         }
 
         #[test]
@@ -149,23 +178,48 @@ pub mod v2 {
             };
 
             let mut table = NodeRewardsTable {
-                table: existing_entries
+                table: existing_entries,
             };
 
             table.extend(NodeRewardsTable { table: new_entries });
 
             let ch = &table.table.get("CH").unwrap().rates;
-            assert_eq!(ch.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
-            assert_eq!(ch.get("small").unwrap().xdr_permyriad_per_node_per_month, 350);
-            assert_eq!(ch.get("storage_upgrade").unwrap().xdr_permyriad_per_node_per_month, 532);
+            assert_eq!(
+                ch.get("default").unwrap().xdr_permyriad_per_node_per_month,
+                240
+            );
+            assert_eq!(
+                ch.get("small").unwrap().xdr_permyriad_per_node_per_month,
+                350
+            );
+            assert_eq!(
+                ch.get("storage_upgrade")
+                    .unwrap()
+                    .xdr_permyriad_per_node_per_month,
+                532
+            );
 
             let uk = &table.table.get("UK").unwrap().rates;
-            assert_eq!(uk.get("default").unwrap().xdr_permyriad_per_node_per_month, 120);
-            assert_eq!(uk.get("small").unwrap().xdr_permyriad_per_node_per_month, 198);
-            assert_eq!(uk.get("storage_upgrade").unwrap().xdr_permyriad_per_node_per_month, 236);
+            assert_eq!(
+                uk.get("default").unwrap().xdr_permyriad_per_node_per_month,
+                120
+            );
+            assert_eq!(
+                uk.get("small").unwrap().xdr_permyriad_per_node_per_month,
+                198
+            );
+            assert_eq!(
+                uk.get("storage_upgrade")
+                    .unwrap()
+                    .xdr_permyriad_per_node_per_month,
+                236
+            );
 
             let fr = &table.table.get("FR").unwrap().rates;
-            assert_eq!(fr.get("default").unwrap().xdr_permyriad_per_node_per_month, 200);
+            assert_eq!(
+                fr.get("default").unwrap().xdr_permyriad_per_node_per_month,
+                200
+            );
             assert!(fr.get("small").is_none());
             assert!(fr.get("storage_upgrade").is_none());
         }
@@ -200,7 +254,7 @@ pub mod v2 {
             };
 
             let table = NodeRewardsTable {
-                table: existing_entries
+                table: existing_entries,
             };
 
             // There is no entry for "US,OR" or "US"
@@ -240,7 +294,9 @@ pub mod v2 {
 
         fn assert_rate(table: &NodeRewardsTable, region: &str, node_type: &str, rate: Option<u64>) {
             assert_eq!(
-                table.get_rate(region, node_type).map(|rate| rate.xdr_permyriad_per_node_per_month),
+                table
+                    .get_rate(region, node_type)
+                    .map(|rate| rate.xdr_permyriad_per_node_per_month),
                 rate
             )
         }
@@ -248,7 +304,6 @@ pub mod v2 {
 }
 
 /// DEPRECATED
-#[rustfmt::skip]
 #[allow(clippy::all)]
 pub mod v1 {
     include!("../../gen/registry/registry.node_rewards.v1.rs");
@@ -265,7 +320,9 @@ pub mod v1 {
         }
 
         pub fn to_map(&self) -> HashMap<i32, u64> {
-            self.rates.clone().into_iter()
+            self.rates
+                .clone()
+                .into_iter()
                 .map(|rate| (rate.node_reward_type, rate.xdr_permyriad_per_node_per_month))
                 .collect()
         }
@@ -314,7 +371,7 @@ pub mod v1 {
                 rates: vec![NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 10,
                     node_reward_type: NodeRewardType::Small as i32,
-                }]
+                }],
             };
 
             rates.extend(rates1.clone());
@@ -331,94 +388,119 @@ pub mod v1 {
                         xdr_permyriad_per_node_per_month: 20,
                         node_reward_type: NodeRewardType::Small as i32,
                     },
-                ]
+                ],
             };
 
             rates.extend(rates2);
             assert_eq!(rates.rates.len(), 2);
-            assert_eq!(*rates.to_map().get(&(NodeRewardType::Unspecified as i32)).unwrap(), 5);
-            assert_eq!(*rates.to_map().get(&(NodeRewardType::Small as i32)).unwrap(), 20);
+            assert_eq!(
+                *rates
+                    .to_map()
+                    .get(&(NodeRewardType::Unspecified as i32))
+                    .unwrap(),
+                5
+            );
+            assert_eq!(
+                *rates.to_map().get(&(NodeRewardType::Small as i32)).unwrap(),
+                20
+            );
 
             // `extend` does not remove rates
             let rates3 = NodeRewardRates {
-                rates: vec![
-                    NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: 8,
-                        node_reward_type: NodeRewardType::Unspecified as i32,
-                    },
-                ]
+                rates: vec![NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 8,
+                    node_reward_type: NodeRewardType::Unspecified as i32,
+                }],
             };
 
             rates.extend(rates3);
             assert_eq!(rates.rates.len(), 2);
-            assert_eq!(*rates.to_map().get(&(NodeRewardType::Unspecified as i32)).unwrap(), 8);
-            assert_eq!(*rates.to_map().get(&(NodeRewardType::Small as i32)).unwrap(), 20);
+            assert_eq!(
+                *rates
+                    .to_map()
+                    .get(&(NodeRewardType::Unspecified as i32))
+                    .unwrap(),
+                8
+            );
+            assert_eq!(
+                *rates.to_map().get(&(NodeRewardType::Small as i32)).unwrap(),
+                20
+            );
         }
     }
 
     #[test]
     fn test_extend_node_reward_table() {
         let mut existing_entries = BTreeMap::new();
-        existing_entries.insert("CH".to_string(), NodeRewardRates {
-            rates: vec![
-                NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 240,
-                    node_reward_type: NodeRewardType::Unspecified as i32,
-                },
-                NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 350,
-                    node_reward_type: NodeRewardType::Small as i32,
-                },
-            ]
-        });
+        existing_entries.insert(
+            "CH".to_string(),
+            NodeRewardRates {
+                rates: vec![
+                    NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 240,
+                        node_reward_type: NodeRewardType::Unspecified as i32,
+                    },
+                    NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 350,
+                        node_reward_type: NodeRewardType::Small as i32,
+                    },
+                ],
+            },
+        );
 
-        existing_entries.insert("UK".to_string(), NodeRewardRates {
-            rates: vec![
-                NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 677,
-                    node_reward_type: NodeRewardType::Unspecified as i32,
-                },
-                NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 198,
-                    node_reward_type: NodeRewardType::Small as i32,
-                },
-                NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 236,
-                    node_reward_type: NodeRewardType::StorageUpgrade as i32,
-                },
-            ]
-        });
+        existing_entries.insert(
+            "UK".to_string(),
+            NodeRewardRates {
+                rates: vec![
+                    NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 677,
+                        node_reward_type: NodeRewardType::Unspecified as i32,
+                    },
+                    NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 198,
+                        node_reward_type: NodeRewardType::Small as i32,
+                    },
+                    NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 236,
+                        node_reward_type: NodeRewardType::StorageUpgrade as i32,
+                    },
+                ],
+            },
+        );
 
         let mut new_entries = BTreeMap::new();
-        new_entries.insert("CH".to_string(), NodeRewardRates {
-            rates: vec![
-                NodeRewardRate {
+        new_entries.insert(
+            "CH".to_string(),
+            NodeRewardRates {
+                rates: vec![NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 532,
                     node_reward_type: NodeRewardType::StorageUpgrade as i32,
-                },
-            ]
-        });
+                }],
+            },
+        );
 
-        new_entries.insert("UK".to_string(), NodeRewardRates {
-            rates: vec![
-                NodeRewardRate {
+        new_entries.insert(
+            "UK".to_string(),
+            NodeRewardRates {
+                rates: vec![NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 120,
                     node_reward_type: NodeRewardType::Unspecified as i32,
-                },
-            ]
-        });
+                }],
+            },
+        );
 
-        new_entries.insert("FR".to_string(), NodeRewardRates {
-            rates: vec![
-                NodeRewardRate {
+        new_entries.insert(
+            "FR".to_string(),
+            NodeRewardRates {
+                rates: vec![NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 200,
                     node_reward_type: NodeRewardType::Unspecified as i32,
-                },
-            ]
-        });
+                }],
+            },
+        );
 
         let mut table = NodeRewardsTable {
-            table: existing_entries
+            table: existing_entries,
         };
 
         table.extend(new_entries);
@@ -426,12 +508,18 @@ pub mod v1 {
         let ch = table.table.get("CH").unwrap().to_map();
         assert_eq!(*ch.get(&(NodeRewardType::Unspecified as i32)).unwrap(), 240);
         assert_eq!(*ch.get(&(NodeRewardType::Small as i32)).unwrap(), 350);
-        assert_eq!(*ch.get(&(NodeRewardType::StorageUpgrade as i32)).unwrap(), 532);
+        assert_eq!(
+            *ch.get(&(NodeRewardType::StorageUpgrade as i32)).unwrap(),
+            532
+        );
 
         let uk = table.table.get("UK").unwrap().to_map();
         assert_eq!(*uk.get(&(NodeRewardType::Unspecified as i32)).unwrap(), 120);
         assert_eq!(*uk.get(&(NodeRewardType::Small as i32)).unwrap(), 198);
-        assert_eq!(*uk.get(&(NodeRewardType::StorageUpgrade as i32)).unwrap(), 236);
+        assert_eq!(
+            *uk.get(&(NodeRewardType::StorageUpgrade as i32)).unwrap(),
+            236
+        );
 
         let fr = table.table.get("FR").unwrap().to_map();
         assert_eq!(*fr.get(&(NodeRewardType::Unspecified as i32)).unwrap(), 200);
