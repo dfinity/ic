@@ -1,0 +1,112 @@
+= Prober Funding
+
+The https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/boundary_node/prober[Prober^] service performs periodical functionality checks against the various IC subnets.
+
+This includes actions from the entire life-cycle of a canister, such as creation, installation, querying and updating, stopping and destroying.
+
+To perform these checks, we must interact with the mainnet of the IC, which requires funds in the form of ICP.
+
+Since the Prober is required to create canisters on each available subnet, multiple wallets have been created, each on a different subnet.
+
+*NOTE*: Funding of the Prober is done with WICP and XTC to *reduce operational costs*. This provides about a 75% reduction in cost to run the Prober.
+
+These instructions show how to transfer funds from a given ledger account to each of the prober's wallets using `dfx`.
+
+Additional information can be found at https://docs.dank.ooo/[Dank's WICP and XTC Docs].
+
+```sh
+XTC_CANISTER_ID='aanaa-xaaaa-aaaah-aaeiq-cai'
+WICP_CANISTER_ID='utozz-siaaa-aaaam-qaaxq-cai'
+
+WICP_ACCOUNT_ID='cc659fe529756bae6f72db9937c6c60cf7ad57eb4ac5f930a75748927aab469a'
+
+# Amount of ICP to distribute to the Prober wallets
+ICP_AMOUNT='10'
+
+# Mint WICP
+dfx ledger --network ic transfer "${WICP_ACCOUNT_ID}" \
+    --amount "${ICP_AMOUNT}" \
+    --memo 0
+
+# Grab <BLOCK_HEIGHT> from above command
+WICP_DEPOSIT_BLOCK_HEIGHT='<BLOCK_HEIGHT>'
+
+dfx canister --network ic call "${WICP_CANISTER_ID}" \
+    mint --update \
+        "(0, ${WICP_DEPOSIT_BLOCK_HEIGHT} : nat64)"
+
+# Check your WICP balance
+IDENTITY_PRINCIPAL='<IDENTITY_PRINCIPAL>'
+
+dfx canister --network=ic call --query "${WICP_CANISTER_ID}" \
+    balanceOf "(principal \"${IDENTITY_PRINCIPAL}\")"
+
+# Swap WICP for XTC
+SONIC_SWAP_CANISTER_ID='3xwpq-ziaaa-aaaah-qcn4a-cai'
+
+# Amount of WICP to Swap for XTC
+WICP_ALLOWANCE_AMOUNT='1_000_000_000'
+WICP_ALLOWANCE_PRINCIPAL="${SONIC_SWAP_CANISTER_ID}"
+
+dfx canister --network=ic call "${WICP_CANISTER_ID}" \
+    approve --update \
+        "(principal \"${WICP_ALLOWANCE_PRINCIPAL}\", ${WICP_ALLOWANCE_AMOUNT} : nat)"
+
+DEPOSIT_AMOUNT='1_000_000_000'
+
+dfx canister --network ic call "${SONIC_SWAP_CANISTER_ID}" \
+    deposit --update --candid swap.did \
+        "(principal \"${WICP_CANISTER_ID}\", ${DEPOSIT_AMOUNT})"
+
+# Check your WICP balance in Sonic
+dfx canister --network ic call "${SONIC_SWAP_CANISTER_ID}" \
+    balanceOf --query --candid swap.did \
+        "(\"${WICP_CANISTER_ID}\", principal \"${IDENTITY_PRINCIPAL}\")"
+
+# Swap WICP for XTC in Sonic
+SWAP_AMOUNT_IN='1_000_000_000'
+SWAP_AMOUNT_OUT_MIN='0'
+SWAP_TO="${IDENTITY_PRINCIPAL}"
+SWAP_DEADLINE='<SWAP_DEADLINE>' # unix timestamp (nano)
+
+dfx canister --network ic call "${SONIC_SWAP_CANISTER_ID}" \
+    swapExactTokensForTokens --update --candid swap.did \
+        "(${SWAP_AMOUNT_IN}, ${SWAP_AMOUNT_OUT_MIN}, vec { \"${WICP_CANISTER_ID}\"; \"${XTC_CANISTER_ID}\" }, principal \"${SWAP_TO}\", ${SWAP_DEADLINE})"
+
+# Check XTC balance in Sonic
+dfx canister --network ic call "${SONIC_SWAP_CANISTER_ID}" \
+    balanceOf --query --candid swap.did \
+        "(\"${XTC_CANISTER_ID}\", principal \"${IDENTITY_PRINCIPAL}\")"
+
+# Withdraw from Sonic
+WITHDRAW_AMOUNT_XTC='<WITHDRAW_AMOUNT_XTC>'
+
+dfx canister --network ic call "${SONIC_SWAP_CANISTER_ID}" \
+    withdraw --update --candid swap.did \
+        "(principal \"${XTC_CANISTER_ID}\", ${WITHDRAW_AMOUNT_XTC} : nat)"
+
+dfx canister --network ic call "${XTC_CANISTER_ID}" \
+    balanceOf --query \
+        "(principal \"${IDENTITY_PRINCIPAL}\")"
+
+# Transfer Cycles to Canister
+WALLET_IDS=(
+    2dk3q-zqaaa-aaaah-aavxa-cai
+    ...
+)
+
+for WALLET_ID in "${WALLET_IDS[@]}"; do
+    FUNDING_CANISTER_ID="${WALLET_ID}"
+    FUNDING_AMOUNT_XTC='1_000_000_000_000'
+
+    dfx canister --network=ic call "${XTC_CANISTER_ID}" \
+        burn --update \
+            "(record { canister_id = principal \"${FUNDING_CANISTER_ID}\"; amount = (${FUNDING_AMOUNT_XTC} : nat64)})"
+done
+
+# Check cycles balance of Prober wallets
+for WALLET_ID in "${WALLET_IDS[@]}"; do
+    dfx identity --network ic set-wallet "${WALLET_ID}"
+    dfx wallet --network ic balance
+done
+```
