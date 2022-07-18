@@ -1,10 +1,10 @@
-type BlockIndex = nat64;
+type BlockIndex = nat;
 type Subaccount = blob;
 // Number of nanoseconds since the UNIX epoch in UTC timezone.
 type Timestamp = nat64;
 // Number of nanoseconds between two [Timestamp]s.
 type Duration = nat64;
-type Tokens = nat64;
+type Tokens = nat;
 
 type Account = record {
     of : principal;
@@ -28,7 +28,7 @@ type TransferError = variant {
     CreatedInFuture;
     Throttled;
     Duplicate : record { duplicate_of : BlockIndex };
-    GenericError : record { error_code : nat64; message : text };
+    GenericError : record { error_code : nat; message : text };
 };
 
 type TransferResult = variant {
@@ -47,11 +47,11 @@ type Value = variant {
 // The initialization parameters of the Ledger
 type InitArgs = record {
     minting_account : Account;
-    transfer_fee : Tokens;
+    transfer_fee : nat64;
     token_symbol : text;
     token_name : text;
     metadata : vec record { text; Value };
-    initial_balances : vec record { Account; Tokens };
+    initial_balances : vec record { Account; nat64 };
     archive_options : record {
         num_blocks_to_archive : nat64;
         trigger_threshold : nat64;
@@ -65,7 +65,7 @@ type InitArgs = record {
 service : (InitArgs) -> {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
-    icrc1_decimals : () -> (nat32) query;
+    icrc1_decimals : () -> (nat8) query;
     icrc1_metadata : () -> (vec record { text; Value }) query;
     icrc1_totalSupply : () -> (Tokens) query;
 

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use candid::types::number::Nat;
 use candid::Principal;
 use dfn_candid::{ArgumentDecoder, ArgumentEncoder};
 use dfn_core::CanisterId;
@@ -92,9 +93,9 @@ impl Ledger for LedgerCanister {
             from_subaccount,
             to_principal: to.of,
             to_subaccount: to.subaccount,
-            fee: Some(fee_e8s),
+            fee: Some(Nat::from(fee_e8s)),
             created_at_time: None,
-            amount: amount_e8s,
+            amount: Nat::from(amount_e8s),
         };
         let res = self.client.transfer(args).await
             .map_err(|(code, msg)| {

@@ -1,3 +1,4 @@
+use candid::types::number::Nat;
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
@@ -9,6 +10,7 @@ use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockHeight, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, StateMachine};
+use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::collections::{BTreeMap, HashMap};
@@ -81,9 +83,12 @@ fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
         &env.query(ledger, "icrc1_balanceOf", Encode!(&acc).unwrap())
             .expect("failed to query balance")
             .bytes(),
-        u64
+        Nat
     )
     .expect("failed to decode balanceOf response")
+    .0
+    .to_u64()
+    .unwrap()
 }
 
 fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
@@ -91,9 +96,12 @@ fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
         &env.query(ledger, "icrc1_totalSupply", Encode!().unwrap())
             .expect("failed to query total supply")
             .bytes(),
-        u64
+        Nat
     )
     .expect("failed to decode totalSupply response")
+    .0
+    .to_u64()
+    .unwrap()
 }
 
 fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
@@ -124,9 +132,10 @@ fn send_transfer(
         )
         .expect("failed to transfer funds")
         .bytes(),
-        Result<BlockHeight, TransferError>
+        Result<Nat, TransferError>
     )
     .expect("failed to decode transfer response")
+    .map(|n| n.0.to_u64().unwrap())
 }
 
 fn transfer(
@@ -146,7 +155,7 @@ fn transfer(
             to_subaccount: to.subaccount,
             fee: None,
             created_at_time: None,
-            amount,
+            amount: Nat::from(amount),
         },
     )
 }
@@ -214,7 +223,7 @@ fn test_metadata() {
             &env.query(canister_id, "icrc1_decimals", Encode!().unwrap())
                 .unwrap()
                 .bytes(),
-            u32
+            u8
         )
         .unwrap()
     );
@@ -270,7 +279,7 @@ fn test_mint_burn() {
     // You have at least FEE, you can burn at least FEE
     assert_eq!(
         Err(TransferError::BadBurn {
-            min_burn_amount: FEE
+            min_burn_amount: Nat::from(FEE)
         }),
         transfer(&env, canister_id, p1.into(), MINTER.clone(), FEE / 2),
     );
@@ -282,7 +291,7 @@ fn test_mint_burn() {
     // If you have less than FEE, you can burn only the whole amount.
     assert_eq!(
         Err(TransferError::BadBurn {
-            min_burn_amount: FEE / 2
+            min_burn_amount: Nat::from(FEE / 2)
         }),
         transfer(&env, canister_id, p2.into(), MINTER.clone(), FEE / 4),
     );
@@ -293,7 +302,7 @@ fn test_mint_burn() {
     // You cannot burn zero tokens, no matter what your balance is.
     assert_eq!(
         Err(TransferError::BadBurn {
-            min_burn_amount: FEE
+            min_burn_amount: Nat::from(FEE)
         }),
         transfer(&env, canister_id, p2.into(), MINTER.clone(), 0),
     );
@@ -350,7 +359,7 @@ fn test_tx_time_bounds() {
                 to_principal: p2,
                 to_subaccount: None,
                 fee: None,
-                amount: 1_000_000,
+                amount: Nat::from(1_000_000),
                 created_at_time: Some(now - tx_window - 1),
             }
         )
@@ -367,7 +376,7 @@ fn test_tx_time_bounds() {
                 to_principal: p2,
                 to_subaccount: None,
                 fee: None,
-                amount: 1_000_000,
+                amount: Nat::from(1_000_000),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
             }
         )
@@ -617,7 +626,7 @@ fn model_transfer(
         return (
             (from_balance, to_balance),
             Some(TransferError::InsufficientFunds {
-                balance: from_balance,
+                balance: Nat::from(from_balance),
             }),
         );
     }

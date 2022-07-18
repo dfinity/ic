@@ -2,22 +2,24 @@ use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
-use ic_ledger_core::block::BlockHeight;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
 use crate::{Account, Subaccount};
 
+pub type NumTokens = Nat;
+pub type BlockIndex = Nat;
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum TransferError {
-    BadFee { expected_fee: u64 },
-    BadBurn { min_burn_amount: u64 },
-    InsufficientFunds { balance: u64 },
+    BadFee { expected_fee: NumTokens },
+    BadBurn { min_burn_amount: NumTokens },
+    InsufficientFunds { balance: NumTokens },
     TooOld { allowed_window_nanos: u64 },
     CreatedInFuture,
     Throttled,
-    Duplicate { duplicate_of: BlockHeight },
-    GenericError { error_code: u64, message: String },
+    Duplicate { duplicate_of: BlockIndex },
+    GenericError { error_code: Nat, message: String },
 }
 
 impl From<CoreTransferError> for TransferError {
@@ -27,10 +29,10 @@ impl From<CoreTransferError> for TransferError {
 
         match err {
             LTE::BadFee { expected_fee } => TE::BadFee {
-                expected_fee: expected_fee.get_e8s(),
+                expected_fee: Nat::from(expected_fee.get_e8s()),
             },
             LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
-                balance: balance.get_e8s(),
+                balance: Nat::from(balance.get_e8s()),
             },
             LTE::TxTooOld {
                 allowed_window_nanos,
@@ -39,7 +41,9 @@ impl From<CoreTransferError> for TransferError {
             },
             LTE::TxCreatedInFuture => TE::CreatedInFuture,
             LTE::TxThrottled => TE::Throttled,
-            LTE::TxDuplicate { duplicate_of } => TE::Duplicate { duplicate_of },
+            LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
+                duplicate_of: Nat::from(duplicate_of),
+            },
         }
     }
 }
@@ -52,10 +56,10 @@ pub struct TransferArg {
     #[serde(default)]
     pub to_subaccount: Option<Subaccount>,
     #[serde(default)]
-    pub fee: Option<u64>,
+    pub fee: Option<NumTokens>,
     #[serde(default)]
     pub created_at_time: Option<u64>,
-    pub amount: u64,
+    pub amount: NumTokens,
 }
 
 impl TransferArg {
@@ -70,8 +74,8 @@ impl TransferArg {
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArchiveInfo {
     pub canister_id: CanisterId,
-    pub block_range_start: u64,
-    pub block_range_end: u64,
+    pub block_range_start: BlockIndex,
+    pub block_range_end: BlockIndex,
 }
 
 /// Variant type for the `metadata` endpoint values.

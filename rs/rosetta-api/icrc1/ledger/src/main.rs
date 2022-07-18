@@ -1,4 +1,5 @@
 use candid::candid_method;
+use candid::types::number::Nat;
 use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -10,7 +11,8 @@ use ic_icrc1_ledger::{InitArgs, Ledger};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction,
 };
-use ic_ledger_core::{block::BlockHeight, timestamp::TimeStamp, tokens::Tokens};
+use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
+use num_traits::ToPrimitive;
 use std::cell::RefCell;
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
@@ -78,8 +80,9 @@ fn icrc1_symbol() -> String {
 
 #[query]
 #[candid_method(query)]
-fn icrc1_decimals() -> u32 {
-    ic_ledger_core::tokens::DECIMAL_PLACES
+fn icrc1_decimals() -> u8 {
+    debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
+    ic_ledger_core::tokens::DECIMAL_PLACES as u8
 }
 
 #[query]
@@ -90,19 +93,19 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
 
 #[query(name = "icrc1_balanceOf")]
 #[candid_method(query, rename = "icrc1_balanceOf")]
-fn icrc1_balance_of(account: Account) -> u64 {
-    Access::with_ledger(|ledger| ledger.balances().account_balance(&account).get_e8s())
+fn icrc1_balance_of(account: Account) -> Nat {
+    Access::with_ledger(|ledger| Nat::from(ledger.balances().account_balance(&account).get_e8s()))
 }
 
 #[query(name = "icrc1_totalSupply")]
 #[candid_method(query, rename = "icrc1_totalSupply")]
-fn icrc1_total_supply() -> u64 {
-    Access::with_ledger(|ledger| ledger.balances().total_supply().get_e8s())
+fn icrc1_total_supply() -> Nat {
+    Access::with_ledger(|ledger| Nat::from(ledger.balances().total_supply().get_e8s()))
 }
 
 #[update]
 #[candid_method(update)]
-async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
+async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let created_at_time = arg
@@ -115,43 +118,53 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
             subaccount: arg.from_subaccount,
         };
         let to_account = arg.to_account();
-        let amount = Tokens::from_e8s(arg.amount);
-        let fee = arg.fee.map(Tokens::from_e8s);
+
+        let amount = match arg.amount.0.to_u64() {
+            Some(n) => Tokens::from_e8s(n),
+            None => {
+                // No one can have so many tokens
+                let balance = Nat::from(ledger.balances().account_balance(&from_account).get_e8s());
+                assert!(balance < arg.amount);
+                return Err(TransferError::InsufficientFunds { balance });
+            }
+        };
 
         let tx = if &to_account == ledger.minting_account() {
-            if fee.is_some() && fee != Some(Tokens::ZERO) {
-                return Err(TransferError::BadFee { expected_fee: 0 });
+            let expected_fee = Nat::from(0u64);
+            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
+                return Err(TransferError::BadFee { expected_fee });
             }
+
             let balance = ledger.balances().account_balance(&from_account);
             let min_burn_amount = ledger.transfer_fee().min(balance);
             if amount < min_burn_amount {
                 return Err(TransferError::BadBurn {
-                    min_burn_amount: min_burn_amount.get_e8s(),
+                    min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
                 });
             }
             if amount == Tokens::ZERO {
                 return Err(TransferError::BadBurn {
-                    min_burn_amount: ledger.transfer_fee().get_e8s(),
+                    min_burn_amount: Nat::from(ledger.transfer_fee().get_e8s()),
                 });
             }
             Transaction::burn(from_account, amount, created_at_time)
         } else if &from_account == ledger.minting_account() {
-            if fee.is_some() && fee != Some(Tokens::ZERO) {
-                return Err(TransferError::BadFee { expected_fee: 0 });
+            let expected_fee = Nat::from(0u64);
+            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
+                return Err(TransferError::BadFee { expected_fee });
             }
             Transaction::mint(to_account, amount, created_at_time)
         } else {
-            let expected_fee = ledger.transfer_fee();
-            if fee.is_some() && fee != Some(expected_fee) {
-                return Err(TransferError::BadFee {
-                    expected_fee: expected_fee.get_e8s(),
-                });
+            let expected_fee_tokens = ledger.transfer_fee();
+            let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
+            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
+                return Err(TransferError::BadFee { expected_fee });
             }
             Transaction::transfer(
                 from_account,
                 to_account,
                 amount,
-                expected_fee,
+                expected_fee_tokens,
                 created_at_time,
             )
         };
@@ -165,7 +178,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(MAX_MESSAGE_SIZE).await;
-    Ok(block_idx)
+    Ok(Nat::from(block_idx))
 }
 
 #[query]
@@ -184,8 +197,8 @@ fn archives() -> Vec<ArchiveInfo> {
                     .into_iter()
                     .map(|((start, end), canister_id)| ArchiveInfo {
                         canister_id,
-                        block_range_start: start,
-                        block_range_end: end,
+                        block_range_start: Nat::from(start),
+                        block_range_end: Nat::from(end),
                     })
             })
             .collect()
