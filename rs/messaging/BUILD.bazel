@@ -50,7 +50,7 @@ rust_test(
         "//rs/test_utilities/metrics",
         "@crate_index//:lazy_static",
         "@crate_index//:maplit",
-        "@crate_index//:mockall",
+        "@crate_index//:mockall_0_7_2",
         "@crate_index//:rand_0_8_4",
         "@crate_index//:rand_chacha_0_3_1",
     ],

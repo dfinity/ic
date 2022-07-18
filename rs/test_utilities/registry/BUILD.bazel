@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/subnet_type",
     "//rs/types/types",
-    "@crate_index//:mockall",
+    "@crate_index//:mockall_0_7_2",
     "@crate_index//:serde_cbor",
 ]
 
