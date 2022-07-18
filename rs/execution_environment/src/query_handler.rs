@@ -13,6 +13,7 @@ use crate::{
 };
 use ic_config::execution_environment::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{QueryExecutionService, QueryHandler};
 use ic_interfaces_state_manager::StateReader;
@@ -93,6 +94,7 @@ pub(crate) struct InternalHttpQueryHandler {
     config: Config,
     metrics: QueryHandlerMetrics,
     max_instructions_per_message: NumInstructions,
+    cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 #[derive(Clone)]
@@ -111,6 +113,7 @@ impl InternalHttpQueryHandler {
         config: Config,
         metrics_registry: &MetricsRegistry,
         max_instructions_per_message: NumInstructions,
+        cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         Self {
             log,
@@ -120,6 +123,7 @@ impl InternalHttpQueryHandler {
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_message,
+            cycles_account_manager,
         }
     }
 }
@@ -160,7 +164,12 @@ impl QueryHandler for InternalHttpQueryHandler {
             max_canister_memory_size,
             self.max_instructions_per_message,
         );
-        context.run(query, &self.metrics, &measurement_scope)
+        context.run(
+            query,
+            &self.metrics,
+            Arc::clone(&self.cycles_account_manager),
+            &measurement_scope,
+        )
     }
 }
 
