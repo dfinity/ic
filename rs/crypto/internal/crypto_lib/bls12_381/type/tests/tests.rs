@@ -342,6 +342,47 @@ fn test_point_neg() {
 }
 
 #[test]
+fn test_multipairing() {
+    let g1 = G1Affine::generator();
+    let g1n = G1Affine::generator().neg();
+    let g2p = G2Prepared::generator();
+    let g2pn = G2Prepared::neg_generator();
+
+    assert_eq!(Gt::multipairing(&[]), Gt::identity());
+
+    assert_eq!(Gt::multipairing(&[(&g1, &g2p)]), Gt::generator());
+
+    assert_eq!(Gt::multipairing(&[(&g1n, &g2pn)]), Gt::generator());
+
+    assert_eq!(Gt::multipairing(&[(&g1, &g2pn)]), Gt::generator().neg());
+
+    assert_eq!(Gt::multipairing(&[(&g1n, &g2p)]), Gt::generator().neg());
+
+    let mut rng = seeded_rng();
+
+    for _ in 0..5 {
+        let a = Scalar::random(&mut rng);
+        let b = Scalar::random(&mut rng);
+        let c = Scalar::random(&mut rng);
+
+        let g1a = G1Affine::from(G1Projective::generator() * a);
+        let g1b = G1Affine::from(G1Projective::generator() * b);
+        let g1c = G1Affine::from(G1Projective::generator() * c);
+
+        let g2a = G2Prepared::from(G2Projective::generator() * a);
+        let g2b = G2Prepared::from(G2Projective::generator() * b);
+        let g2c = G2Prepared::from(G2Projective::generator() * c);
+
+        let g2 = G2Prepared::generator();
+
+        assert_eq!(
+            Gt::multipairing(&[(&g1a, &g2), (&g1b, &g2), (&g1c, &g2)]),
+            Gt::multipairing(&[(&g1, &g2a), (&g1, &g2b), (&g1, &g2c)]),
+        );
+    }
+}
+
+#[test]
 fn test_g1_is_torsion_free() {
     let mut rng = seeded_rng();
 

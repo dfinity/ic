@@ -12,6 +12,10 @@ fn random_g2() -> G2Projective {
     G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
 }
 
+fn random_g2_prepared() -> G2Prepared {
+    G2Prepared::from(random_g2())
+}
+
 fn random_gt() -> Gt {
     Gt::pairing(&random_g1().into(), &random_g2().into())
 }
@@ -167,6 +171,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+
+    group.bench_function("prepare", |b| {
+        b.iter_batched_ref(
+            || G2Affine::from(random_g2()),
+            |pt| G2Prepared::from(*pt),
+            BatchSize::SmallInput,
+        )
+    });
 }
 
 fn pairing_ops(c: &mut Criterion) {
@@ -195,6 +207,55 @@ fn pairing_ops(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+
+    group.bench_function("pairing-with-prep", |b| {
+        b.iter_batched_ref(
+            || (random_g1().into(), random_g2_prepared()),
+            |(g1, g2)| Gt::multipairing(&[(g1, g2)]),
+            BatchSize::SmallInput,
+        )
+    });
+
+    // Simulates the pairing operation used in FS NI-DKG (2 prepared G2, 1 random)
+    group.bench_function("fsnidkg-3-pairing", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    random_g1().into(),
+                    random_g2_prepared(),
+                    random_g1().into(),
+                    random_g2_prepared(),
+                    random_g1().into(),
+                    random_g2(),
+                )
+            },
+            |(g1a, g2a, g1b, g2b, g1c, g2c)| {
+                Gt::multipairing(&[(g1a, g2a), (g1b, g2b), (g1c, &G2Prepared::from(*g2c))])
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    fn n_pairing_instance(n: usize) -> Vec<(G1Affine, G2Prepared)> {
+        let mut v = Vec::with_capacity(n);
+        for _ in 0..n {
+            v.push((random_g1().into(), random_g2_prepared()));
+        }
+        v
+    }
+
+    for n in [2, 3, 10, 20] {
+        group.bench_function(format!("{}-pairing", n), |b| {
+            b.iter_batched_ref(
+                || n_pairing_instance(n),
+                |terms| {
+                    let terms_ref = terms.iter().map(|(g1, g2)| (g1, g2)).collect::<Vec<_>>();
+                    Gt::multipairing(terms_ref.as_slice())
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
 
     group.bench_function("verify_bls_signature", |b| {
         b.iter_batched_ref(

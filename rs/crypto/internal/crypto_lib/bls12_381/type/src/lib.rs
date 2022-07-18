@@ -574,14 +574,89 @@ impl Gt {
         Self::new(bls12_381::pairing(&g1.value, &g2.value))
     }
 
+    /// Perform multi-pairing computation
+    ///
+    /// This is equivalent to computing the pairing from each element of
+    /// `terms` then summing the result.
+    pub fn multipairing(terms: &[(&G1Affine, &G2Prepared)]) -> Self {
+        let mut inners = Vec::with_capacity(terms.len());
+        for (g1, g2) in terms {
+            inners.push((g1.inner(), g2.inner()));
+        }
+
+        Self::new(bls12_381::multi_miller_loop(&inners).final_exponentiation())
+    }
+
     /// Return true if this is the identity element
     pub fn is_identity(&self) -> bool {
         bool::from(self.value.is_identity())
+    }
+
+    /// Return the additive inverse of this Gt
+    pub fn neg(&self) -> Self {
+        use std::ops::Neg;
+        Self::new(self.value.neg())
     }
 }
 
 declare_addsub_ops_for!(Gt);
 declare_mul_scalar_ops_for!(Gt);
+
+/// An element of the group G2 prepared for the Miller loop
+#[derive(Clone, Debug)]
+pub struct G2Prepared {
+    value: bls12_381::G2Prepared,
+}
+
+lazy_static::lazy_static! {
+    static ref G2PREPARED_G : G2Prepared = G2Affine::generator().into();
+    static ref G2PREPARED_NEG_G : G2Prepared = G2Affine::generator().neg().into();
+}
+
+impl G2Prepared {
+    /// Create a new G2Prepared from the inner type
+    pub(crate) fn new(value: bls12_381::G2Prepared) -> Self {
+        Self { value }
+    }
+
+    pub(crate) fn inner(&self) -> &bls12_381::G2Prepared {
+        &self.value
+    }
+
+    /// Return the generator element in the group
+    pub fn generator() -> Self {
+        G2PREPARED_G.clone()
+    }
+
+    /// Return the inverse of the generator element in the group
+    pub fn neg_generator() -> Self {
+        G2PREPARED_NEG_G.clone()
+    }
+}
+
+impl From<&G2Affine> for G2Prepared {
+    fn from(v: &G2Affine) -> Self {
+        Self::new((*v.inner()).into())
+    }
+}
+
+impl From<&G2Projective> for G2Prepared {
+    fn from(v: &G2Projective) -> Self {
+        Self::from(G2Affine::from(v))
+    }
+}
+
+impl From<G2Affine> for G2Prepared {
+    fn from(v: G2Affine) -> Self {
+        Self::from(&v)
+    }
+}
+
+impl From<G2Projective> for G2Prepared {
+    fn from(v: G2Projective) -> Self {
+        Self::from(&v)
+    }
+}
 
 /// Perform BLS signature verification
 ///
@@ -595,16 +670,9 @@ pub fn verify_bls_signature(
     // faster version of
     // Gt::pairing(&signature, &G2Affine::generator()) == Gt::pairing(&message, &public_key)
 
-    use std::ops::Neg;
-
-    // TODO: cache the prepared form of the G2 generator
-    let g2_gen = bls12_381::G2Prepared::from(bls12_381::G2Affine::generator().neg());
-    let pub_key_prepared = bls12_381::G2Prepared::from(*public_key.inner());
-    let res = bls12_381::multi_miller_loop(&[
-        (signature.inner(), &g2_gen),
-        (message.inner(), &pub_key_prepared),
-    ]);
-    bool::from(res.final_exponentiation().is_identity())
+    let g2_gen = G2Prepared::neg_generator();
+    let pub_key_prepared = G2Prepared::from(public_key);
+    Gt::multipairing(&[(signature, &g2_gen), (message, &pub_key_prepared)]).is_identity()
 }
 
 /*

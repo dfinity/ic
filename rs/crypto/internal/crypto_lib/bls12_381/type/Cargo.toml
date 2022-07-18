@@ -12,6 +12,7 @@ pairing = "0.22"
 sha2 = "0.9"
 rand = "0.8"
 rand_chacha = "0.3"
+lazy_static = "1.4"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
