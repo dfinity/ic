@@ -1,5 +1,5 @@
 {
-  "checksum": "c6a43000319fc918d845600f2e03020b0a9938807a2dce71d6606cec3dc4a6f0",
+  "checksum": "670546365fae40583547fbcf4081b720956d3a0dbcce6ca799c8c7bcae33f7c2",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -4085,6 +4085,10 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": [
+          "-C",
+          "opt-level=3"
+        ],
         "version": "0.7.0"
       },
       "license": "MIT/Apache-2.0"
@@ -5113,7 +5117,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-types 0.4.0",
+              "id": "ic-types 0.4.1",
               "target": "ic_types"
             },
             {
@@ -16913,7 +16917,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "ic-types 0.4.0",
+              "id": "ic-types 0.4.1",
               "target": "ic_types"
             },
             {
@@ -17302,13 +17306,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-types 0.4.0": {
+    "ic-types 0.4.1": {
       "name": "ic-types",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-types/0.4.0/download",
-          "sha256": "a67e4edc28c09d29ab97b50410245c91d71756eaf3956212e3488cd6eb75fda4"
+          "url": "https://crates.io/api/v1/crates/ic-types/0.4.1/download",
+          "sha256": "82e9cac29df1f2906137c327ed24dfc398460eda054abaa6107273c11afe6384"
         }
       },
       "targets": [
@@ -17369,7 +17373,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "Apache-2.0"
     },
@@ -41826,8 +41830,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -41850,8 +41854,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

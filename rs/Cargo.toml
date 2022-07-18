@@ -274,6 +274,9 @@ opt-level = 'z'
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
 
+[profile.dev.package.bls12_381]
+opt-level = 3
+
 [patch.crates-io]
 # TODO (CRP-1204): Remove this once tokio-rustls has been updated.
 webpki = { git = "https://github.com/dfinity-lab/webpki", branch = "v0.21.4-v3-no-extensions" }

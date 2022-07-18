@@ -21,6 +21,7 @@ use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_to_bytes, FrBytes,
     G1Bytes,
 };
+use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
 use miracl_core::bls12381::ecp::{ECP, G2_TABLE};
@@ -1224,25 +1225,29 @@ const LAMBDA_H: usize = 256;
 
 /// Return NI-DKG system parameters
 pub fn mk_sys_params() -> SysParam {
-    let mut f = Vec::new();
     let dst = b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-    let f0 = htp2_bls12381(dst, "f0");
+    let f0 = G2Affine::hash(dst, b"f0").to_miracl();
+
+    let mut f = Vec::with_capacity(LAMBDA_T);
     for i in 0..LAMBDA_T {
         let s = format!("f{}", i + 1);
-        f.push(htp2_bls12381(dst, &s));
+        f.push(G2Affine::hash(dst, s.as_bytes()).to_miracl());
     }
-    let mut f_h = Vec::new();
+    let mut f_h = Vec::with_capacity(LAMBDA_H);
     for i in 0..LAMBDA_H {
         let s = format!("f_h{}", i);
-        f_h.push(htp2_bls12381(dst, &s));
+        f_h.push(G2Affine::hash(dst, s.as_bytes()).to_miracl());
     }
+
+    let h = G2Affine::hash(dst, b"h").to_miracl();
+
     SysParam {
         lambda_t: LAMBDA_T,
         lambda_h: LAMBDA_H,
         f0,
         f,
         f_h,
-        h: htp2_bls12381(dst, "h"),
+        h,
     }
 }
 
