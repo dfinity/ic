@@ -1110,6 +1110,11 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_provisional_whitelist_all(mut self) -> Self {
+        self.registry_settings.provisional_whitelist = ProvisionalWhitelist::All;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 

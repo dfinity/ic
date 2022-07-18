@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::ExecutionResponse;
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
-    Payload as Ic00Payload, IC_00,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    IC_00,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 
@@ -16,6 +17,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
 };
+use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::{
     execution_environment::{
         assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
@@ -37,6 +39,8 @@ use ic_types::{
     CanisterId, Cycles, RegistryVersion, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
+
+const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 
 // A Wasm module calling call_simple
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -2173,4 +2177,80 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
             system_state.queues().output_message_count()
         );
     }
+}
+
+#[test]
+fn can_refund_cycles_after_successful_provisional_create_canister() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build();
+    let canister = test.universal_canister().unwrap();
+    let payment = 10_000_000_000;
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(None)).unwrap();
+    let create_canister = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::ProvisionalCreateCanisterWithCycles,
+            call_args().other_side(args),
+            (0, payment),
+        )
+        .build();
+
+    let initial_cycles_balance = test.canister_state(canister).system_state.balance();
+
+    let result = test.ingress(canister, "update", create_canister).unwrap();
+    let new_canister = match result {
+        WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap(),
+        WasmResult::Reject(err) => panic!(
+            "Expected ProvisionalCreateCanisterWithCycles to succeed but got {}",
+            err
+        ),
+    };
+    assert_eq!(
+        CanisterStatusType::Running,
+        test.canister_state(new_canister.get_canister_id()).status(),
+    );
+    assert_balance_equals(
+        initial_cycles_balance,
+        test.canister_state(canister).system_state.balance(),
+        BALANCE_EPSILON,
+    );
+}
+
+#[test]
+fn can_refund_cycles_after_successful_provisional_topup_canister() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build();
+    let canister_1 = test.universal_canister().unwrap();
+    let canister_2 = test.universal_canister().unwrap();
+    let payment = 10_000_000_000;
+    let top_up = 1_000_000_000;
+    let args = Encode!(&ProvisionalTopUpCanisterArgs::new(canister_2, top_up)).unwrap();
+    let top_up_canister = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::ProvisionalTopUpCanister,
+            call_args().other_side(args),
+            (0, payment),
+        )
+        .build();
+
+    let initial_cycles_balance_1 = test.canister_state(canister_1).system_state.balance();
+    let initial_cycles_balance_2 = test.canister_state(canister_2).system_state.balance();
+
+    let result = test.ingress(canister_1, "update", top_up_canister).unwrap();
+
+    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_balance_equals(
+        initial_cycles_balance_1,
+        test.canister_state(canister_1).system_state.balance(),
+        BALANCE_EPSILON,
+    );
+
+    assert_balance_equals(
+        initial_cycles_balance_2 + Cycles::new(top_up),
+        test.canister_state(canister_2).system_state.balance(),
+        BALANCE_EPSILON,
+    );
 }
