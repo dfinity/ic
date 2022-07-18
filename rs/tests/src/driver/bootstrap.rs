@@ -65,7 +65,7 @@ pub fn init_ic(
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: ic_setup.initial_replica_version,
+            replica_version: ic_setup.initial_replica_version.clone(),
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
@@ -141,8 +141,8 @@ pub fn init_ic(
         /* generate_subnet_records= */
         true,
         nns_subnet_idx,
-        None,
-        None,
+        Some(ic_setup.ic_os_update_img_url),
+        Some(ic_setup.ic_os_update_img_sha256),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,

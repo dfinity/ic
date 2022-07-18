@@ -154,8 +154,7 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
     return env
 
 
-def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
-    filename = "disk-img.tar.zst"
+def get_ic_os_image_sha(img_base_url, filename="disk-img.tar.zst") -> Tuple[str, str]:
     img_url = f"{img_base_url}{filename}"
     img_sha256_url = f"{img_base_url}SHA256SUMS"
     result = requests.get(f"{img_sha256_url}")
@@ -166,9 +165,9 @@ def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
         hashes = {}
         for line in result.text.splitlines():
             parts = line.split(" ")
-            hash = parts[0]
+            sha256hex = parts[0]
             name = parts[1][1:]
-            hashes[name] = hash
+            hashes[name] = sha256hex
         img_sha256 = hashes[filename]
         return img_sha256, img_url
     except Exception:
@@ -302,6 +301,9 @@ def main(
     BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(
         f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-dev/"
     )
+    IC_OS_UPD_DEV_IMG_SHA256, IC_OS_UPD_DEV_IMG_URL = get_ic_os_image_sha(
+        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/update-img-dev/", filename="update-img.tar.zst"
+    )
 
     if SSH_KEY_DIR is None:
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")
@@ -413,6 +415,8 @@ def main(
             f"--initial-replica-version={IC_VERSION_ID}",
             f"--ic-os-img-url={IC_OS_DEV_IMG_URL}",
             f"--ic-os-img-sha256={IC_OS_DEV_IMG_SHA256}",
+            f"--ic-os-update-img-url={IC_OS_UPD_DEV_IMG_URL}",
+            f"--ic-os-update-img-sha256={IC_OS_UPD_DEV_IMG_SHA256}",
             f"--boundary-node-img-url={BOUNDARY_NODE_IMG_URL}",
             f"--boundary-node-img-sha256={BOUNDARY_NODE_IMG_SHA256}",
             f"--nns-canister-path={ARTIFACT_DIR}",
