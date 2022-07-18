@@ -108,6 +108,45 @@ fn scalar_two_generates_expected_values() {
 }
 
 #[test]
+fn test_scalar_comparison() {
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert!(zero < one);
+    assert!(one > zero);
+
+    assert!(zero <= zero);
+    assert!(zero >= zero);
+
+    assert!(one <= one);
+    assert!(one >= one);
+
+    let mut rng = seeded_rng();
+
+    for _ in 0..300 {
+        let a = Scalar::random(&mut rng);
+        let b = Scalar::random(&mut rng);
+
+        assert_eq!(a.serialize().cmp(&b.serialize()), a.cmp(&b));
+        assert_eq!(b.serialize().cmp(&a.serialize()), b.cmp(&a));
+
+        assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
+        assert_eq!(b.cmp(&b), std::cmp::Ordering::Equal);
+    }
+
+    for _ in 0..300 {
+        let a = Scalar::from_u32(rng.gen::<u32>());
+        let b = Scalar::from_u32(rng.gen::<u32>());
+
+        assert_eq!(a.serialize().cmp(&b.serialize()), a.cmp(&b));
+        assert_eq!(b.serialize().cmp(&a.serialize()), b.cmp(&a));
+
+        assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
+        assert_eq!(b.cmp(&b), std::cmp::Ordering::Equal);
+    }
+}
+
+#[test]
 fn test_scalar_from_integer_type() {
     let mut rng = seeded_rng();
 
