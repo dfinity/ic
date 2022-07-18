@@ -42,6 +42,23 @@ pub struct Scalar {
     value: bls12_381::Scalar,
 }
 
+impl Ord for Scalar {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.ct_compare(other) {
+            -1 => std::cmp::Ordering::Less,
+            0 => std::cmp::Ordering::Equal,
+            1 => std::cmp::Ordering::Greater,
+            _ => panic!("Unexpected result from Scalar::ct_compare"),
+        }
+    }
+}
+
+impl PartialOrd for Scalar {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Scalar {
     /// The size in bytes of this type
     pub const BYTES: usize = 32;
@@ -223,6 +240,76 @@ impl Scalar {
         let mut bytes = self.value.to_bytes();
         bytes.reverse();
         bytes
+    }
+
+    /// Compare a Scalar with another
+    ///
+    /// If self < other returns -1
+    /// If self == other returns 0
+    /// If self > other returns 1
+    pub(crate) fn ct_compare(&self, other: &Self) -> i8 {
+        use subtle::{ConditionallySelectable, ConstantTimeEq, ConstantTimeLess};
+
+        const IS_LT: u8 = 0xff; // -1i8 as u8
+        const IS_EQ: u8 = 0;
+        const IS_GT: u8 = 1;
+
+        let a = self.serialize();
+        let b = other.serialize();
+
+        /*
+        bls12_381::Scalar does not implement comparisons natively.
+
+        Perform this operation by comparing the serializations of the Scalar
+        instead.
+
+        This function is equivalent to self.serialize().cmp(other.serialize())
+        except that it runs in constant time to avoid leaking information about
+        the values.
+
+        The logic works by examining each byte, starting from the least
+        significant (in a[Self::BYTES-1]) and working up to the most significant
+        (in a[0]).  At each step we track (in variable `result`) what the
+        comparison would have resulted in had we just compared up to that point
+        (ignoring the higher order bytes)
+
+        If the two bytes we are comparing are the same, then whatever their
+        value is does not change the result. As an example, XY and XZ have the
+        same comparison result as Y and Z would, for any three bytes X, Y, Z.
+
+        If they are not the same then either x is less than y, or it is not
+        (which implies, since we know x != y, that x is strictly greater than
+        y).  Additionally, since the byte we are examining at this point has
+        greater magnitude than any byte we have looked at previously, the result
+        we have computed so far no longer matters.
+
+        Pseudo-code for this loop would be:
+
+        let mut result = IS_EQ;
+        for (x,y) in (&a, &b) {
+           if x == y { continue; }
+           else if x < y { result = IS_LT; }
+           else { result = IS_GT; }
+        }
+        */
+
+        // Return a if c otherwise b
+        fn ct_select(c: subtle::Choice, a: u8, b: u8) -> u8 {
+            let mut r = b;
+            r.conditional_assign(&a, c);
+            r
+        }
+
+        let mut result = IS_EQ;
+
+        for i in (0..Self::BYTES).rev() {
+            let is_lt = u8::ct_lt(&a[i], &b[i]);
+            let is_eq = u8::ct_eq(&a[i], &b[i]);
+
+            result = ct_select(is_eq, result, ct_select(is_lt, IS_LT, IS_GT));
+        }
+
+        result as i8
     }
 }
 
