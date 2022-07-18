@@ -2220,14 +2220,11 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn out_of_instructions(
-        &self,
-        num_instructions_left: NumInstructions,
-    ) -> HypervisorResult<NumInstructions> {
+    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64> {
         let result = self
             .out_of_instructions_handler
-            .out_of_instructions(num_instructions_left);
-        trace_syscall!(self, out_of_instructions, result);
+            .out_of_instructions(instruction_counter);
+        trace_syscall!(self, out_of_instructions, result, instruction_counter);
         result
     }
 
@@ -2632,10 +2629,7 @@ impl SystemApi for SystemApiImpl {
 pub struct DefaultOutOfInstructionsHandler {}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
-    fn out_of_instructions(
-        &self,
-        _num_instruction_left: NumInstructions,
-    ) -> HypervisorResult<NumInstructions> {
+    fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
         Err(HypervisorError::InstructionLimitExceeded)
     }
 }

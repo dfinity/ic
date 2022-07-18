@@ -341,12 +341,12 @@ pub trait IngressHistoryWriter: Send + Sync {
 
 /// A trait for handling `out_of_instructions()` calls from the Wasm module.
 pub trait OutOfInstructionsHandler {
-    /// Returns a new instruction limit if the execution should continue.
-    /// Otherwise, returns an error to trap the execution.
-    fn out_of_instructions(
-        &self,
-        num_instructions_left: NumInstructions,
-    ) -> HypervisorResult<NumInstructions>;
+    // This function is invoked if the Wasm instruction counter is negative.
+    //
+    // If it is impossible to recover from the out-of-instructions error then
+    // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
+    // Otherwise, the function returns a new positive instruction counter.
+    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
 /// A trait for providing all necessary imports to a Wasm module.
@@ -692,15 +692,13 @@ pub trait SystemApi {
         performance_counter_type: PerformanceCounterType,
     ) -> HypervisorResult<u64>;
 
-    /// This system call is not part of the public spec and used by the
-    /// hypervisor, when execution runs out of instructions.
+    /// This system call is not part of the public spec and it is invoked when
+    /// Wasm execution has run out of instructions.
     ///
-    /// Returns a new instruction limit if the execution should continue.
-    /// Otherwise, returns an error to trap the execution.
-    fn out_of_instructions(
-        &self,
-        num_instructions_left: NumInstructions,
-    ) -> HypervisorResult<NumInstructions>;
+    /// If it is impossible to recover from the out-of-instructions error then
+    /// the functions return `Err(HypervisorError::InstructionLimitExceeded)`.
+    /// Otherwise, the function return a new non-negative instruction counter.
+    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been called to check whether there's enough

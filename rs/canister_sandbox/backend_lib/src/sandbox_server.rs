@@ -1248,7 +1248,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert!(rep.0.is_ok());
+        assert!(rep.0.is_ok(), "{:?}", rep);
 
         let wasm_memory = PageMap::default();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
@@ -1283,8 +1283,8 @@ mod tests {
             .unwrap();
         assert!(rep.success);
 
-        // Resume execution 9 times.
-        for i in 0..9 {
+        // Resume execution 10 times.
+        for i in 0..10 {
             let completion = exec_sync_rx.get();
             match completion {
                 Completion::Paused(paused) => assert_eq!(paused.exec_id, exec_id),
@@ -1303,7 +1303,7 @@ mod tests {
             assert!(rep.success);
         }
 
-        // After 10 slices execution must complete.
+        // After 11 slices execution must complete.
         let completion = exec_sync_rx.get();
         let result = match completion {
             Completion::Paused(_) => {

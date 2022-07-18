@@ -1,6 +1,7 @@
 ---
 source: embedders/tests/instrumentation.rs
 expression: out
+
 ---
 (module
   (type (;0;) (func))
@@ -12,15 +13,14 @@ expression: out
     global.get 4
     local.get 0
     i64.extend_i32_u
+    i64.sub
+    global.set 4
+    global.get 4
+    i64.const 0
     i64.lt_s
     if  ;; label = @1
       call 0
     end
-    global.get 4
-    local.get 0
-    i64.extend_i32_u
-    i64.sub
-    global.set 4
     local.get 0)
   (global (;0;) (mut i32) (i32.const 0))
   (global (;1;) i32 (i32.const 1))
