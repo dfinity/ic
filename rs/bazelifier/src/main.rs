@@ -160,7 +160,7 @@ impl Bazelifier {
     ) -> eyre::Result<()> {
         for (dep_name_, dep) in deps_iter {
             let over = overrides::dep_name_override(dep_name_, dep).unwrap_or(NameOverride {
-                name: dep_name_,
+                name: dep_name_.into(),
                 repo: None,
             });
             let dep_name = over.name;

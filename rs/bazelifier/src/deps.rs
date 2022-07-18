@@ -10,6 +10,16 @@ pub enum Dep {
     Git(GitDep),
 }
 
+impl Dep {
+    pub fn as_version_req(&self) -> Option<&VersionReq> {
+        match self {
+            Self::Version(v) => Some(v),
+            Self::VersionExtra(NormalDep { version, .. }) => Some(version),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct NormalDep {
     pub version: VersionReq,

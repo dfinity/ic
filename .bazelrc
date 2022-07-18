@@ -18,7 +18,16 @@ build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build --cxxopt='-std=c++17'
 
+build:lint --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:lint --output_groups=+clippy_checks
+build:lint --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-A,clippy::redundant_closure,-C,debug-assertions=off
+
+build:lint --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+build:lint --output_groups=+rustfmt_checks
+build:lint --@rules_rust//:rustfmt.toml=//:rustfmt.toml
+
 build:ci --noremote_local_fallback
+build:ci --config=lint
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 build:ci --repository_cache=/cache/bazel
 

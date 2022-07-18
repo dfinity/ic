@@ -4,6 +4,11 @@ load("//bazel:buildifier.bzl", "buildifier_test")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files([
+    "clippy.toml",
+    "rustfmt.toml",
+])
+
 BUILDIFIER_EXCLUDES = [
     "./.git/*",
     "./gitlab-ci/src/git_changes/test_data/**",

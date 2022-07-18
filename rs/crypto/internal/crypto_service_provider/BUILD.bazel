@@ -94,7 +94,7 @@ rust_test(
         "//rs/crypto/test_utils",
         "//rs/types/types_test_utils",
         "@crate_index//:lazy_static",
-        "@crate_index//:mockall",
+        "@crate_index//:mockall_0_7_2",
         "@crate_index//:proptest",
         "@crate_index//:tempfile",
     ],

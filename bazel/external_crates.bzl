@@ -420,6 +420,10 @@ def external_crates_repository(name, annotations):
             "mockall": crate.spec(
                 version = "^0.11.1",
             ),
+            "mockall-0_7_2": crate.spec(
+                package = "mockall",
+                version = "^0.7.2",
+            ),
             "native-tls": crate.spec(
                 version = "^0.2.7",
                 features = [
