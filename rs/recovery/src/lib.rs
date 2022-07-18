@@ -284,14 +284,6 @@ impl Recovery {
         }
     }
 
-    /// Return an [UpdateConfigStep] updateing the ic.json5 config to point to
-    /// the downloaded state.
-    pub fn get_update_config_step(&self) -> impl Step {
-        UpdateConfigStep {
-            work_dir: self.work_dir.display().to_string(),
-        }
-    }
-
     /// Return a [ReplayStep] to replay the downloaded state of the given
     /// subnet.
     pub fn get_replay_step(
@@ -698,8 +690,7 @@ impl Recovery {
     pub fn get_update_local_store_step(&self, subnet_id: SubnetId) -> impl Step {
         UpdateLocalStoreStep {
             subnet_id,
-            config: self.work_dir.join("ic.json5"),
-            result: self.work_dir.join("update_local_store.txt"),
+            work_dir: self.work_dir.clone(),
         }
     }
 

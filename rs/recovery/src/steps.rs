@@ -1,7 +1,7 @@
 use crate::admin_helper::IcAdmin;
-use crate::command_helper::{exec_cmd, pipe_all};
+use crate::command_helper::exec_cmd;
 use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{remove_dir, rsync, write_file};
+use crate::file_sync_helper::{remove_dir, rsync};
 use crate::ssh_helper::SshHelper;
 use crate::util::{block_on, parse_hex_str};
 use crate::{replay_helper, ADMIN, CHECKPOINTS, IC_STATE, NEW_IC_STATE, READONLY};
@@ -154,44 +154,6 @@ impl Step for DownloadIcStateStep {
     }
 }
 
-pub struct UpdateConfigStep {
-    pub work_dir: String,
-}
-
-impl Step for UpdateConfigStep {
-    fn descr(&self) -> String {
-        format!(
-            "In {}/ic.json5, update node_ip and listen_addr to localhost, and replace ic path with working directory.",
-            self.work_dir
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        let mut cat = Command::new("cat");
-        cat.arg(format!("{}/ic.json5", self.work_dir));
-        let mut sed1 = Command::new("sed");
-        sed1.arg("-e")
-            .arg(r#"s/node_ip: \".*\"/node_ip: \"127.0.0.1\"/"#);
-        let mut sed2 = Command::new("sed");
-        sed2.arg("-e")
-            .arg(r#"s/listen_addr: \".*:\([0-9]*\)\"/listen_addr: \"127.0.0.1:\1\"/"#);
-        let mut sed3 = Command::new("sed");
-        sed3.arg("-e")
-            .arg(format!("s|/var/lib/ic/|{}/|g", self.work_dir));
-
-        if let Some(res) = pipe_all(&mut [cat, sed1, sed2, sed3])? {
-            let mut path = PathBuf::from(&self.work_dir);
-            path.push("ic.json5");
-            write_file(&path, res)?;
-            Ok(())
-        } else {
-            Err(RecoveryError::invalid_output_error(
-                "Could not save to file (empty).".to_string(),
-            ))
-        }
-    }
-}
-
 pub struct ReplaySubCmd {
     pub cmd: SubCommand,
     pub descr: String,
@@ -251,6 +213,7 @@ impl Step for ReplayStep {
                 self.subnet_id,
                 self.config.clone(),
                 self.canister_caller_id,
+                self.work_dir.join("data"),
                 self.subcmd.as_ref().map(|c| c.cmd.clone()),
                 self.result.clone(),
             ))?;
@@ -530,22 +493,22 @@ impl Step for StopReplicaStep {
 
 pub struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
-    pub config: PathBuf,
-    pub result: PathBuf,
+    pub work_dir: PathBuf,
 }
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
-        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store", self.config, self.subnet_id)
+        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store", self.work_dir.join("ic.json5"), self.subnet_id)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         block_on(replay_helper::replay(
             self.subnet_id,
-            self.config.clone(),
+            self.work_dir.join("ic.json5"),
             None,
+            self.work_dir.join("data"),
             Some(SubCommand::UpdateRegistryLocalStore),
-            self.result.clone(),
+            self.work_dir.join("update_local_store.txt"),
         ))?;
         Ok(())
     }
@@ -570,6 +533,7 @@ impl Step for GetRecoveryCUPStep {
             self.subnet_id,
             self.config.clone(),
             None,
+            self.work_dir.join("data"),
             Some(SubCommand::GetRecoveryCup(GetRecoveryCupCmd {
                 state_hash: self.state_hash.clone(),
                 height: self.recovery_height.get(),

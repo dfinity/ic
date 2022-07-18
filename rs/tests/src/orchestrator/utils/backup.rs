@@ -61,8 +61,7 @@ impl Backup {
                 replica_version: replica_version.to_string(),
                 start_height,
             })),
-            state_root: None,
-            local_registry_store: None,
+            data_root: None,
         };
         self.print_contents_of_dir(&self.local_store_path());
         self.print_contents_of_dir(&self.backup_dir);

@@ -139,7 +139,7 @@ pub fn nns_recovery_same_nodes(
         execute_step_after_consent(&logger, step);
 
         match step_type {
-            nns_recovery_same_nodes::StepType::UpdateConfig => {
+            nns_recovery_same_nodes::StepType::DownloadState => {
                 if nns_recovery.params.upgrade_version.is_none() {
                     nns_recovery.params.upgrade_version =
                         read_optional_version(&logger, "Upgrade version: ");
@@ -199,7 +199,7 @@ pub fn nns_recovery_failover_nodes(
         execute_step_after_consent(&logger, step);
 
         match step_type {
-            nns_recovery_failover_nodes::StepType::UpdateConfig => {
+            nns_recovery_failover_nodes::StepType::DownloadState => {
                 if nns_recovery.params.replica_version.is_none() {
                     nns_recovery.params.replica_version = read_optional_version(
                         &logger,

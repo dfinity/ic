@@ -20,6 +20,7 @@ pub async fn replay(
     subnet_id: SubnetId,
     config: PathBuf,
     canister_caller_id: Option<CanisterId>,
+    data_root: PathBuf,
     subcmd: Option<SubCommand>,
     output: PathBuf,
 ) -> RecoveryResult<StateParams> {
@@ -29,8 +30,7 @@ pub async fn replay(
         canister_caller_id,
         replay_until_height: None,
         subcmd,
-        state_root: None,
-        local_registry_store: None,
+        data_root: Some(data_root),
     };
     // Since replay output needs to be persisted anyway in case the recovery process
     // is restarted, we avoid declaring a return value and moving out of the
