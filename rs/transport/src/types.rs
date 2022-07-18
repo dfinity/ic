@@ -1,6 +1,7 @@
 //! Shared types internal to transport crate
 
 use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
+use crate::utils::SendQueueImpl;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -155,14 +156,21 @@ pub(crate) struct FlowState {
 
 impl FlowState {
     pub(crate) fn new(
-        flow_tag_label: String,
+        flow_tag: FlowTag,
         flow_label: String,
         connection_state: ConnectionState,
-        send_queue: Box<dyn SendQueue + Send + Sync>,
+        queue_size: QueueSize,
+        send_queue_metrics: SendQueueMetrics,
         control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
+        let send_queue = Box::new(SendQueueImpl::new(
+            flow_label.clone(),
+            &flow_tag,
+            queue_size,
+            send_queue_metrics,
+        ));
         let ret = Self {
-            flow_tag_label,
+            flow_tag_label: flow_tag.to_string(),
             flow_label,
             connection_state,
             send_queue,
@@ -341,13 +349,7 @@ pub(crate) trait SendQueue {
 #[async_trait]
 pub(crate) trait SendQueueReader {
     /// Called by the scheduler to get the next enqueued message, if any.
-    async fn dequeue(&mut self, bytes_limit: usize, timeout: Duration) -> Vec<DequeuedMessage>;
-}
-
-/// A wrapper for messages that also encloses any related errors
-pub(crate) struct DequeuedMessage {
-    /// Message payload
-    pub(crate) payload: TransportPayload,
+    async fn dequeue(&mut self, bytes_limit: usize, timeout: Duration) -> Vec<TransportPayload>;
 }
 
 #[cfg(test)]

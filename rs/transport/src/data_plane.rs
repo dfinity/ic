@@ -156,12 +156,12 @@ impl TransportImpl {
                         .with_label_values(&[&flow_label, &flow_tag_str])
                         .inc();
                 } else {
-                    for mut msg in dequeued {
+                    for mut payload in dequeued {
                         to_send.append(&mut Self::pack_header(
-                            Some(&msg.payload),
+                            Some(&payload),
                             false,
                         ));
-                        to_send.append(&mut msg.payload.0);
+                        to_send.append(&mut payload.0);
                     }
                 }
                 arc_self

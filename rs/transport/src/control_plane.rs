@@ -10,7 +10,7 @@ use crate::{
         Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
         ServerPortState, TransportImpl,
     },
-    utils::{get_flow_ips, get_flow_label, SendQueueImpl},
+    utils::{get_flow_ips, get_flow_label},
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
@@ -120,15 +120,11 @@ impl TransportImpl {
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
                 let flow_label = get_flow_label(&peer_ip, peer_id);
                 let flow_state = FlowState::new(
-                    flow_config.flow_tag.to_string(),
+                    flow_tag,
                     flow_label.clone(),
                     ConnectionState::Listening,
-                    Box::new(SendQueueImpl::new(
-                        flow_label,
-                        &flow_tag,
-                        QueueSize::from(flow_config.queue_size),
-                        self.send_queue_metrics.clone(),
-                    )),
+                    QueueSize::from(flow_config.queue_size),
+                    self.send_queue_metrics.clone(),
                     self.control_plane_metrics.clone(),
                 );
                 peer_state.flow_map.insert(flow_tag, flow_state);
@@ -180,15 +176,11 @@ impl TransportImpl {
                 connecting_task,
             };
             let flow_state = FlowState::new(
-                flow_endpoint.flow_tag.to_string(),
+                flow_tag,
                 flow_label.clone(),
                 ConnectionState::Connecting(connecting_state),
-                Box::new(SendQueueImpl::new(
-                    flow_label.clone(),
-                    &flow_tag,
-                    *queue_size,
-                    self.send_queue_metrics.clone(),
-                )),
+                *queue_size,
+                self.send_queue_metrics.clone(),
                 self.control_plane_metrics.clone(),
             );
             peer_state

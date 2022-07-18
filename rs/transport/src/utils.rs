@@ -1,7 +1,7 @@
 //! Helper functionality for transport.
 
 use crate::metrics::SendQueueMetrics;
-use crate::types::{DequeuedMessage, QueueSize, SendQueue, SendQueueReader};
+use crate::types::{QueueSize, SendQueue, SendQueueReader};
 use async_trait::async_trait;
 use ic_base_types::NodeId;
 use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportPayload};
@@ -30,8 +30,8 @@ use tokio::time::{timeout_at, Instant};
 //   to take ownership of the updated end. Since update() is an infrequent
 //   operation, take() should have minimal contention
 
-pub(crate) type SendEnd = Sender<(Instant, TransportPayload)>;
-pub(crate) type ReceiveEnd = Receiver<(Instant, TransportPayload)>;
+type SendEnd = Sender<(Instant, TransportPayload)>;
+type ReceiveEnd = Receiver<(Instant, TransportPayload)>;
 
 // Since there is no try_recv(), this is the max duration after the first
 // dequeue to batch for
@@ -199,18 +199,21 @@ impl SendQueueReaderImpl {
         timeout: Duration,
     ) -> Option<(Instant, TransportPayload)> {
         let wait_for_entries = async move { receive_end.recv().await };
-        let ret = timeout_at(Instant::now() + timeout, wait_for_entries).await;
-        if ret.is_err() {
+        match timeout_at(Instant::now() + timeout, wait_for_entries).await {
             // Return None on timeout.
-            return None;
+            Err(_) => None,
+            // Return None on sender disconnect as well.
+            Ok(res) => res,
         }
-
-        // Return None on sender disconnect as well.
-        ret.unwrap()
     }
+}
 
-    /// Updates the receive ends
-    fn update_cached_receive_end(&mut self) {
+#[async_trait]
+impl SendQueueReader for SendQueueReaderImpl {
+    async fn dequeue(&mut self, bytes_limit: usize, timeout: Duration) -> Vec<TransportPayload> {
+        // The channel end is looked up outside the loop. Any updates
+        // to the receive end will be seen only in the next dequeue()
+        // call.
         if let Some(receive_end) = self.receive_end_container.take() {
             self.cur_receive_end = Some(receive_end);
             self.metrics
@@ -218,16 +221,6 @@ impl SendQueueReaderImpl {
                 .with_label_values(&[&self.flow_label, &self.flow_tag])
                 .inc();
         }
-    }
-}
-
-#[async_trait]
-impl SendQueueReader for SendQueueReaderImpl {
-    async fn dequeue(&mut self, bytes_limit: usize, timeout: Duration) -> Vec<DequeuedMessage> {
-        // The channel end is looked up outside the loop. Any updates
-        // to the receive end will be seen only in the next dequeue()
-        // call.
-        self.update_cached_receive_end();
         let cur_receive_end = self.cur_receive_end.as_mut().unwrap();
 
         let mut result = Vec::new();
@@ -245,8 +238,7 @@ impl SendQueueReader for SendQueueReaderImpl {
             removed += 1;
             removed_bytes += payload.0.len();
 
-            let msg = DequeuedMessage { payload };
-            result.push(msg);
+            result.push(payload);
 
             if removed_bytes >= bytes_limit {
                 break;
