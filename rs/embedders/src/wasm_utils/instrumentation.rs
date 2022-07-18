@@ -41,16 +41,16 @@
 //! ```wasm
 //! (func (;5;) (type 4) (param i32) (result i32)
 //!   global.get 0
+//!   local.get 0
+//!   i64.extend_i32_u
+//!   i64.sub
+//!   global.set 0
+//!   global.get 0
 //!   i64.const 0
 //!   i64.lt_s
 //!   if  ;; label = @1
 //!     call 0           # the `out_of_instructions` function
 //!   end
-//!   global.get 0
-//!   local.get 0
-//!   i64.extend_i32_u
-//!   i64.sub
-//!   global.set 0
 //!   local.get 0)
 //! ```
 //!
@@ -112,7 +112,12 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
 
-const UPDATE_AVAILABLE_MEMORY_FN: u32 = 1; // because it's the second import
+// The indicies of injected functions.
+enum InjectedImports {
+    OutOfInstructionsFn = 0,
+    UpdateAvailableMemoryFn = 1,
+    Count = 2,
+}
 
 // Converts a Wasm instruction to a string mnemonic.
 // TODO(EXC-221): Consider optimizing this to "cache" results, so we don't have
@@ -211,6 +216,7 @@ fn inject_helper_functions(module: Module) -> Module {
             .func(import_sig)
             .build(),
     );
+
     let mut module = builder.build();
     // We know, we have at least two imports, because we pushed them above, now
     // let's move them to the first two positions respectively, so that we can
@@ -223,6 +229,14 @@ fn inject_helper_functions(module: Module) -> Module {
     debug_assert!(last.module() == "__" && last.field() == "out_of_instructions");
     entries.insert(0, last);
 
+    debug_assert!(
+        entries[InjectedImports::OutOfInstructionsFn as usize].field() == "out_of_instructions"
+    );
+    debug_assert!(
+        entries[InjectedImports::UpdateAvailableMemoryFn as usize].field()
+            == "update_available_memory"
+    );
+
     // We lift all call references by 2
     for section in module.sections_mut() {
         match section {
@@ -231,7 +245,7 @@ fn inject_helper_functions(module: Module) -> Module {
                     let code = func_body.code_mut();
                     code.elements_mut().iter_mut().for_each(|instr| {
                         if let Instruction::Call(ref mut call_index) = instr {
-                            *call_index += 2
+                            *call_index += InjectedImports::Count as u32;
                         }
                     });
                 }
@@ -239,18 +253,18 @@ fn inject_helper_functions(module: Module) -> Module {
             Section::Export(ref mut export_section) => {
                 for export in export_section.entries_mut() {
                     if let Internal::Function(ref mut func_index) = export.internal_mut() {
-                        *func_index += 2
+                        *func_index += InjectedImports::Count as u32;
                     }
                 }
             }
             Section::Element(ref mut elements_section) => {
                 for segment in elements_section.entries_mut() {
                     for func_index in segment.members_mut() {
-                        *func_index += 2
+                        *func_index += InjectedImports::Count as u32;
                     }
                 }
             }
-            Section::Start(ref mut func_index) => *func_index += 2,
+            Section::Start(ref mut func_index) => *func_index += InjectedImports::Count as u32,
             _ => {}
         }
     }
@@ -378,7 +392,6 @@ pub struct InstrumentationOutput {
 
 #[derive(Default)]
 pub struct ExportModuleData {
-    pub out_of_instructions_fn: u32,
     pub instructions_counter_ix: u32,
     pub decr_instruction_counter_fn: u32,
     pub start_fn_ix: Option<u32>,
@@ -405,7 +418,6 @@ pub(super) fn instrument(
     let num_globals = module.globals_space() as u32;
 
     let export_module_data = ExportModuleData {
-        out_of_instructions_fn: 0, // because it's the first import
         instructions_counter_ix: num_globals,
         decr_instruction_counter_fn: num_functions,
         start_fn_ix: module.start_section(),
@@ -532,20 +544,19 @@ pub fn export_additional_symbols(
             )
             .body()
             .with_instructions(Instructions::new(vec![
-                // Call out_of_instructions if count is already negative.
-                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
-                Instruction::GetLocal(0),
-                Instruction::I64ExtendUI32,
-                Instruction::I64LtS,
-                Instruction::If(BlockType::NoResult),
-                Instruction::Call(export_module_data.out_of_instructions_fn),
-                Instruction::End,
                 // Subtract the parameter amount from the instruction counter
                 Instruction::GetGlobal(export_module_data.instructions_counter_ix),
                 Instruction::GetLocal(0),
                 Instruction::I64ExtendUI32,
                 Instruction::I64Sub,
                 Instruction::SetGlobal(export_module_data.instructions_counter_ix),
+                // Call out_of_instructions() if `counter < 0`.
+                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
+                Instruction::I64Const(0),
+                Instruction::I64LtS,
+                Instruction::If(BlockType::NoResult),
+                Instruction::Call(InjectedImports::OutOfInstructionsFn as u32),
+                Instruction::End,
                 // Return the original param so this function doesn't alter the stack
                 Instruction::GetLocal(0),
                 Instruction::End,
@@ -671,7 +682,7 @@ fn inject_metering(
                         Instruction::I64Const(0),
                         Instruction::I64LtS,
                         Instruction::If(BlockType::NoResult),
-                        Instruction::Call(export_data_module.out_of_instructions_fn),
+                        Instruction::Call(InjectedImports::OutOfInstructionsFn as u32),
                         Instruction::End,
                     ]);
                 }
@@ -725,7 +736,7 @@ fn inject_update_available_memory(func_body: &mut FuncBody, func_type: &Function
                 Instruction::TeeLocal(memory_local_ix),
                 update_available_memory_instr,
                 Instruction::GetLocal(memory_local_ix),
-                Instruction::Call(UPDATE_AVAILABLE_MEMORY_FN),
+                Instruction::Call(InjectedImports::UpdateAvailableMemoryFn as u32),
             ]);
             last_injection_position = point + 1;
         }

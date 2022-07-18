@@ -12,6 +12,7 @@
 //! All of the above objects as well as the functionality provided
 //! towards the controller are found in this module.
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 
@@ -113,8 +114,8 @@ impl Execution {
         let slice_instruction_limit = exec_input.execution_parameters.slice_instruction_limit;
         let sandbox_manager = Arc::clone(&self.sandbox_manager);
         let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
-            total_instruction_limit,
-            slice_instruction_limit,
+            i64::try_from(total_instruction_limit.get()).unwrap_or(i64::MAX),
+            i64::try_from(slice_instruction_limit.get()).unwrap_or(i64::MAX),
             move |paused_execution| {
                 {
                     let mut guard = sandbox_manager.repr.lock().unwrap();
