@@ -1,9 +1,11 @@
 use async_trait::async_trait;
+use candid::types::number::Nat;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Principal;
 use ic_icrc1::endpoints::{TransferArg, TransferError, Value};
 pub use ic_icrc1::Account;
 use ic_ledger_core::block::BlockHeight;
+use num_traits::ToPrimitive;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
 // the cdk or dfn_* if you use dfn_* call.
@@ -18,6 +20,14 @@ pub trait Runtime {
     where
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>;
+}
+
+/// Converts Nat to u64.
+///
+/// Note: our ICRC-1 ledger implementation is guaranteed to return values that
+/// fit into u64.
+fn nat_to_u64(n: Nat) -> u64 {
+    n.0.to_u64().expect("nat does not fit into u64")
 }
 
 pub struct ICRC1Client<R: Runtime> {
@@ -36,9 +46,10 @@ impl<R: Runtime> ICRC1Client<R> {
             .call(self.ledger_canister_id, "icrc1_balanceOf", (account,))
             .await
             .map(untuple)
+            .map(nat_to_u64)
     }
 
-    pub async fn decimals(&self) -> Result<u32, (i32, String)> {
+    pub async fn decimals(&self) -> Result<u8, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_decimals", ())
             .await
@@ -71,16 +82,19 @@ impl<R: Runtime> ICRC1Client<R> {
             .call(self.ledger_canister_id, "icrc1_totalSupply", ())
             .await
             .map(untuple)
+            .map(nat_to_u64)
     }
 
     pub async fn transfer(
         &self,
         args: TransferArg,
     ) -> Result<Result<BlockHeight, TransferError>, (i32, String)> {
-        self.runtime
+        let result: Result<Nat, TransferError> = self
+            .runtime
             .call(self.ledger_canister_id, "icrc1_transfer", (args,))
             .await
-            .map(untuple)
+            .map(untuple)?;
+        Ok(result.map(nat_to_u64))
     }
 }
 

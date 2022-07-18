@@ -18,6 +18,7 @@ ic-icrc1 = { path = "../" }
 ic-icrc1-client = { path = "../client"}
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
+num-traits = "0.2.14"
 serde = "1.0"
 serde_bytes = "0.11"
 

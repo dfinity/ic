@@ -1,3 +1,4 @@
+use candid::types::number::Nat;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
@@ -75,8 +76,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 &sns_canisters.ledger,
                 &user,
                 TransferArg {
-                    amount: stake,
-                    fee: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+                    amount: Nat::from(stake),
+                    fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                     from_subaccount: None,
                     to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
                     to_subaccount: Some(to_subaccount),

@@ -1,3 +1,4 @@
+use candid::types::number::Nat;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
@@ -6,11 +7,13 @@ use ic_icrc1::{
     Account,
 };
 use ic_ledger_core::block::BlockHeight;
+use num_traits::ToPrimitive;
 
 pub async fn balance_of<'a>(canister: &Canister<'a>, account: Account) -> Result<u64, String> {
     canister
         .query_("icrc1_balanceOf", candid_one, account)
         .await
+        .map(|n: Nat| n.0.to_u64().unwrap())
 }
 
 pub async fn transfer<'a>(
@@ -18,8 +21,11 @@ pub async fn transfer<'a>(
     sender: &Sender,
     args: TransferArg,
 ) -> Result<BlockHeight, String> {
-    let res: Result<BlockHeight, TransferError> = canister
+    let res: Result<Nat, TransferError> = canister
         .update_from_sender("icrc1_transfer", candid_one, args, sender)
         .await?;
-    res.map_err(|te| format!("{:#?}", te))
+    match res {
+        Ok(n) => Ok(n.0.to_u64().unwrap()),
+        Err(e) => Err(format!("{:?}", e)),
+    }
 }

@@ -1,3 +1,4 @@
+use candid::types::number::Nat;
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_config::subnet_config::SubnetConfig;
@@ -471,8 +472,8 @@ impl SnsCanisters<'_> {
             &self.ledger,
             sender,
             TransferArg {
-                amount: stake.get_e8s(),
-                fee: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+                amount: Nat::from(stake.get_e8s()),
+                fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
                 to_principal: PrincipalId::from(self.governance.canister_id()),
                 to_subaccount: Some(*to_subaccount),

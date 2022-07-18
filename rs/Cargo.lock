@@ -5741,6 +5741,7 @@ dependencies = [
  "ic-base-types",
  "ic-icrc1",
  "ic-ledger-core",
+ "num-traits",
  "serde",
 ]
 
@@ -5764,6 +5765,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-state-machine-tests",
  "leb128",
+ "num-traits",
  "proptest 0.9.6",
  "serde",
  "serde_bytes",
@@ -7739,6 +7741,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "lazy_static",
  "maplit",
+ "num-traits",
  "on_wire",
  "prost 0.10.4",
  "tokio",

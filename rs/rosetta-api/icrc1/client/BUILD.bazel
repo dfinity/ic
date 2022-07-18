@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:num-traits",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]
