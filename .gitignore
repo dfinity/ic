@@ -92,6 +92,7 @@ test_report.xml
 **/bin/vsock_agent
 **/bin/sandbox_launcher
 **/bin/boundary-node-prober
+**/bin/ic-balance-exporter
 
 # Boundary node control plane binary
 boundary-node-control-plane
