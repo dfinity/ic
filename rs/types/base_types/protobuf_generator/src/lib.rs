@@ -19,4 +19,5 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
         .join(" "),
     );
     config.compile_protos(&[proto_file], &[def]).unwrap();
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

@@ -12,7 +12,6 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Write;
 
-#[rustfmt::skip]
 #[allow(clippy::all)]
 #[path = "../../gen/ic_sns_wasm.pb.v1.rs"]
 pub mod v1;

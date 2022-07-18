@@ -33,6 +33,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             &[proto.base_types, proto.sns_init, proto.sns_wasm],
         )
         .unwrap();
+
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }
 
 /// Convenience function to add the correct namespace to our class names

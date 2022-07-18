@@ -1,7 +1,7 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChangelogEntry {
     /// The version that this mutation produced.
-    #[prost(uint64, tag="1")]
+    #[prost(uint64, tag = "1")]
     pub version: u64,
     /// Serialized value of
     /// ic_registry_transport.pb.v1.RegistryAtomicMutateRequest, with all
@@ -11,7 +11,7 @@ pub struct ChangelogEntry {
     /// of a changelog entry never changes. If we stored the protobuf
     /// type, this might not be the case. E.g., if some field that was
     /// present in old entries is removed from the proto schema.
-    #[prost(bytes="vec", tag="2")]
+    #[prost(bytes = "vec", tag = "2")]
     pub encoded_mutation: ::prost::alloc::vec::Vec<u8>,
 }
 /// Just a container for a set of RegistryDelta that can be used to
@@ -23,13 +23,13 @@ pub struct RegistryStableStorage {
     /// The fields below can be present / missing depending on the value
     /// of this field.  See comments for the Version enum above for more
     /// details.
-    #[prost(enumeration="registry_stable_storage::Version", tag="2")]
+    #[prost(enumeration = "registry_stable_storage::Version", tag = "2")]
     pub version: i32,
     /// Only present if version == VERSION_UNSPECIFIED.
-    #[prost(message, repeated, tag="1")]
+    #[prost(message, repeated, tag = "1")]
     pub deltas: ::prost::alloc::vec::Vec<::ic_registry_transport::pb::v1::RegistryDelta>,
     /// Only present if version == VERSION_1.
-    #[prost(message, repeated, tag="3")]
+    #[prost(message, repeated, tag = "3")]
     pub changelog: ::prost::alloc::vec::Vec<ChangelogEntry>,
 }
 /// Nested message and enum types in `RegistryStableStorage`.
@@ -79,18 +79,17 @@ pub mod registry_stable_storage {
 /// from the registry canister.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryCanisterStableStorage {
-    #[prost(message, optional, tag="2")]
+    #[prost(message, optional, tag = "2")]
     pub registry: ::core::option::Option<RegistryStableStorage>,
     /// Used to check that the latest version of the registry has not been rolled
     /// back after an upgrade
-    #[prost(uint64, optional, tag="3")]
+    #[prost(uint64, optional, tag = "3")]
     pub pre_upgrade_version: ::core::option::Option<u64>,
 }
 /// Maps Node Provider IDs to the amount (in 10,000ths of an SDR) they should be
 /// rewarded for providing nodes to the Internet Computer for the month.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NodeProvidersMonthlyXdrRewards {
-    #[prost(map="string, uint64", tag="1")]
+    #[prost(map = "string, uint64", tag = "1")]
     pub rewards: ::std::collections::HashMap<::prost::alloc::string::String, u64>,
 }

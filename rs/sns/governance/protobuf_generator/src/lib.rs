@@ -671,4 +671,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             &[proto.governance, proto.base_types, proto.ledger],
         )
         .unwrap();
+
+    ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

@@ -1,7 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct MaliciousBehaviourLogEntry {
-    #[prost(enumeration="MaliciousBehaviour", tag="1")]
+    #[prost(enumeration = "MaliciousBehaviour", tag = "1")]
     pub malicious_behaviour: i32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

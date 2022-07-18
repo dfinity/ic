@@ -1,3 +1,4 @@
+use ic_utils_rustfmt::rustfmt;
 use prost_build::Config;
 use std::path::Path;
 
@@ -49,6 +50,13 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_p2p_proto(def, out);
     build_bitcoin_proto(def, out);
     build_canister_http_proto(def, out);
+    rustfmt(out).unwrap_or_else(|e| {
+        panic!(
+            "failed to rustfmt on files at directory {}: {}",
+            out.display(),
+            e
+        )
+    });
 }
 
 /// Generates Rust structs from logging Protobuf messages.
