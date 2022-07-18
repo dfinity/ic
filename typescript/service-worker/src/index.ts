@@ -29,5 +29,12 @@ window.addEventListener('load', async () => {
     // proxied the response from <domain>/<canister-id>/, so this bootstrap file would have never been
     // retrieved from the boundary nodes
     await navigator.serviceWorker.register('sw.js');
+
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration.active && !navigator.serviceWorker.controller) {
+      // There's an active SW, but no controller for this tab. The service worker events are also _not_ fired.
+      // This happens after a hard refresh --> Perform a soft reload to load everything from the SW.
+      window.location.reload();
+    }
   }
 });
