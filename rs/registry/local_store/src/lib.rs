@@ -109,7 +109,10 @@ impl LocalStoreImpl {
     }
 
     // precondition: version > 0
-    fn write_changelog_entry(&self, version: u64, pb: PbChangelogEntry) -> io::Result<()> {
+    fn write_changelog_entry_<F>(&self, version: u64, pb: PbChangelogEntry, f: F) -> io::Result<()>
+    where
+        F: Fn(&Path, PbChangelogEntry) -> io::Result<()>,
+    {
         if version == 0 {
             panic!("Version must be > 0.")
         }
@@ -122,12 +125,31 @@ impl LocalStoreImpl {
         // version == 1 || version-1 exists
         let path = self.get_path(version);
         std::fs::create_dir_all(path.parent().unwrap())?;
-        write_protobuf_using_tmp_file(path, &pb)
+        f(path.as_path(), pb)
     }
 
     fn certified_time_path(&self) -> PathBuf {
         let fname = "time.local_store.v1.CertificationTime.pb";
         self.path.join(fname)
+    }
+
+    fn write_changelog_entry(&self, version: u64, pb: PbChangelogEntry) -> io::Result<()> {
+        self.write_changelog_entry_(version, pb, |p, m| write_protobuf_using_tmp_file(p, &m))
+    }
+
+    /// This method *omits* fsync operations. It is intended to be used in
+    /// controlled environments (like testing) when writing large number of
+    /// versions/files in sequence.
+    pub fn write_changelog_entry_unsafe(&self, version: u64, ce: ChangelogEntry) -> io::Result<()> {
+        let pb = changelog_entry_to_protobuf(ce);
+        self.write_changelog_entry_(version, pb, |p, m| Self::write_protobuf_unsafe(p, &m))
+    }
+
+    fn write_protobuf_unsafe(p: &Path, m: &PbChangelogEntry) -> io::Result<()> {
+        let mut buf = Vec::<u8>::new();
+        m.encode(&mut buf)
+            .expect("Protobuf serialization failed in write_protobuf");
+        std::fs::write(p, buf)
     }
 }
 
