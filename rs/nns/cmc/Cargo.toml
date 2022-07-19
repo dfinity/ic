@@ -29,7 +29,7 @@ on_wire = {path = "../../rust_canisters/on_wire"}
 
 base64 = "0.13.0"
 prost = "0.10.4"
-rand = "0.8"
+rand = "0.7.3"
 serde = "1.0"
 serde_cbor = "0.11.2"
 sha2 = "0.9.1"

@@ -1733,7 +1733,7 @@ mod tests {
         // to the latest rate.
         for day in (0..2 * NUM_DAYS_FOR_ICP_XDR_AVERAGE).rev() {
             // Generate a valid rate, i.e., the ICP/XDR rate at midnight.
-            let valid_rate: u64 = rng.gen_range(1_000_000..10_000_000);
+            let valid_rate: u64 = rng.gen_range(1_000_000, 10_000_000);
             // The rate is only counted if it is not older than
             // `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days.
             if day < NUM_DAYS_FOR_ICP_XDR_AVERAGE {
@@ -1743,7 +1743,7 @@ mod tests {
             update_recent_icp_xdr_rates(
                 &IcpXdrConversionRate {
                     timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
-                    xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                    xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
                 },
                 &mut state,
             );
@@ -1759,7 +1759,7 @@ mod tests {
             update_recent_icp_xdr_rates(
                 &IcpXdrConversionRate {
                     timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
-                    xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                    xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
                 },
                 &mut state,
             );
@@ -1813,7 +1813,7 @@ mod tests {
                 timestamp_seconds: timestamp,
                 xdr_permyriad_per_icp: current_rate as u64,
             });
-            current_rate += rng.gen_range(0..20_000) - 10_000;
+            current_rate += rng.gen_range(0, 20_000) - 10_000;
             if current_rate < 0 {
                 current_rate = 100_000;
             }
