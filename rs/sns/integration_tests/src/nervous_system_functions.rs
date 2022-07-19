@@ -23,10 +23,7 @@ async fn assert_proposal_executed(sns_canisters: &SnsCanisters<'_>, proposal_id:
     assert!(proposal_data.executed_timestamp_seconds > 0);
     assert_eq!(proposal_data.failure_reason, None);
     assert_eq!(proposal_data.failed_timestamp_seconds, 0);
-    assert_eq!(
-        proposal_data.status(),
-        ProposalDecisionStatus::ProposalStatusExecuted
-    );
+    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Executed);
 }
 
 /// Tests that you can add a NervousSystemFunction, that it can then validate and execute

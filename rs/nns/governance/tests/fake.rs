@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::Encode;
 use futures::future::FutureExt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -267,6 +267,7 @@ impl Ledger for FakeDriver {
     }
 }
 
+#[async_trait]
 impl Environment for FakeDriver {
     fn now(&self) -> u64 {
         self.state.try_lock().unwrap().now
@@ -293,6 +294,15 @@ impl Environment for FakeDriver {
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         HeapGrowthPotential::NoIssue
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        _target: CanisterId,
+        _method_name: &str,
+        _request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        unimplemented!();
     }
 }
 

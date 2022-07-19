@@ -667,7 +667,7 @@ impl NervousSystemParameters {
 
         if !illegal_permissions.is_empty() {
             return Err(GovernanceError::new_with_message(
-                ErrorType::ErrorAccessControlList,
+                ErrorType::AccessControlList,
                 format!(
                     "Cannot grant permissions as one or more permissions is not \
                     allowed to be granted. Illegal Permissions: {:?}",

@@ -387,7 +387,7 @@ pub mod governance_error {
         /// type with the implemented method
         ///
         /// An attempt to add or remove a NeuronPermissionType failed.
-        ErrorAccessControlList = 8,
+        AccessControlList = 8,
         /// Some canister side resource is exhausted, so this operation cannot be
         /// performed.
         ResourceExhausted = 9,
@@ -1634,8 +1634,6 @@ pub enum Vote {
     /// A vote for a proposal to be rejected.
     No = 2,
 }
-/// TODO this ends up being awfully verbose in code. Refactor for smaller enum::value naming
-/// A proposal's status, with respect to decision making and execution.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1651,18 +1649,18 @@ pub enum Vote {
 )]
 #[repr(i32)]
 pub enum ProposalDecisionStatus {
-    ProposalStatusUnspecified = 0,
+    Unspecified = 0,
     /// The proposal is open for voting and a decision (adopt/reject) has yet to be made.
-    ProposalStatusOpen = 1,
+    Open = 1,
     /// The proposal has been rejected.
-    ProposalStatusRejected = 2,
+    Rejected = 2,
     /// The proposal has been adopted but either execution has not yet started
     /// or it has started but its outcome is not yet known.
-    ProposalStatusAdopted = 3,
+    Adopted = 3,
     /// The proposal was adopted and successfully executed.
-    ProposalStatusExecuted = 4,
+    Executed = 4,
     /// The proposal was adopted, but execution failed.
-    ProposalStatusFailed = 5,
+    Failed = 5,
 }
 /// A proposal's status, with respect to reward distribution.
 #[derive(

@@ -112,10 +112,7 @@ fn test_motion_proposal_execution() {
             assert!(proposal_data.executed_timestamp_seconds > 0);
             assert_eq!(proposal_data.failure_reason, None);
             assert_eq!(proposal_data.failed_timestamp_seconds, 0);
-            assert_eq!(
-                proposal_data.status(),
-                ProposalDecisionStatus::ProposalStatusExecuted
-            );
+            assert_eq!(proposal_data.status(), ProposalDecisionStatus::Executed);
 
             Ok(())
         }
@@ -1507,10 +1504,7 @@ fn test_proposal_rejection() {
         // Assert the proposal is rejected.
         assert!(proposal_data.decided_timestamp_seconds > 0);
         assert_eq!(proposal_data.executed_timestamp_seconds, 0);
-        assert_eq!(
-            proposal_data.status(),
-            ProposalDecisionStatus::ProposalStatusRejected
-        );
+        assert_eq!(proposal_data.status(), ProposalDecisionStatus::Rejected);
 
         // Assert that because the proposal was rejected, the neuron does not have it's
         // reject fees returned.

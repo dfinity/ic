@@ -4,6 +4,7 @@ type Action = variant {
   ManageNeuron : ManageNeuron;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
+  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
   SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
@@ -310,6 +311,11 @@ type SetDefaultFollowees = record {
   default_followees : vec record { int32; Followees };
 };
 type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
+type SetOpenTimeWindowRequest = record { open_time_window : opt TimeWindow };
+type SetSnsTokenSwapOpenTimeWindow = record {
+  request : opt SetOpenTimeWindowRequest;
+  swap_canister_id : opt principal;
+};
 type Spawn = record {
   percentage_to_spawn : opt nat32;
   new_controller : opt principal;
@@ -322,6 +328,10 @@ type Tally = record {
   yes : nat64;
   total : nat64;
   timestamp_seconds : nat64;
+};
+type TimeWindow = record {
+  start_timestamp_seconds : nat64;
+  end_timestamp_seconds : nat64;
 };
 type UpdateNodeProvider = record { reward_account : opt AccountIdentifier };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };

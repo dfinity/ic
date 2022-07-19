@@ -6,6 +6,7 @@ pub struct ProtoPaths<'a> {
     pub base_types: &'a Path,
     pub nns_common: &'a Path,
     pub ledger: &'a Path,
+    pub sns_swap: &'a Path,
 }
 
 /// Build protos using prost_build.
@@ -26,6 +27,16 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
+    config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
+
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.SetSnsTokenSwapOpenTimeWindow",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
     config.type_attribute(
         "ic_nns_governance.pb.v1.Empty",
         [
@@ -715,6 +726,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
                 proto.nns_common,
                 proto.base_types,
                 proto.ledger,
+                proto.sns_swap,
             ],
         )
         .unwrap();

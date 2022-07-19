@@ -544,7 +544,7 @@ impl Neuron {
             .position(|p| p.principal == Some(principal_id))
             .ok_or_else(|| {
                 GovernanceError::new_with_message(
-                    ErrorType::ErrorAccessControlList,
+                    ErrorType::AccessControlList,
                     format!(
                         "PrincipalId {} does not have any permissions in Neuron {}",
                         principal_id,
@@ -574,7 +574,7 @@ impl Neuron {
 
         if !missing_permissions.is_empty() {
             return Err(GovernanceError::new_with_message(
-                ErrorType::ErrorAccessControlList,
+                ErrorType::AccessControlList,
                 format!(
                     "PrincipalId {} was missing permissions {:?} when removing {:?}",
                     principal_id, missing_permissions, permission_types_to_remove

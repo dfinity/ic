@@ -359,7 +359,7 @@ message GovernanceError {
     // type with the implemented method
     //
     // An attempt to add or remove a NeuronPermissionType failed.
-    ERROR_ACCESS_CONTROL_LIST = 8;
+    ERROR_TYPE_ACCESS_CONTROL_LIST = 8;
 
     // Some canister side resource is exhausted, so this operation cannot be
     // performed.
@@ -414,26 +414,24 @@ message Ballot {
   uint64 cast_timestamp_seconds = 3;
 }
 
-// TODO this ends up being awfully verbose in code. Refactor for smaller enum::value naming
-// A proposal's status, with respect to decision making and execution.
 enum ProposalDecisionStatus {
-  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_DECISION_STATUS_UNSPECIFIED = 0;
 
   // The proposal is open for voting and a decision (adopt/reject) has yet to be made.
-  PROPOSAL_STATUS_OPEN = 1;
+  PROPOSAL_DECISION_STATUS_OPEN = 1;
 
   // The proposal has been rejected.
-  PROPOSAL_STATUS_REJECTED = 2;
+  PROPOSAL_DECISION_STATUS_REJECTED = 2;
 
   // The proposal has been adopted but either execution has not yet started
   // or it has started but its outcome is not yet known.
-  PROPOSAL_STATUS_ADOPTED = 3;
+  PROPOSAL_DECISION_STATUS_ADOPTED = 3;
 
   // The proposal was adopted and successfully executed.
-  PROPOSAL_STATUS_EXECUTED = 4;
+  PROPOSAL_DECISION_STATUS_EXECUTED = 4;
 
   // The proposal was adopted, but execution failed.
-  PROPOSAL_STATUS_FAILED = 5;
+  PROPOSAL_DECISION_STATUS_FAILED = 5;
 }
 
 // A proposal's status, with respect to reward distribution.

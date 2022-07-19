@@ -420,6 +420,19 @@ pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
 }
+/// Calls the set_open_time_window Candid method on a swap canister.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetSnsTokenSwapOpenTimeWindow {
+    /// The swap canister to send the request to.
+    #[prost(message, optional, tag = "1")]
+    pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Arguments that get sent to the swap canister when its set_open_time_window
+    /// Candid method is called.
+    #[prost(message, optional, tag = "2")]
+    pub request: ::core::option::Option<::ic_sns_swap::pb::v1::SetOpenTimeWindowRequest>,
+}
 /// A proposal is the immutable input of a proposal submission. This contains
 /// all the information from the original proposal submission.
 ///
@@ -448,7 +461,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -521,6 +534,9 @@ pub mod proposal {
         /// Register Known Neuron
         #[prost(message, tag = "21")]
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Call the set_open_time_window on a swap canister.
+        #[prost(message, tag = "22")]
+        SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1701,6 +1717,10 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
+    /// Currently, the only type of proposal in this topic is
+    /// SetSnsTokenSwapOpenTimeWindow. It is not expected that more types of proposals will
+    /// be added to this topic.
+    SnsDecentralizationSale = 11,
 }
 /// Every neuron is in one of three states.
 ///

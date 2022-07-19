@@ -1356,7 +1356,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
 
-        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+        assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
 
         Ok(())
     });
@@ -1691,7 +1691,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
 
-        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+        assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
 
         Ok(())
     });
@@ -1924,7 +1924,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
 
-        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+        assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
 
         Ok(())
     });

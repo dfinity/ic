@@ -229,10 +229,11 @@ impl Swap {
         }
 
         // Inspect the request.
-        if !request.is_valid(now_timestamp_seconds) {
+        let defects = request.defects(now_timestamp_seconds);
+        if !defects.is_empty() {
             panic!(
-                "{}ERROR: Received an invalid SetOpenTimeWindowRequest. request: {:#?}",
-                LOG_PREFIX, request
+                "{}ERROR: Received an invalid SetOpenTimeWindowRequest. request: {:#?} . defects:\n  * {:#?}",
+                LOG_PREFIX, request, defects.join("\n  * "),
             );
         }
 
@@ -1213,36 +1214,40 @@ impl TimeWindow {
 }
 
 impl SetOpenTimeWindowRequest {
-    pub fn is_valid(&self, now_timestamp_seconds: u64) -> bool {
+    pub fn defects(&self, now_timestamp_seconds: u64) -> Vec<String> {
         // Require that the open_time_window field be populated.
         let window = match self.open_time_window {
             Some(window) => window,
             None => {
-                println!("{}ERROR: Invalid SetOpenTimeWindowRequest: the open_time_window field is not populated: {:#?}", LOG_PREFIX, self);
-                return false;
+                return vec!["The open_time_window field was not populated.".to_string()];
             }
         };
+        let mut result = vec![];
 
         // Require that start time not be in the past.
         let (start, end) = window.to_boundaries_timestamp_seconds();
         if start < now_timestamp_seconds {
-            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: start time is in the past ({} vs. now={}): {:#?}", LOG_PREFIX, start, now_timestamp_seconds, self);
-            return false;
+            result.push(format!(
+                "Start time is in the past ({} vs. now={})",
+                start, now_timestamp_seconds
+            ));
         }
 
-        // Requires that start be less than or equal to end
+        // Require that start be less than or equal to end
         if end < start {
-            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: start time is later than end time (start={} vs. end={}): {:#?}", LOG_PREFIX, start, end, self);
-            return false;
+            result.push(format!(
+                "Start time is later than end time (start={} vs. end={})",
+                start, end
+            ));
+        // Require that the duration be between 1 and 90 days (inclusive).
+        } else if !VALID_DURATION_RANGE.contains(&window.duration()) {
+            result.push(format!(
+                "Duration must be at least 1 day and at most 90 days but was {} s",
+                window.duration().as_secs_f64(),
+            ));
         }
 
-        // Require that duration be 1-90 days.
-        if !VALID_DURATION_RANGE.contains(&window.duration()) {
-            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: duration must be at least 1 day and at most 90 days but was {:?}: {:#?}", LOG_PREFIX, window.duration(), self);
-            return false;
-        }
-
-        true
+        result
     }
 }
 
@@ -1288,7 +1293,10 @@ mod tests {
             }),
         };
 
-        assert!(request.is_valid(start_timestamp_seconds), "{request:#?}",);
+        assert!(
+            request.defects(start_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
     }
 
     #[test]
@@ -1302,7 +1310,7 @@ mod tests {
         };
 
         assert!(
-            !request.is_valid(start_timestamp_seconds + 1),
+            !request.defects(start_timestamp_seconds + 1).is_empty(),
             "{request:#?}",
         );
     }
@@ -1317,7 +1325,10 @@ mod tests {
             }),
         };
 
-        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+        assert!(
+            !request.defects(start_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
     }
 
     #[test]
@@ -1330,7 +1341,10 @@ mod tests {
             }),
         };
 
-        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+        assert!(
+            !request.defects(start_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
     }
 
     #[test]
@@ -1340,7 +1354,10 @@ mod tests {
             open_time_window: None,
         };
 
-        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+        assert!(
+            !request.defects(start_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
     }
 
     #[test]
@@ -1353,13 +1370,19 @@ mod tests {
             }),
         };
 
-        assert!(!request.is_valid(now_timestamp_seconds), "{request:#?}",);
+        assert!(
+            !request.defects(now_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
 
         request.open_time_window = Some(TimeWindow {
             start_timestamp_seconds: 75,
             end_timestamp_seconds: 75 + ONE_DAY_SECONDS,
         });
 
-        assert!(request.is_valid(now_timestamp_seconds), "{request:#?}",);
+        assert!(
+            request.defects(now_timestamp_seconds).is_empty(),
+            "{request:#?}",
+        );
     }
 }
