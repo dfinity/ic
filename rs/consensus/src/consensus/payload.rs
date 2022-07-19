@@ -68,22 +68,31 @@ impl BatchPayloadSectionBuilder {
                 let size = NumBytes::new(ingress.count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
-                match builder.validate_ingress_payload(&ingress, &past_payloads, validation_context)
+                if let Err(err) =
+                    builder.validate_ingress_payload(&ingress, &past_payloads, validation_context)
                 {
-                    Ok(()) => {
-                        payload.ingress = ingress;
-                        size
-                    }
-                    Err(err) => {
-                        error!(
-                            logger,
-                            "Ingress payload did not pass validation, this is a bug, {:?}", err
-                        );
+                    error!(
+                        logger,
+                        "IngressPayload did not pass validation, this is a bug. Error: {:?}", err
+                    );
 
-                        payload.ingress = IngressPayload::default();
-                        NumBytes::new(0)
-                    }
+                    payload.ingress = IngressPayload::default();
+                    return NumBytes::new(0);
                 }
+
+                // Perform an additional size check
+                if size > max_size {
+                    error!(
+                        logger,
+                        "IngressPayload is larger than byte limits, this is a bug."
+                    );
+
+                    payload.ingress = IngressPayload::default();
+                    return NumBytes::new(0);
+                }
+
+                payload.ingress = ingress;
+                size
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);

@@ -303,7 +303,7 @@ mod test {
         }
     }
 
-    /// Wraps a `BatchPayload` into the full `Payload` structure.
+    /// Wraps a [`BatchPayload`] into the full [`Payload`] structure.
     fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
         Payload::new(
             ic_crypto::crypto_hash,
@@ -393,8 +393,7 @@ mod test {
     /// It builds the following blocks:
     /// - 3/4 of size is `XNetPayload`, 1/4 `IngressPayload`. Expected to pass validation.
     /// - 1/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to pass validation.
-    /// - 3/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to fail validation.
-    /// - 6/4 of size is `XNetPayload`, Expected to pass (with warning).
+    /// - 3/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to pass validation with only a single payload.
     #[test]
     fn test_payload_size_validation() {
         const MAX_SIZE: u64 = 2 * 1024 * 1024;
@@ -425,32 +424,15 @@ mod test {
                 time: mock_time(),
             };
 
-            // Prepare the messages in the mock
-            let make_ingress = |nonce, size| {
-                vec![SignedIngressBuilder::new()
-                    .method_payload(vec![0; size])
-                    .nonce(nonce)
-                    .build()]
-            };
-            let make_slice = |height, size| {
-                let mut map = BTreeMap::new();
-                map.insert(
-                    subnet_test_id(1),
-                    make_certified_stream_slice(height, vec![0; size], vec![]),
-                );
-                map
-            };
             let certified_streams: Vec<BTreeMap<SubnetId, CertifiedStreamSlice>> = vec![
                 make_slice(0, THREE_QUARTER),
                 make_slice(1, ONE_QUARTER),
                 make_slice(2, THREE_QUARTER),
-                make_slice(3, 2 * THREE_QUARTER),
             ];
             let ingress = vec![
                 make_ingress(0, ONE_QUARTER),
                 make_ingress(1, THREE_QUARTER),
                 make_ingress(2, THREE_QUARTER),
-                // No ingress for third block
             ];
             let payload_builder =
                 make_test_payload_impl(registry, ingress, certified_streams, vec![], vec![]);
@@ -458,7 +440,9 @@ mod test {
             // Build first payload and then validate it
             let payload0 =
                 payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
+            assert_eq!(count_payload_msgs(&payload0), 2);
             let wrapped_payload0 = wrap_batch_payload(0, payload0);
+
             payload_builder
                 .validate_payload(Height::from(0), &wrapped_payload0, &[], &context)
                 .unwrap();
@@ -471,7 +455,9 @@ mod test {
                 &context,
                 &subnet_records,
             );
+            assert_eq!(count_payload_msgs(&payload1), 2);
             let wrapped_payload1 = wrap_batch_payload(0, payload1);
+
             payload_builder
                 .validate_payload(Height::from(1), &wrapped_payload1, &past_payload0, &context)
                 .unwrap();
@@ -485,23 +471,35 @@ mod test {
                 &context,
                 &subnet_records,
             );
+            assert_eq!(count_payload_msgs(&payload2), 1);
             let wrapped_payload2 = wrap_batch_payload(1, payload2);
 
-            let pb_result = payload_builder.validate_payload(
-                Height::from(2),
-                &wrapped_payload2,
-                &past_payload1,
-                &context,
-            );
-
-            match pb_result {
-                Err(
-                    ValidationError::<PayloadPermanentError, PayloadTransientError>::Permanent(
-                        PayloadPermanentError::PayloadTooBig { .. },
-                    ),
-                ) => (),
-                _ => panic!("Expected PayloadTooBig error"),
-            }
+            payload_builder
+                .validate_payload(Height::from(2), &wrapped_payload2, &past_payload1, &context)
+                .unwrap();
         });
+    }
+
+    /// Mock up a map of [`CertifiedStreamSlice`] of specified size
+    fn make_slice(height: u64, size: usize) -> BTreeMap<SubnetId, CertifiedStreamSlice> {
+        let mut map = BTreeMap::new();
+        map.insert(
+            subnet_test_id(1),
+            make_certified_stream_slice(height, vec![0; size], vec![]),
+        );
+        map
+    }
+
+    /// Mock up vector of [`SignedIngress`] of specidied size
+    fn make_ingress(nonce: u64, size: usize) -> Vec<SignedIngress> {
+        vec![SignedIngressBuilder::new()
+            .method_payload(vec![0; size])
+            .nonce(nonce)
+            .build()]
+    }
+
+    /// Count the number of payloads (Ingress and XNet) totally contained within a [`BatchPayload`]
+    fn count_payload_msgs(payload: &BatchPayload) -> usize {
+        payload.ingress.message_count() + payload.xnet.stream_slices.len()
     }
 }
