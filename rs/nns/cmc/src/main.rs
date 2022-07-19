@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryInto;
 use std::sync::RwLock;
@@ -34,6 +35,8 @@ mod limiter;
 
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
+/// The ICP/XDR start-of-day conversion rate of the past 60 days is cached.
+const ICP_XDR_CONVERSION_RATE_CACHE_SIZE: usize = 60;
 pub const LABEL_ICP_XDR_CONVERSION_RATE: &[u8] = b"ICP_XDR_CONVERSION_RATE";
 pub const LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE: &[u8] = b"AVERAGE_ICP_XDR_CONVERSION_RATE";
 
@@ -41,6 +44,10 @@ pub const LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE: &[u8] = b"AVERAGE_ICP_XDR_CONVE
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
+
+/// The maturity modulation range in basis points.
+const MIN_MATURITY_MODULATION_PERMYRIAD: i32 = -500;
+const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
 
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
 enum NotificationStatus {
@@ -90,6 +97,10 @@ struct State {
 
     blocks_notified: Option<BTreeMap<BlockHeight, NotificationStatus>>,
     last_purged_notification: Option<BlockHeight>,
+
+    /// The current maturity modulation in basis points (permyriad), i.e.,
+    /// a value of 123 corresponds to 1.23%.
+    maturity_modulation_permyriad: Option<i32>,
 }
 
 impl State {
@@ -107,7 +118,7 @@ impl State {
             average_icp_xdr_conversion_rate: None,
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
-                NUM_DAYS_FOR_ICP_XDR_AVERAGE
+                ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
@@ -115,6 +126,7 @@ impl State {
             total_cycles_minted: Cycles::zero(),
             blocks_notified: Some(BTreeMap::new()),
             last_purged_notification: Some(0),
+            maturity_modulation_permyriad: Some(0),
         }
     }
 
@@ -369,13 +381,13 @@ fn get_average_icp_xdr_conversion_rate_() {
 /// exactly at the start of the day.
 fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate, state: &mut State) {
     let day = new_rate.timestamp_seconds / 86_400;
-    // The index is the day modulo `NUM_ICP_XDR_RATES_FOR_AVERAGE`.
-    let index = (day as usize) % NUM_DAYS_FOR_ICP_XDR_AVERAGE;
+    // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
+    let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
 
     let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
         IcpXdrConversionRate::default(
         );
-        NUM_DAYS_FOR_ICP_XDR_AVERAGE
+        ICP_XDR_CONVERSION_RATE_CACHE_SIZE
     ]);
     // The record is updated if it is the first entry of a new day or an earlier
     // entry of the same day.
@@ -385,16 +397,19 @@ fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate, state: &mut Stat
             && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
     {
         recent_rates[index] = new_rate.clone();
-        // Update the average ICP/XDR rate.
+        // Update the average ICP/XDR rate and the maturity modulation.
         if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
             state.average_icp_xdr_conversion_rate =
                 compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
+            state.maturity_modulation_permyriad =
+                Some(compute_maturity_modulation(recent_rates, time.as_secs()));
         }
     }
 }
 
 /// The function returns the average ICP/XDR price over the past
-/// NUM_ICP_XDR_RATES_FOR_AVERAGE` days. If there are no valid data points for
+/// NUM_ICP_XDR_RATES_FOR_AVERAGE` days ending on the day at the provided timestamp in seconds.
+/// If there are no valid data points for
 /// the time between the given UNIX epoch timestamp and
 /// `NUM_DAYS_FOR_ICP_XDR_AVERAGE` in the past, 'None' is returned.
 fn compute_average_icp_xdr_rate_at_time(
@@ -403,11 +418,12 @@ fn compute_average_icp_xdr_rate_at_time(
 ) -> Option<IcpXdrConversionRate> {
     let day = time_s / 86_400;
     // Filter the rates based on valid days, i.e., days not before day
-    // `current_day - NUM_ICP_XDR_RATES_FOR_AVERAGE` since the start of the epoch.
+    // `day - NUM_ICP_XDR_RATES_FOR_AVERAGE` and not later than the given day.
     let filtered_rates: Vec<u64> = recent_rates
         .iter()
         .filter(|rate| {
             (rate.timestamp_seconds / 86_400) > day - (NUM_DAYS_FOR_ICP_XDR_AVERAGE as u64)
+                && (rate.timestamp_seconds / 86_400) <= day
         })
         .map(|rate| rate.xdr_permyriad_per_icp)
         .collect();
@@ -454,6 +470,74 @@ fn set_icp_xdr_conversion_rate(
     set_certified_data(&witness_generator.hash_tree().digest().0[..]);
 
     Ok(())
+}
+
+#[export_name = "canister_query neuron_maturity_modulation"]
+fn neuron_maturity_modulation_() {
+    over(candid_one, |_: ()| neuron_maturity_modulation())
+}
+
+/// The function returns the current maturity modulation in basis points.
+fn neuron_maturity_modulation() -> Result<i32, String> {
+    match STATE.read() {
+        Ok(state) => Ok(state.maturity_modulation_permyriad.unwrap_or(0)),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// The function computes the maturity modulation for the current time/day, based on the given
+/// start-of-day conversion rates.
+fn compute_maturity_modulation(rates: &[IcpXdrConversionRate], time_s: u64) -> i32 {
+    let day = time_s / 86_400;
+    // Get the rate for four seven-day periods.
+    let rate1 = compute_capped_maturity_modulation(rates, day - 7, day);
+    let rate2 = compute_capped_maturity_modulation(rates, day - 14, day - 7);
+    let rate3 = compute_capped_maturity_modulation(rates, day - 21, day - 14);
+    let rate4 = compute_capped_maturity_modulation(rates, day - 28, day - 21);
+    // Return the average as the final maturity modulation.
+    (rate1 + rate2 + rate3 + rate4) / 4
+}
+
+/// The function returns the capped relative change of the start-of-day ICP/XDR rate between the
+/// given start day and end day, both in UNIX epoch time, where start day <= end day.
+/// The relative change is capped so that it lies in the interval defined by
+/// `MIN_MATURITY_MODULATION_PERMYRIAD` and `MAX_MATURITY_MODULATION_PERMYRIAD`.
+fn compute_capped_maturity_modulation(
+    rates: &[IcpXdrConversionRate],
+    start_day: u64,
+    end_day: u64,
+) -> i32 {
+    let start_index = (start_day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
+    let day_at_start_index = rates[start_index].timestamp_seconds / 86_400;
+
+    let end_index = (end_day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
+    let day_at_end_index = rates[end_index].timestamp_seconds / 86_400;
+
+    // A proper modulation is only possible if we have rates for both days.
+    // Otherwise, no modulation happens for this interval, i.e., zero is returned.
+    if start_day == day_at_start_index && end_day == day_at_end_index {
+        let start_rate_result = compute_average_icp_xdr_rate_at_time(rates, start_day * 86_400);
+        let end_rate_result = compute_average_icp_xdr_rate_at_time(rates, end_day * 86_400);
+        if let (Some(start_rate), Some(end_rate)) = (start_rate_result, end_rate_result) {
+            let start_rate_value = start_rate.xdr_permyriad_per_icp as i32;
+            let end_rate_value = end_rate.xdr_permyriad_per_icp as i32;
+            let difference = end_rate_value - start_rate_value;
+            if start_rate_value == 0 {
+                0
+            } else {
+                let relative_change_permyriad = (10_000 * difference) / start_rate_value;
+                // Bound the relative change based on the permissible range.
+                min(
+                    max(relative_change_permyriad, MIN_MATURITY_MODULATION_PERMYRIAD),
+                    MAX_MATURITY_MODULATION_PERMYRIAD,
+                )
+            }
+        } else {
+            0
+        }
+    } else {
+        0
+    }
 }
 
 #[export_name = "canister_update remove_subnet_from_authorized_subnet_list"]
@@ -1218,7 +1302,210 @@ fn post_upgrade() {
         ));
 
         *STATE.write().unwrap() = State::decode(&bytes).unwrap();
+
+        // Update the state, i.e., the maturity modulation and ICP/XDR rates.
+        let mut state = STATE.write().unwrap();
+
+        state.maturity_modulation_permyriad = Some(0);
+
+        let rate_buffer = state.recent_icp_xdr_rates.as_ref().unwrap().clone();
+
+        state.recent_icp_xdr_rates = Some(vec![
+            IcpXdrConversionRate::default();
+            ICP_XDR_CONVERSION_RATE_CACHE_SIZE
+        ]);
+
+        // Historic rates are copied into the new state.
+        for rate in get_historic_conversion_rates().iter() {
+            update_recent_icp_xdr_rates(rate, &mut state);
+        }
+
+        // The extracted rates are copied into the new state.
+        for rate in rate_buffer.iter() {
+            update_recent_icp_xdr_rates(rate, &mut state);
+        }
     })
+}
+
+/// The functions returns the start-of-day ICP/XDR rates between May 19, 2022 and June 30, 2022.
+/// These rates are added to the CMC state in the post-upgrade function.
+/// This function can be removed after a successful upgrade.
+fn get_historic_conversion_rates() -> Vec<IcpXdrConversionRate> {
+    let rates = vec![
+        IcpXdrConversionRate {
+            timestamp_seconds: 1652918400, // May 19, 2022
+            xdr_permyriad_per_icp: 56_023,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653004800, // May 20, 2022
+            xdr_permyriad_per_icp: 61_063,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653091200, // May 21, 2022
+            xdr_permyriad_per_icp: 57_869,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653177600, // May 22, 2022
+            xdr_permyriad_per_icp: 59_552,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653264600, // May 23, 2022 (not start of day)
+            xdr_permyriad_per_icp: 61_439,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653350400, // May 24, 2022
+            xdr_permyriad_per_icp: 57_720,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653436800, // May 25, 2022
+            xdr_permyriad_per_icp: 58_676,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653523200, // May 26, 2022
+            xdr_permyriad_per_icp: 57_692,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653609600, // May 27, 2022
+            xdr_permyriad_per_icp: 54_095,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653696000, // May 28, 2022
+            xdr_permyriad_per_icp: 51_589,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653782400, // May 29, 2022
+            xdr_permyriad_per_icp: 53_551,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653868800, // May 30, 2022
+            xdr_permyriad_per_icp: 52_848,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1653955200, // May 31, 2022
+            xdr_permyriad_per_icp: 60_112,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654041600, // June 1, 2022
+            xdr_permyriad_per_icp: 61_260,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654128000, // June 2, 2022
+            xdr_permyriad_per_icp: 56_457,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654214400, // June 3, 2022
+            xdr_permyriad_per_icp: 70_102,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654300800, // June 4, 2022
+            xdr_permyriad_per_icp: 58_589,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654387200, // June 5, 2022
+            xdr_permyriad_per_icp: 57_367,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654473600, // June 6, 2022
+            xdr_permyriad_per_icp: 54_347,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654560000, // June 7, 2022
+            xdr_permyriad_per_icp: 56_237,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654646400, // June 8, 2022
+            xdr_permyriad_per_icp: 50_679,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654732800, // June 9, 2022
+            xdr_permyriad_per_icp: 48_381,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654819200, // June 10, 2022
+            xdr_permyriad_per_icp: 47_577,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654905600, // June 11, 2022
+            xdr_permyriad_per_icp: 45_441,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1654992000, // June 12, 2022
+            xdr_permyriad_per_icp: 44_647,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655078400, // June 13, 2022
+            xdr_permyriad_per_icp: 42_095,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655164800, // June 14, 2022
+            xdr_permyriad_per_icp: 40_562,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655257620, // June 15, 2022 (not start of day)
+            xdr_permyriad_per_icp: 42_431,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655337600, // June 16, 2022
+            xdr_permyriad_per_icp: 45_137,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655424000, // June 17, 2022
+            xdr_permyriad_per_icp: 40_036,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655510400, // June 18, 2022
+            xdr_permyriad_per_icp: 40_769,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655596800, // June 19, 2022
+            xdr_permyriad_per_icp: 38_551,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655683200, // June 20, 2022
+            xdr_permyriad_per_icp: 41_041,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655769600, // June 21, 2022
+            xdr_permyriad_per_icp: 43_264,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655856000, // June 22, 2022
+            xdr_permyriad_per_icp: 43_675,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1655942400, // June 23, 2022
+            xdr_permyriad_per_icp: 40_828,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656028800, // June 24, 2022
+            xdr_permyriad_per_icp: 43_591,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656115200, // June 25, 2022
+            xdr_permyriad_per_icp: 45_903,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656201600, // June 26, 2022
+            xdr_permyriad_per_icp: 47_262,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656288000, // June 27, 2022
+            xdr_permyriad_per_icp: 43_021,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656375000, // June 28, 2022 (not start of day)
+            xdr_permyriad_per_icp: 43638,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656460800, // June 29, 2022
+            xdr_permyriad_per_icp: 41116,
+        },
+        IcpXdrConversionRate {
+            timestamp_seconds: 1656547200, // June 30, 2022
+            xdr_permyriad_per_icp: 40_770,
+        },
+    ];
+    rates
 }
 
 #[export_name = "canister_query http_request"]
@@ -1357,51 +1644,64 @@ mod tests {
         );
     }
 
-    #[test]
-    // The function tests if the average ICP/XDR price is computed correctly.
-    fn test_average_icp_xdr_price() {
-        let mut state = State::default();
-        // Set a timestamp.
-        let timestamp: u64 = 1_632_728_342;
-        // Define some rates that will be used in the test.
+    /// The function returns sample conversion rates set for testing.
+    fn get_sample_conversion_rates(timestamp: u64) -> Vec<IcpXdrConversionRate> {
+        let average_rate_interval = NUM_DAYS_FOR_ICP_XDR_AVERAGE as u64;
+        let maturity_modulation_interval = ICP_XDR_CONVERSION_RATE_CACHE_SIZE as u64;
+        // The timestamp has to the start of a day.
+        let start_of_day = (timestamp / 86_400) * 86_400;
+        // Define some rates that will be used in tests.
         let rates = vec![
             IcpXdrConversionRate {
-                timestamp_seconds: timestamp, // The record at this time should be ignored
+                timestamp_seconds: start_of_day + 27542, // The record at this time will not be used
                 xdr_permyriad_per_icp: 1_010_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: 1_632_700_800, // Midnight
+                timestamp_seconds: start_of_day, // Midnight
                 xdr_permyriad_per_icp: 1_000_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: 1_632_614_400, // Midnight, previous day
+                timestamp_seconds: start_of_day - 86_400, // Midnight, previous day
                 xdr_permyriad_per_icp: 1_110_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: 1_632_614_399, /* One minute before midnight, previous day
-                                                   * (ignored) */
+                timestamp_seconds: start_of_day - 86_401, // One minute before midnight, previous day (ignored)
                 xdr_permyriad_per_icp: 1_510_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: 1_632_528_060, // 1 minute after midnight, two days before
+                timestamp_seconds: start_of_day - 2 * 86_400 + 60, // 1 minute after midnight, two days before
                 xdr_permyriad_per_icp: 1_520_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: 1_632_355_200, // Midnight, four days before.
+                timestamp_seconds: start_of_day - 7 * 86_400, // Midnight, seven days before.
                 xdr_permyriad_per_icp: 880_000,
             },
             IcpXdrConversionRate {
-                timestamp_seconds: (1_632_700_800 - (NUM_DAYS_FOR_ICP_XDR_AVERAGE - 1) * 86_400)
-                    as u64,
+                timestamp_seconds: (start_of_day - (average_rate_interval - 1) * 86_400),
                 xdr_permyriad_per_icp: 1_090_000,
             },
             IcpXdrConversionRate {
-                // This record is too old and should be ignored.
-                timestamp_seconds: (1_632_700_800 - NUM_DAYS_FOR_ICP_XDR_AVERAGE * 86_400) as u64,
+                // This record is too old for the average ICP/XDR rate but still used for the
+                // maturity modulation.
+                timestamp_seconds: (start_of_day - (maturity_modulation_interval - 1) * 86_400),
                 xdr_permyriad_per_icp: 1_500_000,
             },
+            IcpXdrConversionRate {
+                // This record is too old and should be ignored entirely.
+                timestamp_seconds: (start_of_day - maturity_modulation_interval * 86_400),
+                xdr_permyriad_per_icp: 1_808_000,
+            },
         ];
-        // The average of the chosen rates.
+        rates
+    }
+
+    #[test]
+    // The function tests if the average ICP/XDR price is computed correctly.
+    fn test_average_icp_xdr_price_with_sample_rates() {
+        let timestamp = 1_632_700_800;
+        let mut state = State::default();
+        let rates = get_sample_conversion_rates(timestamp);
+        // The average of the rates in the sample rates that are used for the ICP/XDR price.
         let chosen_rates_sum: u64 = 1_000_000 + 1_110_000 + 1_520_000 + 880_000 + 1_090_000;
         let average_rate = IcpXdrConversionRate {
             timestamp_seconds: 1_632_700_800,
@@ -1478,6 +1778,113 @@ mod tests {
     }
 
     #[test]
+    // The function tests if the maturity modulation is computed correctly using sample rates.
+    fn test_maturity_modulation_with_sample_rates() {
+        let timestamp = 1_632_700_800;
+        let mut state = State::default();
+        let rates = get_sample_conversion_rates(timestamp);
+        // The state is updated with all rates in reverse order (oldest to newest).
+        for rate in rates.iter().rev() {
+            update_recent_icp_xdr_rates(rate, &mut state);
+        }
+        let recent_rates = state.recent_icp_xdr_rates.unwrap();
+        let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, timestamp);
+        // The are only 5 rates (1_000_000 + 1_110_000 + 1_520_000 + 880_000 + 1_090_000) for the
+        // average rate ending with the given timestamp, yielding an average rate of 1_120_000.
+        // For the average rate seven days ago, there are only two rates (880_000 + 1_090_000), i.e.,
+        // the 30-day average starting on that day is 985_000.
+        // The relative change is (1_120_000 - 985_000) / 985_000 = 0.137, exceeding 5%.
+        // Capping this value at 5%, the maturity modulation is 1.25% because the other three terms
+        // are all zero for the sample rates.
+        assert_eq!(125, computed_maturity_modulation);
+    }
+
+    #[test]
+    // The function tests if the maturity modulation is computed correctly for
+    // random input.
+    fn test_random_maturity_modulation() {
+        // Create random start-of-day conversion rates.
+        let mut current_rate: i32 = 100_000;
+        let mut rng = rand::thread_rng();
+        let mut rates = vec![];
+        let mut timestamp = 1658102400;
+        for _index in 0..ICP_XDR_CONVERSION_RATE_CACHE_SIZE {
+            rates.push(IcpXdrConversionRate {
+                timestamp_seconds: timestamp,
+                xdr_permyriad_per_icp: current_rate as u64,
+            });
+            current_rate += rng.gen_range(0..20_000) - 10_000;
+            if current_rate < 0 {
+                current_rate = 100_000;
+            }
+            timestamp -= 86400;
+        }
+
+        // Get the maturity modulation.
+        let mut state = State::default();
+        for rate in rates.iter().rev() {
+            update_recent_icp_xdr_rates(rate, &mut state);
+        }
+        let recent_rates = state.recent_icp_xdr_rates.unwrap();
+        let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, 1658102400);
+
+        // Compute maturity modulation by hand.
+        let interval = NUM_DAYS_FOR_ICP_XDR_AVERAGE;
+        let a0 = (rates[0..interval]
+            .iter()
+            .map(|rate| rate.xdr_permyriad_per_icp)
+            .sum::<u64>() as i32)
+            / (interval as i32);
+        let a7 = (rates[7..7 + interval]
+            .iter()
+            .map(|rate| rate.xdr_permyriad_per_icp)
+            .sum::<u64>() as i32)
+            / (interval as i32);
+        let a14 = (rates[14..14 + interval]
+            .iter()
+            .map(|rate| rate.xdr_permyriad_per_icp)
+            .sum::<u64>() as i32)
+            / (interval as i32);
+        let a21 = (rates[21..21 + interval]
+            .iter()
+            .map(|rate| rate.xdr_permyriad_per_icp)
+            .sum::<u64>() as i32)
+            / (interval as i32);
+        let a28 = (rates[28..28 + interval]
+            .iter()
+            .map(|rate| rate.xdr_permyriad_per_icp)
+            .sum::<u64>() as i32)
+            / (interval as i32);
+
+        let term1 = max(
+            min(10_000 * (a0 - a7) / a7, MAX_MATURITY_MODULATION_PERMYRIAD),
+            MIN_MATURITY_MODULATION_PERMYRIAD,
+        );
+        let term2 = max(
+            min(10_000 * (a7 - a14) / a14, MAX_MATURITY_MODULATION_PERMYRIAD),
+            MIN_MATURITY_MODULATION_PERMYRIAD,
+        );
+        let term3 = max(
+            min(
+                10_000 * (a14 - a21) / a21,
+                MAX_MATURITY_MODULATION_PERMYRIAD,
+            ),
+            MIN_MATURITY_MODULATION_PERMYRIAD,
+        );
+        let term4 = max(
+            min(
+                10_000 * (a21 - a28) / a28,
+                MAX_MATURITY_MODULATION_PERMYRIAD,
+            ),
+            MIN_MATURITY_MODULATION_PERMYRIAD,
+        );
+
+        let maturity_modulation = (term1 + term2 + term3 + term4) / 4;
+
+        assert_eq!(maturity_modulation, computed_maturity_modulation);
+    }
+
+    #[test]
     fn test_candid_interface_compatibility() {
         use candid::utils::{service_compatible, CandidSource};
         use std::path::PathBuf;
@@ -1493,5 +1900,83 @@ mod tests {
             CandidSource::File(old_interface.as_path()),
         )
         .expect("The CMC canister interface is not compatible with the cmc.did file");
+    }
+
+    #[test]
+    /// The function tests that the upgrade adding the maturity modulation to the state
+    /// can be performed.
+    /// After the upgrade, this test can be deleted.
+    fn test_maturity_modulation_upgrade() {
+        // These bytes were obtained by encoding the state created in the ICP/XDR conversion
+        // rate test prior to the addition of the maturity modulation, i.e., based on the version
+        // on the master branch.
+        let bytes = vec![
+            68, 73, 68, 76, 23, 108, 14, 241, 182, 131, 133, 1, 1, 141, 232, 247, 193, 1, 11, 146,
+            236, 182, 234, 1, 14, 242, 235, 188, 221, 5, 125, 201, 134, 130, 134, 6, 125, 199, 147,
+            165, 146, 8, 17, 232, 248, 207, 247, 8, 18, 168, 149, 163, 135, 9, 8, 214, 200, 191,
+            210, 10, 104, 184, 140, 133, 170, 11, 16, 140, 154, 183, 226, 11, 22, 221, 158, 223,
+            246, 11, 104, 165, 171, 157, 139, 12, 17, 184, 157, 212, 209, 13, 125, 110, 2, 109, 3,
+            108, 2, 0, 120, 1, 4, 107, 3, 219, 205, 150, 229, 3, 5, 184, 155, 255, 150, 9, 10, 243,
+            187, 153, 239, 12, 127, 107, 2, 188, 138, 1, 104, 197, 254, 210, 1, 6, 107, 5, 247,
+            141, 171, 203, 2, 7, 199, 144, 241, 146, 6, 113, 176, 173, 143, 205, 12, 9, 243, 187,
+            153, 239, 12, 127, 209, 157, 206, 169, 15, 120, 108, 2, 224, 158, 203, 169, 2, 8, 196,
+            159, 244, 228, 15, 113, 110, 120, 108, 2, 144, 198, 193, 150, 5, 113, 196, 152, 177,
+            181, 13, 120, 107, 2, 188, 138, 1, 125, 197, 254, 210, 1, 6, 110, 12, 109, 13, 108, 2,
+            223, 245, 129, 160, 8, 120, 214, 213, 218, 198, 15, 120, 109, 15, 108, 2, 0, 104, 1,
+            16, 109, 104, 110, 13, 108, 4, 172, 234, 164, 234, 6, 19, 228, 204, 177, 163, 13, 19,
+            212, 149, 176, 191, 13, 125, 145, 178, 225, 136, 14, 20, 108, 2, 194, 135, 194, 226, 4,
+            120, 191, 181, 149, 180, 9, 121, 109, 21, 108, 2, 207, 137, 141, 211, 4, 125, 240, 167,
+            178, 148, 5, 121, 110, 113, 1, 0, 1, 0, 1, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 128, 109, 13, 0, 0, 0, 0, 0, 128, 195, 75, 97, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 49, 23, 0, 0, 0, 0, 0, 188, 102, 78, 97,
+            0, 0, 0, 0, 240, 239, 16, 0, 0, 0, 0, 0, 0, 184, 79, 97, 0, 0, 0, 0, 64, 66, 15, 0, 0,
+            0, 0, 0, 128, 9, 81, 97, 0, 0, 0, 0, 208, 161, 16, 0, 0, 0, 0, 0, 0, 206, 42, 97, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 160, 148, 165, 141, 29,
+            128, 128, 148, 246, 194, 215, 232, 88, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 14,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+        ];
+        let decoding_result = State::decode(&bytes);
+
+        assert!(decoding_result.is_ok());
+
+        let mut state = decoding_result.unwrap();
+
+        // Check that the vector of recent rates only contains `NUM_DAYS_FOR_ICP_XDR_AVERAGE`
+        // rates and that no maturity modulation is set.
+        assert_eq!(
+            NUM_DAYS_FOR_ICP_XDR_AVERAGE,
+            state.recent_icp_xdr_rates.unwrap().len()
+        );
+        assert_eq!(None, state.maturity_modulation_permyriad);
+
+        // Add a larger vector for recent rates.
+        state.recent_icp_xdr_rates = Some(vec![
+            IcpXdrConversionRate::default();
+            ICP_XDR_CONVERSION_RATE_CACHE_SIZE
+        ]);
+
+        // Historic rates are copied into the new state.
+        for rate in get_historic_conversion_rates().iter() {
+            update_recent_icp_xdr_rates(rate, &mut state);
+        }
+        // Assert that there are more recent rates and that a maturity modulation is set to a
+        // non-zero value.
+        assert_eq!(
+            ICP_XDR_CONVERSION_RATE_CACHE_SIZE,
+            state.recent_icp_xdr_rates.unwrap().len()
+        );
+        assert!(state.maturity_modulation_permyriad.unwrap() != 0);
     }
 }
