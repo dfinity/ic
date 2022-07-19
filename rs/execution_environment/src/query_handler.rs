@@ -86,7 +86,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
     t.into()
 }
 
-pub(crate) struct InternalHttpQueryHandler {
+pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     own_subnet_type: SubnetType,
@@ -106,7 +106,7 @@ pub(crate) struct HttpQueryHandler {
 }
 
 impl InternalHttpQueryHandler {
-    pub(crate) fn new(
+    pub fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         own_subnet_type: SubnetType,

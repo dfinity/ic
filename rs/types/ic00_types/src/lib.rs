@@ -510,6 +510,24 @@ pub struct CanisterSettingsArgs {
 
 impl Payload<'_> for CanisterSettingsArgs {}
 
+impl CanisterSettingsArgs {
+    pub fn new(
+        controller: Option<PrincipalId>,
+        controllers: Option<Vec<PrincipalId>>,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+        freezing_threshold: Option<u64>,
+    ) -> Self {
+        Self {
+            controller,
+            controllers,
+            compute_allocation: compute_allocation.map(candid::Nat::from),
+            memory_allocation: memory_allocation.map(candid::Nat::from),
+            freezing_threshold: freezing_threshold.map(candid::Nat::from),
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     settings : opt canister_settings;

@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{collections::BTreeSet, convert::TryFrom};
 
-use ic_base_types::{NumBytes, PrincipalId, SubnetId};
+use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -15,13 +15,16 @@ use ic_execution_environment::{
     as_num_instructions,
     util::{process_result, process_stopping_canisters},
     CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, Hypervisor,
-    IngressHistoryWriterImpl, RoundInstructions, RoundLimits,
+    IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterStatusType, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
+    EmptyBlob, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SetControllerArgs, UpdateSettingsArgs,
 };
-use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
+};
 use ic_interfaces::messages::RequestOrIngress;
 use ic_interfaces::{
     execution_environment::{AvailableMemory, ExecutionMode, SubnetAvailableMemory},
@@ -44,7 +47,7 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response},
+    messages::{AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery},
     CanisterId, Cycles, NumInstructions, UserId,
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
@@ -103,6 +106,7 @@ pub struct ExecutionTest {
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
+    query_handler: InternalHttpQueryHandler,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -338,6 +342,26 @@ impl ExecutionTest {
     pub fn canister_status(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
         self.subnet_message(Method::CanisterStatus, payload)
+    }
+
+    /// Updates the freezing threshold of the given canister.
+    pub fn update_freezing_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        freezing_threshold: NumSeconds,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgs::new(
+                None,
+                None,
+                None,
+                None,
+                Some(freezing_threshold.get()),
+            ),
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
     }
 
     /// Sets the controller of the canister to the given principal.
@@ -939,6 +963,34 @@ impl ExecutionTest {
         self.message_id += 1;
         MessageId::try_from(&[&[0; 24][..], &message_id.to_be_bytes()[..]].concat()[..]).unwrap()
     }
+
+    /// Executes a query call on the given state.
+    pub fn query(
+        &self,
+        query: UserQuery,
+        state: Arc<ReplicatedState>,
+        data_certificate: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        self.query_handler.query(query, state, data_certificate)
+    }
+
+    /// Returns a reference to the query handler of this test.
+    ///
+    /// Note that the return type is `Any` so that the caller is forced to
+    /// downcast to the concrete type of the query handler and be able to
+    /// access private fields in query handler related tests.
+    pub fn query_handler(&self) -> &dyn std::any::Any {
+        &self.query_handler
+    }
+
+    /// Returns a mutable reference to the query handler of this test.
+    ///
+    /// Note that the return type is `Any` so that the caller is forced to
+    /// downcast to the concrete type of the query handler and be able to
+    /// access private fields in query handler related tests.
+    pub fn query_handler_mut(&mut self) -> &mut dyn std::any::Any {
+        &mut self.query_handler
+    }
 }
 
 /// A builder for `ExecutionTest`.
@@ -1265,14 +1317,23 @@ impl ExecutionTestBuilder {
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironment::new(
-            self.log,
-            hypervisor,
+            self.log.clone(),
+            Arc::clone(&hypervisor),
             Arc::clone(&ingress_history_writer),
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
             1,
             config,
+            Arc::clone(&cycles_account_manager),
+        );
+        let query_handler = InternalHttpQueryHandler::new(
+            self.log,
+            hypervisor,
+            self.subnet_type,
+            Config::default(),
+            &metrics_registry,
+            self.instruction_limit,
             Arc::clone(&cycles_account_manager),
         );
         ExecutionTest {
@@ -1302,6 +1363,7 @@ impl ExecutionTestBuilder {
             user_id: user_test_id(1),
             caller_canister_id: self.caller_canister_id,
             exec_env,
+            query_handler,
             cycles_account_manager,
             metrics_registry,
             ingress_history_writer,
