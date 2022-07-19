@@ -147,7 +147,7 @@ def post_data(index_name: str, data: Dict[str, str]) -> http.client:
         print("Max retries exceeded")
         error_message = (
             "ERROR: log-metrics could not send data to ElasticSearch for "
-            f"{job_url}|job {job_id}>. "
+            f"{job_url} {job_id}>. "
             "Exception details:\n```%s```" % "".join(traceback.format_exception(None, exc, exc.__traceback__))
         )
         error_message += f"\n\nResponse body:\n```\n{body}\n```"
