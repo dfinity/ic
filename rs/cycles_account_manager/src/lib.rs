@@ -185,30 +185,12 @@ impl CyclesAccountManager {
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
     ) -> Cycles {
-        let one_gib = 1 << 30;
+        let idle_cycles_burned_rate: u128 = self
+            .idle_cycles_burned_rate(memory_allocation, memory_usage, compute_allocation)
+            .get();
+        let seconds_per_day = 24 * 60 * 60;
 
-        let memory_fee = {
-            let memory = match memory_allocation {
-                MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => memory_usage,
-            };
-            Cycles::from(
-                (memory.get() as u128
-                    * self.config.gib_storage_per_second_fee.get()
-                    * freeze_threshold.get() as u128)
-                    / one_gib,
-            )
-        };
-
-        let compute_fee = {
-            Cycles::from(
-                compute_allocation.as_percent() as u128
-                    * self.config.compute_percent_allocated_per_second_fee.get()
-                    * freeze_threshold.get() as u128,
-            )
-        };
-
-        memory_fee + compute_fee
+        Cycles::from(idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day)
     }
 
     /// Withdraws `cycles` worth of cycles from the canister's balance.
