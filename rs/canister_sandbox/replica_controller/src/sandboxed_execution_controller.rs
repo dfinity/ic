@@ -59,6 +59,12 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_subprocess_active_last_used: Histogram,
     sandboxed_execution_subprocess_evicted_last_used: Histogram,
     sandboxed_execution_critical_error_invalid_memory_size: IntCounter,
+    sandboxed_execution_replica_create_exe_state_duration: Histogram,
+    sandboxed_execution_replica_create_exe_state_wait_compile_duration: Histogram,
+    sandboxed_execution_replica_create_exe_state_wait_deserialize_duration: Histogram,
+    sandboxed_execution_replica_create_exe_state_finish_duration: Histogram,
+    sandboxed_execution_sandbox_create_exe_state_deserialize_duration: Histogram,
+    sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: Histogram,
 }
 
 impl SandboxedExecutionMetrics {
@@ -141,6 +147,36 @@ impl SandboxedExecutionMetrics {
             ),
             sandboxed_execution_critical_error_invalid_memory_size: metrics_registry.error_counter(
                 SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE),
+            sandboxed_execution_replica_create_exe_state_duration: metrics_registry.histogram(
+                "sandboxed_execution_replica_create_exe_state_duration_seconds",
+                "The total create execution state duration in the replica controller",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+            sandboxed_execution_replica_create_exe_state_wait_compile_duration: metrics_registry.histogram(
+                "sandboxed_execution_replica_create_exe_state_wait_compile_duration_seconds",
+                "Time taken to send a create execution state request and get a response when compiling",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+            sandboxed_execution_replica_create_exe_state_wait_deserialize_duration: metrics_registry.histogram(
+                "sandboxed_execution_replica_create_exe_state_wait_deserialize_duration_seconds",
+                "Time taken to send a create execution state request and get a response when deserializing",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+            sandboxed_execution_replica_create_exe_state_finish_duration: metrics_registry.histogram(
+                "sandboxed_execution_replica_create_exe_finish_duration_seconds",
+                "Time to create an execution state after getting the response from the sandbox",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+            sandboxed_execution_sandbox_create_exe_state_deserialize_duration: metrics_registry.histogram(
+                "sandboxed_execution_sandbox_create_exe_state_deserialize_duration_seconds",
+                "Time taken to deserialize a wasm module when creating the execution state from a serialized module",
+                decimal_buckets_with_zero(-4, 1),
+            ),
+            sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: metrics_registry.histogram(
+                "sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration_seconds",
+                "Total time spent in the sandbox when creating an execution state from a serialized module",
+                decimal_buckets_with_zero(-4, 1),
+            )
         }
     }
 }
@@ -572,6 +608,10 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+        let _create_exe_state_timer = self
+            .metrics
+            .sandboxed_execution_replica_create_exe_state_duration
+            .start_timer();
         let sandbox_process = self.get_sandbox_process(canister_id);
         let wasm_binary = WasmBinary::new(canister_module);
 
@@ -583,6 +623,10 @@ impl WasmExecutor for SandboxedExecutionController {
         let (memory_modifications, exported_globals, serialized_module, compilation_result) =
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
+                    let _compilation_timer = self
+                        .metrics
+                        .sandboxed_execution_replica_create_exe_state_wait_compile_duration
+                        .start_timer();
                     sandbox_process.history.record(format!(
                         "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
                         wasm_id, next_wasm_memory_id
@@ -609,11 +653,15 @@ impl WasmExecutor for SandboxedExecutionController {
                     )
                 }
                 Some(serialized_module) => {
+                    let _deserialization_timer = self
+                        .metrics
+                        .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
+                        .start_timer();
                     sandbox_process.history.record(format!(
                         "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
                         wasm_id, next_wasm_memory_id
                     ));
-                    let (memory_modifications, exported_globals) = sandbox_process
+                    let sandbox_result = sandbox_process
                         .sandbox_service
                         .create_execution_state_serialized(
                             protocol::sbxsvc::CreateExecutionStateSerializedRequest {
@@ -627,14 +675,24 @@ impl WasmExecutor for SandboxedExecutionController {
                         .sync()
                         .unwrap()
                         .0?;
+                    self.metrics
+                        .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                        .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                    self.metrics
+                        .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
+                        .observe(sandbox_result.deserialization_time.as_secs_f64());
                     (
-                        memory_modifications,
-                        exported_globals,
+                        sandbox_result.wasm_memory_modifications,
+                        sandbox_result.exported_globals,
                         serialized_module,
                         None,
                     )
                 }
             };
+        let _finish_timer = self
+            .metrics
+            .sandboxed_execution_replica_create_exe_state_finish_duration
+            .start_timer();
 
         cache_opened_wasm(
             &mut *wasm_binary.embedder_cache.lock().unwrap(),

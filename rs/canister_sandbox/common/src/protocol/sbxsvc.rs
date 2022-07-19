@@ -1,7 +1,7 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
@@ -284,8 +284,16 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateSerializedRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateSerializedSuccessReply {
+    pub wasm_memory_modifications: MemoryModifications,
+    pub exported_globals: Vec<Global>,
+    pub deserialization_time: Duration,
+    pub total_sandbox_time: Duration,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateSerializedReply(
-    pub HypervisorResult<(MemoryModifications, Vec<Global>)>,
+    pub HypervisorResult<CreateExecutionStateSerializedSuccessReply>,
 );
 
 /// All possible requests to a sandboxed process.
