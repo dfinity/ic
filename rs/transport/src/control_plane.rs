@@ -49,34 +49,12 @@ const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
 impl TransportImpl {
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
-        self.allowed_clients.write().unwrap().remove(peer_id);
-        let mut peer_map = self.peer_map.blocking_write();
-        let peer_state = match peer_map.get(peer_id) {
-            Some(peer_state) => peer_state,
-            None => {
-                return;
-            }
-        };
-        // Remove flow from metrics.
-        for flow_state in peer_state.flow_map.values() {
-            if self
-                .control_plane_metrics
-                .flow_state
-                .remove_label_values(&[&flow_state.flow_label, &flow_state.flow_tag_label])
-                .is_err()
-            {
-                warn!(
-                    self.log,
-                    "ControlPlane::stop_peer_connections(): Could not remove flow metric {:?}",
-                    flow_state.flow_label
-                )
-            }
-        }
-        peer_map.remove(peer_id);
         info!(
             self.log,
             "ControlPlane::stop_peer_connections(): peer_id = {:?}", peer_id
         );
+        self.allowed_clients.write().unwrap().remove(peer_id);
+        self.peer_map.blocking_write().remove(peer_id);
     }
 
     /// Starts connection(s) to a peer and initializes the corresponding data
@@ -120,6 +98,7 @@ impl TransportImpl {
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
                 let flow_label = get_flow_label(&peer_ip, peer_id);
                 let flow_state = FlowState::new(
+                    self.log.clone(),
                     flow_tag,
                     flow_label.clone(),
                     ConnectionState::Listening,
@@ -176,6 +155,7 @@ impl TransportImpl {
                 connecting_task,
             };
             let flow_state = FlowState::new(
+                self.log.clone(),
                 flow_tag,
                 flow_label.clone(),
                 ConnectionState::Connecting(connecting_state),

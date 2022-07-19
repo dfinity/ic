@@ -334,14 +334,10 @@ impl TransportImpl {
         timeout: Duration,
     ) -> Result<(), ReadError> {
         let read_future = reader.read_exact(buf);
-        let ret = tokio::time::timeout(timeout, read_future).await;
-        if ret.is_err() {
-            return Err(ReadError::SocketReadTimeOut);
-        }
-
-        match ret.unwrap() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(ReadError::SocketReadFailed(e)),
+        match tokio::time::timeout(timeout, read_future).await {
+            Err(_) => Err(ReadError::SocketReadTimeOut),
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(ReadError::SocketReadFailed(e)),
         }
     }
 
@@ -362,12 +358,10 @@ impl TransportImpl {
             None => return,
         };
 
-        let connected = match &flow_state.connection_state {
-            ConnectionState::Connected(connected) => connected,
-            _ => {
-                // Flow is already disconnected/reconnecting, skip reconnect processing
-                return;
-            }
+        let connected = match flow_state.get_connected() {
+            Some(connected) => connected,
+            // Flow is already disconnected/reconnecting, skip reconnect processing
+            None => return,
         };
 
         let connection_state = self
@@ -442,7 +436,7 @@ impl TransportImpl {
             None => return Err(TransportErrorCode::FlowNotFound),
         };
 
-        if let ConnectionState::Connected(_) = flow_state.connection_state {
+        if flow_state.get_connected().is_some() {
             // TODO: P2P-516
             return Err(TransportErrorCode::FlowConnectionUp);
         }

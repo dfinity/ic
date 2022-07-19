@@ -2,14 +2,13 @@
 
 use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::utils::SendQueueImpl;
+use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use phantom_newtype::{AmountOf, Id};
-
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
@@ -17,9 +16,7 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use strum::AsRefStr;
-use tokio::runtime::Handle;
-use tokio::task::JoinHandle;
-use tokio::time::Duration;
+use tokio::{runtime::Handle, task::JoinHandle, time::Duration};
 
 /// A tag for the server port
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -142,20 +139,22 @@ pub(crate) struct PeerState {
 
 /// Per-flow state, specific to a transport-client and a peer.
 pub(crate) struct FlowState {
+    log: ReplicaLogger,
     /// Flow tag as a metrics label
-    pub flow_tag_label: String,
+    flow_tag_label: String,
     /// Flow label, used for metrics
     pub flow_label: String,
     /// Connection state
-    pub connection_state: ConnectionState,
+    connection_state: ConnectionState,
     /// The send queue of this flow
     pub send_queue: Box<dyn SendQueue + Send + Sync>,
     /// Metrics
-    pub control_plane_metrics: ControlPlaneMetrics,
+    control_plane_metrics: ControlPlaneMetrics,
 }
 
 impl FlowState {
     pub(crate) fn new(
+        log: ReplicaLogger,
         flow_tag: FlowTag,
         flow_label: String,
         connection_state: ConnectionState,
@@ -170,6 +169,7 @@ impl FlowState {
             send_queue_metrics,
         ));
         let ret = Self {
+            log,
             flow_tag_label: flow_tag.to_string(),
             flow_label,
             connection_state,
@@ -192,6 +192,29 @@ impl FlowState {
             .flow_state
             .with_label_values(&[&self.flow_label, &self.flow_tag_label])
             .set(self.connection_state.idx());
+    }
+
+    pub(crate) fn get_connected(&self) -> Option<&Connected> {
+        if let ConnectionState::Connected(connected) = &self.connection_state {
+            return Some(connected);
+        }
+        None
+    }
+}
+
+impl Drop for FlowState {
+    fn drop(&mut self) {
+        if self
+            .control_plane_metrics
+            .flow_state
+            .remove_label_values(&[&self.flow_label, &self.flow_tag_label])
+            .is_err()
+        {
+            warn!(
+                self.log,
+                "Transport:FlowState drop: Could not remove flow metric {:?}", self.flow_label
+            )
+        }
     }
 }
 
