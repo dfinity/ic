@@ -134,6 +134,10 @@ e2e-workload-test:
       artifacts: false
     - job: guest-os-diskimg-dev-malicious
       artifacts: false
+    - job: guest-os-updateimg-build
+      artifacts: false
+    - job: guest-os-updateimg-build-dev
+      artifacts: false
     - job: boundary-os-diskimg
       artifacts: false
     - job: boundary-os-diskimg-dev
