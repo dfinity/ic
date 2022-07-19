@@ -1,6 +1,9 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::{compile, validate_and_instrument_for_testing},
+    WasmtimeEmbedder,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -41,7 +44,7 @@ fn generate_wats() -> Vec<(String, String)> {
 
 fn wasm_compilation(c: &mut Criterion) {
     let wats = generate_wats();
-    let mut group = c.benchmark_group("compilation");
+    let mut group = c.benchmark_group("full-compilation");
     for (name, wat) in wats {
         let wasm =
             BinaryEncodedWasm::new(wabt::wat2wasm(wat).expect("Failed to convert wat to wasm"));
@@ -90,5 +93,33 @@ fn wasm_deserialization(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benchmarks, wasm_compilation, wasm_deserialization);
+fn wasm_validation_instrumentation(c: &mut Criterion) {
+    let wats = generate_wats();
+    let mut group = c.benchmark_group("validation-instrumentation");
+    for (name, wat) in wats {
+        let wasm =
+            BinaryEncodedWasm::new(wabt::wat2wasm(wat).expect("Failed to convert wat to wasm"));
+
+        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(name),
+            &(embedder, wasm),
+            |b, (embedder, wasm)| {
+                b.iter_with_large_drop(|| {
+                    validate_and_instrument_for_testing(embedder, wasm)
+                        .expect("Failed to validate and instrument canister wasm")
+                })
+            },
+        );
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benchmarks,
+    wasm_compilation,
+    wasm_deserialization,
+    wasm_validation_instrumentation
+);
 criterion_main!(benchmarks);
