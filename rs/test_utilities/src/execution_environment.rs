@@ -20,7 +20,7 @@ use ic_execution_environment::{
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
     EmptyBlob, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SetControllerArgs, UpdateSettingsArgs,
+    UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
@@ -370,8 +370,12 @@ impl ExecutionTest {
         canister_id: CanisterId,
         controller: PrincipalId,
     ) -> Result<WasmResult, UserError> {
-        let payload = SetControllerArgs::new(canister_id, controller).encode();
-        self.subnet_message(Method::SetController, payload)
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgs::new(None, Some(vec![controller]), None, None, None),
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
     }
 
     /// Installs the given Wasm binary in the given canister.
