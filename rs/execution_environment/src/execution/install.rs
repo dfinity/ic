@@ -7,7 +7,7 @@ use crate::canister_manager::{
     InstallCodeResponse, InstallCodeResult,
 };
 use crate::execution::common::update_round_limits;
-use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
@@ -68,6 +68,7 @@ pub(crate) fn execute_install(
     mut execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    compilation_cost_handling: CompilationCostHandling,
 ) -> DtsInstallCodeResult {
     // Stage 1: create a new execution state based on the new Wasm binary.
 
@@ -95,7 +96,10 @@ pub(crate) fn execute_install(
 
     execution_parameters
         .instruction_limits
-        .reduce_by(instructions_from_compilation);
+        .reduce_by(match compilation_cost_handling {
+            CompilationCostHandling::Ignore => NumInstructions::from(0),
+            CompilationCostHandling::Charge => instructions_from_compilation,
+        });
 
     let system_state = old_canister.system_state.clone();
     let scheduler_state = old_canister.scheduler_state.clone();

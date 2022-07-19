@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::HypervisorError;
@@ -2058,7 +2059,13 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
     assert_eq!(Ok(()), result);
     // Compilation occurs once for original installation and again for upgrade.
-    assert_eq!(wat_compilation_cost(wat) * 2, test.executed_instructions());
+    assert_eq!(
+        test.executed_instructions(),
+        match EmbeddersConfig::default().feature_flags.module_sharing {
+            FlagStatus::Enabled => wat_compilation_cost(wat),
+            FlagStatus::Disabled => wat_compilation_cost(wat) * 2,
+        }
+    );
 }
 
 #[test]

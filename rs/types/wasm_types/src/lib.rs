@@ -10,6 +10,8 @@ use std::{
     sync::Arc,
 };
 
+const WASM_HASH_LENGTH: usize = 32;
+
 /// A newtype for
 /// [BinaryEncoded](https://github.com/WebAssembly/design/blob/master/BinaryEncoding.md)
 /// Wasm modules used for execution.
@@ -42,7 +44,7 @@ pub struct CanisterModule {
     // The Wasm binary.
     module: ModuleStorage,
     // The Sha256 hash of the binary.
-    module_hash: [u8; 32],
+    module_hash: [u8; WASM_HASH_LENGTH],
 }
 
 impl CanisterModule {
@@ -92,7 +94,7 @@ impl CanisterModule {
     }
 
     /// Returns the Sha256 hash of this Wasm module.
-    pub fn module_hash(&self) -> [u8; 32] {
+    pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
         self.module_hash
     }
 }
@@ -117,6 +119,16 @@ impl Eq for CanisterModule {}
 impl std::hash::Hash for CanisterModule {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state)
+    }
+}
+
+/// The hash of an __uninstrumented__ canister wasm.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct WasmHash([u8; WASM_HASH_LENGTH]);
+
+impl From<&CanisterModule> for WasmHash {
+    fn from(item: &CanisterModule) -> Self {
+        Self(item.module_hash())
     }
 }
 

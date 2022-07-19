@@ -1179,6 +1179,10 @@ impl Scheduler for SchedulerImpl {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 final_state.metadata.heap_delta_estimate = NumBytes::from(0);
+                // `expected_compiled_wasms` will be cleared upon store and load
+                // of a checkpoint because it doesn't exist in the protobuf
+                // metadata, but we make it explicit here anyway.
+                final_state.metadata.expected_compiled_wasms.clear();
             }
             ExecutionRoundType::OrdinaryRound => {}
         }

@@ -163,12 +163,11 @@ impl Hypervisor {
 
     pub fn create_execution_state(
         &self,
-        wasm_binary: Vec<u8>,
+        canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
         round_limits: &mut RoundLimits,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
-        let canister_module = CanisterModule::new(wasm_binary);
         let (execution_state, compilation_cost, compilation_result) =
             self.wasm_executor.create_execution_state(
                 canister_module,
@@ -196,8 +195,7 @@ impl Hypervisor {
         embedder_config.query_execution_threads = config.query_execution_threads;
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
-
-        let module_sharing_flag = embedder_config.feature_flags.module_sharing;
+        embedder_config.feature_flags.module_sharing = config.module_sharing;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -226,7 +224,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(module_sharing_flag)),
+            compilation_cache: Arc::new(CompilationCache::new(config.module_sharing)),
         }
     }
 

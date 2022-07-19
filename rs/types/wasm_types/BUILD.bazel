@@ -17,6 +17,7 @@ rust_library(
     edition = "2018",
     deps = [
         "//rs/crypto/sha",
+        "//rs/protobuf",
         "//rs/sys",
         "//rs/utils",
         "@crate_index//:serde",

@@ -1,5 +1,5 @@
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
-use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -35,6 +35,7 @@ use ic_types::{
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time, UserId,
 };
+use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -163,7 +164,7 @@ pub struct InstallCodeContext {
     pub sender: PrincipalId,
     pub mode: CanisterInstallMode,
     pub canister_id: CanisterId,
-    pub wasm_module: Vec<u8>,
+    pub wasm_module: CanisterModule,
     pub arg: Vec<u8>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
@@ -272,7 +273,7 @@ impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
             sender,
             mode: args.mode,
             canister_id,
-            wasm_module: args.wasm_module,
+            wasm_module: CanisterModule::new(args.wasm_module),
             arg: args.arg,
             compute_allocation,
             memory_allocation,
@@ -631,6 +632,7 @@ impl CanisterManager {
             &network_topology,
             execution_parameters,
             round_limits,
+            CompilationCostHandling::Charge,
         );
         let (instructions_left, result, canister) = match dts_res.response {
             InstallCodeResponse::Result((instructions_left, result)) => {
@@ -679,6 +681,7 @@ impl CanisterManager {
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
+        compilation_cost_handling: CompilationCostHandling,
     ) -> DtsInstallCodeResult {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
         if context.compute_allocation.is_some() {
@@ -776,6 +779,7 @@ impl CanisterManager {
                 execution_parameters,
                 round.clone(),
                 round_limits,
+                compilation_cost_handling,
             ),
             CanisterInstallMode::Upgrade => execute_upgrade(
                 context,
@@ -785,6 +789,7 @@ impl CanisterManager {
                 execution_parameters,
                 round.clone(),
                 round_limits,
+                compilation_cost_handling,
             ),
         };
 

@@ -8,7 +8,7 @@ use crate::canister_manager::{
     InstallCodeResponse, InstallCodeResult,
 };
 use crate::execution::common::update_round_limits;
-use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
@@ -76,6 +76,7 @@ pub(crate) fn execute_upgrade(
     execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    compilation_cost_handling: CompilationCostHandling,
 ) -> DtsInstallCodeResult {
     let canister_id = context.canister_id;
     let mut new_canister = old_canister.clone();
@@ -116,6 +117,7 @@ pub(crate) fn execute_upgrade(
             time,
             round,
             round_limits,
+            compilation_cost_handling,
         )
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
@@ -145,6 +147,7 @@ pub(crate) fn execute_upgrade(
                     time,
                     round,
                     round_limits,
+                    compilation_cost_handling,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -157,6 +160,7 @@ pub(crate) fn execute_upgrade(
                     context,
                     canister_layout_path,
                     time,
+                    compilation_cost_handling,
                 });
                 DtsInstallCodeResult {
                     old_canister,
@@ -180,6 +184,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    compilation_cost_handling: CompilationCostHandling,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
@@ -215,6 +220,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 time,
                 round,
                 round_limits,
+                compilation_cost_handling,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -239,6 +245,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    compilation_cost_handling: CompilationCostHandling,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
@@ -286,7 +293,10 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
     execution_parameters
         .instruction_limits
-        .reduce_by(instructions_from_compilation);
+        .reduce_by(match compilation_cost_handling {
+            CompilationCostHandling::Ignore => NumInstructions::from(0),
+            CompilationCostHandling::Charge => instructions_from_compilation,
+        });
     let instructions_left = execution_parameters.instruction_limits.message();
 
     // Update allocations.  This must happen after we have created the new
@@ -659,6 +669,7 @@ struct PausedPreUpgradeExecution {
     context: InstallCodeContext,
     canister_layout_path: PathBuf,
     time: Time,
+    compilation_cost_handling: CompilationCostHandling,
 }
 
 impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
@@ -688,6 +699,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     self.time,
                     round,
                     round_limits,
+                    self.compilation_cost_handling,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {

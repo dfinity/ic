@@ -31,6 +31,7 @@ use ic_types::{
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
 use std::{
@@ -125,6 +126,15 @@ pub struct SystemMetadata {
     pub time_of_last_allocation_charge: Time,
 
     pub subnet_metrics: SubnetMetrics,
+
+    /// The set of WASM modules we expect to be present in the [`Hypervisor`]'s
+    /// compilation cache. This allows us to deterministically decide when we
+    /// expect a compilation to be fast and ignore the compilation cost when
+    /// considering the round instruction limit.
+    ///
+    /// Each time a canister is installed, its WASM is inserted and the set is
+    /// cleared at each checkpoint.
+    pub expected_compiled_wasms: BTreeSet<WasmHash>,
 }
 
 /// Full description of the IC network toplogy.
@@ -485,6 +495,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
             },
+            expected_compiled_wasms: BTreeSet::new(),
         })
     }
 }
@@ -510,6 +521,7 @@ impl SystemMetadata {
             heap_delta_estimate: NumBytes::from(0),
             time_of_last_allocation_charge: UNIX_EPOCH,
             subnet_metrics: Default::default(),
+            expected_compiled_wasms: BTreeSet::new(),
         }
     }
 

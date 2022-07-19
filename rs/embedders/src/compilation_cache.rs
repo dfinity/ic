@@ -5,17 +5,7 @@ use std::{
 
 use crate::SerializedModule;
 use ic_config::flag_status::FlagStatus;
-use ic_wasm_types::CanisterModule;
-
-/// The hash of an __uninstrumented__ canister wasm.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct WasmHash([u8; 32]);
-
-impl From<&CanisterModule> for WasmHash {
-    fn from(item: &CanisterModule) -> Self {
-        Self(item.module_hash())
-    }
-}
+use ic_wasm_types::{CanisterModule, WasmHash};
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.

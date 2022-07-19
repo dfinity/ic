@@ -5529,6 +5529,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
+ "ic-state-machine-tests",
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
@@ -8351,6 +8352,7 @@ name = "ic-wasm-types"
 version = "0.8.0"
 dependencies = [
  "ic-crypto-sha",
+ "ic-protobuf",
  "ic-sys",
  "ic-utils 0.8.0",
  "serde",
