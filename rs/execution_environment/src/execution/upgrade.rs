@@ -7,18 +7,16 @@ use crate::canister_manager::{
     canister_layout, CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
     InstallCodeResponse, InstallCodeResult,
 };
-use crate::execution::common::{deduct_compilation_instructions, update_round_limits};
+use crate::execution::common::update_round_limits;
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
-use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{error, fatal, info};
 use ic_replicated_state::{CanisterState, Memory, SystemState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{MemoryAllocation, NumInstructions, Time};
 use std::path::PathBuf;
@@ -82,7 +80,6 @@ pub(crate) fn execute_upgrade(
     let canister_id = context.canister_id;
     let mut new_canister = old_canister.clone();
     let total_heap_delta = NumBytes::from(0);
-    let instructions_left = execution_parameters.total_instruction_limit;
 
     // Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
 
@@ -95,7 +92,7 @@ pub(crate) fn execute_upgrade(
             return DtsInstallCodeResult {
                 old_canister,
                 response: InstallCodeResponse::Result((
-                    instructions_left,
+                    execution_parameters.instruction_limits.message(),
                     Err((canister_id, HypervisorError::WasmModuleNotFound).into()),
                 )),
             }
@@ -107,6 +104,7 @@ pub(crate) fn execute_upgrade(
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
         new_canister.execution_state = Some(execution_state);
+        let instructions_left = execution_parameters.instruction_limits.message();
         upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             context,
             new_canister,
@@ -248,9 +246,12 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         round.log,
         "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
-        execution_parameters.total_instruction_limit - instructions_left,
+        execution_parameters.instruction_limits.message() - instructions_left,
         instructions_left
     );
+    execution_parameters
+        .instruction_limits
+        .update(instructions_left);
 
     // Stage 2: create a new execution state based on the new Wasm code.
     // Replace the execution state of the canister with a new execution state, but
@@ -283,10 +284,10 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         };
     new_canister.execution_state = Some(execution_state);
 
-    let instructions_left =
-        deduct_compilation_instructions(instructions_left, instructions_from_compilation);
-    execution_parameters.total_instruction_limit = instructions_left;
-    execution_parameters.slice_instruction_limit = instructions_left;
+    execution_parameters
+        .instruction_limits
+        .reduce_by(instructions_from_compilation);
+    let instructions_left = execution_parameters.instruction_limits.message();
 
     // Update allocations.  This must happen after we have created the new
     // execution state so that we fairly account for the memory requirements
@@ -463,12 +464,13 @@ fn upgrade_stage_4a_call_post_upgrade(
         round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
-        execution_parameters.total_instruction_limit - instructions_left,
+        execution_parameters.instruction_limits.message() - instructions_left,
         instructions_left
     );
 
-    execution_parameters.total_instruction_limit = instructions_left;
-    execution_parameters.slice_instruction_limit = instructions_left;
+    execution_parameters
+        .instruction_limits
+        .update(instructions_left);
 
     // Stage 4: invoke the `canister_post_upgrade()` method (if present).
 
@@ -601,7 +603,7 @@ fn upgrade_stage_4c_finish_upgrade(
         round.log,
         "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
-        execution_parameters.total_instruction_limit - instructions_left,
+        execution_parameters.instruction_limits.message() - instructions_left,
         instructions_left
     );
 

@@ -1,11 +1,11 @@
 use crate::execution_environment::{as_round_instructions, RoundLimits};
 use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, NetworkTopology};
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{NumInstructions, Time};
@@ -30,12 +30,13 @@ pub fn execute_inspect_message(
     let memory_usage = canister.memory_usage(own_subnet_type);
     let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
     let (execution_state, system_state, _) = canister.into_parts();
+    let message_instruction_limit = execution_parameters.instruction_limits.message();
 
     // Validate that the Wasm module is present.
     let execution_state = match execution_state {
         None => {
             return (
-                execution_parameters.total_instruction_limit,
+                message_instruction_limit,
                 Err(UserError::new(
                     ErrorCode::CanisterWasmModuleNotFound,
                     "Requested canister has no wasm module",
@@ -48,7 +49,7 @@ pub fn execute_inspect_message(
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
-        return (execution_parameters.total_instruction_limit, Ok(()));
+        return (message_instruction_limit, Ok(()));
     }
 
     let system_api = ApiType::inspect_message(
@@ -58,7 +59,7 @@ pub fn execute_inspect_message(
         time,
     );
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(execution_parameters.total_instruction_limit),
+        instructions: as_round_instructions(message_instruction_limit),
         subnet_available_memory,
     };
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(

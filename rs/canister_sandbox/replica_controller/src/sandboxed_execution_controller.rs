@@ -324,7 +324,7 @@ struct PausedSandboxExecution {
     exec_id: ExecId,
     next_wasm_memory_id: MemoryId,
     next_stable_memory_id: MemoryId,
-    initial_num_instructions_left: NumInstructions,
+    message_instruction_limit: NumInstructions,
     api_type_label: &'static str,
     controller: Arc<SandboxedExecutionController>,
 }
@@ -377,7 +377,7 @@ impl PausedWasmExecution for PausedSandboxExecution {
             result,
             self.next_wasm_memory_id,
             self.next_stable_memory_id,
-            self.initial_num_instructions_left,
+            self.message_instruction_limit,
             self.api_type_label,
             self.sandbox_process,
         )
@@ -426,13 +426,11 @@ impl WasmExecutor for SandboxedExecutionController {
         ExecutionState,
         WasmExecutionResult,
     ) {
-        // TODO(EXC-868): Adjust this assertion once the execution environment
+        let message_instruction_limit = execution_parameters.instruction_limits.message();
+        let slice_instruction_limit = execution_parameters.instruction_limits.slice();
+        // TODO(RUN-59): Adjust this assertion once the execution environment
         // supports deterministic time slicing with sandbox.
-        assert_eq!(
-            execution_parameters.total_instruction_limit,
-            execution_parameters.slice_instruction_limit
-        );
-        let initial_num_instructions_left = execution_parameters.slice_instruction_limit;
+        assert_eq!(message_instruction_limit, slice_instruction_limit);
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics
@@ -463,7 +461,7 @@ impl WasmExecutor for SandboxedExecutionController {
                         // TODO(RUN-269): The `num_instructions_left` should be set to
                         // the limit, not zero here.
                         SliceExecutionOutput {
-                            executed_instructions: execution_parameters.slice_instruction_limit,
+                            executed_instructions: slice_instruction_limit,
                         },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
@@ -560,7 +558,7 @@ impl WasmExecutor for SandboxedExecutionController {
             result,
             next_wasm_memory_id,
             next_stable_memory_id,
-            initial_num_instructions_left,
+            message_instruction_limit,
             api_type_label,
             sandbox_process,
         );
@@ -878,7 +876,7 @@ impl SandboxedExecutionController {
         result: CompletionResult,
         next_wasm_memory_id: MemoryId,
         next_stable_memory_id: MemoryId,
-        initial_num_instructions_left: NumInstructions,
+        message_instruction_limit: NumInstructions,
         api_type_label: &'static str,
         sandbox_process: Arc<SandboxProcess>,
     ) -> (ExecutionState, WasmExecutionResult) {
@@ -890,7 +888,7 @@ impl SandboxedExecutionController {
                     exec_id,
                     next_wasm_memory_id,
                     next_stable_memory_id,
-                    initial_num_instructions_left,
+                    message_instruction_limit,
                     api_type_label,
                     controller: self,
                 });
@@ -900,8 +898,8 @@ impl SandboxedExecutionController {
         };
 
         // If sandbox is compromised this value could be larger than the initial limit.
-        if exec_output.wasm.num_instructions_left > initial_num_instructions_left {
-            exec_output.wasm.num_instructions_left = initial_num_instructions_left;
+        if exec_output.wasm.num_instructions_left > message_instruction_limit {
+            exec_output.wasm.num_instructions_left = message_instruction_limit;
             error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
         }
 

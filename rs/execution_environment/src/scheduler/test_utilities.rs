@@ -535,6 +535,7 @@ impl SchedulerTestBuilder {
             IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
+        let deterministic_time_slicing = config.deterministic_time_slicing;
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
@@ -558,6 +559,7 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            deterministic_time_slicing,
         );
         SchedulerTest {
             state: Some(state),
@@ -773,10 +775,10 @@ impl TestWasmExecutorCore {
         let (_message_id, message, call_context_id) = self.take_message(&input);
 
         // TODO(RUN-124): Use `slice_instruction_limit` and support DTS here.
-        let instruction_limit = input.execution_parameters.total_instruction_limit;
+        let instruction_limit = input.execution_parameters.instruction_limits.message();
         if message.instructions > instruction_limit {
             let slice = SliceExecutionOutput {
-                executed_instructions: input.execution_parameters.total_instruction_limit,
+                executed_instructions: input.execution_parameters.instruction_limits.slice(),
             };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),

@@ -4,12 +4,12 @@ use crate::execution_environment::RoundLimits;
 use crate::{CanisterHeartbeatError, Hypervisor};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallOrigin, CanisterState, ExecutionState, NetworkTopology, SchedulerState, SystemState,
 };
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{Cycles, NumBytes, Time};
 use std::sync::Arc;
@@ -119,7 +119,7 @@ pub fn execute_heartbeat(
     let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
-    let instructions_limit = execution_parameters.slice_instruction_limit;
+    let message_instruction_limit = execution_parameters.instruction_limits.message();
 
     // Validate and extract execution state.
     let (execution_state, mut system_state, scheduler_state) =
@@ -135,7 +135,7 @@ pub fn execute_heartbeat(
         &mut system_state,
         memory_usage,
         compute_allocation,
-        instructions_limit,
+        message_instruction_limit,
     ) {
         return HeartbeatResult::new(
             CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
@@ -185,7 +185,7 @@ pub fn execute_heartbeat(
     cycles_account_manager.refund_execution_cycles(
         &mut canister.system_state,
         num_instructions_left,
-        instructions_limit,
+        message_instruction_limit,
     );
 
     HeartbeatResult::new(canister, heap_delta)

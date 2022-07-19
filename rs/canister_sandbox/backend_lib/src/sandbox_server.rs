@@ -144,18 +144,16 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
-    use ic_config::embedders::Config as EmbeddersConfig;
     use ic_config::subnet_config::CyclesAccountManagerConfig;
+    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_cycles_account_manager::CyclesAccountManager;
-    use ic_interfaces::execution_environment::{
-        AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
-    };
+    use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, HypervisorError};
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
-        ApiType,
+        ApiType, ExecutionParameters, InstructionLimits,
     };
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
@@ -173,8 +171,11 @@ mod tests {
 
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
-            total_instruction_limit: NumInstructions::new(1000),
-            slice_instruction_limit: NumInstructions::new(1000),
+            instruction_limits: InstructionLimits::new(
+                FlagStatus::Disabled,
+                NumInstructions::new(1000),
+                NumInstructions::new(1000),
+            ),
             canister_memory_limit: NumBytes::new(4 << 30),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
@@ -1267,8 +1268,11 @@ mod tests {
             child_wasm_memory_id,
             child_stable_memory_id,
         );
-        exec_input.execution_parameters.total_instruction_limit = NumInstructions::new(1000);
-        exec_input.execution_parameters.slice_instruction_limit = NumInstructions::new(70);
+        exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
+            FlagStatus::Enabled,
+            NumInstructions::new(1000),
+            NumInstructions::new(70),
+        );
 
         // Execute the first slice.
         let rep = srv
@@ -1383,8 +1387,11 @@ mod tests {
             child_wasm_memory_id,
             child_stable_memory_id,
         );
-        exec_input.execution_parameters.total_instruction_limit = NumInstructions::new(1000);
-        exec_input.execution_parameters.slice_instruction_limit = NumInstructions::new(70);
+        exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
+            FlagStatus::Enabled,
+            NumInstructions::new(1000),
+            NumInstructions::new(70),
+        );
 
         // Execute the first slice.
         let rep = srv

@@ -2,15 +2,15 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_execution_environment::{as_round_instructions, RoundLimits};
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SubnetAvailableMemory};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities::{
     mock_time,
@@ -116,8 +116,11 @@ where
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
-        total_instruction_limit: MAX_NUM_INSTRUCTIONS,
-        slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
+        instruction_limits: InstructionLimits::new(
+            FlagStatus::Disabled,
+            MAX_NUM_INSTRUCTIONS,
+            MAX_NUM_INSTRUCTIONS,
+        ),
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
         compute_allocation: canister_state.scheduler_state.compute_allocation,
         subnet_type: SubnetType::Application,

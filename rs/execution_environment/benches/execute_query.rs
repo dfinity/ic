@@ -56,7 +56,9 @@ pub fn bench_execute_query(c: &mut Criterion) {
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
             let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(execution_parameters.total_instruction_limit),
+                instructions: as_round_instructions(
+                    execution_parameters.instruction_limits.message(),
+                ),
                 subnet_available_memory,
             };
             let instructions_before = round_limits.instructions;

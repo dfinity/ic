@@ -14,14 +14,15 @@ const M: u64 = 1_000_000;
 
 // The limit on the number of instructions a message is allowed to executed.
 // Going above the limit results in an `InstructionLimitExceeded` error.
-// Note that without deterministic time slicing this limit must be the same as
-// `MAX_INSTRUCTIONS_PER_SLICE`.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
 
+// The limit on the number of instructions a slice is allowed to executed.
+// If deterministic time slicing is enabled, then going above this limit
+// causes the Wasm execution to pause until the next slice.
+// If deterministic time slicing is disabled, then this limit is ignored and
+// `MAX_INSTRUCTIONS_PER_MESSAGE` is used for execution of the single slice.
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU one message has
 // approximately 2.5 seconds to be processed.
-// Note that without deterministic time slicing this limit must be the same as
-// `MAX_INSTRUCTIONS_PER_MESSAGE`.
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes

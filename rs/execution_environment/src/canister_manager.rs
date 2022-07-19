@@ -16,7 +16,7 @@ use ic_ic00_types::{
     InstallCodeArgs, Method as Ic00Method, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, IngressHistoryWriter,
+    CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter,
 };
 use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -26,6 +26,7 @@ use ic_replicated_state::{
     SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
+use ic_system_api::ExecutionParameters;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
@@ -614,7 +615,7 @@ impl CanisterManager {
         let old_canister = match state.take_canister_state(&context.canister_id) {
             None => {
                 return (
-                    execution_parameters.total_instruction_limit,
+                    execution_parameters.instruction_limits.message(),
                     Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
                     None,
                 );
@@ -679,6 +680,7 @@ impl CanisterManager {
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
+        let message_instruction_limit = execution_parameters.instruction_limits.message();
         if context.compute_allocation.is_some() {
             warn!(
                 self.log,
@@ -692,19 +694,13 @@ impl CanisterManager {
         {
             return DtsInstallCodeResult {
                 old_canister,
-                response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
-                    Err(err),
-                )),
+                response: InstallCodeResponse::Result((message_instruction_limit, Err(err))),
             };
         }
         if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
             return DtsInstallCodeResult {
                 old_canister,
-                response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
-                    Err(err),
-                )),
+                response: InstallCodeResponse::Result((message_instruction_limit, Err(err))),
             };
         }
         match context.mode {
@@ -713,7 +709,7 @@ impl CanisterManager {
                     return DtsInstallCodeResult {
                         old_canister,
                         response: InstallCodeResponse::Result((
-                            execution_parameters.total_instruction_limit,
+                            message_instruction_limit,
                             Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
                         )),
                     };
@@ -729,7 +725,7 @@ impl CanisterManager {
             return DtsInstallCodeResult {
                 old_canister,
                 response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
+                    message_instruction_limit,
                     Err(CanisterManagerError::InstallCodeRateLimited(can_id)),
                 )),
             };
@@ -749,12 +745,12 @@ impl CanisterManager {
             &mut old_canister.system_state,
             memory_usage,
             compute_allocation,
-            execution_parameters.total_instruction_limit,
+            message_instruction_limit,
         ) {
             return DtsInstallCodeResult {
                 old_canister,
                 response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
+                    message_instruction_limit,
                     Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
                 )),
             };
@@ -762,7 +758,6 @@ impl CanisterManager {
 
         // Copy bits out of context as the calls below are going to consume it.
         let mode = context.mode;
-        let instruction_limit = execution_parameters.total_instruction_limit;
 
         let round = RoundContext {
             network_topology,
@@ -796,7 +791,7 @@ impl CanisterManager {
         match res.response {
             InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
                 res.old_canister,
-                instruction_limit,
+                message_instruction_limit,
                 instructions_left,
                 result,
                 mode,
@@ -807,7 +802,7 @@ impl CanisterManager {
             InstallCodeResponse::Paused(paused_install_code_execution) => {
                 let paused_execution = Box::new(PausedInstallCode {
                     paused_install_code_execution,
-                    instruction_limit,
+                    message_instruction_limit,
                     mode,
                     canister_layout_path,
                     config: self.config.clone(),
@@ -1868,7 +1863,7 @@ fn finish_install_code(
 #[derive(Debug)]
 struct PausedInstallCode {
     paused_install_code_execution: Box<dyn PausedInstallCodeExecution>,
-    instruction_limit: NumInstructions,
+    message_instruction_limit: NumInstructions,
     mode: CanisterInstallMode,
     canister_layout_path: PathBuf,
     config: CanisterMgrConfig,
@@ -1887,7 +1882,7 @@ impl PausedInstallCodeExecution for PausedInstallCode {
         match res.response {
             InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
                 res.old_canister,
-                self.instruction_limit,
+                self.message_instruction_limit,
                 instructions_left,
                 result,
                 self.mode,

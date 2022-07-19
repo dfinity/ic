@@ -183,6 +183,7 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
+            config.deterministic_time_slicing,
         ));
 
         Self {

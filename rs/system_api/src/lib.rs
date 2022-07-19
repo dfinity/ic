@@ -5,9 +5,10 @@ pub mod sandbox_safe_system_state;
 mod stable_memory;
 pub mod system_api_empty;
 
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionComplexity, ExecutionParameters,
+    AvailableMemory, ExecutionComplexity, ExecutionMode,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, SubnetAvailableMemory,
     SystemApi,
@@ -21,7 +22,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
-    CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -80,6 +81,71 @@ fn summarize(heap: &[u8], start: u32, size: u32) -> u64 {
     } else {
         0
     }
+}
+
+/// Keeps the message instruction limit and the maximum slice instruction limit.
+/// Supports operations to reduce the message limit while keeping the maximum
+/// slice limit the same, which is useful for messages that have multiple
+/// execution steps such as install, upgrade, and response.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct InstructionLimits {
+    /// The total instruction limit for message execution. With deterministic
+    /// time slicing this limit may exceed the per-round instruction limit.  The
+    /// message fails with an `InstructionLimitExceeded` error if it executes
+    /// more instructions than this limit.
+    message: NumInstructions,
+
+    /// The number of instructions in the largest possible slice. It may
+    /// exceed `self.message()` if the latter was reduced or updated by the
+    /// previous executions.
+    max_slice: NumInstructions,
+}
+
+impl InstructionLimits {
+    /// Returns the message and slice instruction limits based on the
+    /// deterministic time slicing flag.
+    pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
+        Self {
+            message,
+            max_slice: match dts {
+                FlagStatus::Enabled => max_slice,
+                FlagStatus::Disabled => message,
+            },
+        }
+    }
+
+    /// See the comments of the corresponding field.
+    pub fn message(&self) -> NumInstructions {
+        self.message
+    }
+
+    /// Returns the effective slice size, which is the smallest of
+    /// `self.max_slice` and `self.message`.
+    pub fn slice(&self) -> NumInstructions {
+        self.max_slice.min(self.message)
+    }
+
+    /// Reduces the message instruction limit by the given number.
+    /// Note that with DTS, the slice size is constant for a fixed message type.
+    pub fn reduce_by(&mut self, used: NumInstructions) {
+        self.message = NumInstructions::from(self.message.get().saturating_sub(used.get()));
+    }
+
+    /// Sets the message instruction limit to the given number.
+    /// Note that with DTS, the slice size is constant for a fixed message type.
+    pub fn update(&mut self, left: NumInstructions) {
+        self.message = left;
+    }
+}
+
+// Canister and subnet configuration parameters required for execution.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExecutionParameters {
+    pub instruction_limits: InstructionLimits,
+    pub canister_memory_limit: NumBytes,
+    pub compute_allocation: ComputeAllocation,
+    pub subnet_type: SubnetType,
+    pub execution_mode: ExecutionMode,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -1093,11 +1159,11 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn total_instruction_limit(&self) -> NumInstructions {
-        self.execution_parameters.total_instruction_limit
+        self.execution_parameters.instruction_limits.message()
     }
 
     fn slice_instruction_limit(&self) -> NumInstructions {
-        self.execution_parameters.slice_instruction_limit
+        self.execution_parameters.instruction_limits.slice()
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {

@@ -18,6 +18,7 @@ use crate::{
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{
     CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
@@ -35,8 +36,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces::{
     execution_environment::{
-        ExecutionMode, ExecutionParameters, HypervisorError, IngressHistoryWriter,
-        SubnetAvailableMemory,
+        ExecutionMode, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -51,6 +51,7 @@ use ic_replicated_state::{
     },
     CanisterState, NetworkTopology, ReplicatedState,
 };
+use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::messages::MessageId;
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
@@ -320,7 +321,7 @@ impl ExecutionEnvironment {
         &self,
         msg: CanisterInputMessage,
         mut state: ReplicatedState,
-        instructions_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         registry_settings: &RegistryExecutionSettings,
@@ -400,7 +401,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::InstallCode) => {
                 let res =
-                    self.execute_install_code(&msg, &mut state, instructions_limit, round_limits);
+                    self.execute_install_code(&msg, &mut state, instruction_limits, round_limits);
                 Some((res, msg.take_cycles()))
             }
 
@@ -874,7 +875,7 @@ impl ExecutionEnvironment {
     pub fn execute_canister_message(
         &self,
         canister: CanisterState,
-        instructions_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         msg: CanisterInputMessage,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -885,7 +886,7 @@ impl ExecutionEnvironment {
                 return self.execute_canister_response(
                     canister,
                     response,
-                    instructions_limit,
+                    instruction_limits,
                     time,
                     network_topology,
                     round_limits,
@@ -903,12 +904,14 @@ impl ExecutionEnvironment {
             time,
         };
 
+        let execution_parameters =
+            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+
         execute_call(
             canister,
             req,
-            instructions_limit,
+            execution_parameters,
             time,
-            &self.config,
             round,
             round_limits,
         )
@@ -918,13 +921,19 @@ impl ExecutionEnvironment {
     pub fn execute_canister_heartbeat(
         &self,
         canister: CanisterState,
-        instructions_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         network_topology: Arc<NetworkTopology>,
         time: Time,
         round_limits: &mut RoundLimits,
     ) -> (CanisterState, Result<NumBytes, CanisterHeartbeatError>) {
+        // A heartbeat is expected to finish quickly, so DTS is not supported for it.
+        let instruction_limits = InstructionLimits::new(
+            FlagStatus::Disabled,
+            instruction_limits.slice(),
+            instruction_limits.slice(),
+        );
         let execution_parameters =
-            self.execution_parameters(&canister, instructions_limit, ExecutionMode::Replicated);
+            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
         let (canister, result) = execute_heartbeat(
             canister,
             network_topology,
@@ -975,12 +984,11 @@ impl ExecutionEnvironment {
     fn execution_parameters(
         &self,
         canister: &CanisterState,
-        instruction_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         execution_mode: ExecutionMode,
     ) -> ExecutionParameters {
         ExecutionParameters {
-            total_instruction_limit: instruction_limit,
-            slice_instruction_limit: instruction_limit,
+            instruction_limits,
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
@@ -1142,13 +1150,13 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         response: Arc<Response>,
-        instruction_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_parameters =
-            self.execution_parameters(&canister, instruction_limit, ExecutionMode::Replicated);
+            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
         let round = RoundContext {
             network_topology: &*network_topology,
             hypervisor: &self.hypervisor,
@@ -1248,11 +1256,16 @@ impl ExecutionEnvironment {
             // Letting the canister grow arbitrarily when executing the
             // query is fine as we do not persist state modifications.
             let subnet_available_memory = subnet_memory_capacity(&self.config);
-            let execution_parameters = self.execution_parameters(
-                canister,
+
+            // An inspect message is expected to finish quickly, so DTS is not
+            // supported for it.
+            let instruction_limits = InstructionLimits::new(
+                FlagStatus::Disabled,
                 self.config.max_instructions_for_message_acceptance_calls,
-                execution_mode,
+                self.config.max_instructions_for_message_acceptance_calls,
             );
+            let execution_parameters =
+                self.execution_parameters(canister, instruction_limits, execution_mode);
             inspect_message::execute_inspect_message(
                 state.time(),
                 canister.clone(),
@@ -1279,11 +1292,15 @@ impl ExecutionEnvironment {
     ) -> Result<WasmResult, UserError> {
         let canister_id = anonymous_query.receiver;
         let canister = state.get_active_canister(&canister_id)?;
-        let execution_parameters = self.execution_parameters(
-            &canister,
+        // An anonymous query is expected to finish quickly, so DTS is not
+        // supported for it.
+        let instruction_limits = InstructionLimits::new(
+            FlagStatus::Disabled,
             max_instructions_per_message,
-            ExecutionMode::NonReplicated,
+            max_instructions_per_message,
         );
+        let execution_parameters =
+            self.execution_parameters(&canister, instruction_limits, ExecutionMode::NonReplicated);
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_message),
@@ -1606,7 +1623,7 @@ impl ExecutionEnvironment {
         &self,
         msg: &RequestOrIngress,
         state: &mut ReplicatedState,
-        instructions_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let payload = msg.method_payload();
@@ -1625,8 +1642,7 @@ impl ExecutionEnvironment {
         let timer = Timer::start();
 
         let execution_parameters = ExecutionParameters {
-            total_instruction_limit: instructions_limit,
-            slice_instruction_limit: instructions_limit,
+            instruction_limits,
             canister_memory_limit: self.config.max_canister_memory_size,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: state.metadata.own_subnet_type,
@@ -1746,7 +1762,7 @@ pub struct ExecuteCanisterResult {
 pub fn execute_canister(
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
-    instructions_limit: NumInstructions,
+    instruction_limits: InstructionLimits,
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
@@ -1764,7 +1780,7 @@ pub fn execute_canister(
             ExecutionTask::Heartbeat => {
                 let (canister, result) = exec_env.execute_canister_heartbeat(
                     canister,
-                    instructions_limit,
+                    instruction_limits,
                     network_topology,
                     time,
                     round_limits,
@@ -1784,7 +1800,7 @@ pub fn execute_canister(
 
             let result = exec_env.execute_canister_message(
                 canister,
-                instructions_limit,
+                instruction_limits,
                 message,
                 time,
                 network_topology,

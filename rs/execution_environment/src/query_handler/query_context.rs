@@ -45,17 +45,16 @@ use crate::{
     NonReplicatedQueryKind,
 };
 use ic_base_types::NumBytes;
+use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::methods::{FuncRef, WasmClosure};
 use ic_types::{
     ingress::WasmResult,
@@ -409,7 +408,9 @@ impl<'a> QueryContext<'a> {
                 .allocation_before_execution(&canister.canister_id())
                 .into(),
         );
-        let execution_parameters = self.execution_parameters(&canister, instruction_limit);
+        let instruction_limits =
+            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let (canister, instructions_left, result) = execute_non_replicated_query(
             query_kind,
@@ -507,7 +508,9 @@ impl<'a> QueryContext<'a> {
                 .allocation_before_execution(&canister_id)
                 .into(),
         );
-        let execution_parameters = self.execution_parameters(&canister, instruction_limit);
+        let instruction_limits =
+            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -522,6 +525,9 @@ impl<'a> QueryContext<'a> {
 
         let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
         canister.execution_state = Some(output_execution_state);
+        execution_parameters
+            .instruction_limits
+            .update(output.num_instructions_left);
 
         let (instructions_left, result) = match output.wasm_result {
             result @ Ok(_) => {
@@ -544,11 +550,7 @@ impl<'a> QueryContext<'a> {
                         &call_origin,
                         callback_err,
                         canister_current_memory_usage,
-                        ExecutionParameters {
-                            total_instruction_limit: output.num_instructions_left,
-                            slice_instruction_limit: output.num_instructions_left,
-                            ..execution_parameters
-                        },
+                        execution_parameters,
                     ),
                 }
             }
@@ -976,11 +978,10 @@ impl<'a> QueryContext<'a> {
     fn execution_parameters(
         &self,
         canister: &CanisterState,
-        instruction_limit: NumInstructions,
+        instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
         ExecutionParameters {
-            total_instruction_limit: instruction_limit,
-            slice_instruction_limit: instruction_limit,
+            instruction_limits,
             canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,

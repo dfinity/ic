@@ -6,16 +6,16 @@ use crate::canister_manager::{
     canister_layout, CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
     InstallCodeResponse, InstallCodeResult,
 };
-use crate::execution::common::{deduct_compilation_instructions, update_round_limits};
+use crate::execution::common::update_round_limits;
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
-use ic_interfaces::execution_environment::{ExecutionParameters, WasmExecutionOutput};
+use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{MemoryAllocation, NumInstructions, Time};
 use std::path::PathBuf;
@@ -86,19 +86,16 @@ pub(crate) fn execute_install(
                 return DtsInstallCodeResult {
                     old_canister,
                     response: InstallCodeResponse::Result((
-                        execution_parameters.total_instruction_limit,
+                        execution_parameters.instruction_limits.message(),
                         Err((canister_id, err).into()),
                     )),
                 };
             }
         };
 
-    let instructions_left = deduct_compilation_instructions(
-        execution_parameters.total_instruction_limit,
-        instructions_from_compilation,
-    );
-    execution_parameters.total_instruction_limit = instructions_left;
-    execution_parameters.slice_instruction_limit = instructions_left;
+    execution_parameters
+        .instruction_limits
+        .reduce_by(instructions_from_compilation);
 
     let system_state = old_canister.system_state.clone();
     let scheduler_state = old_canister.scheduler_state.clone();
@@ -120,7 +117,7 @@ pub(crate) fn execute_install(
             return DtsInstallCodeResult {
                 old_canister,
                 response: InstallCodeResponse::Result((
-                    execution_parameters.total_instruction_limit,
+                    execution_parameters.instruction_limits.message(),
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
@@ -147,11 +144,12 @@ pub(crate) fn execute_install(
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
+        let instructions_left = execution_parameters.instruction_limits.message();
         info!(
             round.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
+            execution_parameters.instruction_limits.message() - instructions_left,
             instructions_left
         );
         new_canister.execution_state = Some(execution_state);
@@ -289,11 +287,12 @@ fn install_stage_2b_continue_install_after_start(
         round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
-        execution_parameters.total_instruction_limit - instructions_left,
+        execution_parameters.instruction_limits.message() - instructions_left,
         instructions_left
     );
-    execution_parameters.total_instruction_limit = instructions_left;
-    execution_parameters.slice_instruction_limit = instructions_left;
+    execution_parameters
+        .instruction_limits
+        .update(instructions_left);
 
     // Stage 3: invoke the `canister_init()` method of the Wasm module (if present).
 
@@ -311,7 +310,7 @@ fn install_stage_2b_continue_install_after_start(
             round.log,
             "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
+            execution_parameters.instruction_limits.message() - instructions_left,
             instructions_left
         );
         return DtsInstallCodeResult {
@@ -388,7 +387,7 @@ fn install_stage_3_process_init_result(
         round.log,
         "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
-        execution_parameters.total_instruction_limit - output.num_instructions_left,
+        execution_parameters.instruction_limits.message() - output.num_instructions_left,
         output.num_instructions_left
     );
 

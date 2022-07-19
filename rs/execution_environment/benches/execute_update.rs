@@ -375,13 +375,15 @@ pub fn bench_execute_update(c: &mut Criterion) {
              ..
          }| {
             let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(execution_parameters.total_instruction_limit),
+                instructions: as_round_instructions(
+                    execution_parameters.instruction_limits.message(),
+                ),
                 subnet_available_memory,
             };
             let instructions_before = round_limits.instructions;
             let res = ee_test.execution_environment().execute_canister_message(
                 canister_state,
-                execution_parameters.total_instruction_limit,
+                execution_parameters.instruction_limits,
                 ingress,
                 time,
                 network_topology,

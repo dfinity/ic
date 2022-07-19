@@ -9,9 +9,8 @@ use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
-use ic_interfaces::execution_environment::ExecutionParameters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time};
@@ -38,7 +37,7 @@ pub fn execute_non_replicated_query(
     if let Err(err) = validate_canister(&canister) {
         return (
             canister,
-            execution_parameters.total_instruction_limit,
+            execution_parameters.instruction_limits.message(),
             Err(err),
         );
     }
@@ -51,7 +50,7 @@ pub fn execute_non_replicated_query(
         let canister_id = canister.canister_id();
         return (
             canister,
-            execution_parameters.total_instruction_limit,
+            execution_parameters.instruction_limits.message(),
             Err(err.into_user_error(&canister_id)),
         );
     }
