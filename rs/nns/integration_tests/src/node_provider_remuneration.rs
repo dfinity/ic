@@ -412,6 +412,8 @@ async fn set_average_icp_xdr_conversion_rate(
         ..Default::default()
     };
 
+    // Add conversion rate proposals for the past 31 days.
+    payload.timestamp_seconds -= 86400 * 31;
     for _ in 0..31 {
         payload.timestamp_seconds += 86400;
         set_icp_xdr_conversion_rate(nns_canisters, payload.clone()).await;
