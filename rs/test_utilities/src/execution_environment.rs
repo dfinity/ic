@@ -38,6 +38,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState, SubnetTopology,
 };
+use ic_system_api::InstructionLimits;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::Time;
@@ -92,8 +93,8 @@ pub struct ExecutionTest {
     user_id: UserId,
 
     // Read-only fields.
-    instruction_limit: NumInstructions,
-    install_code_instruction_limit: NumInstructions,
+    instruction_limits: InstructionLimits,
+    install_code_instruction_limits: InstructionLimits,
     initial_canister_cycles: Cycles,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
@@ -544,7 +545,7 @@ impl ExecutionTest {
         let instructions_before = round_limits.instructions;
         let (canister, result) = self.exec_env.execute_canister_heartbeat(
             canister,
-            self.instruction_limit,
+            self.instruction_limits.clone(),
             network_topology,
             self.time,
             &mut round_limits,
@@ -558,7 +559,11 @@ impl ExecutionTest {
             state.metadata.heap_delta_estimate += heap_delta;
         }
         self.state = Some(state);
-        self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
+        self.update_execution_stats(
+            canister_id,
+            self.instruction_limits.message(),
+            instructions_executed,
+        );
         result?;
         Ok(())
     }
@@ -577,9 +582,11 @@ impl ExecutionTest {
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result =
-            self.exec_env
-                .execute_anonymous_query(query, state.clone(), self.instruction_limit);
+        let result = self.exec_env.execute_anonymous_query(
+            query,
+            state.clone(),
+            self.instruction_limits.message(),
+        );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
         result
@@ -601,7 +608,7 @@ impl ExecutionTest {
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
-            self.instruction_limit,
+            self.instruction_limits.clone(),
             mock_time(),
             network_topology,
             &mut round_limits,
@@ -612,7 +619,11 @@ impl ExecutionTest {
             .set(round_limits.subnet_available_memory.get());
 
         state.metadata.heap_delta_estimate += result.heap_delta;
-        self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
+        self.update_execution_stats(
+            canister_id,
+            self.instruction_limits.message(),
+            instructions_executed,
+        );
         state.put_canister_state(result.canister);
         self.state = Some(state);
         result.response
@@ -682,7 +693,7 @@ impl ExecutionTest {
         let new_state = self.exec_env.execute_subnet_message(
             message,
             state,
-            self.install_code_instruction_limit,
+            self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
             &self.ecdsa_subnet_public_keys,
             &self.registry_settings,
@@ -696,7 +707,7 @@ impl ExecutionTest {
         if let Some(canister_id) = maybe_canister_id {
             self.update_execution_stats(
                 canister_id,
-                self.install_code_instruction_limit,
+                self.install_code_instruction_limits.message(),
                 instructions_executed,
             );
         }
@@ -736,7 +747,7 @@ impl ExecutionTest {
                 let instructions_before = round_limits.instructions;
                 let result = self.exec_env.execute_canister_message(
                     canister,
-                    self.instruction_limit,
+                    self.instruction_limits.clone(),
                     message,
                     self.time,
                     Arc::clone(&network_topology),
@@ -748,7 +759,7 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += heap_delta;
                 self.update_execution_stats(
                     canister_id,
-                    self.instruction_limit,
+                    self.instruction_limits.message(),
                     instructions_executed,
                 );
                 canister = new_canister;
@@ -782,7 +793,7 @@ impl ExecutionTest {
             let instructions_before = round_limits.instructions;
             let result = self.exec_env.execute_canister_message(
                 canister,
-                self.instruction_limit,
+                self.instruction_limits.clone(),
                 message,
                 self.time,
                 Arc::clone(&network_topology),
@@ -794,7 +805,11 @@ impl ExecutionTest {
                 .set(round_limits.subnet_available_memory.get());
             let (new_canister, heap_delta, ingress) = process_result(result);
             state.metadata.heap_delta_estimate += heap_delta;
-            self.update_execution_stats(canister_id, self.instruction_limit, instructions_executed);
+            self.update_execution_stats(
+                canister_id,
+                self.instruction_limits.message(),
+                instructions_executed,
+            );
             canister = new_canister;
             if let Some(ir) = ingress {
                 self.ingress_history_writer
@@ -938,12 +953,14 @@ pub struct ExecutionTestBuilder {
     ecdsa_key: Option<EcdsaKeyId>,
     instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
+    slice_instruction_limit: NumInstructions,
     initial_canister_cycles: Cycles,
     subnet_total_memory: i64,
     subnet_message_memory: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
+    deterministic_time_slicing: bool,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
 }
@@ -968,12 +985,14 @@ impl Default for ExecutionTestBuilder {
             ecdsa_key: None,
             instruction_limit: config.max_instructions_per_message,
             install_code_instruction_limit: config.max_instructions_per_install_code,
+            slice_instruction_limit: config.max_instructions_per_slice,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
             subnet_message_memory: subnet_total_memory,
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
+            deterministic_time_slicing: false,
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
         }
@@ -1048,6 +1067,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_slice_instruction_limit(self, slice_instruction_limit: u64) -> Self {
+        Self {
+            slice_instruction_limit: NumInstructions::from(slice_instruction_limit),
+            ..self
+        }
+    }
+
     pub fn with_initial_canister_cycles(self, initial_canister_cycles: u128) -> Self {
         Self {
             initial_canister_cycles: Cycles::new(initial_canister_cycles),
@@ -1096,6 +1122,13 @@ impl ExecutionTestBuilder {
     pub fn with_rate_limiting_of_instructions(self) -> Self {
         Self {
             rate_limiting_of_instructions: true,
+            ..self
+        }
+    }
+
+    pub fn with_deterministic_time_slicing(self) -> Self {
+        Self {
+            deterministic_time_slicing: true,
             ..self
         }
     }
@@ -1207,8 +1240,14 @@ impl ExecutionTestBuilder {
         } else {
             FlagStatus::Disabled
         };
+        let deterministic_time_slicing = if self.deterministic_time_slicing {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = Config {
             rate_limiting_of_instructions,
+            deterministic_time_slicing,
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             ..Config::default()
         };
@@ -1248,8 +1287,16 @@ impl ExecutionTestBuilder {
                 self.subnet_message_memory,
             )),
             time: mock_time(),
-            instruction_limit: self.instruction_limit,
-            install_code_instruction_limit: self.install_code_instruction_limit,
+            instruction_limits: InstructionLimits::new(
+                deterministic_time_slicing,
+                self.instruction_limit,
+                self.slice_instruction_limit,
+            ),
+            install_code_instruction_limits: InstructionLimits::new(
+                deterministic_time_slicing,
+                self.install_code_instruction_limit,
+                self.slice_instruction_limit,
+            ),
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),

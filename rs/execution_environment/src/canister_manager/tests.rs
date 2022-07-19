@@ -19,9 +19,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType,
     CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, HypervisorError};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -31,6 +29,7 @@ use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
     CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
 };
+use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     execution_environment::{
@@ -83,8 +82,11 @@ lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
-        total_instruction_limit: MAX_NUM_INSTRUCTIONS,
-        slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
+        instruction_limits: InstructionLimits::new(
+            FlagStatus::Disabled,
+            MAX_NUM_INSTRUCTIONS,
+            MAX_NUM_INSTRUCTIONS
+        ),
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
@@ -266,7 +268,9 @@ fn install_code(
         state,
         EXECUTION_PARAMETERS.clone(),
         &mut RoundLimits {
-            instructions: as_round_instructions((*EXECUTION_PARAMETERS).total_instruction_limit),
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
         },
     )
@@ -286,8 +290,11 @@ fn install_code_with_instruction_limit(
         context,
         state,
         ExecutionParameters {
-            total_instruction_limit: instruction_limit,
-            slice_instruction_limit: instruction_limit,
+            instruction_limits: InstructionLimits::new(
+                FlagStatus::Disabled,
+                instruction_limit,
+                instruction_limit,
+            ),
             ..EXECUTION_PARAMETERS.clone()
         },
         &mut RoundLimits {

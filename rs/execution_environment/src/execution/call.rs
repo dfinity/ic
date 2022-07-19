@@ -10,14 +10,11 @@ use crate::execution::common::{
 use crate::execution_environment::{
     ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
-use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messages::CanisterInputMessage;
-use ic_interfaces::{
-    execution_environment::{ExecutionMode, ExecutionParameters, HypervisorError},
-    messages::RequestOrIngress,
-};
+use ic_interfaces::{execution_environment::HypervisorError, messages::RequestOrIngress};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
@@ -27,7 +24,7 @@ use ic_types::{
     CanisterId, NumBytes, NumInstructions, Time,
 };
 
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::methods::{FuncRef, WasmMethod};
 
 use super::common::update_round_limits;
@@ -99,12 +96,22 @@ fn validate_message(
 pub fn execute_call(
     mut canister: CanisterState,
     req: RequestOrIngress,
-    instruction_limit: NumInstructions,
+    mut execution_parameters: ExecutionParameters,
     time: Time,
-    config: &ExecutionConfig,
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
+    let is_query_call = canister.exports_query_method(req.method_name().to_string());
+    if is_query_call {
+        // A query call is expected to finish quickly, so DTS is not supported for it.
+        let slice_instruction_limit = execution_parameters.instruction_limits.slice();
+        execution_parameters.instruction_limits = InstructionLimits::new(
+            FlagStatus::Disabled,
+            slice_instruction_limit,
+            slice_instruction_limit,
+        )
+    };
+    // Withdraw execution cycles.
     let subnet_type = round.hypervisor.subnet_type();
     let memory_usage = canister.memory_usage(subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
@@ -112,32 +119,22 @@ pub fn execute_call(
         &mut canister.system_state,
         memory_usage,
         compute_allocation,
-        instruction_limit,
+        execution_parameters.instruction_limits.message(),
     ) {
         let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
         return early_error_to_result(user_error, canister, req, time);
     }
 
-    let mut execution_parameters = ExecutionParameters {
-        total_instruction_limit: instruction_limit,
-        slice_instruction_limit: instruction_limit,
-        canister_memory_limit: canister.memory_limit(config.max_canister_memory_size),
-        compute_allocation: canister.scheduler_state.compute_allocation,
-        subnet_type,
-        execution_mode: ExecutionMode::Replicated,
-    };
-
     if let Err(user_error) = validate_message(&canister, &req, time, round.log) {
-        let mut result = early_error_to_result(user_error, canister, req, time);
         round.cycles_account_manager.refund_execution_cycles(
-            &mut result.canister.system_state,
-            instruction_limit,
-            instruction_limit,
+            &mut canister.system_state,
+            execution_parameters.instruction_limits.message(),
+            execution_parameters.instruction_limits.message(),
         );
-        result
-    } else if canister.exports_query_method(req.method_name().to_string()) {
-        // DTS is not supported in query calls.
-        execution_parameters.total_instruction_limit = execution_parameters.slice_instruction_limit;
+        return early_error_to_result(user_error, canister, req, time);
+    }
+
+    if is_query_call {
         execute_query_method(
             canister,
             req,
@@ -203,7 +200,7 @@ fn execute_update_method(
         call_context_id,
         call_origin,
         time,
-        total_instruction_limit: execution_parameters.total_instruction_limit,
+        message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: req,
     };
     process_update_result(canister, result, original, round, round_limits)
@@ -267,7 +264,7 @@ fn process_update_result(
             round.cycles_account_manager.refund_execution_cycles(
                 &mut canister.system_state,
                 output.num_instructions_left,
-                original.total_instruction_limit,
+                original.message_instruction_limit,
             );
             ExecuteMessageResult {
                 canister,
@@ -285,7 +282,7 @@ struct OriginalContext {
     call_context_id: CallContextId,
     call_origin: CallOrigin,
     time: Time,
-    total_instruction_limit: NumInstructions,
+    message_instruction_limit: NumInstructions,
     message: RequestOrIngress,
 }
 
@@ -362,7 +359,7 @@ fn execute_query_method(
     round.cycles_account_manager.refund_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
-        execution_parameters.total_instruction_limit,
+        execution_parameters.instruction_limits.message(),
     );
 
     ExecuteMessageResult {

@@ -110,11 +110,12 @@ impl Execution {
     ) {
         let run_timer = std::time::Instant::now();
 
-        let total_instruction_limit = exec_input.execution_parameters.total_instruction_limit;
-        let slice_instruction_limit = exec_input.execution_parameters.slice_instruction_limit;
+        let message_instruction_limit =
+            exec_input.execution_parameters.instruction_limits.message();
+        let slice_instruction_limit = exec_input.execution_parameters.instruction_limits.slice();
         let sandbox_manager = Arc::clone(&self.sandbox_manager);
         let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
-            i64::try_from(total_instruction_limit.get()).unwrap_or(i64::MAX),
+            i64::try_from(message_instruction_limit.get()).unwrap_or(i64::MAX),
             i64::try_from(slice_instruction_limit.get()).unwrap_or(i64::MAX),
             move |slice, paused_execution| {
                 {

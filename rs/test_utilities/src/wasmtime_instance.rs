@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ModificationTracking, SystemApiImpl,
+    sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
+    ModificationTracking, SystemApiImpl,
 };
 use ic_types::{ComputeAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -98,8 +100,11 @@ impl WasmtimeInstanceBuilder {
             sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             ExecutionParameters {
-                total_instruction_limit: self.num_instructions,
-                slice_instruction_limit: self.num_instructions,
+                instruction_limits: InstructionLimits::new(
+                    FlagStatus::Disabled,
+                    self.num_instructions,
+                    self.num_instructions,
+                ),
                 canister_memory_limit: ic_types::NumBytes::from(4 << 30),
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,

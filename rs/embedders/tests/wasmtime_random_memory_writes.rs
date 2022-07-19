@@ -1,13 +1,14 @@
 use ic_config::embedders::Config;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
+use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
@@ -64,8 +65,11 @@ fn test_api_for_update(
         static_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
-            total_instruction_limit: MAX_NUM_INSTRUCTIONS,
-            slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
+            instruction_limits: InstructionLimits::new(
+                FlagStatus::Disabled,
+                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS,
+            ),
             canister_memory_limit,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,

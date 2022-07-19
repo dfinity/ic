@@ -4,13 +4,13 @@ use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    SystemApiImpl,
+    ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
@@ -45,8 +45,11 @@ fn test_wasmtime_system_api() {
         sandbox_safe_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
-            total_instruction_limit: MAX_NUM_INSTRUCTIONS,
-            slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
+            instruction_limits: InstructionLimits::new(
+                FlagStatus::Disabled,
+                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS,
+            ),
             canister_memory_limit,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,

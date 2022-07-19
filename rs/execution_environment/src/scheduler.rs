@@ -27,6 +27,7 @@ use ic_replicated_state::{
     bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, ExecutionTask,
     InputQueueType, NetworkTopology, ReplicatedState,
 };
+use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
@@ -56,28 +57,6 @@ pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
 
-#[derive(Clone)]
-pub(crate) struct CanisterExecutionLimits {
-    max_heap_delta_per_iteration: NumBytes,
-    instruction_limit_per_message: NumInstructions,
-    instruction_overhead_per_message: NumInstructions,
-    max_message_duration_before_warn_in_seconds: f64,
-    _heap_delta_rate_limit: NumBytes,
-}
-
-impl CanisterExecutionLimits {
-    pub fn from(config: &SchedulerConfig) -> Self {
-        Self {
-            max_heap_delta_per_iteration: config.max_heap_delta_per_iteration,
-            instruction_limit_per_message: config.max_instructions_per_message,
-            instruction_overhead_per_message: config.instruction_overhead_per_message,
-            max_message_duration_before_warn_in_seconds: config
-                .max_message_duration_before_warn_in_seconds,
-            _heap_delta_rate_limit: config.heap_delta_rate_limit,
-        }
-    }
-}
-
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
@@ -90,6 +69,7 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
+    deterministic_time_slicing: FlagStatus,
 }
 
 /// Orders the canisters and updates their accumulated priorities according to
@@ -289,6 +269,7 @@ impl SchedulerImpl {
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
         rate_limiting_of_instructions: FlagStatus,
+        deterministic_time_slicing: FlagStatus,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
@@ -303,6 +284,7 @@ impl SchedulerImpl {
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            deterministic_time_slicing,
         }
     }
 
@@ -515,7 +497,6 @@ impl SchedulerImpl {
     ) {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
-        let canister_execution_limits = CanisterExecutionLimits::from(&self.config);
 
         // If there are no more instructions left, then skip execution and
         // return unchanged canisters.
@@ -554,8 +535,8 @@ impl SchedulerImpl {
                 let network_topology = Arc::clone(&network_topology);
                 let metrics = Arc::clone(&self.metrics);
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
-                let canister_execution_limits = canister_execution_limits.clone();
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
+                let deterministic_time_slicing = self.deterministic_time_slicing;
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
                     subnet_available_memory: round_limits_per_thread
@@ -563,17 +544,19 @@ impl SchedulerImpl {
                         .get()
                         .into(),
                 };
+                let config = &self.config;
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
                         exec_env,
-                        canister_execution_limits,
+                        config,
                         metrics,
                         round_id,
                         time,
                         network_topology,
                         logger,
                         rate_limiting_of_heap_delta,
+                        deterministic_time_slicing,
                         round_limits,
                     );
                 });
@@ -971,11 +954,16 @@ impl Scheduler for SchedulerImpl {
             // For now, we assume all subnet messages need the entire replicated
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
+                let instruction_limits = InstructionLimits::new(
+                    self.deterministic_time_slicing,
+                    self.config.max_instructions_per_message,
+                    self.config.max_instructions_per_slice,
+                );
                 let instructions_before = round_limits.instructions;
                 state = self.exec_env.execute_subnet_message(
                     CanisterInputMessage::Response(response.into()),
                     state,
-                    self.config.max_instructions_per_message,
+                    instruction_limits,
                     &mut csprng,
                     &ecdsa_subnet_public_keys,
                     registry_settings,
@@ -998,8 +986,13 @@ impl Scheduler for SchedulerImpl {
             let mut total_bitcoin_requests = 0;
 
             while let Some(msg) = state.pop_subnet_input() {
-                let instructions_limit_per_message =
+                let max_instructions_per_message =
                     get_instructions_limit_for_subnet_message(&self.config, &msg);
+                let instruction_limits = InstructionLimits::new(
+                    self.deterministic_time_slicing,
+                    max_instructions_per_message,
+                    self.config.max_instructions_per_slice,
+                );
 
                 if is_bitcoin_request(&msg) {
                     total_bitcoin_requests += 1;
@@ -1009,7 +1002,7 @@ impl Scheduler for SchedulerImpl {
                 state = self.exec_env.execute_subnet_message(
                     msg,
                     state,
-                    instructions_limit_per_message,
+                    instruction_limits,
                     &mut csprng,
                     &ecdsa_subnet_public_keys,
                     registry_settings,
@@ -1239,13 +1232,14 @@ struct ExecutionThreadResult {
 fn execute_canisters_on_thread(
     canisters_to_execute: Vec<CanisterState>,
     exec_env: &ExecutionEnvironment,
-    canister_execution_limits: CanisterExecutionLimits,
+    config: &SchedulerConfig,
     metrics: Arc<SchedulerMetrics>,
     round_id: ExecutionRound,
     time: Time,
     network_topology: Arc<NetworkTopology>,
     logger: ReplicaLogger,
     rate_limiting_of_heap_delta: FlagStatus,
+    deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
@@ -1259,11 +1253,17 @@ fn execute_canisters_on_thread(
     let mut total_messages_executed = NumMessages::from(0);
     let mut total_heap_delta = NumBytes::from(0);
 
+    let instruction_limits = InstructionLimits::new(
+        deterministic_time_slicing,
+        config.max_instructions_per_message,
+        config.max_instructions_per_slice,
+    );
+
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
         if round_limits.instructions <= RoundInstructions::from(0)
-            || total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration
+            || total_heap_delta >= config.max_heap_delta_per_iteration
         {
             canisters.push(canister);
             continue;
@@ -1295,7 +1295,7 @@ fn execute_canisters_on_thread(
             } = execute_canister(
                 exec_env,
                 canister,
-                canister_execution_limits.instruction_limit_per_message,
+                instruction_limits.clone(),
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
@@ -1309,20 +1309,18 @@ fn execute_canisters_on_thread(
                 &metrics,
                 &new_canister,
                 instructions_executed,
-                canister_execution_limits.instruction_limit_per_message,
+                instruction_limits.message(),
             );
             canister = new_canister;
             round_limits.instructions -=
-                as_round_instructions(canister_execution_limits.instruction_overhead_per_message);
+                as_round_instructions(config.instruction_overhead_per_message);
             total_messages_executed.inc_assign();
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
             }
             let msg_execution_duration = timer.stop_and_record();
-            if msg_execution_duration
-                > canister_execution_limits.max_message_duration_before_warn_in_seconds
-            {
+            if msg_execution_duration > config.max_message_duration_before_warn_in_seconds {
                 warn!(
                     logger,
                     "Finished executing message type {:?} on canister {:?} after {:?} seconds",
@@ -1332,7 +1330,7 @@ fn execute_canisters_on_thread(
                     messaging.canister_id => canister.canister_id().to_string(),
                 );
             }
-            if total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration {
+            if total_heap_delta >= config.max_heap_delta_per_iteration {
                 break;
             }
         }

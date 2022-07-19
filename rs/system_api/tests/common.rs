@@ -1,8 +1,9 @@
 use std::{convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -10,7 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    SystemApiImpl,
+    ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
     mock_time,
@@ -27,8 +28,11 @@ pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 pub fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
-        total_instruction_limit: NumInstructions::new(5_000_000_000),
-        slice_instruction_limit: NumInstructions::new(5_000_000_000),
+        instruction_limits: InstructionLimits::new(
+            FlagStatus::Disabled,
+            NumInstructions::from(5_000_000_000),
+            NumInstructions::from(5_000_000_000),
+        ),
         canister_memory_limit: NumBytes::new(4 << 30),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,

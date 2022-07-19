@@ -64,7 +64,10 @@ pub fn process_result(
             result.canister.push_output_response(response.into());
             None
         }
-        ExecutionResponse::Empty | ExecutionResponse::Paused(_) => None,
+        ExecutionResponse::Empty => None,
+        ExecutionResponse::Paused(_) => {
+            unreachable!("Unexpected paused execution in process_result.");
+        }
     };
     (result.canister, result.heap_delta, ingress_status)
 }

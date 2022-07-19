@@ -8,10 +8,12 @@ pub mod wasmtime_embedder;
 use std::{sync::Arc, time::Duration};
 
 pub use compilation_cache::CompilationCache;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionParameters};
+use ic_interfaces::execution_environment::AvailableMemory;
 use ic_replicated_state::{ExecutionState, Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+};
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 pub use serialized_module::{SerializedModule, SerializedModuleBytes};

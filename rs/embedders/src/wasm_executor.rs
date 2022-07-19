@@ -18,14 +18,16 @@ use crate::{
 use crate::{CompilationCache, CompilationResult, SerializedModule};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SystemApi, WasmExecutionOutput,
+    AvailableMemory, HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl};
+use ic_system_api::{
+    system_api_empty::SystemApiEmpty, ExecutionParameters, ModificationTracking, SystemApiImpl,
+};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
@@ -181,8 +183,8 @@ impl WasmExecutor for WasmExecutorImpl {
         // Since deterministic time slicing works only with sandboxing,
         // it must also be disabled and the execution limits must match.
         assert_eq!(
-            execution_parameters.total_instruction_limit,
-            execution_parameters.slice_instruction_limit
+            execution_parameters.instruction_limits.message(),
+            execution_parameters.instruction_limits.slice(),
         );
 
         // Ensure that Wasm is compiled.
@@ -200,7 +202,7 @@ impl WasmExecutor for WasmExecutorImpl {
                     execution_state,
                     WasmExecutionResult::Finished(
                         SliceExecutionOutput {
-                            executed_instructions: execution_parameters.slice_instruction_limit,
+                            executed_instructions: execution_parameters.instruction_limits.slice(),
                         },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
@@ -546,7 +548,7 @@ pub fn process(
     Option<WasmStateChanges>,
     Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
 ) {
-    let instruction_limit = execution_parameters.slice_instruction_limit;
+    let instruction_limit = execution_parameters.instruction_limits.slice();
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
     let system_api = SystemApiImpl::new(

@@ -15,7 +15,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
         MessageId, SignedIngressContent, UserQuery,
     },
-    ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -223,27 +223,6 @@ impl SubnetAvailableMemory {
 pub enum ExecutionMode {
     Replicated,
     NonReplicated,
-}
-
-// Canister and subnet configuration parameters required for execution.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ExecutionParameters {
-    /// The total instruction limit of message execution. With deterministic
-    /// time slicing this limit may exceed the per-round instruction limit.
-    /// The message fails with an out-of-instructions error if it executes
-    /// more instructions than this limit.
-    pub total_instruction_limit: NumInstructions,
-
-    /// Without deterministic time slicing, this limit must be equal to
-    /// `total_instruction_limit`. With deterministic time slicing this
-    /// limit specifies the number of instructions to execute before
-    /// pausing the execution.
-    pub slice_instruction_limit: NumInstructions,
-
-    pub canister_memory_limit: NumBytes,
-    pub compute_allocation: ComputeAllocation,
-    pub subnet_type: SubnetType,
-    pub execution_mode: ExecutionMode,
 }
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;

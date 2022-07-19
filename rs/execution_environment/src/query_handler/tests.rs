@@ -9,13 +9,12 @@ use crate::{
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, ExecutionParameters, QueryHandler,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, QueryHandler};
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -128,8 +127,11 @@ fn universal_canister(
             .build(),
         state,
         ExecutionParameters {
-            total_instruction_limit: INSTRUCTION_LIMIT,
-            slice_instruction_limit: INSTRUCTION_LIMIT,
+            instruction_limits: InstructionLimits::new(
+                FlagStatus::Disabled,
+                INSTRUCTION_LIMIT,
+                INSTRUCTION_LIMIT,
+            ),
             canister_memory_limit: MEMORY_CAPACITY,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,

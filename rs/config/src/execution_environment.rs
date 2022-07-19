@@ -107,6 +107,9 @@ pub struct Config {
     /// Specifies the percentage of subnet compute capacity that is allocatable
     /// by canisters.
     pub allocatable_compute_capacity_in_percent: usize,
+
+    /// Indicates whether deterministic time slicing is enabled or not.
+    pub deterministic_time_slicing: FlagStatus,
 }
 
 impl Default for Config {
@@ -133,6 +136,7 @@ impl Default for Config {
             rate_limiting_of_instructions: FlagStatus::Enabled,
             // TODO(RUN-211): Increase the allocatable capacity.
             allocatable_compute_capacity_in_percent: 50,
+            deterministic_time_slicing: FlagStatus::Disabled,
         }
     }
 }

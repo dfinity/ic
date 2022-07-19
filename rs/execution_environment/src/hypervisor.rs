@@ -6,9 +6,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
-use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorResult, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
@@ -18,6 +16,7 @@ use ic_replicated_state::{
     page_map::allocated_pages_count, CanisterState, ExecutionState, SchedulerState, SystemState,
 };
 use ic_sys::PAGE_SIZE;
+use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
     ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time,

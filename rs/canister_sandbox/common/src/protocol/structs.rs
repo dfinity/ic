@@ -1,13 +1,11 @@
 use ic_embedders::wasm_executor::SliceExecutionOutput;
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionParameters, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, WasmExecutionOutput};
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
-    ApiType,
+    ApiType, ExecutionParameters,
 };
 use ic_types::{methods::FuncRef, NumBytes};
 use serde::{Deserialize, Serialize};
