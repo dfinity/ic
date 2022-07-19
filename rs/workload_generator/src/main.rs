@@ -138,8 +138,7 @@ async fn main() {
                 .long("canister")
                 .takes_value(true)
                 .allow_invalid_utf8(true)
-                .conflicts_with("canister-id")
-                .help("Path to the canister code. Needs to match selected --method."),
+                .help("Path to the canister code. Needs to match selected --method. If --canister-id is also given then the code will be installed on the existing canister, otherwise a new canister will be created."),
         )
         .arg(
             Arg::new("install-endpoint")
@@ -434,10 +433,39 @@ async fn main() {
 
             // use id of install canister if no id specified
             let canister_id = if let Some(s) = matches.value_of("canister-id") {
-                CanisterId::try_from(PrincipalId::from_str(s).unwrap_or_else(|_| {
-                    panic!("Illegal value for option --canister-id: '{}'", s);
-                }))
-                .unwrap()
+                let canister_id =
+                    CanisterId::try_from(PrincipalId::from_str(s).unwrap_or_else(|_| {
+                        panic!("Illegal value for option --canister-id: '{}'", s);
+                    }))
+                    .unwrap();
+                if let Some(wasm_file_path) = matches.value_of_os("canister").map(Path::new) {
+                    let mut install_succeeded = false;
+                    for url in install_endpoint {
+                        match canister::install_canister(
+                            http_client.clone(),
+                            sender.clone(),
+                            url,
+                            canister_id,
+                            Some(wasm_file_path),
+                        )
+                        .await
+                        {
+                            Ok(()) => {
+                                install_succeeded = true;
+                                break;
+                            }
+                            Err(err) => println!(
+                                "⚠️  Could not install canister at replica url {}. {}",
+                                url, err
+                            ),
+                        }
+                    }
+
+                    if !install_succeeded {
+                        panic!("Failed to install wasm to existing canister");
+                    }
+                }
+                canister_id
             } else {
                 let wasm_file_path = matches.value_of_os("canister").map(Path::new);
                 canister::setup_canister(http_client, sender, install_endpoint, wasm_file_path)
