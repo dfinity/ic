@@ -55,7 +55,7 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     QueryAllocation, SubnetId,
 };
-use ic_wasm_types::WasmValidationError;
+use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use std::{collections::BTreeSet, convert::TryFrom, path::Path, sync::Arc};
@@ -110,7 +110,7 @@ impl InstallCodeContextBuilder {
     }
 
     pub fn wasm_module(mut self, wasm_module: Vec<u8>) -> Self {
-        self.ctx.wasm_module = wasm_module;
+        self.ctx.wasm_module = CanisterModule::new(wasm_module);
         self
     }
 
@@ -152,7 +152,7 @@ impl Default for InstallCodeContextBuilder {
             ctx: InstallCodeContext {
                 sender: PrincipalId::new_user_test_id(0),
                 canister_id: canister_test_id(0),
-                wasm_module: wabt::wat2wasm(EMPTY_WAT).unwrap(),
+                wasm_module: CanisterModule::new(wabt::wat2wasm(EMPTY_WAT).unwrap()),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2126,7 +2126,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: initial_wasm,
+                wasm_module: CanisterModule::new(initial_wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2144,7 +2144,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: upgrade_wasm,
+                wasm_module: CanisterModule::new(upgrade_wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2255,7 +2255,7 @@ fn failed_install_hooks_consume_instructions() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2359,7 +2359,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             sender,
             canister_id,
-            wasm_module: wasm.clone(),
+            wasm_module: CanisterModule::new(wasm.clone()),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -2385,7 +2385,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             sender,
             canister_id,
-            wasm_module: wasm.clone(),
+            wasm_module: CanisterModule::new(wasm.clone()),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -2405,7 +2405,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             sender,
             canister_id,
-            wasm_module: wasm.clone(),
+            wasm_module: CanisterModule::new(wasm.clone()),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -2431,7 +2431,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             sender,
             canister_id,
-            wasm_module: wasm,
+            wasm_module: CanisterModule::new(wasm),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -2485,7 +2485,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let compilation_cost = wasm_compilation_cost(&install_code_context.wasm_module);
+    let compilation_cost = wasm_compilation_cost(install_code_context.wasm_module.as_slice());
 
     let (instructions_left, res, canister) = install_code(
         &canister_manager,
@@ -2606,7 +2606,7 @@ fn lower_memory_allocation_than_usage_fails() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2674,7 +2674,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm.clone(),
+                wasm_module: CanisterModule::new(wasm.clone()),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2718,7 +2718,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2767,7 +2767,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2792,7 +2792,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm.clone(),
+                wasm_module: CanisterModule::new(wasm.clone()),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2839,7 +2839,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2940,7 +2940,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -2984,7 +2984,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm.clone(),
+                wasm_module: CanisterModule::new(wasm.clone()),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3024,7 +3024,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 sender,
                 canister_id,
-                wasm_module: wasm,
+                wasm_module: CanisterModule::new(wasm),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,

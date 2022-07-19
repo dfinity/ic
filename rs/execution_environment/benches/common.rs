@@ -23,6 +23,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
+use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -69,7 +70,9 @@ where
     };
     let (_, execution_state) = hypervisor
         .create_execution_state(
-            wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
+            CanisterModule::new(
+                wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
+            ),
             canister_root,
             canister_id,
             &mut round_limits,

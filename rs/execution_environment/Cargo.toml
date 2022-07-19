@@ -57,6 +57,7 @@ criterion = { version = "0.3", features = ["html_reports"] }
 iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-btc-types = { path = "../bitcoin/types/public" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-wasm-types = { path = "../types/wasm_types" }

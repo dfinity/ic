@@ -64,6 +64,7 @@ use ic_types::{
     },
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
+use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
 use rand::RngCore;
@@ -1631,6 +1632,17 @@ impl ExecutionEnvironment {
         let install_context = InstallCodeContext::try_from((*msg.sender(), args))?;
 
         let canister_id = install_context.canister_id;
+        let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
+        let compilation_cost_handling = if self.config.module_sharing == FlagStatus::Enabled
+            && state
+                .metadata
+                .expected_compiled_wasms
+                .contains(&new_wasm_hash)
+        {
+            CompilationCostHandling::Ignore
+        } else {
+            CompilationCostHandling::Charge
+        };
         info!(
             self.log,
             "Start executing install_code message on canister {:?}, contains module {:?}",
@@ -1668,6 +1680,7 @@ impl ExecutionEnvironment {
             &network_topology,
             execution_parameters,
             round_limits,
+            compilation_cost_handling,
         );
         let (result, canister) = match dts_res.response {
             InstallCodeResponse::Result((_, result)) => {
@@ -1688,6 +1701,9 @@ impl ExecutionEnvironment {
         let result = match result {
             Ok(result) => {
                 state.metadata.heap_delta_estimate += result.heap_delta;
+                if self.config.module_sharing == FlagStatus::Enabled {
+                    state.metadata.expected_compiled_wasms.insert(new_wasm_hash);
+                }
 
                 info!(
                     self.log,
@@ -1724,6 +1740,12 @@ impl ExecutionEnvironment {
     pub fn clear_compilation_cache_for_testing(&self) {
         (&*self.hypervisor).clear_compilation_cache_for_testing()
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CompilationCostHandling {
+    Ignore,
+    Charge,
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).

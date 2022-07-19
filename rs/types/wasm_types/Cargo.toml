@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-protobuf = { path = "../../protobuf" }
 ic-sys = { path = "../../sys" }
 ic-utils = { path = "../../utils" }
 serde = { version = "1.0.99", features = ["derive"] }

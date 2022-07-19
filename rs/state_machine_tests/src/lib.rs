@@ -471,6 +471,17 @@ impl StateMachine {
         .unwrap_or(0.0)
     }
 
+    /// Returns the total number of Wasm instructions executed when executing subnet
+    /// messages (IC00 messages addressed to the subnet).
+    pub fn subnet_message_instructions(&self) -> f64 {
+        fetch_histogram_stats(
+            &self.metrics_registry,
+            "execution_round_subnet_queue_instructions",
+        )
+        .map(|stats| stats.sum)
+        .unwrap_or(0.0)
+    }
+
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
