@@ -2,7 +2,7 @@ load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 http_archive(
     name = "rules_rust",
@@ -132,3 +132,10 @@ bazel_skylib_workspace()
 load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains")
 
 buildifier_prebuilt_register_toolchains()
+
+new_git_repository(
+    name = "sevtool",
+    build_file = "//ic-os:BUILD.sevtool.bazel",
+    commit = "3e6418e09f5ca91d789e115d0751ead1227aab47",
+    remote = "https://github.com/AMDESE/sev-tool.git",
+)
