@@ -644,3 +644,15 @@ system-tests-staging-nightly:
   script:
     - *run-farm-based-test
   allow_failure: true 
+
+ingress-manager-proptests-nightly:
+  extends:
+    - .prod-test
+  stage: prod-tests
+  variables:
+    cd_target_env: "NIGHTLY"
+  timeout: 70 minutes
+  script:
+    - |
+      cd "${CI_PROJECT_DIR}/rs"
+      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager --features proptest proptest
