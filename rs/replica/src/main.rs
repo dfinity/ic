@@ -341,12 +341,15 @@ fn main() -> io::Result<()> {
         });
     }
 
+    let save_logger = logger.clone();
     rt_main.block_on(async move {
         let _drop_async_log_guard = async_log_guard;
         let _drop_sigpipe_handler = sigpipe_handler;
-        info!(logger, "IC Replica Terminated");
+        info!(logger, "IC Replica Running");
+        // Blocking on `SIGINT` or `SIGTERM`.
         shutdown_signal(logger.inner_logger.root.clone()).await
     });
+    info!(save_logger, "IC Replica Terminating");
 
     #[cfg(feature = "profiler")]
     finalize_report(&guard);
