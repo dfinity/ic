@@ -10,6 +10,9 @@ cc_binary(
     linkopts = [
         "-lsystemd",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 cc_binary(
@@ -20,5 +23,8 @@ cc_binary(
     linkopts = [
         "-lselinux",
         "-pthread",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
     ],
 )
