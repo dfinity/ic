@@ -62,6 +62,8 @@ struct Crate {
     dependencies: BTreeMap<String, Dep>,
     #[serde(default, rename = "dev-dependencies")]
     dev_dependencies: BTreeMap<String, Dep>,
+    #[serde(default, rename = "build-dependencies")]
+    build_dependencies: BTreeMap<String, Dep>,
     #[serde(default)]
     target: toml::map::Map<String, toml::Value>,
     #[serde(default)]
@@ -96,6 +98,7 @@ struct BuildFile<'a> {
     dev_deps: Deps,
     macro_deps: Deps,
     macro_dev_deps: Deps,
+    build_deps: Deps,
     aliases: BTreeMap<String, String>,
     target_name: Cow<'a, str>,
     edition: &'a str,
@@ -103,6 +106,7 @@ struct BuildFile<'a> {
     bins: Vec<BinSection>,
     gen_tests: bool,
     has_testsuite: bool,
+    build_script: bool,
 }
 
 static MACRO_CRATES: &[&str] = &[
@@ -111,6 +115,7 @@ static MACRO_CRATES: &[&str] = &[
     "derive_more",
     "fe-derive",
     "hex-literal",
+    "ic-nervous-system-common-build-metadata",
     "paste",
     "proptest-derive",
     "slog_derive",
@@ -155,7 +160,7 @@ impl Bazelifier {
         &self,
         deps_iter: btree_map::Iter<String, Dep>,
         deps: &mut Deps,
-        macro_deps: &mut Deps,
+        mut macro_deps: Option<&mut Deps>,
         aliases: &mut BTreeMap<String, String>,
     ) -> eyre::Result<()> {
         for (dep_name_, dep) in deps_iter {
@@ -188,11 +193,13 @@ impl Bazelifier {
                     .display()
                 ),
             };
-            if MACRO_CRATES.contains(&&*dep_name) {
-                macro_deps.insert(dep_text);
-            } else {
-                deps.insert(dep_text);
+            if let Some(ref mut mdeps) = macro_deps {
+                if MACRO_CRATES.contains(&&*dep_name) {
+                    mdeps.insert(dep_text);
+                    continue;
+                }
             }
+            deps.insert(dep_text);
         }
         Ok(())
     }
@@ -203,7 +210,7 @@ impl Bazelifier {
         self.process_deps(
             self.pkg.dev_dependencies.iter(),
             &mut bf.dev_deps,
-            &mut bf.macro_dev_deps,
+            Some(&mut bf.macro_dev_deps),
             &mut bf.aliases,
         )?;
 
@@ -254,13 +261,22 @@ impl Bazelifier {
         self.process_deps(
             self.pkg.dependencies.iter(),
             &mut bf.deps,
-            &mut bf.macro_deps,
+            Some(&mut bf.macro_deps),
+            &mut bf.aliases,
+        )?;
+
+        self.process_deps(
+            self.pkg.build_dependencies.iter(),
+            &mut bf.build_deps,
+            None,
             &mut bf.aliases,
         )?;
 
         if self.opts.gen_tests {
             self.generate_tests(&mut bf)?;
         }
+
+        bf.build_script = !bf.build_deps.is_empty() || self.manifest_dir.join("build.rs").is_file();
 
         if self.opts.dry_run {
             std::io::stdout().write_all(bf.render()?.as_bytes())?;
