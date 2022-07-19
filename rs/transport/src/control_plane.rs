@@ -5,7 +5,7 @@
 //! peers. The component also manages re-establishment of severed connections.
 
 use crate::{
-    metrics::STATUS_SUCCESS,
+    metrics::{STATUS_ERROR, STATUS_SUCCESS},
     types::{
         Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
         ServerPortState, TransportImpl,
@@ -49,10 +49,6 @@ const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
 impl TransportImpl {
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
-        info!(
-            self.log,
-            "ControlPlane::stop_peer_connections(): peer_id = {:?}", peer_id
-        );
         self.allowed_clients.write().unwrap().remove(peer_id);
         self.peer_map.blocking_write().remove(peer_id);
     }
@@ -65,13 +61,6 @@ impl TransportImpl {
         peer_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        info!(
-            self.log,
-            "ControlPlane::start_peer_connections(): node_id = {:?}, peer_id = {:?}, registry_version = {}",
-            self.node_id,
-            peer_id,
-            registry_version
-        );
         let role = Self::connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
@@ -187,7 +176,7 @@ impl TransportImpl {
                     Ok((stream, _)) => {
                         arc_self.control_plane_metrics
                             .tcp_accepts
-                            .with_label_values(&[&flow_tag.to_string()])
+                            .with_label_values(&[STATUS_SUCCESS])
                             .inc();
 
                         let (local_addr, peer_addr) = match (stream.local_addr(), stream.peer_addr()) {
@@ -229,7 +218,7 @@ impl TransportImpl {
                                        .inc();
                                     warn!(
                                         arc_self.log,
-                                        "ControlPlane::tls_server_handshake() failed: error = {:?},
+                                        "ControlPlane::spawn_accept_task(): tls_server_handshake failed: error = {:?},
                                         local_addr = {:?}, peer_addr = {:?}",
                                         err,
                                         local_addr,
@@ -250,15 +239,15 @@ impl TransportImpl {
                                     .tcp_accept_conn_success
                                     .with_label_values(&[&flow_tag.to_string()])
                                         .inc()
-                                }
-                            });
-                        },
+                            }
+                        });
+                    }
                     Err(err) => {
                         arc_self.control_plane_metrics
-                            .tcp_accept_conn_err
-                            .with_label_values(&[&flow_tag.to_string()])
+                            .tcp_accepts
+                            .with_label_values(&[STATUS_ERROR])
                             .inc();
-                        warn!(arc_self.log, "ControlPlane::accept(): failed: error = {:?}",err);
+                        error!(arc_self.log, "ControlPlane::spawn_accept_task(): accept failed: error = {:?}", err);
                     }
                 }
             }
@@ -289,16 +278,16 @@ impl TransportImpl {
                     Some(arc_self) => arc_self,
                     _ => return,
                 };
-
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
-                arc_self.control_plane_metrics
-                    .tcp_connects
-                    .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
-                    .inc();
                 match Self::connect_to_server(&local_addr, &peer_addr).await {
                     Ok(stream) => {
+                        arc_self.control_plane_metrics
+                            .tcp_connects
+                            .with_label_values(&[STATUS_SUCCESS])
+                            .inc();
+
                         let tls_stream = match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
                                 arc_self.control_plane_metrics
@@ -314,7 +303,7 @@ impl TransportImpl {
                                     .inc();
                                 warn!(
                                     arc_self.log,
-                                    "ControlPlane::tls_client_handshake() failed: error = {:?},
+                                    "ControlPlane::spawn_connect_task(): tls_client_handshake failed: error = {:?},
                                     local_addr = {:?}, peer_addr = {:?}",
                                     err,
                                     local_addr,
@@ -340,16 +329,6 @@ impl TransportImpl {
                                         &flow_tag.to_string(),
                                     ])
                                     .inc();
-                                info!(
-                                    arc_self.log,
-                                    "ControlPlane::connect_to_server(): Successful TLS handshake. local_addr = {:?}, \
-                                     flow_tag = {:?}, peer = {:?}/{:?}, retries = {}",
-                                    local_addr,
-                                    flow_tag,
-                                    peer_id,
-                                    peer_addr,
-                                    retries,
-                                );
                                 return;
                             }
                             Err(e) => {
@@ -360,37 +339,36 @@ impl TransportImpl {
                                         &flow_tag.to_string(),
                                     ])
                                     .inc();
-                                info!(
-                                    every_n_seconds => 300,
-                                    arc_self.log,
-                                    "ControlPlane::connect_to_server(): TLS handshake failed. local_addr = {:?}, \
-                                     flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}, retries = {}",
-                                    local_addr,
-                                    flow_tag,
-                                    peer_id,
-                                    peer_addr,
-                                    e,
-                                    retries
-                                );
+                                    info!(
+                                        every_n_seconds => 300,
+                                        arc_self.log,
+                                        "ControlPlane::spawn_connect_task(): try_transition_to_connected failed. local_addr = {:?}, \
+                                         flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}, retries = {}",
+                                        local_addr,
+                                        flow_tag,
+                                        peer_id,
+                                        peer_addr,
+                                        e,
+                                        retries
+                                    );
                                 sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
                                 continue;
                             }
                         }
                     }
-                    Err(e) => {
+                    Err(err) => {
                         arc_self.control_plane_metrics
-                            .tcp_conn_to_server_err
-                            .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
+                            .tcp_connects
+                            .with_label_values(&[STATUS_ERROR])
                             .inc();
                         warn!(
                             arc_self.log,
-                            "ControlPlane::connect_to_server(): local_addr = {:?}, flow_tag = {:?}, \
-                             peer = {:?}/{:?}, error = {:?}, retries = {}",
+                            "ControlPlane::spawn_connect_task(): connect_to_server failed: error = {:?}, \
+                            local_addr = {:?}, peer = {:?}/{:?}, retries = {}",
+                            err,
                             local_addr,
-                            flow_tag,
                             peer_id,
                             peer_addr,
-                            e,
                             retries,
                         );
                         sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;

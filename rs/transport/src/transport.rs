@@ -74,7 +74,7 @@ use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use std::collections::BTreeSet;
@@ -154,10 +154,18 @@ impl Transport for TransportImpl {
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
+        info!(
+            self.log,
+            "Transport::start_connections(): peer_id = {:?}", peer_id
+        );
         self.start_peer_connections(peer_id, node_record, registry_version)
     }
 
     fn stop_connections(&self, peer_id: &NodeId) {
+        info!(
+            self.log,
+            "Transport::stop_connections(): peer_id = {:?}", peer_id,
+        );
         self.stop_peer_connections(peer_id);
     }
 
