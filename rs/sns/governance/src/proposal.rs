@@ -482,17 +482,17 @@ impl ProposalData {
     /// proto for more information.
     pub fn status(&self) -> ProposalDecisionStatus {
         if self.decided_timestamp_seconds == 0 {
-            ProposalDecisionStatus::ProposalStatusOpen
+            ProposalDecisionStatus::Open
         } else if self.is_accepted() {
             if self.executed_timestamp_seconds > 0 {
-                ProposalDecisionStatus::ProposalStatusExecuted
+                ProposalDecisionStatus::Executed
             } else if self.failed_timestamp_seconds > 0 {
-                ProposalDecisionStatus::ProposalStatusFailed
+                ProposalDecisionStatus::Failed
             } else {
-                ProposalDecisionStatus::ProposalStatusAdopted
+                ProposalDecisionStatus::Adopted
             }
         } else {
-            ProposalDecisionStatus::ProposalStatusRejected
+            ProposalDecisionStatus::Rejected
         }
     }
 
@@ -747,9 +747,9 @@ impl ProposalDecisionStatus {
     pub fn is_final(&self) -> bool {
         matches!(
             self,
-            ProposalDecisionStatus::ProposalStatusRejected
-                | ProposalDecisionStatus::ProposalStatusExecuted
-                | ProposalDecisionStatus::ProposalStatusFailed
+            ProposalDecisionStatus::Rejected
+                | ProposalDecisionStatus::Executed
+                | ProposalDecisionStatus::Failed
         )
     }
 }

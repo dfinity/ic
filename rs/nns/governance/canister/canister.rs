@@ -20,6 +20,7 @@ use std::time::SystemTime;
 
 use prost::Message;
 
+use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
@@ -28,7 +29,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::MethodAuthzChange;
 use ic_nns_common::{
     access_control::{check_caller_is_ledger, check_caller_is_root},
@@ -132,6 +133,7 @@ impl CanisterEnv {
     }
 }
 
+#[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
         self.time_warp.apply(
@@ -204,6 +206,15 @@ impl Environment for CanisterEnv {
         } else {
             Ok(())
         }
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        dfn_core::api::call(target, method_name, on_wire::bytes, request).await
     }
 
     #[cfg(target_arch = "wasm32")]

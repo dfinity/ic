@@ -25,10 +25,12 @@ use crate::pb::v1::{
     ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
     MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NeuronState,
     NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus,
-    ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders, Tally, Topic,
-    UpdateNodeProvider, Vote,
+    ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+    SetSnsTokenSwapOpenTimeWindow, Tally, Topic, UpdateNodeProvider, Vote,
 };
-use candid::Decode;
+
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -38,6 +40,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
+use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
@@ -1127,6 +1130,9 @@ impl Proposal {
                 | proposal::Action::RewardNodeProviders(_) => Topic::NodeProviderRewards,
                 proposal::Action::SetDefaultFollowees(_)
                 | proposal::Action::RegisterKnownNeuron(_) => Topic::Governance,
+                proposal::Action::SetSnsTokenSwapOpenTimeWindow(_) => {
+                    Topic::SnsDecentralizationSale
+                }
             }
         } else {
             Topic::Unspecified
@@ -1810,6 +1816,7 @@ impl fmt::Display for RewardEvent {
 }
 
 /// A general trait for the environment in which governance is running.
+#[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
@@ -1832,6 +1839,8 @@ pub trait Environment: Send + Sync {
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
     /// result back
+    ///
+    /// See also call_candid_method.
     fn execute_nns_function(
         &self,
         proposal_id: u64,
@@ -1844,6 +1853,14 @@ pub trait Environment: Send + Sync {
     /// non-essential memory-consuming operations when the potential for heap
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
+
+    /// Basically, the same as dfn_core::api::call.
+    async fn call_canister_method(
+        &mut self,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)>;
 }
 
 /// Rough buckets for how much the heap can still grow.
@@ -4606,7 +4623,61 @@ impl Governance {
                 let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
+            proposal::Action::SetSnsTokenSwapOpenTimeWindow(
+                ref set_sns_token_swap_open_time_window,
+            ) => {
+                self.set_sns_token_swap_open_time_window(pid, set_sns_token_swap_open_time_window)
+                    .await
+            }
         }
+    }
+
+    /// Executes the action in SetSnsTokenSwapOpenTimeWindow proposals. I.e. calls the
+    /// set_open_time_window Candid method on the target canister (presumably, a
+    /// swap canister).
+    async fn set_sns_token_swap_open_time_window(
+        &mut self,
+        proposal_id: u64,
+        set_sns_token_swap_open_time_window: &SetSnsTokenSwapOpenTimeWindow,
+    ) {
+        // Unpack arguments. This should be safe (i.e. no unwrap/expect panics),
+        // since we found these fields to be Some(_) when the proposal was
+        // validated at submission time. It is possible that the proposal became
+        // invalid with the passage of time, but at least the fields are
+        // populated.
+        let swap_canister_id = set_sns_token_swap_open_time_window.swap_canister_id();
+        let request = set_sns_token_swap_open_time_window.request();
+
+        // Call the swap canister.
+        let result = self
+            .env
+            .call_canister_method(
+                swap_canister_id,
+                "set_open_time_window",
+                Encode!(request).expect("Candid encoding set_open_time_window argument failed."),
+            )
+            .await;
+
+        // Convert result.
+        let result = result
+            .map(
+                |response| match Decode!(&response, sns_swap_pb::SetOpenTimeWindowResponse) {
+                    Ok(response) => println!("{LOG_PREFIX}INFO: {response:#?}"),
+                    Err(err) => println!(
+                        "{LOG_PREFIX}ERROR: Unable to decode set_open_time_window \
+                         response becaues of {err:#?}. response bytes: {response:?}"
+                    ),
+                },
+            )
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Swap rejected the set_open_time_window method call: {err:#?}"),
+                )
+            });
+
+        // Finally, record the result.
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     /// Mark all Neurons controlled by the given principals as having passed
@@ -4958,6 +5029,10 @@ impl Governance {
             } else {
                 return Ok(());
             }
+        } else if let Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(action)) =
+            &proposal.action
+        {
+            return action.validate(self.env.now());
         } else if proposal.topic() == Topic::Unspecified {
             "The topic of the proposal is unspecified.".to_string()
         } else {
@@ -6310,6 +6385,92 @@ impl Governance {
     }
 }
 
+impl SetSnsTokenSwapOpenTimeWindow {
+    /// Precondition: the swap_canister_id field must be populated (i.e. be
+    /// Some(_)). This is necessary for self to be considered valid (see the
+    /// validate and defects methods)
+    pub fn swap_canister_id(&self) -> CanisterId {
+        self.swap_canister_id
+            .expect("Invalid SetSnsTokenSwapOpenTimeWindow: swap_canister_id field not populated.")
+            .try_into()
+            .expect("Unable to convert swap_canister_id into a CanisterId")
+    }
+
+    /// Precondition: the request field must be populated (i.e. be
+    /// Some(_)). This is necessary for self to be considered valid (see the
+    /// validate and defects methods)
+    pub fn request(&self) -> &sns_swap_pb::SetOpenTimeWindowRequest {
+        self.request
+            .as_ref()
+            .expect("Invalid SetSnsTokenSwapOpenTimeWindow: request field not populated.")
+    }
+
+    /// Requirements:
+    ///
+    ///   1. All fields must be populated.
+    ///   2. swap_canister_id must convert to CanisterId.
+    ///   3. request must be valid. See SetOpenTimeWindowRequest::is_valid.
+    pub fn validate(&self, now_timestamp_seconds: u64) -> Result<(), GovernanceError> {
+        let defects = self.defects(now_timestamp_seconds);
+
+        if defects.is_empty() {
+            return Ok(());
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Invalid SetSnsTokenSwapOpenTimeWindow. Defect(s) were:\n  * {}",
+                defects.join("\n  * e")
+            ),
+        ))
+    }
+
+    /// An alternative to validate.
+    ///
+    /// Returns a list of strings, each describing a defect in self (i.e. reason
+    /// that validate should return Err).
+    pub fn defects(&self, now_timestamp_seconds: u64) -> Vec<String> {
+        let mut result = vec![];
+
+        result.append(&mut self.swap_canister_id_defects());
+        result.append(&mut self.request_defects(now_timestamp_seconds));
+
+        result
+    }
+
+    fn swap_canister_id_defects(&self) -> Vec<String> {
+        let swap_canister_id = match self.swap_canister_id {
+            Some(id) => id,
+            None => {
+                return vec!["The swap_canister_id field was not populated.".to_string()];
+            }
+        };
+
+        match CanisterId::try_from(swap_canister_id) {
+            Ok(_) => (),
+            Err(err) => {
+                return vec![format!(
+                    "Unable to parse swap_canister_id as a CanisterId: {err:#?}"
+                )];
+            }
+        }
+
+        vec![]
+    }
+
+    fn request_defects(&self, now_timestamp_seconds: u64) -> Vec<String> {
+        let request = match &self.request {
+            Some(r) => r,
+            None => {
+                return vec!["The request field was not populated.".to_string()];
+            }
+        };
+
+        request.defects(now_timestamp_seconds)
+    }
+}
+
 // Returns whether the following requirements are met:
 //   1. proposal must have a title.
 //   2. title len (bytes, not characters) is between min and max.
@@ -6460,14 +6621,116 @@ impl TimeWarp {
     }
 }
 
-#[test]
-fn test_time_warp() {
-    let w = TimeWarp { delta_s: 0_i64 };
-    assert_eq!(w.apply(100_u64), 100);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let w = TimeWarp { delta_s: 42_i64 };
-    assert_eq!(w.apply(100_u64), 142);
+    #[test]
+    fn test_time_warp() {
+        let w = TimeWarp { delta_s: 0_i64 };
+        assert_eq!(w.apply(100_u64), 100);
 
-    let w = TimeWarp { delta_s: -42_i64 };
-    assert_eq!(w.apply(100_u64), 58);
+        let w = TimeWarp { delta_s: 42_i64 };
+        assert_eq!(w.apply(100_u64), 142);
+
+        let w = TimeWarp { delta_s: -42_i64 };
+        assert_eq!(w.apply(100_u64), 58);
+    }
+
+    const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641024000;
+    const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+
+    fn assert_invalid_set_sns_token_swap_open_time_window(
+        action: &SetSnsTokenSwapOpenTimeWindow,
+        error_key_words: Vec<&str>,
+    ) {
+        let error_key_words: Vec<_> = error_key_words
+            .iter()
+            .map(|s| s.to_ascii_lowercase())
+            .collect();
+
+        let has_all_error_key_words = |s: &String| {
+            let s = s.to_ascii_lowercase();
+
+            error_key_words.iter().all(|e| s.contains(e))
+        };
+
+        let err = match action.validate(START_OF_2022_TIMESTAMP_SECONDS) {
+            Ok(()) => panic!("Validation passed, but it shouldn't have."),
+            Err(err) => err,
+        };
+        assert_eq!(err.error_type, ErrorType::InvalidProposal as i32);
+        assert!(
+            has_all_error_key_words(&err.error_message),
+            "error_key_words={:#?}. err={:#?}",
+            error_key_words,
+            err
+        );
+
+        let defects = action.defects(START_OF_2022_TIMESTAMP_SECONDS);
+        assert!(!defects.is_empty(), "{:#?}", defects);
+        // This covers a superset of the previous assert, but we keep the
+        // previous one for extra confidence (in case test code contains bugs).
+        assert!(
+            defects.iter().any(has_all_error_key_words),
+            "error_key_words={:#?}. defects={:#?}",
+            error_key_words,
+            defects
+        );
+    }
+
+    fn ok_set_sns_token_swap_open_time_window() -> SetSnsTokenSwapOpenTimeWindow {
+        let action = SetSnsTokenSwapOpenTimeWindow {
+            swap_canister_id: Some(PrincipalId::new_user_test_id(42)),
+            request: Some(sns_swap_pb::SetOpenTimeWindowRequest {
+                open_time_window: Some(sns_swap_pb::TimeWindow {
+                    start_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY,
+                    end_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 44 * SECONDS_PER_DAY,
+                }),
+            }),
+        };
+
+        let result = action.validate(START_OF_2022_TIMESTAMP_SECONDS);
+        assert!(result.is_ok(), "{:#?}", result);
+        let defects = action.defects(START_OF_2022_TIMESTAMP_SECONDS);
+        assert!(defects.is_empty(), "{:#?}", defects);
+
+        action
+    }
+
+    #[test]
+    fn validate_set_sns_token_swap_open_time_window_no_canister_id() {
+        let mut action = ok_set_sns_token_swap_open_time_window();
+
+        action.swap_canister_id = None;
+        assert_invalid_set_sns_token_swap_open_time_window(
+            &action,
+            vec!["swap_canister_id", "populate"],
+        );
+    }
+
+    #[test]
+    fn validate_set_sns_token_swap_open_time_window_no_request() {
+        let mut action = ok_set_sns_token_swap_open_time_window();
+
+        action.request = None;
+        assert_invalid_set_sns_token_swap_open_time_window(&action, vec!["request", "populate"]);
+    }
+
+    #[test]
+    fn validate_set_sns_token_swap_open_time_window_defective_request() {
+        let mut action = ok_set_sns_token_swap_open_time_window();
+
+        // Create a defect: too short.
+        let mut open_time_window = action
+            .request
+            .as_mut()
+            .unwrap()
+            .open_time_window
+            .as_mut()
+            .unwrap();
+        open_time_window.end_timestamp_seconds = open_time_window.start_timestamp_seconds + 1;
+
+        assert_invalid_set_sns_token_swap_open_time_window(&action, vec!["duration", "day"]);
+    }
 }

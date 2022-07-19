@@ -3,7 +3,9 @@
 ///
 /// If the initialization parameters are incorrect, the swap will
 /// immediately become aborted.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Init {
     /// The canister ID of the NNS governance canister. This is the only
     /// principal that can open the swap.
@@ -55,7 +57,9 @@ pub struct Init {
     #[prost(string, repeated, tag = "11")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BuyerState {
     /// Can only be set when a buyer state record for a new buyer is
     /// created, which can only happen when the lifecycle state is
@@ -101,7 +105,9 @@ pub struct BuyerState {
     pub sns_disbursing: bool,
 }
 /// Mutable state of the swap canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct State {
     /// The number of tokens (of `init.sns_ledger_canister_id`) that are
     /// being offered. The tokens are held in escrow for the the Governance
@@ -132,7 +138,9 @@ pub struct State {
     #[prost(message, optional, tag = "4")]
     pub open_time_window: ::core::option::Option<TimeWindow>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Copy, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Copy, Clone, PartialEq, ::prost::Message)]
 pub struct TimeWindow {
     #[prost(uint64, tag = "1")]
     pub start_timestamp_seconds: u64,
@@ -140,7 +148,9 @@ pub struct TimeWindow {
     pub end_timestamp_seconds: u64,
 }
 /// The complete state of the swap canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Swap {
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
@@ -151,19 +161,27 @@ pub struct Swap {
 // === Request/Response Messages
 //
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetCanisterStatusRequest {}
 /// TODO: introduce a limits on the number of buyers to include?
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetStateRequest {}
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetStateResponse {
     #[prost(message, optional, tag = "1")]
     pub swap: ::core::option::Option<Swap>,
     #[prost(message, optional, tag = "2")]
     pub derived: ::core::option::Option<DerivedState>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,
@@ -172,7 +190,9 @@ pub struct DerivedState {
     pub sns_tokens_per_icp: f32,
 }
 /// See `set_open_time_window` for details.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetOpenTimeWindowRequest {
     /// Duration must be between 1 and 90 days. The TimeWindow's
     /// end time but be greater than or equal to the TimeWindow's
@@ -181,33 +201,47 @@ pub struct SetOpenTimeWindowRequest {
     pub open_time_window: ::core::option::Option<TimeWindow>,
 }
 /// Response if setting the open time window succeeded.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetOpenTimeWindowResponse {}
 /// Informs the swap canister that the swap has been funded. That is, the initial
 /// pot of tokens being offered has been transferred to the swap canister.
 ///
 /// Only in lifecycle state 'pending'.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshSnsTokensRequest {}
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshSnsTokensResponse {}
 /// Informs the swap canister that a buyer has sent funds to participate in the
 /// swap.
 ///
 /// Only in lifecycle state 'open'.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshBuyerTokensRequest {
     /// If not specified, the caller is used.
     #[prost(string, tag = "1")]
     pub buyer: ::prost::alloc::string::String,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefreshBuyerTokensResponse {}
 /// Once a swap is committed or aborted, the tokens need to be
 /// distributed, and, if the swap was committed, neurons created.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FinalizeSwapRequest {}
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "1")]
     pub sweep_icp: ::core::option::Option<SweepResult>,
@@ -218,7 +252,9 @@ pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "4")]
     pub sns_governance_normal_mode_enabled: ::core::option::Option<SetModeCallResult>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SweepResult {
     #[prost(uint32, tag = "1")]
     pub success: u32,
@@ -228,21 +264,27 @@ pub struct SweepResult {
     pub skipped: u32,
 }
 /// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetModeCallResult {
     #[prost(oneof = "set_mode_call_result::Possibility", tags = "2")]
     pub possibility: ::core::option::Option<set_mode_call_result::Possibility>,
 }
 /// Nested message and enum types in `SetModeCallResult`.
 pub mod set_mode_call_result {
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Possibility {
         /// TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
         #[prost(message, tag = "2")]
         Err(super::CanisterCallError),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterCallError {
     #[prost(int32, optional, tag = "1")]
     pub code: ::core::option::Option<i32>,
@@ -252,7 +294,9 @@ pub struct CanisterCallError {
 /// Request a refund of tokens that were sent to the canister in
 /// error. The refund is always on the ICP ledger, from this canister's
 /// subaccount of the caller to the account of the caller.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorRefundIcpRequest {
     /// The amount of ICP to transfer.
     #[prost(uint64, tag = "1")]
@@ -261,23 +305,15 @@ pub struct ErrorRefundIcpRequest {
     #[prost(uint64, tag = "2")]
     pub fee_override_e8s: u64,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorRefundIcpResponse {}
 /// Lifecycle states of the swap cansiter's world state. The details of
 /// their meanings is provided in the documentation of the `Swap`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Lifecycle {
     /// Canister is incorrectly configured. Not a real lifecycle state.

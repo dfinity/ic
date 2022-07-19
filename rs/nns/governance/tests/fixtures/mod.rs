@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use candid::Encode;
 use comparable::Comparable;
 use futures::future::FutureExt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
@@ -448,6 +448,7 @@ impl Ledger for NNSFixture {
     }
 }
 
+#[async_trait]
 impl Environment for NNSFixture {
     fn now(&self) -> u64 {
         self.nns_state.try_lock().unwrap().now
@@ -477,6 +478,15 @@ impl Environment for NNSFixture {
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         HeapGrowthPotential::NoIssue
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        _target: CanisterId,
+        _method_name: &str,
+        _request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        unimplemented!();
     }
 }
 
@@ -835,6 +845,7 @@ impl Ledger for NNS {
     }
 }
 
+#[async_trait]
 impl Environment for NNS {
     fn now(&self) -> u64 {
         self.fixture.now()
@@ -858,6 +869,15 @@ impl Environment for NNS {
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         self.fixture.heap_growth_potential()
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        _target: CanisterId,
+        _method_name: &str,
+        _request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        unimplemented!();
     }
 }
 

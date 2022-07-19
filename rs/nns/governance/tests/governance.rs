@@ -4,11 +4,12 @@
 //! tests are run.
 
 use assert_matches::assert_matches;
+use async_trait::async_trait;
 use candid::Encode;
 #[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use futures::future::FutureExt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -27,7 +28,7 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_governance::{
     governance::{
         subaccount_from_slice, validate_proposal_title, Environment, Governance,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
@@ -67,9 +68,11 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
         NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        RewardEvent, RewardNodeProvider, SetDefaultFollowees, SetSnsTokenSwapOpenTimeWindow, Tally,
+        Topic, Vote,
     },
 };
+use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
@@ -77,6 +80,7 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -120,6 +124,7 @@ use common::increase_dissolve_delay_raw;
 use ic_nervous_system_common::ledger::Ledger;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 #[cfg(feature = "test")]
 fn check_proposal_status_after_voting_and_after_expiration_new(
@@ -10244,6 +10249,184 @@ fn test_known_neurons() {
         .cloned()
         .collect();
     assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
+}
+
+#[test]
+fn test_set_sns_token_swap_open_time_window() {
+    // Step 0: Define helper(s)
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    struct ExpectedCallCanisterMethodCallArguments<'a> {
+        target: CanisterId,
+        method_name: &'a str,
+        request: Vec<u8>,
+    }
+
+    #[allow(clippy::type_complexity)]
+    struct MockEnvironment<'a> {
+        expected_call_canister_method_calls: VecDeque<(
+            ExpectedCallCanisterMethodCallArguments<'a>,
+            Result<Vec<u8>, (Option<i32>, String)>,
+        )>,
+    }
+
+    #[async_trait]
+    impl Environment for MockEnvironment<'_> {
+        async fn call_canister_method(
+            &mut self,
+            target: CanisterId,
+            method_name: &str,
+            request: Vec<u8>,
+        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+            let (expected_arguments, result) = self
+                .expected_call_canister_method_calls
+                .pop_front()
+                .unwrap();
+
+            assert_eq!(
+                ExpectedCallCanisterMethodCallArguments {
+                    target,
+                    method_name,
+                    request
+                },
+                expected_arguments,
+            );
+
+            result
+        }
+
+        // Other methods don't do anything interesting. We implement them mostly
+        // to fulfill the trait requirements.
+
+        fn now(&self) -> u64 {
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS
+        }
+
+        fn random_u64(&mut self) -> u64 {
+            panic!("Unexpected call to Environment::random_u64");
+        }
+
+        fn random_byte_array(&mut self) -> [u8; 32] {
+            panic!("Unexpected call to Environment::random_byte_array");
+        }
+
+        fn execute_nns_function(
+            &self,
+            _proposal_id: u64,
+            _update: &ExecuteNnsFunction,
+        ) -> Result<(), GovernanceError> {
+            panic!("Unexpected call to Environment::execute_nns_function");
+        }
+
+        fn heap_growth_potential(&self) -> HeapGrowthPotential {
+            HeapGrowthPotential::NoIssue
+        }
+    }
+
+    // Require that all expected calls were made.
+    impl Drop for MockEnvironment<'_> {
+        fn drop(&mut self) {
+            assert!(
+                self.expected_call_canister_method_calls.is_empty(),
+                "{:#?}",
+                self.expected_call_canister_method_calls,
+            );
+        }
+    }
+
+    // Step 1: Prepare the world.
+
+    // Parameters which will later be used to construct the swap proposal.
+    let swap_canister_id = PrincipalId::new_user_test_id(1);
+    let start_timestamp_seconds = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
+    let request = sns_swap_pb::SetOpenTimeWindowRequest {
+        open_time_window: Some(sns_swap_pb::TimeWindow {
+            start_timestamp_seconds,
+            end_timestamp_seconds: start_timestamp_seconds + 2 * SECONDS_PER_DAY,
+        }),
+    };
+
+    let neurons = hashmap! {
+        1 => Neuron {
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(principal(1)),
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                MAX_DISSOLVE_DELAY_SECONDS,
+            )),
+            ..Default::default()
+        },
+    };
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons,
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls = [(
+        ExpectedCallCanisterMethodCallArguments {
+            target: CanisterId::try_from(swap_canister_id).unwrap(),
+            method_name: "set_open_time_window",
+            request: Encode!(&request).unwrap(),
+        },
+        Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
+    )]
+    .iter()
+    .cloned()
+    .collect();
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        governance_proto,
+        // This is where the main expectation is set. To wit, we expect that
+        // execution of the proposal will cause governance to call out to the
+        // swap canister.
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls,
+        }),
+        driver.get_fake_ledger(),
+    );
+
+    // Step 2: Run code under test. This is done indirectly via proposal.
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &principal(1),
+        &Proposal {
+            title: Some("Schedule SNS Token Swap".to_string()),
+            summary: "".to_string(),
+            action: Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(
+                SetSnsTokenSwapOpenTimeWindow {
+                    swap_canister_id: Some(swap_canister_id),
+                    request: Some(request),
+                },
+            )),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Make sure expected canister call(s) take place.
+
+    // Step 3.2: Inspect the proposal. In particular, look at its execution status.
+    assert_eq!(gov.proto.proposals.len(), 1, "{:#?}", gov.proto.proposals);
+    let mut proposals: Vec<(_, _)> = gov.proto.proposals.iter().collect();
+    let (_id, proposal) = proposals.pop().unwrap();
+    assert_eq!(
+        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
+        "Schedule SNS Token Swap",
+        "{:#?}",
+        proposal.proposal.as_ref().unwrap()
+    );
+    assert_eq!(
+        proposal.executed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+        "{:#?}",
+        proposal
+    );
+    assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
 }
 
 #[tokio::test]

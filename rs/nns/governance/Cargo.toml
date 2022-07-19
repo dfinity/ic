@@ -41,6 +41,7 @@ ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }
+ic-sns-swap = { path = "../../sns/swap" } # This is just for a couple of PB definitions.
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
@@ -81,4 +82,4 @@ tokio = { version = "1.15.0", features = [ "full" ] }
 tokio-test = "0.4.2"
 
 [features]
-test = ["ic-base-types/test", "ic-nns-common/test", "ledger-canister/test"]
+test = ["ic-base-types/test", "ic-nns-common/test", "ledger-canister/test", "ic-sns-swap/test"]

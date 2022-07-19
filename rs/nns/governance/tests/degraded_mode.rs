@@ -3,7 +3,7 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
@@ -28,6 +28,7 @@ use ic_nns_governance::governance::{HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN
 use ledger_canister::Subaccount;
 
 struct DegradedEnv {}
+#[async_trait]
 impl Environment for DegradedEnv {
     fn now(&self) -> u64 {
         111000222
@@ -47,6 +48,15 @@ impl Environment for DegradedEnv {
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         HeapGrowthPotential::LimitedAvailability
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        _target: CanisterId,
+        _method_name: &str,
+        _request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        unimplemented!();
     }
 }
 

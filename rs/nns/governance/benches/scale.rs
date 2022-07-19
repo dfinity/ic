@@ -18,7 +18,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use futures::future::FutureExt;
 use std::convert::TryFrom;
 
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential};
@@ -44,6 +44,7 @@ struct MockEnvironment {
     secs: u64,
 }
 
+#[async_trait]
 impl Environment for MockEnvironment {
     fn now(&self) -> u64 {
         self.secs
@@ -67,6 +68,15 @@ impl Environment for MockEnvironment {
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         HeapGrowthPotential::NoIssue
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        _target: CanisterId,
+        _method_name: &str,
+        _request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        unimplemented!();
     }
 }
 

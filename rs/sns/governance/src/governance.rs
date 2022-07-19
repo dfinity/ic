@@ -1335,10 +1335,7 @@ impl Governance {
         match self.proto.proposals.get_mut(&pid) {
             Some(mut proposal) => {
                 // The proposal has to be adopted before it is executed.
-                assert_eq!(
-                    proposal.status(),
-                    ProposalDecisionStatus::ProposalStatusAdopted
-                );
+                assert_eq!(proposal.status(), ProposalDecisionStatus::Adopted);
                 match result {
                     Ok(_) => {
                         println!("Execution of proposal: {} succeeded.", pid);
@@ -1578,7 +1575,7 @@ impl Governance {
             Some(p) => p,
         };
 
-        if proposal_data.status() != ProposalDecisionStatus::ProposalStatusOpen {
+        if proposal_data.status() != ProposalDecisionStatus::Open {
             return;
         }
 
@@ -1643,7 +1640,7 @@ impl Governance {
             .proto
             .proposals
             .iter()
-            .filter(|(_, info)| info.status() == ProposalDecisionStatus::ProposalStatusOpen)
+            .filter(|(_, info)| info.status() == ProposalDecisionStatus::Open)
             .map(|(pid, _)| *pid)
             .collect::<Vec<u64>>();
 
@@ -1657,7 +1654,7 @@ impl Governance {
             .proto
             .proposals
             .values()
-            .filter(|data| data.status() == ProposalDecisionStatus::ProposalStatusOpen)
+            .filter(|data| data.status() == ProposalDecisionStatus::Open)
             .map(|data| {
                 data.proposal_creation_timestamp_seconds
                     .saturating_add(initial_voting_period)
@@ -3355,7 +3352,7 @@ impl Governance {
                 }
             };
 
-            if p.status() == ProposalDecisionStatus::ProposalStatusOpen {
+            if p.status() == ProposalDecisionStatus::Open {
                 println!(
                     "{}Proposal {} was considered for reward distribution despite \
                      being open. We will now force the proposal's status to be Rejected.",
@@ -3380,7 +3377,7 @@ impl Governance {
                 });
                 debug_assert_eq!(
                     p.status(),
-                    ProposalDecisionStatus::ProposalStatusRejected,
+                    ProposalDecisionStatus::Rejected,
                     "Failed to force ProposalData status to become Rejected. p:\n{:#?}",
                     p,
                 );
@@ -3483,7 +3480,7 @@ fn err_if_another_upgrade_is_in_progress(
             continue;
         }
 
-        if proposal_data.status() != ProposalDecisionStatus::ProposalStatusAdopted {
+        if proposal_data.status() != ProposalDecisionStatus::Adopted {
             continue;
         }
 
@@ -3955,10 +3952,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(
-            execution_in_progress_proposal.status(),
-            Status::ProposalStatusAdopted
-        );
+        assert_eq!(execution_in_progress_proposal.status(), Status::Adopted);
 
         // Step 1.2: Second proposal. This one will be thwarted by the first.
         let to_be_processed_proposal = ProposalData {
@@ -3983,10 +3977,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(
-            to_be_processed_proposal.status(),
-            Status::ProposalStatusOpen
-        );
+        assert_eq!(to_be_processed_proposal.status(), Status::Open);
 
         // Step 1.3: Init Governance.
         let mut governance = Governance::new(
@@ -4041,7 +4032,7 @@ mod tests {
         // Step 3: Inspect results.
         assert_eq!(
             final_proposal_data.status(),
-            Status::ProposalStatusFailed,
+            Status::Failed,
             "The second upgrade proposal did not fail. final_proposal_data: {:#?}",
             final_proposal_data,
         );
@@ -4078,7 +4069,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(proposal.status(), Status::ProposalStatusAdopted);
+        assert_eq!(proposal.status(), Status::Adopted);
 
         // Step 2: Run code under test.
         let some_other_proposal_id = 99_u64;
@@ -4113,7 +4104,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(proposal.status(), Status::ProposalStatusOpen);
+        assert_eq!(proposal.status(), Status::Open);
 
         // Step 2: Run code under test.
         let some_other_proposal_id = 99_u64;
@@ -4150,7 +4141,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(proposal.status(), Status::ProposalStatusExecuted);
+        assert_eq!(proposal.status(), Status::Executed);
 
         // Step 2: Run code under test.
         let some_other_proposal_id = 99_u64;
@@ -4186,7 +4177,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(proposal.status(), Status::ProposalStatusAdopted);
+        assert_eq!(proposal.status(), Status::Adopted);
 
         let proposals = btreemap! {
             proposal_id => proposal,
