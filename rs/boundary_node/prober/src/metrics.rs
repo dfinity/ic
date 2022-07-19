@@ -19,15 +19,17 @@ pub struct MetricParams {
 }
 
 impl MetricParams {
-    pub fn new(meter: &Meter, name: &str) -> Self {
+    pub fn new(meter: &Meter, namespace: &str, name: &str) -> Self {
         Self {
             counter: meter
-                .u64_counter(format!("{name}.total"))
-                .with_description(format!("Counts occurences of {name} calls"))
+                .u64_counter(format!("{namespace}.{name}.total"))
+                .with_description(format!("Counts occurences of {namespace}.{name} calls"))
                 .init(),
             recorder: meter
-                .f64_value_recorder(format!("{name}.duration_nsec"))
-                .with_description(format!("Records the duration of {name} calls in nsec"))
+                .f64_value_recorder(format!("{namespace}.{name}.duration_sec"))
+                .with_description(format!(
+                    "Records the duration of {namespace}.{name} calls in sec"
+                ))
                 .init(),
         }
     }
@@ -71,6 +73,7 @@ impl<T: Create> Create for WithMetrics<T> {
         let ctx = ctx.baggage();
 
         let labels = &[
+            KeyValue::new("action", "create"),
             KeyValue::new("subnet_id", ctx.get("subnet_id").unwrap().to_string()),
             KeyValue::new("node_id", ctx.get("node_id").unwrap().to_string()),
             KeyValue::new("socket_addr", ctx.get("socket_addr").unwrap().to_string()),
@@ -116,6 +119,7 @@ impl<T: Install> Install for WithMetrics<T> {
         let ctx = ctx.baggage();
 
         let labels = &[
+            KeyValue::new("action", "install"),
             KeyValue::new("subnet_id", ctx.get("subnet_id").unwrap().to_string()),
             KeyValue::new("node_id", ctx.get("node_id").unwrap().to_string()),
             KeyValue::new("socket_addr", ctx.get("socket_addr").unwrap().to_string()),
@@ -157,6 +161,7 @@ impl<T: Probe> Probe for WithMetrics<T> {
         let ctx = ctx.baggage();
 
         let labels = &[
+            KeyValue::new("action", "probe"),
             KeyValue::new("subnet_id", ctx.get("subnet_id").unwrap().to_string()),
             KeyValue::new("node_id", ctx.get("node_id").unwrap().to_string()),
             KeyValue::new("socket_addr", ctx.get("socket_addr").unwrap().to_string()),
@@ -201,6 +206,7 @@ impl<T: Stop> Stop for WithMetrics<T> {
         let ctx = ctx.baggage();
 
         let labels = &[
+            KeyValue::new("action", "stop"),
             KeyValue::new("subnet_id", ctx.get("subnet_id").unwrap().to_string()),
             KeyValue::new("node_id", ctx.get("node_id").unwrap().to_string()),
             KeyValue::new("socket_addr", ctx.get("socket_addr").unwrap().to_string()),
@@ -247,6 +253,7 @@ impl<T: Delete> Delete for WithMetrics<T> {
         let ctx = ctx.baggage();
 
         let labels = &[
+            KeyValue::new("action", "delete"),
             KeyValue::new("subnet_id", ctx.get("subnet_id").unwrap().to_string()),
             KeyValue::new("node_id", ctx.get("node_id").unwrap().to_string()),
             KeyValue::new("socket_addr", ctx.get("socket_addr").unwrap().to_string()),

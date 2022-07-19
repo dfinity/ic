@@ -47,6 +47,8 @@ use tracing_subscriber::prelude::*;
 mod metrics;
 use metrics::{MetricParams, WithMetrics};
 
+const SERVICE_NAME: &str = "prober";
+
 const MILLISECOND: Duration = Duration::from_millis(1);
 const MINUTE: Duration = Duration::from_secs(60);
 
@@ -57,7 +59,7 @@ const CANISTER_WAT: &[u8] = include_bytes!("canister.wat");
 const LOG_PREFIX: &str = "prober.log";
 
 #[derive(Parser)]
-#[clap(name = "Prober")]
+#[clap(name = SERVICE_NAME)]
 #[clap(author = "Boundary Node Team <boundary-nodes@dfinity.org>")]
 struct Cli {
     #[clap(long, default_value = "routes")]
@@ -104,32 +106,47 @@ async fn main() -> Result<(), Error> {
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
 
     let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new("service", "prober")]))
+        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
         .init();
-    let meter = global::meter("prober");
+    let meter = global::meter(SERVICE_NAME);
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let loader = ContextLoader::new(cli.routes_dir.clone(), cli.wallets_path.clone());
-    let loader = WithMetrics(loader, MetricParams::new(&meter, "load"));
+    let loader = WithMetrics(loader, MetricParams::new(&meter, SERVICE_NAME, "load"));
 
     let creator = Creator::new(cli.canister_cycles_amount);
-    let creator = WithMetrics(creator, MetricParams::new(&meter, "create"));
+    let creator = WithMetrics(
+        creator,
+        MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
+    );
 
     let wasm_module = wabt::wat2wasm(CANISTER_WAT).context("failed convert wat to wasm")?;
 
     let installer = Installer::new(wasm_module);
-    let installer = WithMetrics(installer, MetricParams::new(&meter, "install"));
+    let installer = WithMetrics(
+        installer,
+        MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
+    );
 
     let prober = Prober {};
-    let prober = WithMetrics(prober, MetricParams::new(&meter, "probe"));
+    let prober = WithMetrics(
+        prober,
+        MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
+    );
 
     let stopper = Stopper {};
-    let stopper = WithMetrics(stopper, MetricParams::new(&meter, "stop"));
+    let stopper = WithMetrics(
+        stopper,
+        MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
+    );
 
     let deleter = Deleter {};
-    let deleter = WithMetrics(deleter, MetricParams::new(&meter, "delete"));
+    let deleter = WithMetrics(
+        deleter,
+        MetricParams::new(&meter, SERVICE_NAME, "canister_op"),
+    );
 
     let canister_ops = CanisterOps {
         creator,
@@ -158,7 +175,7 @@ async fn main() -> Result<(), Error> {
         cli.probe_interval.into(),
     );
 
-    let runner = WithMetrics(runner, MetricParams::new(&meter, "run"));
+    let runner = WithMetrics(runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
     let runner = WithThrottle(runner, ThrottleParams::new(1 * MINUTE));
     let mut runner = runner;
 
