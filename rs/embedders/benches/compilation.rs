@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -61,5 +61,34 @@ fn wasm_compilation(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benchmarks, wasm_compilation);
+fn wasm_deserialization(c: &mut Criterion) {
+    let wats = generate_wats();
+    let mut group = c.benchmark_group("deserialization");
+    for (name, wat) in wats {
+        let wasm =
+            BinaryEncodedWasm::new(wabt::wat2wasm(wat).expect("Failed to convert wat to wasm"));
+
+        let mut config = EmbeddersConfig::default();
+        config.feature_flags.module_sharing = FlagStatus::Enabled;
+        let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+        let (_, _, serialized_module) =
+            compile(&embedder, &wasm).expect("Failed to compile canister wasm");
+        let serialized_module_bytes = serialized_module.bytes;
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(name),
+            &(embedder, serialized_module_bytes),
+            |b, (embedder, serialized_module_bytes)| {
+                b.iter_with_large_drop(|| {
+                    embedder
+                        .deserialize_module(serialized_module_bytes)
+                        .expect("Failed to deserialize module")
+                })
+            },
+        );
+    }
+    group.finish();
+}
+
+criterion_group!(benchmarks, wasm_compilation, wasm_deserialization);
 criterion_main!(benchmarks);
