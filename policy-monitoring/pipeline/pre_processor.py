@@ -165,7 +165,7 @@ class DeclarativePreProcessor(PreProcessor):
         [
             "log",
             "reboot",
-            "p2p__node_added",
+            "reboot_intent" "p2p__node_added",
             "p2p__node_removed",
             "deliver_batch",
             "consensus_finalized",
@@ -193,6 +193,7 @@ class DeclarativePreProcessor(PreProcessor):
     GLOBAL_INFRA_BASED_EVENTS = frozenset(
         [
             "reboot",
+            "reboot_intent",
             "p2p__original_subnet_type",
             "p2p__originally_unassigned",
             "p2p__originally_in_subnet",
@@ -344,11 +345,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "reboot_count": {
             "preambles": frozenset([]),
-            "dependencies": frozenset(
-                [
-                    "reboot",
-                ]
-            ),
+            "dependencies": frozenset(["reboot", "reboot_intent"]),
         },
         "finalization_consistency": {
             "preambles": frozenset([]),

@@ -1,5 +1,5 @@
 .build-and-test-monpoly-docker: &build-and-test-monpoly-docker |
-  docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+  docker build --build-arg MONPOLY_PIPELINE_GIT_REVISION="${CI_COMMIT_SHA}" -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
   MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
   trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io

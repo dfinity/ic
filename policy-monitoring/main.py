@@ -136,6 +136,12 @@ def main():
         type=str,
         help="Directory in which the pipeline artifacts should be stored",
     )
+    parser.add_argument(
+        "--git_revision",
+        "-gr",
+        type=str,
+        help="The Git branch name or revision SHA of this pipeline invocation. Used to add policy definition links in violation alerts",
+    )
     args = parser.parse_args()
     args_by_name = vars(args)
 
@@ -180,6 +186,9 @@ def main():
     )
     artifacts_location = env.extract_value_with_default(
         args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="./artifacts", secret=False
+    )
+    git_revision = env.extract_value_with_default(
+        args.git_revision, "MONPOLY_PIPELINE_GIT_REVISION", "master", secret=False
     )
 
     # === Phase II: Obtain the following objectgs: ===
@@ -246,6 +255,7 @@ def main():
             liveness_channel=liveness_slack,
             docker=with_docker,
             docker_starter=docker_starter,
+            git_revision=git_revision,
             formulas=set(args.policy) if args.policy else None,
             fail=args.fail,
         )

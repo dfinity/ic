@@ -30,7 +30,7 @@ class NodesubnetParams:
 
 
 def quoted(text: str) -> str:
-    return '"%s"' % text.replace('"', '\\"')
+    return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
 
 
 class EsDoc:
@@ -265,7 +265,7 @@ class ReplicaDoc(EsDoc):
 
     def get_subnet_principal(self) -> str:
         le = self._log_entry()
-        return le["subnet_id"]
+        return f'"{le["subnet_id"]}"'
 
     def get_subnet_type(self) -> Optional[Tuple[str, str]]:
         m = re.search(
@@ -567,7 +567,9 @@ class ReplicaDoc(EsDoc):
         le = self._log_entry()
         lel = le["level"]
         lem = le["message"]
-        if lel != "CRITICAL" and lel != "ERROR":
-            return None
-        else:
-            return ReplicaDoc.UnusualLogLevelParams(level=lel, message=quoted(lem))
+        # Note: We opt for pre-processing all events, even that are not unusual.
+        # This allows us to test the pre-processor more thoroughly.
+        # if lel != "CRITICAL" and lel != "ERROR":
+        #     return None
+        # else:
+        return ReplicaDoc.UnusualLogLevelParams(level=lel, message=quoted(lem))
