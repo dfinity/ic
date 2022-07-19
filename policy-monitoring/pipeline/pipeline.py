@@ -28,12 +28,8 @@ from .repro_manager import ReproManager
 
 
 class Pipeline:
-
-    REPO_BASE = "https://gitlab.com/ic-monitoring/es-log-processor/-/tree/main"
-
-    @staticmethod
-    def _formula_url(formula: str) -> str:
-        return f"<{Pipeline.REPO_BASE}/mfotl-policies/{formula}/formula.mfotl|{formula}>"
+    def _formula_url(self, formula: str) -> str:
+        return f"<https://sourcegraph.com/github.com/dfinity/ic@{self.git_revision}/-/blob/policy-monitoring/mfotl-policies/{formula}/formula.mfotl|{formula}>"
 
     def __init__(
         self,
@@ -44,6 +40,7 @@ class Pipeline:
         liveness_channel: AlertService,
         docker: bool,
         docker_starter: Optional[str] = None,  # only used in alerts with repros
+        git_revision: str = "master",  # the Git sha of this pipeline invocation
         global_infra: Optional[GlobalInfra] = None,
         formulas: Optional[Set[str]] = None,
         fail=False,  # if True, raise exceptions instead of just sending Slack alerts
@@ -59,6 +56,7 @@ class Pipeline:
         self.liveness_channel = liveness_channel
         self.docker = docker
         self.docker_starter = docker_starter
+        self.git_revision = git_revision
         self.modes = modes
 
         self._global_infra = global_infra
@@ -128,7 +126,7 @@ class Pipeline:
                 text=(
                     f"Policy monitoring pipeline status: operational (see reports in #ic-policy-alerts)\n"
                     f"Repro:\n"
-                    f"```\n{repro(monitor)}"
+                    f"```\n{repro(monitor)}\n```"
                 ),
                 short_text="Policy monitoring pipeline status: 🍏",
             )

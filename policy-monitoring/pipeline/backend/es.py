@@ -65,6 +65,11 @@ class Es:
         return {"range": {"@timestamp": {"gte": f"now-{minutes_ago}m", "lt": "now"}}}
 
     def find_testnet_indices(self, tag: str) -> List[str]:
+        """
+        Returns a list of (non-empty) ES indices that are tagged with [tag]
+        Exceptions:
+            - [EsException] if COUNT query fails for some index
+        """
         result = []
         index: str
         for index in self.es.indices.get_alias(index="*"):
@@ -81,7 +86,7 @@ class Es:
                 )
                 eprint(msg)
                 if self.fail:
-                    raise e
+                    raise EsException(e)
                 self.alert_service.alert(
                     text=msg,
                     short_text=f"ES COUNT query failed for {index}",
@@ -143,7 +148,7 @@ class Es:
                     f"exception:\n{str(e)}\n"
                 )
                 if self.fail:
-                    raise e
+                    raise EsException(e)
                 self.alert_service.alert(
                     text=msg,
                     short_text="ES COUNT query failed for a MAINNET index",
@@ -170,7 +175,7 @@ class Es:
             raise EsException("Could not find any ES indices with MAINNET documents.")
         return result
 
-    def get_logs_for_group(self, group_name: str, limit: int, window_minutes: Optional[int]) -> Iterator[EsDoc]:
+    def _get_logs_for_group(self, group_name: str, limit: int, window_minutes: Optional[int]) -> Iterator[EsDoc]:
 
         if self.mainnet:
             assert_with_trace(window_minutes is not None, "[window_minutes] must be specified since Es.mainnet is true")
@@ -212,9 +217,16 @@ class Es:
         eprint(f"\nObtained {i + 1} entries from ES")
 
     def download_logs(self, groups: Dict[str, Group], limit_per_group: int, minutes_per_group: Optional[int]):
+        """
+        Downloads logs corresponding to each of the [groups]. Details:
+            - At most [limit_per_group] entries are downloaded. [limit_per_group] == 0 means no limit.
+            - If [minutes_per_group] is defined, only download logs emitted within the [now-minutes_per_group; now] window.
+        Exceptions:
+            - [EsException] if logs could not be downloaded due to ES API issues
+        """
         for gid in groups:
             try:
-                groups[gid].logs = self.get_logs_for_group(gid, limit_per_group, minutes_per_group)
+                groups[gid].logs = self._get_logs_for_group(gid, limit_per_group, minutes_per_group)
             except EsException as e:
                 self.alert_service.alert(
                     level="🧀",
@@ -245,7 +257,7 @@ class Es:
                 text=msg,
                 short_text=f"ES COUNT query failed for {','.join(indices)}",
             )
-            raise e
+            raise EsException(e)
 
         docs = response["hits"]["hits"]
 

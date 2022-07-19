@@ -280,8 +280,7 @@ spec-compliance-pre-master:
 
 .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
   docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
-  DATE="$(cat "${CI_PROJECT_DIR}/working_dir/date.txt")"
-  TEST_DRIVER_LOG_DIR="${CI_PROJECT_DIR}/working_dir/${DATE}/system_env"
+  TEST_DRIVER_LOG_DIR="${CI_PROJECT_DIR}/working_dir/system_env"
   ls -alh "${TEST_DRIVER_LOG_DIR}"
   MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
   trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
