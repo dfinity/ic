@@ -281,6 +281,7 @@ fn setup_artifact_manager(
         artifact_pools.canister_http_pool.clone(),
         artifact_pools.consensus_pool_cache.clone(),
         consensus_crypto.clone(),
+        state_manager.clone(),
         membership.clone(),
         subnet_id,
         registry_client.clone(),

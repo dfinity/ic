@@ -32,10 +32,14 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
 };
+
+// TODO: Make this amount configurable
+pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 pub type CanisterHttpRequestId = CallbackId;
 

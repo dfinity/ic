@@ -247,21 +247,9 @@ pub fn generate_responses_to_subnet_calls(
                     payload,
                 ));
             }
-            let canister_http_request_map = &state
-                .get_ref()
-                .metadata
-                .subnet_call_context_manager
-                .canister_http_request_contexts;
             consensus_responses.append(
                 &mut generate_execution_responses_for_canister_http_responses(
                     &block_payload.batch.canister_http,
-                    canister_http_request_map,
-                ),
-            );
-            consensus_responses.append(
-                &mut generate_execution_responses_for_expired_canister_http_responses(
-                    block.context.time,
-                    canister_http_request_map,
                 ),
             );
         }
@@ -269,48 +257,21 @@ pub fn generate_responses_to_subnet_calls(
     consensus_responses
 }
 
-/// Generate execution responses for http requests that have timed out
-pub fn generate_execution_responses_for_expired_canister_http_responses(
-    consensus_time: Time,
-    request_map: &BTreeMap<CallbackId, CanisterHttpRequestContext>,
-) -> Vec<Response> {
-    let mut responses = Vec::new();
-    for (callback_id, request) in request_map.iter() {
-        // TODO: Make this amount configuragble
-        let timeout_allowed = std::time::Duration::from_secs(5 * 60);
-        if request.time + timeout_allowed < consensus_time {
-            responses.push(Response {
-                originator: request.request.sender,
-                respondent: request.request.receiver,
-                refund: Cycles::zero(),
-                originator_reply_callback: *callback_id,
-                response_payload: ic_types::messages::Payload::Reject(
-                    ic_types::messages::RejectContext {
-                        code: ic_error_types::RejectCode::SysTransient,
-                        message: "Canister http request timed out".to_string(),
-                    },
-                ),
-            });
-        }
-    }
-    responses
-}
-
 /// This function converts the canister http responses from the batch payload
 /// into something that is recognizable by upper layers.
 pub fn generate_execution_responses_for_canister_http_responses(
     canister_http_payload: &CanisterHttpPayload,
-    request_map: &BTreeMap<CallbackId, CanisterHttpRequestContext>,
 ) -> Vec<Response> {
+    // Deliver responses with consenus
     canister_http_payload
-        .0
+        .responses
         .iter()
-        .filter_map(|canister_http_response| {
+        .map(|canister_http_response| {
             let content = &canister_http_response.content;
-            let request = request_map.get(&content.id)?;
-            Some(Response {
-                originator: request.request.sender,
-                respondent: request.request.receiver,
+            Response {
+                // NOTE originator and respondent are not needed for these types of calls
+                originator: CanisterId::ic_00(),
+                respondent: CanisterId::ic_00(),
                 originator_reply_callback: content.id,
                 refund: Cycles::zero(),
                 response_payload: match &content.content {
@@ -321,8 +282,26 @@ pub fn generate_execution_responses_for_canister_http_responses(
                         ic_types::messages::Payload::Reject((canister_http_reject).into())
                     }
                 },
-            })
+            }
         })
+        // Deliver timeout responses
+        .chain(
+            canister_http_payload
+                .timeouts
+                .iter()
+                .map(|canister_http_timeout| Response {
+                    originator: CanisterId::ic_00(),
+                    respondent: CanisterId::ic_00(),
+                    originator_reply_callback: *canister_http_timeout,
+                    refund: Cycles::zero(),
+                    response_payload: ic_types::messages::Payload::Reject(
+                        ic_types::messages::RejectContext {
+                            code: ic_error_types::RejectCode::SysTransient,
+                            message: "Canister http request timed out".to_string(),
+                        },
+                    ),
+                }),
+        )
         .collect()
 }
 

@@ -24,6 +24,7 @@ use ic_types::{
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseMetadata,
         CanisterHttpResponseProof, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
@@ -106,6 +107,7 @@ pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
     cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     membership: Arc<Membership>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
@@ -119,6 +121,7 @@ impl CanisterHttpPayloadBuilderImpl {
         pool: Arc<RwLock<dyn CanisterHttpPool>>,
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         membership: Arc<Membership>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
@@ -129,6 +132,7 @@ impl CanisterHttpPayloadBuilderImpl {
             pool,
             cache,
             crypto,
+            state_manager,
             membership,
             subnet_id,
             registry,
@@ -230,7 +234,13 @@ impl CanisterHttpPayloadBuilderImpl {
     fn get_past_payload_ids(past_payloads: &[&CanisterHttpPayload]) -> HashSet<CallbackId> {
         past_payloads
             .iter()
-            .flat_map(|payload| payload.0.iter().map(|response| response.content.id))
+            .flat_map(|payload| {
+                payload
+                    .responses
+                    .iter()
+                    .map(|response| response.content.id)
+                    .chain(payload.timeouts.iter().cloned())
+            })
             .collect()
     }
 
@@ -319,7 +329,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // aggregation. Also we don't want to hold the lock on the pool while aggregating.
         // Therefore, we pick the candidates for the payload first, then aggregate the signatures
         // in a second step
-        let mut candidates = {
+        let (mut candidates, timeouts) = {
             let pool_access = self.pool.read().unwrap();
             let mut total_share_count = 0;
             let mut active_shares = 0;
@@ -386,22 +396,52 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 }
             }
 
+            // Check the state for timeouts
+            // NOTE: We can not use the existing timed out artifacts for this task, since we don't have consensus on them.
+            // For example a malicious node might publish a single timed out metadata share and we would pick it up
+            // to generate a time out response.
+            // Instead, we scan the state metadata for timed out requests and generate time out responses based on that
+            let mut timeouts = vec![];
+            if let Ok(state) = self
+                .state_manager
+                .get_state_at(validation_context.certified_height)
+            {
+                // Iterate over all outstanding canister http requests
+                for (callback_id, request) in state
+                    .get_ref()
+                    .metadata
+                    .subnet_call_context_manager
+                    .canister_http_request_contexts
+                    .iter()
+                {
+                    // TODO: Account for size of timeouts
+                    // Check for timed out requests and include them into the block
+                    // if they have not been delivered yet
+                    if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
+                        && !delivered_ids.contains(callback_id)
+                    {
+                        timeouts.push(*callback_id);
+                    }
+                }
+            }
+
             self.metrics
                 .unique_includable_responses
                 .set(unique_includable_responses);
 
-            candidates
+            (candidates, timeouts)
         };
 
         // Now that we have the candidates, aggregate the signatures and construct the payload
-        let payload = CanisterHttpPayload(
-            candidates
+        let payload = CanisterHttpPayload {
+            responses: candidates
                 .drain(..)
                 .filter_map(|(metadata, shares, content)| {
                     self.aggregate(consensus_registry_version, metadata, shares, content)
                 })
                 .collect(),
-        );
+            timeouts,
+        };
 
         payload
     }
@@ -437,7 +477,12 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         }
 
         // Check size of the payload
-        let payload_size = payload.0.iter().map(CountBytes::count_bytes).sum::<usize>();
+        // TODO: Account for size of timeouts
+        let payload_size = payload
+            .responses
+            .iter()
+            .map(CountBytes::count_bytes)
+            .sum::<usize>();
         if payload_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
             return Err(CanisterHttpPayloadValidationError::Permanent(
                 CanisterHttpPermanentValidationError::PayloadTooBig {
@@ -449,6 +494,39 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
         let delivered_ids = Self::get_past_payload_ids(past_payloads);
 
+        // Validate the timed out calls
+        let state = &self
+            .state_manager
+            .get_state_at(validation_context.certified_height)
+            .map_err(|_| {
+                CanisterHttpPayloadValidationError::Transient(
+                    CanisterHttpTransientValidationError::StateUnavailable,
+                )
+            })?;
+        let http_contexts = &state
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+
+        for timeout_id in &payload.timeouts {
+            // Get requests
+            let request = http_contexts.get(timeout_id).ok_or(
+                CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::UnknownCallbackId(*timeout_id),
+                ),
+            )?;
+
+            // Check that they are timed out and no dupicates
+            if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time
+                || delivered_ids.contains(timeout_id)
+            {
+                return Err(CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::NotTimedOut(*timeout_id),
+                ));
+            }
+        }
+
         // Get the consensus registry version
         let consensus_registry_version = registry_version_at_height(self.cache.as_ref(), height)
             .ok_or(CanisterHttpPayloadValidationError::Transient(
@@ -456,7 +534,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             ))?;
 
         // Check conditions on individual reponses
-        for response in &payload.0 {
+        for response in &payload.responses {
             // Check that response is consistent
             Self::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::Permanent)?;
@@ -480,7 +558,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // Verify the signatures
         // NOTE: We do this in a separate loop because this check is expensive and we want to
         // do all the cheap checks first
-        for response in &payload.0 {
+        for response in &payload.responses {
             self.crypto
                 .verify_aggregate(&response.proof, consensus_registry_version)
                 .map_err(|err| {
@@ -596,7 +674,7 @@ mod tests {
 
             //  Make sure the response is contained in the payload
             assert_eq!(payload.num_responses(), 1);
-            assert_eq!(payload.0[0].content, response);
+            assert_eq!(payload.responses[0].content, response);
         });
     }
 
@@ -663,16 +741,19 @@ mod tests {
             };
 
             // Set up past payload
-            let past_payload = CanisterHttpPayload(vec![CanisterHttpResponseWithConsensus {
-                content: past_response,
-                proof: Signed {
-                    content: past_metadata,
-                    signature: MultiSignature::<CanisterHttpResponseMetadata> {
-                        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-                        signers: vec![],
+            let past_payload = CanisterHttpPayload {
+                responses: vec![CanisterHttpResponseWithConsensus {
+                    content: past_response,
+                    proof: Signed {
+                        content: past_metadata,
+                        signature: MultiSignature::<CanisterHttpResponseMetadata> {
+                            signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
+                            signers: vec![],
+                        },
                     },
-                },
-            }]);
+                }],
+                timeouts: vec![],
+            };
 
             // Build a payload
             let payload = payload_builder.get_canister_http_payload(
@@ -688,7 +769,7 @@ mod tests {
 
             //  Make sure the response is not contained in the payload
             assert_eq!(payload.num_responses(), 1);
-            assert_eq!(payload.0[0].content, valid_response);
+            assert_eq!(payload.responses[0].content, valid_response);
         });
     }
 
@@ -840,8 +921,10 @@ mod tests {
         test_config_with_http_feature(4, |payload_builder, _| {
             let (response, metadata) = test_response_and_metadata(0);
 
-            let payload =
-                CanisterHttpPayload(vec![response_and_metadata_to_proof(&response, &metadata)]);
+            let payload = CanisterHttpPayload {
+                responses: vec![response_and_metadata_to_proof(&response, &metadata)],
+                timeouts: vec![],
+            };
 
             let validation_result = payload_builder.validate_canister_http_payload(
                 Height::from(1),
@@ -977,6 +1060,7 @@ mod tests {
                 membership,
                 pool,
                 canister_http_pool,
+                state_manager,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config,
@@ -988,6 +1072,7 @@ mod tests {
                 canister_http_pool.clone(),
                 pool.get_cache(),
                 crypto,
+                state_manager,
                 membership,
                 subnet_test_id(0),
                 registry,
@@ -1024,8 +1109,10 @@ mod tests {
             let (mut response, mut metadata) = test_response_and_metadata(0);
             modify(&mut response, &mut metadata);
 
-            let payload =
-                CanisterHttpPayload(vec![response_and_metadata_to_proof(&response, &metadata)]);
+            let payload = CanisterHttpPayload {
+                responses: vec![response_and_metadata_to_proof(&response, &metadata)],
+                timeouts: vec![],
+            };
 
             payload_builder.validate_canister_http_payload(
                 Height::from(1),
