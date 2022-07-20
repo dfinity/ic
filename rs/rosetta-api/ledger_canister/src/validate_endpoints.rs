@@ -568,10 +568,7 @@ impl ToProto for Transaction {
             Some(m) => Memo(m.memo),
             None => Memo(0),
         };
-        let created_at_time: TimeStamp = pb
-            .created_at_time
-            .map(timestamp_from_proto)
-            .unwrap_or_else(|| TimeStamp::new(0, 0));
+        let created_at_time: Option<TimeStamp> = pb.created_at_time.map(timestamp_from_proto);
         let operation = match pb.transfer.ok_or("This block has no transaction")? {
             PTransfer::Burn(protobuf::Burn {
                 from: Some(from),
@@ -642,7 +639,7 @@ impl ToProto for Transaction {
         protobuf::Transaction {
             memo: Some(protobuf::Memo { memo: memo.0 }),
             created_at: None,
-            created_at_time: Some(timestamp_into_proto(created_at_time)),
+            created_at_time: created_at_time.map(timestamp_into_proto),
             transfer: Some(transfer),
         }
     }

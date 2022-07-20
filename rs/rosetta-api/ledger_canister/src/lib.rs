@@ -117,21 +117,26 @@ pub struct Transaction {
     pub memo: Memo,
 
     /// The time this transaction was created.
-    pub created_at_time: TimeStamp,
+    pub created_at_time: Option<TimeStamp>,
 }
 
 impl LedgerTransaction for Transaction {
     type AccountId = AccountIdentifier;
 
-    fn burn(from: Self::AccountId, amount: Tokens, created_at_time: TimeStamp) -> Self {
+    fn burn(
+        from: Self::AccountId,
+        amount: Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self {
         Self {
             operation: Operation::Burn { from, amount },
-            memo: Memo::default(),
+            memo: memo.map(Memo).unwrap_or_default(),
             created_at_time,
         }
     }
 
-    fn created_at_time(&self) -> TimeStamp {
+    fn created_at_time(&self) -> Option<TimeStamp> {
         self.created_at_time
     }
 
@@ -167,7 +172,7 @@ impl Transaction {
         Transaction {
             operation,
             memo,
-            created_at_time,
+            created_at_time: Some(created_at_time),
         }
     }
 }
@@ -192,7 +197,7 @@ impl Block {
         let transaction = Transaction {
             operation,
             memo,
-            created_at_time,
+            created_at_time: Some(created_at_time),
         };
         Ok(Self::from_transaction(parent_hash, transaction, timestamp))
     }
@@ -458,7 +463,8 @@ impl Ledger {
             Transaction {
                 operation,
                 memo,
-                created_at_time: created_at_time.unwrap_or(now),
+                // TODO(FI-349): preserve created_at_time and memo the caller specified.
+                created_at_time: created_at_time.or(Some(now)),
             },
             now,
         )
@@ -1736,22 +1742,6 @@ pub struct CandidTransaction {
     pub created_at_time: TimeStamp,
 }
 
-impl From<Transaction> for CandidTransaction {
-    fn from(
-        Transaction {
-            operation,
-            memo,
-            created_at_time,
-        }: Transaction,
-    ) -> Self {
-        Self {
-            memo,
-            operation: operation.into(),
-            created_at_time,
-        }
-    }
-}
-
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CandidBlock {
     pub parent_hash: Option<[u8; HASH_LENGTH]>,
@@ -1769,7 +1759,11 @@ impl From<Block> for CandidBlock {
     ) -> Self {
         Self {
             parent_hash: parent_hash.map(|h| h.into_bytes()),
-            transaction: transaction.into(),
+            transaction: CandidTransaction {
+                memo: transaction.memo,
+                operation: transaction.operation.into(),
+                created_at_time: transaction.created_at_time.unwrap_or(timestamp),
+            },
             timestamp,
         }
     }

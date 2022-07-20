@@ -142,7 +142,7 @@ impl Ledger {
         for (account, balance) in initial_balances.into_iter() {
             apply_transaction(
                 &mut ledger,
-                Transaction::mint(account.clone(), Tokens::from_e8s(balance), now),
+                Transaction::mint(account.clone(), Tokens::from_e8s(balance), Some(now), None),
                 now,
             )
             .unwrap_or_else(|err| {

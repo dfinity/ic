@@ -43,7 +43,7 @@ TransactionContent = {
 TxCommon = (
   amt: Amount,
   ? memo: Memo,
-  ts: Timestamp
+  ? ts: Timestamp
 )
 
 Account = [1*2 bytes]

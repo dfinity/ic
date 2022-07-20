@@ -193,7 +193,8 @@ impl From<Operation> for CandidOperation {
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct CandidTransaction {
     pub operation: CandidOperation,
-    pub created_at_time: u64,
+    pub created_at_time: Option<u64>,
+    pub memo: Option<u64>,
 }
 
 impl From<Transaction> for CandidTransaction {
@@ -201,11 +202,13 @@ impl From<Transaction> for CandidTransaction {
         Transaction {
             operation,
             created_at_time,
+            memo,
         }: Transaction,
     ) -> Self {
         Self {
             operation: operation.into(),
             created_at_time,
+            memo,
         }
     }
 }
@@ -214,25 +217,39 @@ impl From<Transaction> for CandidTransaction {
 pub struct Transaction {
     #[serde(flatten)]
     pub operation: Operation,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "ts")]
-    pub created_at_time: u64,
+    pub created_at_time: Option<u64>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<u64>,
 }
 
 impl LedgerTransaction for Transaction {
     type AccountId = Account;
 
-    fn burn(from: Account, amount: Tokens, created_at_time: TimeStamp) -> Self {
+    fn burn(
+        from: Account,
+        amount: Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self {
         Self {
             operation: Operation::Burn {
                 from,
                 amount: amount.get_e8s(),
             },
-            created_at_time: created_at_time.as_nanos_since_unix_epoch(),
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo,
         }
     }
 
-    fn created_at_time(&self) -> TimeStamp {
-        TimeStamp::from_nanos_since_unix_epoch(self.created_at_time)
+    fn created_at_time(&self) -> Option<TimeStamp> {
+        self.created_at_time
+            .map(TimeStamp::from_nanos_since_unix_epoch)
     }
 
     fn hash(&self) -> HashOf<Self> {
@@ -268,13 +285,19 @@ impl LedgerTransaction for Transaction {
 }
 
 impl Transaction {
-    pub fn mint(to: Account, amount: Tokens, created_at_time: TimeStamp) -> Self {
+    pub fn mint(
+        to: Account,
+        amount: Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self {
         Self {
             operation: Operation::Mint {
                 to,
                 amount: amount.get_e8s(),
             },
-            created_at_time: created_at_time.as_nanos_since_unix_epoch(),
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo,
         }
     }
 
@@ -283,7 +306,8 @@ impl Transaction {
         to: Account,
         amount: Tokens,
         fee: Tokens,
-        created_at_time: TimeStamp,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
     ) -> Self {
         Self {
             operation: Operation::Transfer {
@@ -292,7 +316,8 @@ impl Transaction {
                 amount: amount.get_e8s(),
                 fee: fee.get_e8s(),
             },
-            created_at_time: created_at_time.as_nanos_since_unix_epoch(),
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo,
         }
     }
 }

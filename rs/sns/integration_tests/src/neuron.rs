@@ -1051,6 +1051,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
                 to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
                 to_subaccount: Some(to_subaccount),
                 created_at_time: None,
+                memo: Some(nonce),
             },
         )
         .await

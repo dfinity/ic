@@ -59,6 +59,8 @@ pub struct TransferArg {
     pub fee: Option<NumTokens>,
     #[serde(default)]
     pub created_at_time: Option<u64>,
+    #[serde(default)]
+    pub memo: Option<u64>,
     pub amount: NumTokens,
 }
 

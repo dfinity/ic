@@ -82,6 +82,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
                     to_subaccount: Some(to_subaccount),
                     created_at_time: None,
+                    memo: Some(nonce),
                 },
             )
             .await
