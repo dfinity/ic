@@ -36,8 +36,9 @@ use ic_nns_governance::pb::v1::{
     neuron::DissolveState, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
     Neuron as NeuronProto,
 };
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight,

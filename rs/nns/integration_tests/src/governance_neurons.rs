@@ -21,9 +21,10 @@ use ic_nns_governance::pb::v1::NeuronState;
 use ic_nns_governance::pb::v1::{
     neuron::DissolveState, ManageNeuron, ManageNeuronResponse, Neuron,
 };
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    ids::TEST_NEURON_1_ID,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 

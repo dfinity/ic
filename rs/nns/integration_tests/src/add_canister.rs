@@ -7,10 +7,11 @@ use ic_nervous_system_root::{
 };
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
+    ids::TEST_NEURON_1_ID,
+    itest_helpers::NnsCanisters,
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;

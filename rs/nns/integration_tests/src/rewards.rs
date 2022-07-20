@@ -15,10 +15,11 @@ use ic_nns_governance::pb::v1::{
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NodeProvider, Proposal,
     ProposalStatus, RewardNodeProvider,
 };
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    ids::TEST_NEURON_1_ID,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,

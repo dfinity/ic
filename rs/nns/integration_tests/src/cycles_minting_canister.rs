@@ -9,11 +9,12 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    governance::submit_external_update_proposal,
     governance::wait_for_final_state,
     ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo,

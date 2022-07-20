@@ -13,11 +13,12 @@ use ic_nns_governance::pb::v1::{
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalStatus,
 };
-use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    registry::get_value,
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;

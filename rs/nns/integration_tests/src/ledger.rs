@@ -26,9 +26,12 @@ use ic_nns_governance::pb::v1::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
     ManageNeuron, ManageNeuronResponse, Neuron,
 };
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, maybe_upgrade_root_controlled_canister_to_self, NnsCanisters,
-    NnsInitPayloadsBuilder, UpgradeTestingScenario,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{
+        local_test_on_nns_subnet, maybe_upgrade_root_controlled_canister_to_self, NnsCanisters,
+        UpgradeTestingScenario,
+    },
 };
 use ledger_canister::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,

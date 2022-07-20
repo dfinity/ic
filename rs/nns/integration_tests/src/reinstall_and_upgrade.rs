@@ -21,15 +21,14 @@ use ic_nns_gtc::{
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
 };
 use ic_nns_test_utils::{
+    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     governance::{
         append_inert, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
         upgrade_nns_canister_with_arg_by_proposal, upgrade_root_canister_by_proposal,
     },
     ids::TEST_NEURON_2_ID,
-    itest_helpers::{
-        local_test_on_nns_subnet, NnsCanisters, NnsInitPayloads, NnsInitPayloadsBuilder,
-    },
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{LedgerCanisterInitPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;

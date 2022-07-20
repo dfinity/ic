@@ -11,7 +11,7 @@ use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanis
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{
-    itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
+    common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters,
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
