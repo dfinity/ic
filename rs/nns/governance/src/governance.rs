@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
+use std::ops::RangeInclusive;
 use std::string::ToString;
 
 use crate::pb::v1::{
@@ -159,6 +160,8 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 // The number of seconds between automated Node Provider reward events
 // Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+
+const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
 // The default values for network economics (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
@@ -1823,7 +1826,7 @@ impl fmt::Display for RewardEvent {
 #[async_trait]
 pub trait CMC: Send + Sync {
     /// Returns the current neuron maturity modulation.
-    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String>;
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String>;
 }
 
 /// A general trait for the environment in which governance is running.
@@ -6165,9 +6168,12 @@ impl Governance {
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
+        // Check if we're already updating the neuron maturity modulation.
         let now_seconds = self.env.now();
-        let last_updated = self.proto.last_updated_maturity_modulation_cache;
-        last_updated.is_none() || last_updated.unwrap() + 86400 > now_seconds
+        let last_updated = self
+            .proto
+            .maturity_modulation_last_updated_at_timestamp_seconds;
+        last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
     }
 
     async fn update_maturity_modulation(&mut self) {
@@ -6176,7 +6182,6 @@ impl Governance {
         };
 
         let now_seconds = self.env.now();
-
         let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
         if maturity_modulation.is_err() {
             println!(
@@ -6187,8 +6192,13 @@ impl Governance {
             return;
         }
         let maturity_modulation = maturity_modulation.unwrap();
-        self.proto.cached_daily_maturity_modulation = Some(maturity_modulation);
-        self.proto.last_updated_maturity_modulation_cache = Some(now_seconds);
+        println!(
+            "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
+            LOG_PREFIX, maturity_modulation, now_seconds, self.proto.maturity_modulation_last_updated_at_timestamp_seconds,
+        );
+        self.proto.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
+        self.proto
+            .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
     }
 
     fn can_spawn_neurons(&self) -> bool {
@@ -6207,16 +6217,15 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = self.proto.cached_daily_maturity_modulation;
-        if maturity_modulation.is_none() {
-            return;
-        }
-        let maturity_modulation = maturity_modulation.unwrap();
+        let maturity_modulation = match self.proto.cached_daily_maturity_modulation_basis_points {
+            None => return,
+            Some(value) => value,
+        };
 
         // Sanity check that the maturity modulation returned is within bounds.
-        if !(-0.05..=0.05).contains(&maturity_modulation) {
+        if !VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE.contains(&maturity_modulation) {
             println!(
-                "{}Maturity modulation out-of-bounds. Should be in range [-0.05, 0.05], actually is: {}",
+                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [-500, 500], actually is: {}",
                 LOG_PREFIX, maturity_modulation
             );
             return;
@@ -6252,8 +6261,16 @@ impl Governance {
                 // Add the neuron to the set of neurons undergoing ledger updates.
                 match self.lock_neuron_for_command(id.id, in_flight_command.clone()) {
                     Ok(mut lock) => {
-                        let maturity = neuron.maturity_e8s_equivalent;
-                        let neuron_stake = (maturity as f64 * (1f64 + maturity_modulation)) as u64;
+                        // Since we're multiplying a potentially pretty big number by up to 10500, do
+                        // the calculations as u128 before converting back.
+                        let maturity = neuron.maturity_e8s_equivalent as u128;
+                        let neuron_stake: u64 = maturity
+                            .checked_mul((10000 + maturity_modulation).try_into().unwrap())
+                            .unwrap()
+                            .checked_div(10000)
+                            .unwrap()
+                            .try_into()
+                            .expect("Couldn't convert stake to u64");
 
                         println!(
                             "{}Spawning neuron: {:?}. Performing ledger udpate.",

@@ -1420,10 +1420,10 @@ message Governance {
   MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
 
   // Cached value for the maturity modulation as calculated each day.
-  optional double cached_daily_maturity_modulation = 17;
+  optional int32 cached_daily_maturity_modulation_basis_points = 17;
 
   // The last time that the maturity modulation value was updated.
-  optional uint64 last_updated_maturity_modulation_cache = 18;
+  optional uint64 maturity_modulation_last_updated_at_timestamp_seconds = 18;
 
   // Whether the heartbeat function is currently spawning neurons, meaning
   // that it should finish before being called again.

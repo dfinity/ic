@@ -301,14 +301,12 @@ fn test_single_neuron_proposal_new() {
                         GovernanceCachedMetricsChange::TotalStakedE8S(U64Change(0, 1)),
                     ]),
                 )),
-                GovernanceChange::CachedDailyMaturityModulation(OptionChange::Different(
-                    None,
-                    Some(0.01),
-                )),
-                GovernanceChange::LastUpdatedMaturityModulationCache(OptionChange::Different(
-                    None,
-                    Some(999111017)
-                ))
+                GovernanceChange::CachedDailyMaturityModulationBasisPoints(
+                    OptionChange::Different(None, Some(100),)
+                ),
+                GovernanceChange::MaturityModulationLastUpdatedAtTimestampSeconds(
+                    OptionChange::Different(None, Some(999111017),)
+                ),
             ]),
         ])
     );

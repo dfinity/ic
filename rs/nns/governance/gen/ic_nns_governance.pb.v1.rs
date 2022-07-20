@@ -1434,11 +1434,11 @@ pub struct Governance {
     pub most_recent_monthly_node_provider_rewards:
         ::core::option::Option<MostRecentMonthlyNodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
-    #[prost(double, optional, tag = "17")]
-    pub cached_daily_maturity_modulation: ::core::option::Option<f64>,
+    #[prost(int32, optional, tag = "17")]
+    pub cached_daily_maturity_modulation_basis_points: ::core::option::Option<i32>,
     /// The last time that the maturity modulation value was updated.
     #[prost(uint64, optional, tag = "18")]
-    pub last_updated_maturity_modulation_cache: ::core::option::Option<u64>,
+    pub maturity_modulation_last_updated_at_timestamp_seconds: ::core::option::Option<u64>,
     /// Whether the heartbeat function is currently spawning neurons, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
