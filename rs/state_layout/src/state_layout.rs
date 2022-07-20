@@ -21,7 +21,7 @@ use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
     ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
 };
-use ic_wasm_types::CanisterModule;
+use ic_wasm_types::{CanisterModule, WasmHash};
 use std::convert::{From, TryFrom, TryInto};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -155,13 +155,14 @@ pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
 /// This struct contains bits of the `ExecutionState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug)]
 pub struct ExecutionStateBits {
     pub exported_globals: Vec<Global>,
     pub heap_size: NumWasmPages,
     pub exports: ExportedFunctions,
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
+    pub binary_hash: Option<WasmHash>,
 }
 
 /// This struct contains bits of the `CanisterState` that are not already
@@ -992,11 +993,16 @@ impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(&self) -> Result<CanisterModule, LayoutError> {
-        CanisterModule::new_from_file(self.path.clone()).map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "Failed to read file contents".to_string(),
-            io_err: err,
+    pub fn deserialize(
+        &self,
+        module_hash: Option<WasmHash>,
+    ) -> Result<CanisterModule, LayoutError> {
+        CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+            LayoutError::IoError {
+                path: self.path.clone(),
+                message: "Failed to read file contents".to_string(),
+                io_err: err,
+            }
         })
     }
 }
@@ -1150,6 +1156,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             exports: (&item.exports).into(),
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
+            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
         }
     }
 }
@@ -1161,6 +1168,19 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
         for g in value.exported_globals.into_iter() {
             globals.push(g.try_into()?);
         }
+        let binary_hash = match value.binary_hash {
+            Some(hash) => {
+                let hash: [u8; 32] =
+                    hash.try_into()
+                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                            typ: "BinaryHash",
+                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                        })?;
+                Some(hash.into())
+            }
+            None => None,
+        };
+
         Ok(Self {
             exported_globals: globals,
             heap_size: (value.heap_size as usize).into(),
@@ -1168,6 +1188,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             last_executed_round: value.last_executed_round.into(),
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
+            binary_hash,
         })
     }
 }

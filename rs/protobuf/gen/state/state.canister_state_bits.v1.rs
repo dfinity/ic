@@ -171,6 +171,8 @@ pub struct ExecutionStateBits {
     pub last_executed_round: u64,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<WasmMetadata>,
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopCanisterContext {
