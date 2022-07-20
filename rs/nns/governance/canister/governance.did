@@ -91,10 +91,11 @@ type Followees = record { followees : vec NeuronId };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
+  maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
-  cached_daily_maturity_modulation : opt float64;
   node_providers : vec NodeProvider;
+  cached_daily_maturity_modulation_basis_points : opt int32;
   economics : opt NetworkEconomics;
   spawning_neurons : opt bool;
   latest_reward_event : opt RewardEvent;
@@ -103,7 +104,6 @@ type Governance = record {
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
-  last_updated_maturity_modulation_cache : opt nat64;
   genesis_timestamp_seconds : nat64;
 };
 type GovernanceCachedMetrics = record {

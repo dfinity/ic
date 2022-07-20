@@ -84,7 +84,7 @@ impl Ledger for DegradedEnv {
 
 #[async_trait]
 impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
         unimplemented!()
     }
 }

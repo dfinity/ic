@@ -275,8 +275,8 @@ impl Ledger for FakeDriver {
 
 #[async_trait]
 impl CMC for FakeDriver {
-    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
-        Ok(0.01)
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+        Ok(100)
     }
 }
 

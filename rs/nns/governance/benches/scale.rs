@@ -111,7 +111,7 @@ struct MockCMC {}
 
 #[async_trait]
 impl CMC for MockCMC {
-    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
         unimplemented!()
     }
 }

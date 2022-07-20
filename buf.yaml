@@ -7,7 +7,6 @@ build:
     - rs/nns/common/proto
     - rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
     - rs/nns/handlers/root/proto
-    - rs/nns/governance/proto
     - rs/protobuf/def
     - rs/rosetta-api/ledger_canister/proto
     - rs/sns/governance/proto
