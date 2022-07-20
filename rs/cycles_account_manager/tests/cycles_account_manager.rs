@@ -1,5 +1,6 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SubnetConfigs;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{IngressInductionCost, IngressInductionCostError};
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
@@ -35,6 +36,7 @@ fn test_can_charge_application_subnets() {
                 MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap(),
             ] {
                 for freeze_threshold in &[NumSeconds::from(1000), NumSeconds::from(0)] {
+                    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
                     let cycles_account_manager = CyclesAccountManagerBuilder::new()
                         .with_subnet_type(*subnet_type)
                         .build();
@@ -53,9 +55,12 @@ fn test_can_charge_application_subnets() {
                         MemoryAllocation::BestEffort => canister.memory_usage(*subnet_type),
                         MemoryAllocation::Reserved(bytes) => *bytes,
                     };
-                    let expected_fee = cycles_account_manager
-                        .compute_allocation_cost(compute_allocation, duration)
-                        + cycles_account_manager.memory_cost(memory, duration);
+                    let expected_fee =
+                        cycles_account_manager.compute_allocation_cost(
+                            compute_allocation,
+                            duration,
+                            subnet_size,
+                        ) + cycles_account_manager.memory_cost(memory, duration, subnet_size);
                     let initial_cycles = expected_fee + Cycles::new(100);
                     *canister.system_state.balance_mut() += initial_cycles;
                     cycles_account_manager
@@ -63,6 +68,7 @@ fn test_can_charge_application_subnets() {
                             &log,
                             &mut canister,
                             duration,
+                            subnet_size,
                         )
                         .unwrap();
                 }
@@ -277,6 +283,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
 
 #[test]
 fn canister_charge_for_memory_until_zero_works() {
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
     let mut system_state = SystemStateBuilder::new().build();
     let subnet_type = SubnetType::Application;
     let config = SubnetConfigs::default()
@@ -300,15 +307,15 @@ fn canister_charge_for_memory_until_zero_works() {
 
     for _ in 0..iterations {
         assert!(cycles_account_manager
-            .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1))
+            .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1), subnet_size)
             .is_ok());
     }
 
     // The fee that will be charged in each iteration
-    let fee = cycles_account_manager.memory_cost(gibs, Duration::from_secs(1));
+    let fee = cycles_account_manager.memory_cost(gibs, Duration::from_secs(1), subnet_size);
     assert!(system_state.balance() < fee);
     assert!(cycles_account_manager
-        .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1))
+        .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1), subnet_size)
         .is_err());
 }
 
@@ -384,6 +391,7 @@ fn ingress_induction_cost_valid_subnet_message() {
 #[test]
 fn charging_removes_canisters_with_insufficient_balance() {
     with_test_replica_logger(|log| {
+        let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
         let mut canister = new_canister_state(
@@ -400,6 +408,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
                 &log,
                 &mut canister,
                 Duration::from_secs(1),
+                subnet_size,
             )
             .unwrap();
 
@@ -417,6 +426,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
                 &log,
                 &mut canister,
                 Duration::from_secs(1),
+                subnet_size,
             )
             .unwrap_err();
 
@@ -434,6 +444,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
                 &log,
                 &mut canister,
                 Duration::from_secs(1),
+                subnet_size,
             )
             .unwrap_err();
     })

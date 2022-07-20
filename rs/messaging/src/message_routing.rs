@@ -3,6 +3,7 @@ use crate::{
     state_machine::{StateMachine, StateMachineImpl},
 };
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::{CanisterStatusType, EcdsaKeyId};
 use ic_interfaces::{
@@ -37,7 +38,7 @@ use ic_types::{
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
 use std::ops::Range;
@@ -68,6 +69,8 @@ const PHASE_REMOVE_CANISTERS: &str = "remove_canisters_not_in_rt";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
+
+const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -238,6 +241,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// for the extra copies of the state that the protocol has to store for
     /// correct operations.
     canisters_memory_usage_bytes: IntGauge,
+    /// Critical error for not being able to calculate a subnet size.
+    missing_subnet_size_error: IntCounter,
 }
 
 impl MessageRoutingMetrics {
@@ -277,6 +282,8 @@ impl MessageRoutingMetrics {
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
             ),
+            missing_subnet_size_error: metrics_registry
+                .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
         }
     }
 }
@@ -726,6 +733,20 @@ impl BatchProcessor for BatchProcessorImpl {
 
         self.remove_canisters_not_in_routing_table(&mut state);
 
+        let subnet_size = network_topology
+            .subnets
+            .get(&state.metadata.own_subnet_id)
+            .map(|subnet_topology| subnet_topology.nodes.len())
+            .unwrap_or_else(|| {
+                self.metrics.missing_subnet_size_error.inc();
+                warn!(
+                    self.log,
+                    "{}: [EXC-1168] Unable to get subnet size from network topology. Cycles accounting may no longer be accurate.",
+                    CRITICAL_ERROR_MISSING_SUBNET_SIZE
+                );
+                SMALL_APP_SUBNET_MAX_SIZE
+            });
+
         let state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -735,6 +756,7 @@ impl BatchProcessor for BatchProcessorImpl {
                 max_number_of_canisters,
                 provisional_whitelist,
                 max_ecdsa_queue_size,
+                subnet_size,
             },
         );
         self.observe_canisters_memory_usage(&state_after_round);

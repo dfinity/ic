@@ -841,6 +841,7 @@ pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
     pub max_ecdsa_queue_size: u32,
+    pub subnet_size: usize,
 }
 
 pub trait Scheduler: Send {

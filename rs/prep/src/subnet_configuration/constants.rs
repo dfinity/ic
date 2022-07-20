@@ -3,10 +3,13 @@ use std::time::Duration;
 
 pub const KILOBYTE: u64 = 1024;
 pub const MEGABYTE: u64 = KILOBYTE * KILOBYTE;
+
+/// Propagate value from `ic_constants`.
 /// The configuration for app subnets is used for new app subnets with at most
-/// 13 nodes. App subnets with more nodes will be deployed with the NNS
+/// X nodes. App subnets with more nodes will be deployed with the NNS
 /// subnet configs.
-pub const SMALL_APP_SUBNET_MAX_SIZE: usize = 13;
+pub use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+
 /// Current NNS subnet size. Used in SLO tests as default.
 pub const NNS_SUBNET_SIZE: usize = 40;
 pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);

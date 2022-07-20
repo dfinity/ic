@@ -14,6 +14,7 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }
+ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = { path = "../crypto/sha" }

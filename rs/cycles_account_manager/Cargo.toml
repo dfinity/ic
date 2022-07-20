@@ -18,5 +18,6 @@ serde = { version = "1.0.99", features = ["derive"] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]
+ic-constants = { path = "../constants" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }
