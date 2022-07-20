@@ -17,71 +17,29 @@ end::catalog[] */
 use crate::canister_http::lib::*;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-};
-use crate::driver::universal_vm::UniversalVm;
-use crate::driver::universal_vm::UniversalVms;
-use crate::nns::NnsExt;
-use crate::util::{self};
-use crate::{
-    driver::ic::{InternetComputer, Subnet},
-    driver::vm_control::IcControl,
-};
+use crate::driver::test_env_api::HasArtifacts;
+use crate::driver::vm_control::IcControl;
+use crate::util;
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_ic00_types::HttpMethod;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::info;
+use slog::{info, warn};
 use std::time::{Duration, Instant};
 
 const EXPIRATION: Duration = Duration::from_secs(180);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
-pub fn config(env: TestEnv) {
-    let activate_script = &get_universal_vm_activation_script()[..];
-    let config_dir = env
-        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
-        .unwrap();
-
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_dir(config_dir)
-        .start(&env)
-        .expect("failed to set up universal VM");
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(4),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-}
-
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    info!(&logger, "Checking readiness of all nodes...");
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy().unwrap();
-        }
-    }
 
     // TODO: adapt the test below to use the env directly
     // instead of using the deprecated IcHandle and Context.
     let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
-
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
@@ -151,14 +109,13 @@ pub fn test(env: TestEnv) {
                 }
                 Err(failure) => {
                     let message = format!("Failed to make the update call. {}", failure);
-                    println!("{}", message);
                     panic!("{}", message);
                 }
             }
         }
     });
 
-    println!("Killing one of the node now.");
+    info!(&logger, "Killing one of the node now.");
     app_endpoints[1].kill_node(ctx.logger.clone());
 
     // wait the node is actually killed
@@ -176,10 +133,10 @@ pub fn test(env: TestEnv) {
         }
         std::thread::sleep(BACKOFF_DELAY);
     }
-    println!("Node successfully killed");
+    info!(&logger, "Node successfully killed");
 
     // recover the killed node and observe it caught up on state
-    println!("Restarting the killed node now.");
+    info!(&logger, "Restarting the killed node now.");
     app_endpoints[1].start_node(ctx.logger.clone());
     let restarted_endpoint = &util::runtime_from_url(app_endpoints[1].url.clone());
     let restarted_canister_endpoint = Canister::new(
@@ -202,19 +159,23 @@ pub fn test(env: TestEnv) {
 
             if let Err(error) = waited_query {
                 std::thread::sleep(BACKOFF_DELAY);
-                println!("Restarted node hasn't caught up. Got error: {error}. Retrying..");
+                warn!(
+                    &logger,
+                    "Restarted node hasn't caught up. Got error: {error}. Retrying.."
+                );
                 continue;
             }
 
             match waited_query.unwrap() {
                 Err(error) => {
                     std::thread::sleep(BACKOFF_DELAY);
-                    println!(
+                    warn!(
+                        &logger,
                         "Restarted node hasn't caught up. Got inner error: {error}. Retrying.."
                     );
                 }
                 Ok(queried) => {
-                    println!("Restarted node is caught up!");
+                    info!(&logger, "Restarted node is caught up!");
                     assert!(queried.status == 200);
                     assert!(!queried.body.is_empty());
                     break;
@@ -222,7 +183,10 @@ pub fn test(env: TestEnv) {
             }
         }
     });
-    println!("Restarted node caught up with cached query content. Success!");
+    info!(
+        &logger,
+        "Restarted node caught up with cached query content. Success!"
+    );
 
     // now that restarted node is verified returning previous HTTP request correctly,
     // we can abort the continued HTTP calls.
