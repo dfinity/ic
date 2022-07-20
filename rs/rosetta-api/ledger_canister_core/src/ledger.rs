@@ -20,10 +20,15 @@ pub trait LedgerTransaction: Sized {
 
     /// Constructs a new "burn" transaction that removes the specified `amount` of tokens from the
     /// `from` account.
-    fn burn(from: Self::AccountId, amount: Tokens, at: TimeStamp) -> Self;
+    fn burn(
+        from: Self::AccountId,
+        amount: Tokens,
+        at: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self;
 
     /// Returns the time at which the transaction was constructed.
-    fn created_at_time(&self) -> TimeStamp;
+    fn created_at_time(&self) -> Option<TimeStamp>;
 
     /// Returns the hash of this transaction.
     fn hash(&self) -> HashOf<Self>;
@@ -123,7 +128,7 @@ pub fn apply_transaction<L: LedgerData>(
 ) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
     let num_pruned = purge_old_transactions(ledger, now);
 
-    let created_at_time = transaction.created_at_time();
+    let created_at_time = transaction.created_at_time().unwrap_or(now);
 
     if created_at_time + ledger.transaction_window() < now {
         return Err(TransferError::TxTooOld {
@@ -185,7 +190,7 @@ pub fn apply_transaction<L: LedgerData>(
     };
 
     for (balance, account) in to_trim {
-        let burn_tx = L::Transaction::burn(account, balance, now);
+        let burn_tx = L::Transaction::burn(account, balance, Some(now), None);
 
         burn_tx
             .apply(ledger.balances_mut())

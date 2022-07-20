@@ -87,7 +87,7 @@ impl Ledger for LedgerCanister {
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
         to: Account,
-        _memo: u64, /* TODO: pass the memo once TransferArg supports it */
+        memo: u64,
     ) -> Result<BlockHeight, NervousSystemError> {
         let args = TransferArg {
             from_subaccount,
@@ -96,6 +96,7 @@ impl Ledger for LedgerCanister {
             fee: Some(Nat::from(fee_e8s)),
             created_at_time: None,
             amount: Nat::from(amount_e8s),
+            memo: Some(memo),
         };
         let res = self.client.transfer(args).await
             .map_err(|(code, msg)| {

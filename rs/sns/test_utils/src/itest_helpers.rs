@@ -477,7 +477,13 @@ impl SnsCanisters<'_> {
                 from_subaccount: None,
                 to_principal: PrincipalId::from(self.governance.canister_id()),
                 to_subaccount: Some(*to_subaccount),
-                created_at_time: None,
+                memo: None,
+                created_at_time: Some(
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
             },
         )
         .await

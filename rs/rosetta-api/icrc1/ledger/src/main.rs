@@ -110,8 +110,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let created_at_time = arg
             .created_at_time
-            .map(TimeStamp::from_nanos_since_unix_epoch)
-            .unwrap_or(now);
+            .map(TimeStamp::from_nanos_since_unix_epoch);
 
         let from_account = Account {
             of: PrincipalId::from(ic_cdk::api::caller()),
@@ -147,13 +146,13 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                     min_burn_amount: Nat::from(ledger.transfer_fee().get_e8s()),
                 });
             }
-            Transaction::burn(from_account, amount, created_at_time)
+            Transaction::burn(from_account, amount, created_at_time, arg.memo)
         } else if &from_account == ledger.minting_account() {
             let expected_fee = Nat::from(0u64);
             if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
                 return Err(TransferError::BadFee { expected_fee });
             }
-            Transaction::mint(to_account, amount, created_at_time)
+            Transaction::mint(to_account, amount, created_at_time, arg.memo)
         } else {
             let expected_fee_tokens = ledger.transfer_fee();
             let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
@@ -166,6 +165,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                 amount,
                 expected_fee_tokens,
                 created_at_time,
+                arg.memo,
             )
         };
 

@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime};
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
+const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 const MINTER: Account = Account {
     of: PrincipalId::new(0, [0u8; 29]),
@@ -166,6 +167,7 @@ fn transfer(
             fee: None,
             created_at_time: None,
             amount: Nat::from(amount),
+            memo: None,
         },
     )
 }
@@ -192,6 +194,10 @@ fn get_archive_block(
         Option<CandidBlock>
     )
     .expect("failed to decode get_block response")
+}
+
+fn system_time_to_nanos(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
 #[test]
@@ -269,6 +275,112 @@ fn test_metadata() {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1".to_string(),
         }]
+    );
+}
+
+#[test]
+fn test_tx_deduplication() {
+    let env = StateMachine::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
+
+    let block_idx =
+        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed");
+
+    assert_eq!(
+        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000),
+        Err(TransferError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        })
+    );
+
+    env.advance_time(TX_WINDOW + Duration::from_secs(5 * 60));
+
+    // Check that we can send the same transaction after the deduplication window.
+    assert!(
+        transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed")
+            > block_idx
+    );
+
+    let now = system_time_to_nanos(env.time());
+
+    // Same transaction, but `created_at_time` specified explicitly.
+    // The ledger should not deduplicate this request.
+    let block_idx = send_transfer(
+        &env,
+        canister_id,
+        p1,
+        &TransferArg {
+            from_subaccount: None,
+            to_principal: p2,
+            to_subaccount: None,
+            fee: None,
+            amount: Nat::from(1_000_000),
+            created_at_time: Some(now),
+            memo: None,
+        },
+    )
+    .expect("transfer failed");
+
+    // This time the transaction is a duplicate.
+    assert_eq!(
+        Err(TransferError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        }),
+        send_transfer(
+            &env,
+            canister_id,
+            p1,
+            &TransferArg {
+                from_subaccount: None,
+                to_principal: p2,
+                to_subaccount: None,
+                fee: None,
+                amount: Nat::from(1_000_000),
+                created_at_time: Some(now),
+                memo: None,
+            }
+        )
+    );
+
+    // Same transaction, but with "default" `memo`.
+    // The ledger should not deduplicate because we set a new field explicitly.
+    let block_idx = send_transfer(
+        &env,
+        canister_id,
+        p1,
+        &TransferArg {
+            from_subaccount: None,
+            to_principal: p2,
+            to_subaccount: None,
+            fee: None,
+            amount: Nat::from(1_000_000),
+            created_at_time: Some(now),
+            memo: Some(0),
+        },
+    )
+    .expect("transfer failed");
+
+    // This time the transaction is a duplicate.
+    assert_eq!(
+        Err(TransferError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        }),
+        send_transfer(
+            &env,
+            canister_id,
+            p1,
+            &TransferArg {
+                from_subaccount: None,
+                to_principal: p2,
+                to_subaccount: None,
+                fee: None,
+                amount: Nat::from(1_000_000),
+                created_at_time: Some(now),
+                memo: Some(0),
+            }
+        )
     );
 }
 
@@ -358,12 +470,8 @@ fn test_tx_time_bounds() {
     let p2 = PrincipalId::new_user_test_id(2);
     let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
 
-    let now = env
-        .time()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
-    let tx_window = Duration::from_secs(24 * 60 * 60).as_nanos() as u64;
+    let now = system_time_to_nanos(env.time());
+    let tx_window = TX_WINDOW.as_nanos() as u64;
 
     assert_eq!(
         Err(TransferError::TooOld {
@@ -380,6 +488,7 @@ fn test_tx_time_bounds() {
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now - tx_window - 1),
+                memo: None,
             }
         )
     );
@@ -397,6 +506,7 @@ fn test_tx_time_bounds() {
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
+                memo: None
             }
         )
     );
@@ -517,10 +627,13 @@ fn arb_operation() -> impl Strategy<Value = Operation> {
 }
 
 fn arb_transaction() -> impl Strategy<Value = Transaction> {
-    (arb_operation(), any::<u64>()).prop_map(|(operation, ts)| Transaction {
-        operation,
-        created_at_time: ts,
-    })
+    (arb_operation(), any::<Option<u64>>(), any::<Option<u64>>()).prop_map(
+        |(operation, ts, memo)| Transaction {
+            operation,
+            created_at_time: ts,
+            memo,
+        },
+    )
 }
 
 fn arb_block() -> impl Strategy<Value = Block> {

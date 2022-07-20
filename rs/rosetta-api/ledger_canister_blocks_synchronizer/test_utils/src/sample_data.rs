@@ -124,7 +124,7 @@ impl Scribe {
         let transaction = Transaction {
             operation: Operation::Mint { to: uid, amount },
             memo: self.next_message(),
-            created_at_time: self.time().into(),
+            created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
         self.add_block(transaction);
@@ -137,7 +137,7 @@ impl Scribe {
         let transaction = Transaction {
             operation: Operation::Burn { from: uid, amount },
             memo: self.next_message(),
-            created_at_time: self.time().into(),
+            created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
         self.add_block(transaction);
@@ -158,7 +158,7 @@ impl Scribe {
                 fee: DEFAULT_TRANSFER_FEE,
             },
             memo: self.next_message(),
-            created_at_time: self.time().into(),
+            created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
         self.add_block(transaction);

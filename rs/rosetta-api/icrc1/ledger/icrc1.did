@@ -17,6 +17,7 @@ type TransferArg = record {
     to_subaccount : opt Subaccount;
     amount : Tokens;
     fee : opt Tokens;
+    memo : opt nat64;
     created_at_time: opt Timestamp;
 };
 
