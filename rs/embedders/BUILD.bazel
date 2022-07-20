@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",
     "@crate_index//:wasmtime-runtime",
+    "@crate_index//:rayon",
 ]
 
 MACRO_DEPENDENCIES = []

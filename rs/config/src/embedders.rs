@@ -24,6 +24,9 @@ pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 #[doc(hidden)]
 const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions = NumInstructions::new(3_000);
 
+/// The number of rayon threads used by wasmtime to compile wasm binaries
+const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub api_cycles_u128_flag: FlagStatus,
@@ -62,6 +65,9 @@ pub struct Config {
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
 
+    /// The number of rayon threads used by wasmtime to compile wasm binaries
+    pub num_rayon_compilation_threads: usize,
+
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
 }
@@ -76,6 +82,7 @@ impl Config {
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
+            num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::default(),
         }
     }

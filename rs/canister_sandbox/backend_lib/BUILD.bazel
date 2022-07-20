@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:threadpool",
+    "@crate_index//:rayon",
 ]
 
 MACRO_DEPENDENCIES = []
