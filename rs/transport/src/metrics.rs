@@ -6,6 +6,23 @@ use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeV
 pub(crate) const STATUS_SUCCESS: &str = "success";
 pub(crate) const STATUS_ERROR: &str = "error";
 
+/// This is intended to be used as RAII type that will increment the gauge
+/// at construction and decrease the gauge on Drop.
+pub(crate) struct IntGaugeResource(IntGauge);
+
+impl IntGaugeResource {
+    pub(crate) fn new(gauge: IntGauge) -> Self {
+        gauge.inc();
+        IntGaugeResource(gauge)
+    }
+}
+
+impl Drop for IntGaugeResource {
+    fn drop(&mut self) {
+        self.0.dec();
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
     pub(crate) flow_state: IntGaugeVec,
@@ -16,11 +33,17 @@ pub(crate) struct ControlPlaneMetrics {
     pub(crate) tcp_conn_to_server_success: IntCounterVec,
     pub(crate) retry_connection: IntCounterVec,
     pub(crate) tls_handshakes: IntCounterVec,
+    pub(crate) async_tasks: IntGaugeVec,
 }
 
 impl ControlPlaneMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
+            async_tasks: metrics_registry.int_gauge_vec(
+                "transport_async_tasks",
+                "Current number of running tokio tasks",
+                &["name"],
+            ),
             flow_state: metrics_registry.int_gauge_vec(
                 "transport_flow_state",
                 "Current state of the flow",

@@ -5,7 +5,7 @@
 //! peers. The component also manages re-establishment of severed connections.
 
 use crate::{
-    metrics::{STATUS_ERROR, STATUS_SUCCESS},
+    metrics::{IntGaugeResource, STATUS_ERROR, STATUS_SUCCESS},
     types::{
         Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
         ServerPortState, TransportImpl,
@@ -44,6 +44,10 @@ const CONNECT_RETRY_SECONDS: u64 = 3;
 
 /// Time to wait for the TLS handshake (for both client/server sides)
 const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
+
+const CONNECT_TASK_NAME: &str = "connect";
+const ACCEPT_TASK_NAME: &str = "accept";
+const TRANSITION_FROM_ACCEPT_TASK_NAME: &str = "transition_from_accept";
 
 /// Implementation for the transport control plane
 impl TransportImpl {
@@ -165,7 +169,10 @@ impl TransportImpl {
     fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> JoinHandle<()> {
         let weak_self = self.weak_self.read().unwrap().clone();
         let rt_handle = self.rt_handle.clone();
+        let async_tasks_gauge_vec = self.control_plane_metrics.async_tasks.clone();
         self.rt_handle.spawn(async move {
+            let gauge = async_tasks_gauge_vec.with_label_values(&[ACCEPT_TASK_NAME]);
+            let _raii_gauge = IntGaugeResource::new(gauge);
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
@@ -203,6 +210,8 @@ impl TransportImpl {
                         }
 
                         rt_handle.spawn(async move {
+                            let gauge = arc_self.control_plane_metrics.async_tasks.with_label_values(&[TRANSITION_FROM_ACCEPT_TASK_NAME]);
+                            let _raii_gauge = IntGaugeResource::new(gauge);
                             let (peer_id, tls_stream) = match arc_self.tls_server_handshake(stream).await {
                                 Ok((peer_id, tls_stream)) => {
                                     arc_self.control_plane_metrics
@@ -265,7 +274,10 @@ impl TransportImpl {
     ) -> JoinHandle<()> {
         let node_ip = self.node_ip;
         let weak_self = self.weak_self.read().unwrap().clone();
+        let async_tasks_gauge_vec = self.control_plane_metrics.async_tasks.clone();
         self.rt_handle.spawn(async move {
+            let gauge = async_tasks_gauge_vec.with_label_values(&[CONNECT_TASK_NAME]);
+            let _raii_gauge_vec = IntGaugeResource::new(gauge);
             let local_addr = SocketAddr::new(node_ip, 0);
             let peer_addr = SocketAddr::new(peer_ip, server_port.get());
 
