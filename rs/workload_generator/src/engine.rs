@@ -144,13 +144,13 @@ impl Engine {
     ///
     ///   Currently, we
     /// use a single runtime. Not specifying this yields better throughput.
-    /// - `rps` - Request rate to issue against the IC
+    /// - `rpms` - Request rate (per milliseconds) to issue against the IC
     /// - `time_secs` - The time in seconds that the workload should be kept up
     /// - `nonce` - Nonce to use for update calls
     #[allow(clippy::too_many_arguments)]
     pub async fn execute_rps(
         &self,
-        rps: usize,
+        rpms: usize,
         request_type: RequestType,
         canister_method_name: String,
         time_secs: usize,
@@ -160,12 +160,16 @@ impl Engine {
         canister_id: &CanisterId,
         periodic_output: bool,
     ) -> Vec<Fact> {
-        let requests: usize = time_secs * rps;
+        let requests: usize = ((time_secs * rpms) as f64 / 1000f64).ceil() as usize;
         if requests == 0 {
             debug!("Not executing any requests");
             return vec![];
         }
-        debug!("⏱️  Executing {} requests at {} rps", requests, rps);
+        debug!(
+            "⏱️  Executing {} requests at {} rps",
+            requests,
+            rpms as f64 / 1000f64
+        );
 
         let plan = Plan::new(
             requests,
@@ -184,12 +188,12 @@ impl Engine {
         let rx_handle = tokio::task::spawn(Engine::evaluate_requests(
             rx,
             collector,
-            Some(rps),
+            Some(rpms),
             time_origin,
         ));
 
         // Time between each two consecutive requests
-        let inter_arrival_time = 1. / rps as f64;
+        let inter_arrival_time = 1000. / rpms as f64;
         let mut tx_handles = vec![];
         for n in 0..requests {
             // Calculate the time at which the request should be running from start time
@@ -220,13 +224,13 @@ impl Engine {
     }
 
     /// Finds the max rps currently possible with the given set of replicas.
-    /// - `rps` - Initial estimate of the max rps
+    /// - `rpms` - Initial estimate of the max requests per milliseconds
     /// - `time_secs` - The time in seconds that the workload should be kept up
     /// - `nonce` - Nonce to use for update calls
     #[allow(clippy::too_many_arguments)]
     pub async fn evaluate_max_rps(
         &self,
-        rps: usize,
+        rpms: usize,
         request_type: RequestType,
         canister_method_name: String,
         time_secs: usize,
@@ -236,12 +240,14 @@ impl Engine {
         canister_id: &CanisterId,
         periodic_output: bool,
     ) -> Vec<Fact> {
+        let requests: usize = ((time_secs * rpms) as f64 / 1000f64).ceil() as usize; // This is just an upper estimate
         println!(
-            "⏱️  Evaluating rps: initial_rps = {}, duration = {} sec",
-            rps, time_secs
+            "⏱️  Evaluating rps: initial_rps = {}, duration = {} sec total requests = {}",
+            rpms as f64 / 1000f64,
+            time_secs,
+            requests
         );
 
-        let requests: usize = time_secs * rps; // This is just an upper estimate
         let plan = Plan::new(
             requests,
             nonce,
@@ -254,19 +260,27 @@ impl Engine {
         let (collector, rec_handle) = collector::start::<Fact>(plan.clone(), periodic_output);
         let (tx, rx) = channel(requests);
 
-        let rate_limiter = RateLimiter::builder()
-            .initial(rps)
-            .interval(Duration::from_secs(1))
-            .refill(rps)
-            .build();
+        let rate_limiter = if rpms > 10_000 {
+            RateLimiter::builder()
+                .initial(rpms / 1000)
+                .interval(Duration::from_secs(1))
+                .refill(rpms / 1000)
+                .build()
+        } else {
+            RateLimiter::builder()
+                .initial(1)
+                .interval(Duration::from_secs_f64(1000f64 / rpms as f64))
+                .refill(1)
+                .build()
+        };
         // Initially holds (rps * INITIAL_PERMITS_MULTIPLIER) permits
-        let request_manager = RequestManager::new(rps * INITIAL_PERMITS_MULTIPLIER);
+        let request_manager = RequestManager::new(rpms * INITIAL_PERMITS_MULTIPLIER / 1000);
 
         let time_origin = Instant::now();
         let rx_handle = tokio::task::spawn(Engine::evaluate_requests(
             rx,
             collector,
-            Some(rps),
+            Some(rpms),
             time_origin,
         ));
         let end_time = time_origin
@@ -688,7 +702,7 @@ impl Engine {
     async fn evaluate_requests(
         mut rx: Receiver<CallResult>,
         collector: std::sync::mpsc::Sender<Message<Fact>>,
-        rps: Option<usize>,
+        rpms: Option<usize>,
         _time_start: Instant,
     ) {
         let mut max_counter = 0;
@@ -716,7 +730,7 @@ impl Engine {
         collector
             .send(Message::Log(format!(
                 "requested: {} - 🚀 Max counter value seen: {} - submit failures: {} - wait failures: {}",
-                rps.unwrap_or(0),
+                rpms.map(|x| x as f64 / 1000f64).unwrap_or(0f64),
                 max_counter,
                 failures.get(&CallFailure::OnSubmit).unwrap_or(&0),
                 failures.get(&CallFailure::OnWait).unwrap_or(&0),
