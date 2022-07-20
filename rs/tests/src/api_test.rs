@@ -12,7 +12,6 @@ use crate::driver::{
 };
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
-use std::fs::File;
 
 /// The following setup function demonstrates how to create more than one
 /// Internet Computer instances within a setup function.
@@ -47,29 +46,6 @@ pub fn ics_have_correct_subnet_count(test_env: TestEnv) {
 
     let topo_snapshot2 = test_env.topology_snapshot_by_name("two_subnets");
     assert_eq!(topo_snapshot2.subnets().count(), 2);
-}
-
-/// Farm can be used to upload auxiliary files and make them available [to the
-/// system under test] via http.
-///
-/// This is used, e.g., in recovery tests to publish recovery CUPs that are
-/// referenced via HTTP in governance proposals.
-pub fn upload_file_to_farm(test_env: TestEnv) {
-    test_env
-        .write_json_object("uploaded", &String::from("magic"))
-        .expect("failed to write to env");
-    let fm = test_env.http_file_store();
-    let fh = fm
-        .upload(test_env.get_json_path("uploaded"))
-        .expect("failed to upload file to farm");
-    let sink =
-        File::create(test_env.get_json_path("downloaded")).expect("cannot create output file");
-    fh.download(Box::new(sink))
-        .expect("failed to download file from farm");
-
-    let uploaded: String = test_env.read_json_object("uploaded").unwrap();
-    let downloaded: String = test_env.read_json_object("downloaded").unwrap();
-    assert_eq!(uploaded, downloaded);
 }
 
 /// Entities that are instantiated as Virtual Machines (such as IC Nodes,

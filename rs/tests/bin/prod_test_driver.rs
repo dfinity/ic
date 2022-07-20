@@ -280,7 +280,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         api_test::ics_have_correct_subnet_count,
                     ),
                     // sys_t("vm_control", api_test::vm_control), disabled due to flakiness
-                    sys_t("upload_file_to_farm", api_test::upload_file_to_farm),
                     sys_t(
                         "install_counter_canister",
                         api_test::install_counter_canister,
