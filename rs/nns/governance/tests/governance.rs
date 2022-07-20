@@ -301,6 +301,14 @@ fn test_single_neuron_proposal_new() {
                         GovernanceCachedMetricsChange::TotalStakedE8S(U64Change(0, 1)),
                     ]),
                 )),
+                GovernanceChange::CachedDailyMaturityModulation(OptionChange::Different(
+                    None,
+                    Some(0.01),
+                )),
+                GovernanceChange::LastUpdatedMaturityModulationCache(OptionChange::Different(
+                    None,
+                    Some(999111017)
+                ))
             ]),
         ])
     );
@@ -351,6 +359,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
     let pid = behavior
@@ -1191,6 +1200,7 @@ fn test_cascade_following() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1299,6 +1309,7 @@ fn test_minimum_icp_xdr_conversion_rate() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Set minimum conversion rate.
     gov.proto.economics.as_mut().unwrap().minimum_icp_xdr_rate = 100_000;
@@ -1356,6 +1367,7 @@ fn test_node_provider_must_be_registered() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     let node_provider = NodeProvider {
         id: Some(PrincipalId::try_from(b"SID2".to_vec()).unwrap()),
@@ -1417,6 +1429,7 @@ fn test_sufficient_stake() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Set stake to 0.5 ICP.
     gov.proto
@@ -1476,6 +1489,7 @@ fn test_all_follow_proposer() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Add following for 5 and 6 for 1.
     gov.manage_neuron(
@@ -1550,6 +1564,7 @@ fn test_follow_negative() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1634,6 +1649,7 @@ fn test_no_default_follow_for_governance() {
         fixture_for_following(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1774,6 +1790,7 @@ fn test_query_for_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Test that anybody can call `get_neuron_info` as long as the
     // neuron exists.
@@ -1909,6 +1926,7 @@ fn test_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
     gov.make_proposal(
@@ -2066,6 +2084,7 @@ fn test_sufficient_stake_for_manage_neuron() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Set stake to less than 0.01 ICP (same as
     // neuron_management_fee_per_proposal_e8s).
@@ -2168,6 +2187,7 @@ fn test_invalid_proposals_fail() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
     let long_string = (0..(PROPOSAL_MOTION_TEXT_BYTES_MAX + 1))
@@ -2211,6 +2231,7 @@ fn test_reward_event_proposals_last_longer_than_reward_period() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -2341,6 +2362,7 @@ fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(
@@ -2463,6 +2485,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
     // Make sure that the fixture function indeed did not create a neuron 999.
@@ -2529,6 +2552,7 @@ fn test_genesis_in_the_future_in_supported() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     gov.run_periodic_tasks().now_or_never();
     // At genesis, we should create an empty reward event
@@ -2774,6 +2798,7 @@ fn compute_maturities(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
     let expected_initial_event = RewardEvent {
@@ -3033,7 +3058,12 @@ fn test_approve_kyc() {
                 .collect::<Vec<Neuron>>(),
         )
         .with_supply(Tokens::from_tokens(1_000_000).unwrap());
-    let mut gov = Governance::new(fixture, driver.get_fake_env(), driver.get_fake_ledger());
+    let mut gov = Governance::new(
+        fixture,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     let neuron_a = gov.proto.neurons.get(&1).unwrap().clone();
     let neuron_b = gov.proto.neurons.get(&2).unwrap().clone();
 
@@ -3164,7 +3194,12 @@ fn test_get_neuron_ids_by_principal() {
         .collect();
 
     let driver = fake::FakeDriver::default();
-    let gov = Governance::new(gov_proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let gov = Governance::new(
+        gov_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
 
     let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
     principal2_neuron_ids.sort_unstable();
@@ -3249,6 +3284,7 @@ fn governance_with_staked_neuron(
         empty_fixture(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
 
     // Add a stake transfer for this neuron, emulating a ledger call.
@@ -3539,6 +3575,7 @@ fn governance_with_staked_unclaimed_neuron(
         empty_fixture(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
 
     (driver, gov, to_subaccount)
@@ -5046,6 +5083,14 @@ fn test_neuron_merge_follow() {
     );
 }
 
+// Spawn neurons has the least priority in the periodic tasks, so we need to run
+// them often enough to make sure it happens.
+fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) {
+    for _i in 0..5 {
+        gov.run_periodic_tasks().now_or_never();
+    }
+}
+
 /// Checks that:
 /// * An attempt to spawn a neuron does nothing if the parent has too little
 ///   maturity.
@@ -5133,12 +5178,13 @@ fn test_neuron_spawn() {
 
     // We should now have 2 neurons.
     assert_eq!(gov.proto.neurons.len(), 2);
-    // And we should have two ledger accounts.
-    driver.assert_num_neuron_accounts_exist(2);
+    // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
+    driver.assert_num_neuron_accounts_exist(1);
 
     let child_neuron = gov
         .get_neuron(&child_nid)
-        .expect("The child neuron is missing");
+        .expect("The child neuron is missing")
+        .clone();
     let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
     let child_subaccount = child_neuron.account.clone();
 
@@ -5147,21 +5193,66 @@ fn test_neuron_spawn() {
 
     assert_eq!(
         child_neuron,
-        &Neuron {
+        Neuron {
             id: Some(child_nid.clone()),
-            account: child_subaccount,
+            account: child_subaccount.clone(),
             controller: Some(child_controller),
-            cached_neuron_stake_e8s: parent_maturity_e8s_equivalent,
+            cached_neuron_stake_e8s: 0,
             created_timestamp_seconds: driver.now(),
-            aging_since_timestamp_seconds: driver.now(),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                gov.proto
-                    .economics
-                    .as_ref()
-                    .unwrap()
-                    .neuron_spawn_dissolve_delay_seconds
+            aging_since_timestamp_seconds: u64::MAX,
+            spawn_at_timestamp_seconds: Some(driver.now() + 7 * 86400),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                driver.now()
+                    + gov
+                        .proto
+                        .economics
+                        .as_ref()
+                        .unwrap()
+                        .neuron_spawn_dissolve_delay_seconds
             )),
             kyc_verified: true,
+            maturity_e8s_equivalent: parent_maturity_e8s_equivalent,
+            ..Default::default()
+        }
+    );
+
+    let creation_timestamp = driver.now();
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    driver.assert_num_neuron_accounts_exist(1);
+
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    driver.assert_num_neuron_accounts_exist(2);
+
+    let child_neuron = gov
+        .get_neuron(&child_nid)
+        .expect("The child neuron is missing")
+        .clone();
+    assert_eq!(
+        child_neuron,
+        Neuron {
+            id: Some(child_nid),
+            account: child_subaccount,
+            controller: Some(child_controller),
+            cached_neuron_stake_e8s: (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64,
+            created_timestamp_seconds: creation_timestamp,
+            aging_since_timestamp_seconds: u64::MAX,
+            spawn_at_timestamp_seconds: None,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                creation_timestamp
+                    + gov
+                        .proto
+                        .economics
+                        .as_ref()
+                        .unwrap()
+                        .neuron_spawn_dissolve_delay_seconds
+            )),
+            kyc_verified: true,
+            maturity_e8s_equivalent: 0,
             ..Default::default()
         }
     );
@@ -5251,15 +5342,31 @@ fn test_neuron_spawn_with_subaccount() {
         .unwrap()
         .unwrap();
 
+    let creation_timestamp = driver.now();
+
     // We should now have 2 neurons.
     assert_eq!(gov.proto.neurons.len(), 2);
-    // And we should have two ledger accounts.
+    // And we should have one ledger accounts.
+    driver.assert_num_neuron_accounts_exist(1);
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    // Maturity on the parent neuron should be reset.
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
         .get_neuron(&child_nid)
-        .expect("The child neuron is missing");
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+        .expect("The child neuron is missing")
+        .clone();
     let child_subaccount = child_neuron.account.clone();
 
     // Verify that the sub-account was created according to spawn input.
@@ -5277,26 +5384,27 @@ fn test_neuron_spawn_with_subaccount() {
         "Sub-account doesn't match expected sub-account (with nonce)."
     );
 
-    // Maturity on the parent neuron should be reset.
-    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
-
     assert_eq!(
         child_neuron,
-        &Neuron {
-            id: Some(child_nid.clone()),
+        Neuron {
+            id: Some(child_nid),
             account: child_subaccount,
             controller: Some(child_controller),
-            cached_neuron_stake_e8s: parent_maturity_e8s_equivalent,
-            created_timestamp_seconds: driver.now(),
-            aging_since_timestamp_seconds: driver.now(),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                gov.proto
-                    .economics
-                    .as_ref()
-                    .unwrap()
-                    .neuron_spawn_dissolve_delay_seconds
+            cached_neuron_stake_e8s: (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64,
+            created_timestamp_seconds: creation_timestamp,
+            aging_since_timestamp_seconds: u64::MAX,
+            spawn_at_timestamp_seconds: None,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                creation_timestamp
+                    + gov
+                        .proto
+                        .economics
+                        .as_ref()
+                        .unwrap()
+                        .neuron_spawn_dissolve_delay_seconds
             )),
             kyc_verified: true,
+            maturity_e8s_equivalent: 0,
             ..Default::default()
         }
     );
@@ -5384,16 +5492,25 @@ fn assert_neuron_spawn_partial(
         .unwrap()
         .unwrap();
 
+    let creation_timestamp = driver.now();
+
     // We should now have 2 neurons.
     assert_eq!(gov.proto.neurons.len(), 2);
-    // And we should have two ledger accounts.
-    driver.assert_num_neuron_accounts_exist(2);
+    // And we should have 1 ledger accounts.
+    driver.assert_num_neuron_accounts_exist(1);
 
     let child_neuron = gov
         .get_neuron(&child_nid)
         .expect("The child neuron is missing");
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .get_neuron(&id)
+        .expect("The parent neuron is missing")
+        .clone();
     let child_subaccount = child_neuron.account.clone();
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    driver.assert_num_neuron_accounts_exist(1);
 
     // Some maturity should be remaining on the parent neuron.
     assert_eq!(
@@ -5401,23 +5518,38 @@ fn assert_neuron_spawn_partial(
         expected_remaining_maturity
     );
 
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    driver.assert_num_neuron_accounts_exist(2);
+
+    let child_neuron = gov
+        .get_neuron(&child_nid)
+        .expect("The child neuron is missing")
+        .clone();
+
     assert_eq!(
         child_neuron,
-        &Neuron {
-            id: Some(child_nid.clone()),
+        Neuron {
+            id: Some(child_nid),
             account: child_subaccount,
             controller: Some(child_controller),
-            cached_neuron_stake_e8s: expected_spawned_maturity,
-            created_timestamp_seconds: driver.now(),
-            aging_since_timestamp_seconds: driver.now(),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                gov.proto
-                    .economics
-                    .as_ref()
-                    .unwrap()
-                    .neuron_spawn_dissolve_delay_seconds
+            cached_neuron_stake_e8s: (expected_spawned_maturity as f64 * 1.01f64) as u64,
+            created_timestamp_seconds: creation_timestamp,
+            aging_since_timestamp_seconds: u64::MAX,
+            spawn_at_timestamp_seconds: None,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                creation_timestamp
+                    + gov
+                        .proto
+                        .economics
+                        .as_ref()
+                        .unwrap()
+                        .neuron_spawn_dissolve_delay_seconds
             )),
             kyc_verified: true,
+            maturity_e8s_equivalent: 0,
             ..Default::default()
         }
     );
@@ -5611,7 +5743,12 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
             .map(|n| (n.id.as_ref().unwrap().id, n.clone())),
     );
 
-    let gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     assert_eq!(gov.proto.neurons.len(), 3);
     (driver, gov)
 }
@@ -6810,6 +6947,7 @@ fn test_get_proposal_info() {
         fixture_for_proposals(proposal_id, vec![1, 2, 3]),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     let caller = &principal(1);
 
@@ -6837,6 +6975,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         fixture_for_proposals(proposal_id, payload),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     let caller = &principal(1);
 
@@ -6874,6 +7013,7 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
         fixture_for_proposals(proposal_id, payload),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     let caller = &principal(1);
 
@@ -6913,6 +7053,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
         fixture_for_proposals(proposal_id, payload),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     let caller = &principal(1);
 
@@ -6955,7 +7096,12 @@ fn test_list_proposals() {
         ..Default::default()
     };
     let driver = fake::FakeDriver::default();
-    let gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     let caller = &principal(1);
     {
         let lst = gov
@@ -7266,7 +7412,12 @@ fn test_filter_proposals() {
         ..Default::default()
     };
     let mut driver = fake::FakeDriver::default().at(20);
-    let gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     // Test 1: a proposal with resticted voting is included only if
     // the caller is allowed to vote on the proposal.
     {
@@ -7550,7 +7701,12 @@ fn test_list_neurons() {
     .cloned()
     .collect();
     let driver = fake::FakeDriver::default();
-    let gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     assert_eq!(
         ListNeuronsResponse {
             ..Default::default()
@@ -7649,6 +7805,7 @@ fn test_max_number_of_proposals_with_ballots() {
         proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
@@ -7792,7 +7949,12 @@ fn test_proposal_gc() {
     };
     // Set timestamp to 30 days
     let mut driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
-    let mut gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
+    let mut gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     assert_eq!(999, gov.proto.proposals.len());
     // First check GC does not take place if
     // latest_gc_{timestamp_seconds|num_proposals} are both close to
@@ -7840,6 +8002,7 @@ fn test_id_v1_works() {
         fixture_for_manage_neuron(),
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
     // Make a proposal to replace the list of followees (2-4) with just 2.
     gov.make_proposal(
@@ -7876,6 +8039,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
             fixture_for_manage_neuron(),
             driver.get_fake_env(),
             driver.get_fake_ledger(),
+            driver.get_fake_cmc(),
         );
 
         let nid = NeuronId { id: 2 };
@@ -8507,6 +8671,7 @@ fn test_start_dissolving() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     assert_eq!(
         gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
@@ -8568,6 +8733,7 @@ fn test_start_dissolving_panics() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     assert_eq!(
         gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
@@ -8611,6 +8777,7 @@ fn test_stop_dissolving() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     assert_eq!(
         gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
@@ -8665,6 +8832,7 @@ fn test_stop_dissolving_panics() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     assert_eq!(
         gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
@@ -8831,6 +8999,7 @@ fn test_increase_dissolve_delay() {
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     // Tests for neuron 1. Non-dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 1, 1);
@@ -8964,7 +9133,12 @@ fn test_join_community_fund() {
     let mut driver = fake::FakeDriver::default()
         .at(60 * 60 * 24 * 30)
         .with_supply(total_icp_suppply);
-    let mut gov = Governance::new(fixture, driver.get_fake_env(), driver.get_fake_ledger());
+    let mut gov = Governance::new(
+        fixture,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
     {
         let actual_metrics = gov.proto.compute_cached_metrics(now, total_icp_suppply);
         assert_eq!(200, actual_metrics.total_supply_icp);
@@ -9230,6 +9404,7 @@ fn wait_for_quiet_test_helper(
         fixture,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
     let pid = gov
         .make_proposal(
@@ -10118,6 +10293,7 @@ fn test_known_neurons() {
         governance_proto,
         driver.get_fake_env(),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
 
     gov.make_proposal(
@@ -10386,6 +10562,7 @@ fn test_set_sns_token_swap_open_time_window() {
             expected_call_canister_method_calls,
         }),
         driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
     );
 
     // Step 2: Run code under test. This is done indirectly via proposal.
@@ -10532,7 +10709,12 @@ async fn distribute_rewards_load_test() {
 
         ..Default::default()
     };
-    let mut governance = Governance::new(proto, helper.get_fake_env(), helper.get_fake_ledger());
+    let mut governance = Governance::new(
+        proto,
+        helper.get_fake_env(),
+        helper.get_fake_ledger(),
+        helper.get_fake_cmc(),
+    );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
 

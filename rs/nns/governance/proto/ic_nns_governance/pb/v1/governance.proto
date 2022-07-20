@@ -142,6 +142,10 @@ enum NeuronState {
   // delay. If these incentives turn out to be insufficient, the NNS
   // may decide to impose further restrictions on dissolved neurons.
   NEURON_STATE_DISSOLVED = 3;
+
+  // The neuron is in spawning state, meaning it's maturity will be
+  // converted to ICP according to https://wiki.internetcomputer.org/wiki/Maturity_modulation.
+  NEURON_STATE_SPAWNING = 4;
 }
 
 // How did a neuron vote in the recent past? This data is used by
@@ -263,6 +267,11 @@ message Neuron {
   // dissolving neurons always has age zero. The canonical value of
   // this field for a dissolving neuron is `u64::MAX`.
   uint64 aging_since_timestamp_seconds = 8;
+
+  // The timestamp, in seconds from the Unix epoch, at which this
+  // neuron should be spawned and its maturity converted to ICP
+  // according to https://wiki.internetcomputer.org/wiki/Maturity_modulation.
+  optional uint64 spawn_at_timestamp_seconds = 19;
 
   // At any time, at most one of `when_dissolved` and
   // `dissolve_delay` are specified.
@@ -1324,16 +1333,17 @@ message Governance {
     uint64 timestamp = 1;
     reserved 6;
     reserved "claim_or_refresh";
+    reserved 4;
 
     oneof command {
       ManageNeuron.Disburse disburse = 2;
       ManageNeuron.Split split = 3;
-      ManageNeuron.Spawn spawn = 4;
       ManageNeuron.DisburseToNeuron disburse_to_neuron = 5;
       ManageNeuron.MergeMaturity merge_maturity = 7;
       ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 8;
       ManageNeuron.Configure configure = 9;
       ManageNeuron.Merge merge = 10;
+      ic_nns_common.pb.v1.NeuronId spawn = 20;
     }
   }
 
@@ -1408,6 +1418,16 @@ message Governance {
   GovernanceCachedMetrics metrics = 15;
 
   MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
+
+  // Cached value for the maturity modulation as calculated each day.
+  optional double cached_daily_maturity_modulation = 17;
+
+  // The last time that the maturity modulation value was updated.
+  optional uint64 last_updated_maturity_modulation_cache = 18;
+
+  // Whether the heartbeat function is currently spawning neurons, meaning
+  // that it should finish before being called again.
+  optional bool spawning_neurons = 19;
 
   reserved 6;
   reserved "authz";

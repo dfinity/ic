@@ -31,7 +31,6 @@ use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcHandle;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
-use ic_nervous_system_common::ledger;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
@@ -629,11 +628,11 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         test_start_dissolve(&rosetta_api_serv, account_id, key_pair.into(), neuron_subaccount_identifier).await.unwrap();
 
         let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with enough maturity");
-        test_spawn(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        test_spawn(&rosetta_api_serv, &ledger_for_governance, neuron_info, None).await;
         let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with not enough maturity");
         test_spawn_invalid(&rosetta_api_serv, neuron_info).await;
         let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with partial maturity");
-        test_spawn_partial(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        test_spawn(&rosetta_api_serv, &ledger_for_governance, neuron_info, Some(75)).await;
 
         let neuron_info= neuron_tests.get_neuron_for_test("Test merge all neuron maturity");
         test_merge_maturity_all(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
@@ -2295,9 +2294,12 @@ async fn test_staking_flow_two_txns(
     .await;
 }
 
-async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: NeuronInfo) {
-    let (_, tip_idx) = get_tip(ledger).await;
-
+async fn test_spawn(
+    ros: &RosettaApiHandle,
+    ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+    percentage_to_spawn: Option<u32>,
+) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
@@ -2312,14 +2314,14 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
 
     // the nonce used to generate spawned neuron.
     let spawned_neuron_index: u64 = 4321;
-    let res = do_multiple_txn(
+    let (tx_id, results, _) = do_multiple_txn(
         ros,
         &[RequestInfo {
             request: Request::Spawn(Spawn {
                 account: acc,
                 spawned_neuron_index,
-                controller: Option::None, // use default (same) controller.
-                percentage_to_spawn: Option::None,
+                controller: None,
+                percentage_to_spawn,
                 neuron_index,
             }),
             sender_keypair: Arc::clone(&key_pair),
@@ -2329,47 +2331,54 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
         None,
     )
     .await
-    .map(|(tx_id, results, _)| {
-        assert!(!tx_id.is_transfer());
-        assert!(matches!(
-            results.operations.first().unwrap(),
-            RequestResult {
-                _type: Request::Spawn(_),
-                status: Status::Completed,
-                ..
-            }
-        ));
-        results
-    });
+    .expect("failed to spawn a neuron");
 
-    // Check spawn results.
-    // We expect one transaction to happen.
-    let expected_idx = tip_idx + 1;
-    if let Some(h) = res.unwrap().last_block_index() {
-        assert_eq!(h, expected_idx);
-    }
-    // Wait for Rosetta sync.
-    ros.wait_for_tip_sync(expected_idx).await.unwrap();
-    let balance_main_after = get_balance(ledger, neuron_acc).await;
+    assert!(!tx_id.is_transfer());
+    assert!(matches!(
+        results.operations.first().unwrap(),
+        RequestResult {
+            _type: Request::Spawn(_),
+            status: Status::Completed,
+            ..
+        }
+    ));
+
+    // Check that the neuron is spawning.
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::NeuronInfo(NeuronInfoRequest {
+                account: acc,
+                controller: None,
+                neuron_index: spawned_neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(_, results, _)| results)
+    .expect("Failed to retrieve neuron info");
+
+    assert_eq!(1, res.operations.len());
+    let metadata: &Object = res
+        .operations
+        .get(0)
+        .unwrap()
+        .metadata
+        .as_ref()
+        .expect("No metadata found.");
+
     assert_eq!(
-        balance_main_before.get_e8s(),
-        balance_main_after.get_e8s(),
-        "Neuron balance shouldn't change during spawn."
+        "SPAWNING",
+        metadata
+            .get("state")
+            .expect("State expected")
+            .as_str()
+            .unwrap()
     );
-
-    // Verify that maturity got transferred to the spawned neuron.
-    let subaccount =
-        ledger::compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
-    let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
-    let balance_sub = get_balance(ledger, spawned_neuron).await;
-    assert_eq!(
-        500_000_000,
-        balance_sub.get_e8s(),
-        "Expecting all maturity to be transferred to the spawned neuron."
-    );
-
-    // We should get the same results with Rosetta call (step not required though).
-    check_balance(ros, ledger, &spawned_neuron, Tokens::from_e8s(500_000_000)).await;
 }
 
 async fn test_spawn_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {
@@ -2417,88 +2426,6 @@ async fn test_spawn_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {
     let err = res.unwrap_err();
     assert_eq!(err.code, 770);
     assert_eq!(err.message, "Operation failed".to_string());
-}
-
-async fn test_spawn_partial(
-    ros: &RosettaApiHandle,
-    ledger: &Canister<'_>,
-    neuron_info: NeuronInfo,
-) {
-    let (_, tip_idx) = get_tip(ledger).await;
-
-    let acc = neuron_info.account_id;
-    let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
-
-    let neuron_acc = neuron_info.neuron_account;
-    let balance_main_before = get_balance(ledger, neuron_acc).await;
-    assert_ne!(
-        balance_main_before.get_e8s(),
-        0,
-        "Neuron balance shouldn't be 0."
-    );
-
-    // the nonce used to generate spawned neuron.
-    let spawned_neuron_index: u64 = 4321;
-    let res = do_multiple_txn(
-        ros,
-        &[RequestInfo {
-            request: Request::Spawn(Spawn {
-                account: acc,
-                spawned_neuron_index,
-                controller: Option::None, // use default (same) controller.
-                percentage_to_spawn: Option::Some(75),
-                neuron_index,
-            }),
-            sender_keypair: Arc::clone(&key_pair),
-        }],
-        false,
-        Some(one_day_from_now_nanos()),
-        None,
-    )
-    .await
-    .map(|(tx_id, results, _)| {
-        assert!(!tx_id.is_transfer());
-        assert!(matches!(
-            results.operations.first().unwrap(),
-            RequestResult {
-                _type: Request::Spawn(_),
-                status: Status::Completed,
-                ..
-            }
-        ));
-        results
-    });
-
-    // Check spawn results.
-    // We expect one transaction to happen.
-    let expected_idx = tip_idx + 1;
-    if let Some(h) = res.unwrap().last_block_index() {
-        assert_eq!(h, expected_idx);
-    }
-    // Wait for Rosetta sync.
-    ros.wait_for_tip_sync(expected_idx).await.unwrap();
-    let balance_main_after = get_balance(ledger, neuron_acc).await;
-    assert_eq!(
-        balance_main_before.get_e8s(),
-        balance_main_after.get_e8s(),
-        "Neuron balance shouldn't change during spawn."
-    );
-
-    // Verify that the proper percentage of maturity got transferred to the spawned neuron.
-    let subaccount =
-        ledger::compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
-    let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
-    let balance_sub = get_balance(ledger, spawned_neuron).await;
-    assert_eq!(
-        375_000_000,
-        balance_sub.get_e8s(),
-        "Expecting partial maturity to be transferred to the spawned neuron."
-    );
-
-    // We should get the same results with Rosetta call (step not required though).
-    check_balance(ros, ledger, &spawned_neuron, Tokens::from_e8s(375_000_000)).await;
-    check_balance(ros, ledger, &neuron_acc, Tokens::from_e8s(1_000_000_000)).await;
 }
 
 async fn test_merge_maturity_all(

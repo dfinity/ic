@@ -518,6 +518,9 @@ impl Neuron {
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
     pub fn state(&self, now_seconds: u64) -> NeuronState {
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
         match self.dissolve_state {
             Some(DissolveState::DissolveDelaySeconds(d)) => {
                 if d > 0 {
@@ -1756,6 +1759,7 @@ impl GovernanceProto {
 
             match neuron.state(now) {
                 NeuronState::Unspecified => (),
+                NeuronState::Spawning => (),
                 NeuronState::Dissolved => {
                     metrics.dissolved_neurons_count += 1;
                     metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;
@@ -1813,6 +1817,13 @@ impl fmt::Display for RewardEvent {
             self.settled_proposals.len()
         )
     }
+}
+
+/// A trait defining common patterns for accessing the CMC canister.
+#[async_trait]
+pub trait CMC: Send + Sync {
+    /// Returns the current neuron maturity modulation.
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String>;
 }
 
 /// A general trait for the environment in which governance is running.
@@ -1877,16 +1888,27 @@ pub enum HeapGrowthPotential {
 struct LedgerUpdateLock {
     nid: u64,
     gov: *mut Governance,
+    // Retain this lock even on drop.
+    retain: bool,
 }
 
 impl Drop for LedgerUpdateLock {
     fn drop(&mut self) {
+        if self.retain {
+            return;
+        }
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
         // 'unlock_neuron' will verify that the lock exists.
         let gov: &mut Governance = unsafe { &mut *self.gov };
         gov.unlock_neuron(self.nid);
+    }
+}
+
+impl LedgerUpdateLock {
+    fn retain(&mut self) {
+        self.retain = true;
     }
 }
 
@@ -1903,6 +1925,9 @@ pub struct Governance {
 
     /// Implementation of the interface with the Ledger canister.
     ledger: Box<dyn Ledger>,
+
+    /// Implementation of the interface with the CMC canister.
+    cmc: Box<dyn CMC>,
 
     /// Cached data structure that (for each topic) maps a followee to
     /// the set of followers. This is the inverse of the mapping from
@@ -1950,6 +1975,7 @@ impl Governance {
         mut proto: GovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn Ledger>,
+        cmc: Box<dyn CMC>,
     ) -> Self {
         if proto.genesis_timestamp_seconds == 0 {
             proto.genesis_timestamp_seconds = env.now();
@@ -1970,6 +1996,7 @@ impl Governance {
             proto,
             env,
             ledger,
+            cmc,
             topic_followee_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             known_neuron_name_set: HashSet::new(),
@@ -2138,7 +2165,11 @@ impl Governance {
 
         self.proto.in_flight_commands.insert(id, command);
 
-        Ok(LedgerUpdateLock { nid: id, gov: self })
+        Ok(LedgerUpdateLock {
+            nid: id,
+            gov: self,
+            retain: false,
+        })
     }
 
     /// Unlocks a given neuron.
@@ -2651,8 +2682,9 @@ impl Governance {
     ///
     /// Preconditions:
     /// - The parent neuron exists
-    /// - The caller is the controller of the neuron
+    /// - The caller is the controller of the neuron.
     /// - The parent neuron is not already undergoing ledger updates.
+    /// - The parent neuron is not spawning.
     /// - The staked amount minus amount to split is more than the minimum
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
@@ -2678,6 +2710,13 @@ impl Governance {
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
         let parent_neuron = self.get_neuron(id)?.clone();
+
+        if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
 
         let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
 
@@ -2781,6 +2820,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: parent_neuron
                 .joined_community_fund_timestamp_seconds,
             known_neuron_data: None,
+            spawn_at_timestamp_seconds: None,
         };
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
@@ -2855,6 +2895,10 @@ impl Governance {
     /// - Source neuron's not_for_profit field must match target
     /// - Source neuron and target neuron have the same ManageNeuron following
     /// - Cannot merge neurons that have been dedicated to the community fund
+    /// - Source neuron cannot be dedicated to the community fund
+    /// - Target neuron cannot be dedicated to the community fund
+    /// - Source neuron cannot be in spawning state
+    /// - Target neuron cannot be in spawning state
     /// - Subaccount of source neuron to be merged must be present
     /// - Subaccount of target neuron to be merged must be present
     /// - Neither neuron can be the proposer of an open proposal
@@ -2901,6 +2945,20 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 "Source neuron must be owned by the caller",
+            ));
+        }
+
+        if source_neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Source neuron is spawning.",
+            ));
+        }
+
+        if target_neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Target neuron is spawning.",
             ));
         }
 
@@ -3144,20 +3202,17 @@ impl Governance {
 
     /// Spawn an neuron from an existing neuron's maturity.
     ///
-    /// This spawns a new neuron from an existing neuron's maturity. The
-    /// existing neuron must have enough accumulated maturity such that the
-    /// new neuron has stake that is more than the minimum stake.
-    ///
-    /// The newly spawned neuron has the dissolve delay specified in
-    /// NetworkEconomics.
+    /// This creates a new neuron and moves some of the existing neuron's maturity
+    /// to the new neuron's maturity. The newly created neuron is in spawning state
+    /// and the time when it will be spawn is defined according to the NetworkEconomics.
     ///
     /// Pre-conditions:
     /// - The parent neuron exists.
     /// - The caller is the controller of the neuron.
     /// - The parent neuron is not already undergoing ledger updates.
-    /// - The parent neuron has accumulated maturity that would generate more
-    ///   than NetworkEconomics::neuron_minimum_spawn_stake_e8s staked in the
-    ///   child neuron.
+    /// - The parent neuron is not spawning itself.
+    /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
+    ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
     pub async fn spawn_neuron(
         &mut self,
         id: &NeuronId,
@@ -3168,7 +3223,13 @@ impl Governance {
         self.check_heap_can_grow()?;
 
         let parent_neuron = self.get_neuron(id)?.clone();
-        let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
+
+        if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Target neuron is spawning.",
+            ));
+        }
 
         if !parent_neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
@@ -3185,7 +3246,7 @@ impl Governance {
             .maturity_e8s_equivalent
             .checked_mul(percentage as u64)
             .expect("Overflow while processing maturity to spawn.");
-        let maturity_to_spawn = maturity_to_spawn / 100;
+        let maturity_to_spawn = maturity_to_spawn.checked_div(100).unwrap();
 
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
@@ -3198,9 +3259,6 @@ impl Governance {
                 .expect("The parent neuron doesn't have a controller.")
         };
 
-        // Calculate the stake of the new neuron.
-        let child_stake_e8s = maturity_to_spawn;
-
         let economics = self
             .proto
             .economics
@@ -3208,10 +3266,14 @@ impl Governance {
             .expect("Governance does not have NetworkEconomics")
             .clone();
 
-        if child_stake_e8s < economics.neuron_minimum_stake_e8s {
+        // Check if the least possible stake this neuron would be spawned with
+        // is more than the minimum neuron stake.
+        let least_possible_stake = (maturity_to_spawn as f64 * (1f64 - 0.05)) as u64;
+
+        if least_possible_stake < economics.neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
-                "There isn't enough maturity to spawn a new neuron.",
+                "There isn't enough maturity to spawn a new neuron due to worst case maturity modulation.",
             ));
         }
 
@@ -3239,21 +3301,9 @@ impl Governance {
         }
 
         let creation_timestamp_seconds = self.env.now();
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: creation_timestamp_seconds,
-            command: Some(InFlightCommand::Spawn(spawn.clone())),
-        };
+        let dissolve_and_spawn_at_timestamp_seconds =
+            creation_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
 
-        // Make sure the parent neuron is not already undergoing a ledger update.
-        let _parent_lock =
-            self.lock_neuron_for_command(parent_nid.id, in_flight_command.clone())?;
-
-        // Before we do the transfer, we need to save the neuron in the map
-        // otherwise a trap after the transfer is successful but before this
-        // method finishes would cause the funds to be lost.
-        // However the new neuron is not yet ready to be used as we can't know
-        // whether the transfer will succeed, so we temporarily set the
-        // stake to 0 and only change it after the transfer is successful.
         let child_neuron = Neuron {
             id: Some(child_nid.clone()),
             account: to_subaccount.to_vec(),
@@ -3262,15 +3312,16 @@ impl Governance {
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: creation_timestamp_seconds,
-            aging_since_timestamp_seconds: creation_timestamp_seconds,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                economics.neuron_spawn_dissolve_delay_seconds,
+            aging_since_timestamp_seconds: u64::MAX,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                dissolve_and_spawn_at_timestamp_seconds,
             )),
+            spawn_at_timestamp_seconds: Some(dissolve_and_spawn_at_timestamp_seconds),
             followees: parent_neuron.followees.clone(),
             recent_ballots: Vec::new(),
             kyc_verified: parent_neuron.kyc_verified,
             transfer: None,
-            maturity_e8s_equivalent: 0,
+            maturity_e8s_equivalent: maturity_to_spawn,
             not_for_profit: false,
             // We allow spawning of maturity from a neuron that has
             // joined the community fund: the spawned neuron is not
@@ -3279,51 +3330,14 @@ impl Governance {
             known_neuron_data: None,
         };
 
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
-
-        // Add the child neuron to the set of neurons undergoing ledger updates.
-        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
-
-        // Do the transfer, this is a minting transfer, from the governance canister's
-        // (which is also the minting canister) main account into the new neuron's
-        // subaccount.
-        let now = self.env.now();
-        let result: Result<u64, NervousSystemError> = self
-            .ledger
-            .transfer_funds(
-                child_stake_e8s,
-                0, // Minting transfer don't pay a fee.
-                None,
-                neuron_subaccount(to_subaccount),
-                now,
-            )
-            .await;
-
-        if let Err(error) = result {
-            let error = GovernanceError::from(error);
-            // If we've got an error, we assume the transfer didn't happen for
-            // some reason. The only state to cleanup is to delete the child
-            // neuron, since we haven't mutated the parent yet.
-            self.remove_neuron(child_nid.id, child_neuron)?;
-            println!(
-                "Neuron minting transfer of to neuron: {:?}\
-                                  failed with error: {:?}. Neuron can't be staked.",
-                child_nid, error
-            );
-            return Err(error);
-        }
+        self.add_neuron(child_nid.id, child_neuron)?;
 
         // Get the neurons again, but this time mutable references.
         let parent_neuron = self.get_neuron_mut(id).expect("Neuron not found");
 
         // Reset the parent's maturity.
-        parent_neuron.maturity_e8s_equivalent -= child_stake_e8s;
+        parent_neuron.maturity_e8s_equivalent -= maturity_to_spawn;
 
-        let child_neuron = self
-            .get_neuron_mut(&child_nid)
-            .expect("Expected the child neuron to exist");
-
-        child_neuron.cached_neuron_stake_e8s = child_stake_e8s;
         Ok(child_nid)
     }
 
@@ -3336,6 +3350,7 @@ impl Governance {
     /// Pre-conditions:
     /// - The neuron is controlled by `caller`
     /// - The neuron has some maturity to merge.
+    /// - The neuron is not in spawning state.
     /// - The e8s equivalent of the amount of maturity to merge must be more
     ///   than the transaction fee.
     pub async fn merge_maturity_of_neuron(
@@ -3345,6 +3360,14 @@ impl Governance {
         merge_maturity: &manage_neuron::MergeMaturity,
     ) -> Result<MergeMaturityResponse, GovernanceError> {
         let neuron = self.get_neuron(id)?.clone();
+
+        if neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
+
         let nid = neuron.id.as_ref().expect("Neurons must have an id");
         let subaccount = subaccount_from_slice(&neuron.account)?.ok_or_else(|| {
             GovernanceError::new_with_message(
@@ -3450,6 +3473,7 @@ impl Governance {
     /// - The parent neuron exists
     /// - The caller is the controller of the neuron
     /// - The parent neuron is not already undergoing ledger updates.
+    /// - The parent neuron is not in spawning state.
     /// - The parent neuron's state is `Dissolved` at the current timestamp.
     /// - The staked amount minus amount to split is more than the minimum
     ///   stake.
@@ -3473,6 +3497,13 @@ impl Governance {
 
         let parent_neuron = self.get_neuron(id)?.clone();
         let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
+
+        if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
 
         if !parent_neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
@@ -3631,6 +3662,7 @@ impl Governance {
             not_for_profit: false,
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
+            spawn_at_timestamp_seconds: None,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -4253,6 +4285,7 @@ impl Governance {
                     transfer: None,
                     joined_community_fund_timestamp_seconds: None,
                     known_neuron_data: None,
+                    spawn_at_timestamp_seconds: None,
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -5761,6 +5794,7 @@ impl Governance {
             recent_ballots: vec![],
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
+            spawn_at_timestamp_seconds: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -6077,21 +6111,37 @@ impl Governance {
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
 
-        // Getting the total ICP supply from the ledger is expensive enough that we
-        // don't want to do it on every call to `run_periodic_tasks`. So we only
-        // fetch it when it's needed, which is when either rewards should be
-        // distributed or metrics should be computed.
-        if self.should_distribute_rewards() || self.should_compute_cached_metrics() {
+        // First try to mint node provider rewards (once per month).
+        if self.is_time_to_mint_monthly_node_provider_rewards() {
+            match self.mint_monthly_node_provider_rewards().await {
+                Ok(()) => (),
+                Err(e) => println!(
+                    "{}Error when minting monthly node provider rewards in run_periodic_tasks: {}",
+                    LOG_PREFIX, e,
+                ),
+            }
+        // Second try to distribute voting rewards (once per day).
+        } else if self.should_distribute_rewards() {
+            // Getting the total ICP supply from the ledger is expensive enough that we
+            // don't want to do it on every call to `run_periodic_tasks`. So we only
+            // fetch it when it's needed.
             match self.ledger.total_supply().await {
                 Ok(supply) => {
-                    // Distribute rewards if enough time has passed since the last reward
-                    // event. If there is no reward event, attempt to compute cached
-                    // metrics. We ensure that both rewards and metrics computations don't
-                    // both execute in the same call in order to limit the amount of
-                    // time/cycles that run_periodic_tasks uses.
                     if self.should_distribute_rewards() {
                         self.distribute_rewards(supply);
-                    } else if self.should_compute_cached_metrics() {
+                    }
+                }
+                Err(e) => println!(
+                    "{}Error when getting total ICP supply: {}",
+                    LOG_PREFIX,
+                    GovernanceError::from(e),
+                ),
+            }
+        // Third try to compute cached metrics (once per day).
+        } else if self.should_compute_cached_metrics() {
+            match self.ledger.total_supply().await {
+                Ok(supply) => {
+                    if self.should_compute_cached_metrics() {
                         let now = self.env.now();
                         let metrics = self.proto.compute_cached_metrics(now, supply);
                         self.proto.metrics = Some(metrics);
@@ -6103,19 +6153,177 @@ impl Governance {
                     GovernanceError::from(e),
                 ),
             }
-        }
-
-        if self.is_time_to_mint_monthly_node_provider_rewards() {
-            match self.mint_monthly_node_provider_rewards().await {
-                Ok(()) => (),
-                Err(e) => println!(
-                    "{}Error when minting monthly node provider rewards in run_periodic_tasks: {}",
-                    LOG_PREFIX, e,
-                ),
-            }
+        // Try to update maturity modulation (once per day).
+        } else if self.should_update_maturity_modulation() {
+            self.update_maturity_modulation().await;
+        // Try to spawn neurons (potentially multiple times per day).
+        } else if self.can_spawn_neurons() {
+            self.spawn_neurons().await;
         }
 
         self.maybe_gc();
+    }
+
+    fn should_update_maturity_modulation(&self) -> bool {
+        let now_seconds = self.env.now();
+        let last_updated = self.proto.last_updated_maturity_modulation_cache;
+        last_updated.is_none() || last_updated.unwrap() + 86400 > now_seconds
+    }
+
+    async fn update_maturity_modulation(&mut self) {
+        if !self.should_update_maturity_modulation() {
+            return;
+        };
+
+        let now_seconds = self.env.now();
+
+        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
+        if maturity_modulation.is_err() {
+            println!(
+                "{}Couldn't update maturity modulation. Error: {}",
+                LOG_PREFIX,
+                maturity_modulation.err().unwrap()
+            );
+            return;
+        }
+        let maturity_modulation = maturity_modulation.unwrap();
+        self.proto.cached_daily_maturity_modulation = Some(maturity_modulation);
+        self.proto.last_updated_maturity_modulation_cache = Some(now_seconds);
+    }
+
+    fn can_spawn_neurons(&self) -> bool {
+        let spawning = self.proto.spawning_neurons;
+        spawning.is_none() || !spawning.unwrap()
+    }
+
+    /// Actually spawn neurons by minting their maturity, modulated by the maturity modulation rate of the day.
+    /// There can only be one execution of this method running at a time to keep the reasoning about this simple.
+    /// This means that programming in this method needs to be extra-defensive on the handling of results so that
+    /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
+    /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
+    async fn spawn_neurons(&mut self) {
+        if !self.can_spawn_neurons() {
+            return;
+        }
+
+        let now_seconds = self.env.now();
+        let maturity_modulation = self.proto.cached_daily_maturity_modulation;
+        if maturity_modulation.is_none() {
+            return;
+        }
+        let maturity_modulation = maturity_modulation.unwrap();
+
+        // Sanity check that the maturity modulation returned is within bounds.
+        if !(-0.05..=0.05).contains(&maturity_modulation) {
+            println!(
+                "{}Maturity modulation out-of-bounds. Should be in range [-0.05, 0.05], actually is: {}",
+                LOG_PREFIX, maturity_modulation
+            );
+            return;
+        }
+
+        // Acquire the global "spawning" lock.
+        self.proto.spawning_neurons = Some(true);
+
+        // Filter all the neurons that are currently in "spawning" state.
+        // Do this here to avoid having to borrow *self while we perform changes below.
+        let spawning_neurons = self
+            .proto
+            .neurons
+            .values()
+            .cloned()
+            .filter(|n| n.state(now_seconds) == NeuronState::Spawning)
+            .collect::<Vec<Neuron>>();
+
+        for neuron in spawning_neurons {
+            let spawn_timestamp_seconds = neuron
+                .spawn_at_timestamp_seconds
+                .expect("Neuron is spawning but has no spawn timestamp");
+
+            if now_seconds >= spawn_timestamp_seconds {
+                let id = neuron.id.as_ref().unwrap().clone();
+                let subaccount = neuron.account.clone();
+                // Actually mint the neuron's ICP.
+                let in_flight_command = NeuronInFlightCommand {
+                    timestamp: now_seconds,
+                    command: Some(InFlightCommand::Spawn(neuron.id.as_ref().unwrap().clone())),
+                };
+
+                // Add the neuron to the set of neurons undergoing ledger updates.
+                match self.lock_neuron_for_command(id.id, in_flight_command.clone()) {
+                    Ok(mut lock) => {
+                        let maturity = neuron.maturity_e8s_equivalent;
+                        let neuron_stake = (maturity as f64 * (1f64 + maturity_modulation)) as u64;
+
+                        println!(
+                            "{}Spawning neuron: {:?}. Performing ledger udpate.",
+                            LOG_PREFIX, neuron
+                        );
+
+                        let mut neuron = self.get_neuron_mut(&id).unwrap();
+
+                        // Reset the neuron's maturity and set that it's spawning before we actually mint
+                        // the stake. This is conservative to prevent a neuron having _both_ the stake and
+                        // the maturity at any point in time.
+                        neuron.maturity_e8s_equivalent = 0;
+                        neuron.spawn_at_timestamp_seconds = None;
+                        neuron.cached_neuron_stake_e8s = neuron_stake;
+
+                        let neuron_clone = neuron.clone();
+
+                        // Do the transfer, this is a minting transfer, from the governance canister's
+                        // (which is also the minting canister) main account into the neuron's
+                        // subaccount.
+                        match self
+                            .ledger
+                            .transfer_funds(
+                                neuron_stake,
+                                0, // Minting transfer don't pay a fee.
+                                None,
+                                neuron_subaccount(
+                                    Subaccount::try_from(&subaccount[..])
+                                        .expect("Couldn't convert neuron.account"),
+                                ),
+                                now_seconds,
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                println!(
+                                    "{}Spawned neuron: {:?}. Ledger update performed.",
+                                    LOG_PREFIX, neuron_clone,
+                                );
+                            }
+                            Err(error) => {
+                                // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                                // operations until this is fixed.
+                                // This is different from what we do in most places because we usually rely
+                                // on trapping to retain the lock, but we can't do that here since we're not
+                                // working on a single neuron.
+                                lock.retain();
+                                println!(
+                                    "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
+                                    LOG_PREFIX,
+                                    id,
+                                    error,
+                                );
+                            }
+                        };
+                    }
+                    Err(error) => {
+                        // If the lock was already acquired, just continue.
+                        println!(
+                            "{}Tried to spawn neuron but was already locked: {:?}. Error: {:?}",
+                            LOG_PREFIX, id, error,
+                        );
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Release the global spawning lock
+        self.proto.spawning_neurons = Some(false);
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise

@@ -21,7 +21,7 @@ use std::convert::TryFrom;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential};
+use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential, CMC};
 
 use ic_nns_governance::pb::v1::neuron;
 use ic_nns_governance::pb::v1::proposal;
@@ -107,6 +107,15 @@ impl Ledger for MockLedger {
     }
 }
 
+struct MockCMC {}
+
+#[async_trait]
+impl CMC for MockCMC {
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+        unimplemented!()
+    }
+}
+
 // Make a proposal for neuron 0 and call proccess proposals. The
 // following graph is set up to cascade following, so the proposal
 // will be accepted when submitted and executed in the call to process
@@ -135,6 +144,7 @@ fn linear_20k(c: &mut Criterion) {
         fixture_for_scale(20_000, true),
         Box::new(MockEnvironment { secs }),
         Box::new(MockLedger {}),
+        Box::new(MockCMC {}),
     );
     c.bench_function("linear 20k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -147,6 +157,7 @@ fn tree_20k(c: &mut Criterion) {
         fixture_for_scale(20_000, false),
         Box::new(MockEnvironment { secs }),
         Box::new(MockLedger {}),
+        Box::new(MockCMC {}),
     );
     c.bench_function("tree 20k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -159,6 +170,7 @@ fn linear_200k(c: &mut Criterion) {
         fixture_for_scale(200_000, true),
         Box::new(MockEnvironment { secs }),
         Box::new(MockLedger {}),
+        Box::new(MockCMC {}),
     );
     c.bench_function("linear 200k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -171,6 +183,7 @@ fn tree_200k(c: &mut Criterion) {
         fixture_for_scale(200_000, false),
         Box::new(MockEnvironment { secs }),
         Box::new(MockLedger {}),
+        Box::new(MockCMC {}),
     );
     c.bench_function("tree 200k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
