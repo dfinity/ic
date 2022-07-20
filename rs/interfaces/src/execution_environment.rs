@@ -52,8 +52,9 @@ pub enum SubnetAvailableMemoryError {
 /// Performance counter type.
 #[derive(Debug)]
 pub enum PerformanceCounterType {
-    // The number of WebAssembly instructions the canister has executed
-    Instructions(NumInstructions),
+    // The number of WebAssembly instructions the canister has executed based on
+    // the given `i64` instruction counter.
+    Instructions(i64),
 }
 
 /// Tracks the execution complexity.
@@ -354,11 +355,20 @@ pub trait SystemApi {
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
 
-    /// Returns the total instruction limit.
-    fn total_instruction_limit(&self) -> NumInstructions;
+    /// Returns the message instruction limit, which is the total instruction
+    /// limit for all slices combined.
+    fn message_instruction_limit(&self) -> NumInstructions;
+
+    /// Returns the number of instructions executed in the current message,
+    /// which is the sum of instructions executed in all slices including the
+    /// current one.
+    fn message_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 
     /// Returns the instruction limit for the current execution slice.
     fn slice_instruction_limit(&self) -> NumInstructions;
+
+    /// Returns the number of instructions executed in the current slice.
+    fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
@@ -677,7 +687,7 @@ pub trait SystemApi {
     /// If it is impossible to recover from the out-of-instructions error then
     /// the functions return `Err(HypervisorError::InstructionLimitExceeded)`.
     /// Otherwise, the function return a new non-negative instruction counter.
-    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been called to check whether there's enough

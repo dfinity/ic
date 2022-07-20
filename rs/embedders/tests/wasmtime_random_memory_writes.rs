@@ -24,6 +24,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -38,6 +39,7 @@ fn test_api_for_update(
     caller: Option<PrincipalId>,
     payload: Vec<u8>,
     subnet_type: SubnetType,
+    instruction_limit: NumInstructions,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     let system_state = SystemStateBuilder::default().build();
@@ -67,8 +69,8 @@ fn test_api_for_update(
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
                 FlagStatus::Disabled,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_NUM_INSTRUCTIONS,
+                instruction_limit,
+                instruction_limit,
             ),
             canister_memory_limit,
             compute_allocation: ComputeAllocation::default(),
@@ -184,7 +186,7 @@ mod tests {
 
     use ic_embedders::wasm_executor::compute_page_delta;
     // Get .current() trait method
-    use ic_interfaces::execution_environment::HypervisorError;
+    use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
     use ic_system_api::ModificationTracking;
@@ -213,9 +215,14 @@ mod tests {
                 let mut payload = write.dst.to_le_bytes().to_vec();
                 payload.extend(write.bytes.iter());
 
-                let api =
-                    test_api_for_update(no_op_logger(), None, payload, SubnetType::Application);
-
+                let api = test_api_for_update(
+                    no_op_logger(),
+                    None,
+                    payload,
+                    SubnetType::Application,
+                    MAX_NUM_INSTRUCTIONS,
+                );
+                let instruction_limit = api.slice_instruction_limit();
                 let mut instance = embedder
                     .new_instance(
                         canister_test_id(1),
@@ -228,7 +235,7 @@ mod tests {
                     )
                     .map_err(|r| r.0)
                     .expect("Failed to create instance");
-                instance.set_num_instructions(MAX_NUM_INSTRUCTIONS);
+                instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
                 // Apply the write to the test buffer.
                 buf_apply_write(&mut test_heap, write);
@@ -352,13 +359,18 @@ mod tests {
             )
             .unwrap();
 
-            let max_num_instructions = NumInstructions::from(5_000_000_000);
-
             let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
             let cache = compile(&embedder, &wasm).unwrap().0;
 
-            let api = test_api_for_update(log, None, payload, SubnetType::Application);
+            let api = test_api_for_update(
+                log,
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
             let mut inst = embedder
                 .new_instance(
                     canister_test_id(1),
@@ -371,15 +383,19 @@ mod tests {
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");
-            inst.set_num_instructions(max_num_instructions);
+            inst.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
             let _result = inst.run(FuncRef::Method(WasmMethod::Update("func_trap".into())));
 
             // The amount of instructions consumed: 2 constants, trap() (21 instructions)
             // plus equivalent of `num_bytes` in instructions.
-            let instructions_consumed = max_num_instructions - inst.get_num_instructions();
+            let instruction_counter = inst.instruction_counter();
+            let instructions_executed = inst
+                .store_data()
+                .system_api
+                .slice_instructions_executed(instruction_counter);
             assert_eq!(
-                instructions_consumed.get(),
+                instructions_executed.get(),
                 23 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
             )
         });
@@ -573,7 +589,8 @@ mod tests {
         let config = Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let cache = compile(&embedder, &wasm).unwrap().0;
-        let api = test_api_for_update(log, None, payload, subnet_type);
+        let api = test_api_for_update(log, None, payload, subnet_type, max_num_instructions);
+        let instruction_limit = api.slice_instruction_limit();
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
@@ -586,12 +603,17 @@ mod tests {
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
-        inst.set_num_instructions(max_num_instructions);
+        inst.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
         inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
 
-        // The amount of instructions consumed.
-        Ok(max_num_instructions - inst.get_num_instructions())
+        let instruction_counter = inst.instruction_counter();
+        let instructions_executed = inst
+            .store_data()
+            .system_api
+            .slice_instructions_executed(instruction_counter);
+
+        Ok(instructions_executed)
     }
 
     #[test]

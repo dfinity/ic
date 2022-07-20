@@ -1,8 +1,9 @@
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SystemApi};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
@@ -115,7 +116,7 @@ impl WasmtimeInstanceBuilder {
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
         );
-
+        let instruction_limit = api.slice_instruction_limit();
         let mut instance = embedder
             .new_instance(
                 canister_test_id(1),
@@ -128,7 +129,7 @@ impl WasmtimeInstanceBuilder {
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
-        instance.set_num_instructions(self.num_instructions);
+        instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
         instance
     }
 }

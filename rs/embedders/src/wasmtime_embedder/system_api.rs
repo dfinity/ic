@@ -123,7 +123,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller, log, canister_id)?;
     // Assert the current instruction counter is sane
-    let system_api = &caller.data().system_api;
+    let system_api = &mut caller.data_mut().system_api;
     let instruction_limit = system_api.slice_instruction_limit().get() as i64;
     if instruction_counter > instruction_limit {
         error!(
@@ -167,7 +167,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     // then we need to call the out-of-instructins handler again and store the
     // returned new counter value.
     if instruction_counter < 0 {
-        let system_api = &caller.data().system_api;
+        let system_api = &mut caller.data_mut().system_api;
         // Note we cannot use `map_err()` here because `caller` is needed later on in `store_value`.
         instruction_counter = match system_api.out_of_instructions(instruction_counter) {
             Ok(instruction_counter) => instruction_counter,
@@ -199,14 +199,14 @@ fn observe_execution_complexity<S: SystemApi>(
         // TODO: RUN-126: Implement per-round complexity that combines complexities of
         //       multiple messages.
         // Note: for install messages the CPU Limit will be > 1s, but it will be addressed with DTS
-        let total_instruction_limit = system_api.total_instruction_limit();
-        if total_complexity.cpu > total_instruction_limit {
+        let message_instruction_limit = system_api.message_instruction_limit();
+        if total_complexity.cpu > message_instruction_limit {
             error!(
                 log,
                 "Canister {}: Error exceeding CPU complexity limit: (observed:{}, limit:{})",
                 canister_id,
                 total_complexity.cpu,
-                total_instruction_limit,
+                message_instruction_limit,
             );
             return Err(process_err(
                 caller,
@@ -225,35 +225,25 @@ fn ic0_performance_counter_helper<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     counter_type: u32,
 ) -> Result<u64, Trap> {
-    let performance_counter_type = match counter_type {
+    match counter_type {
         0 => {
             let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
             let instruction_counter =
-                load_value(&num_instructions_global, caller, log, canister_id)? as u64;
-
-            // TODO(RUN-272): Add the total executed instructions from the out-of-instructions handler.
-            let instructions_limit = caller.data().system_api.slice_instruction_limit().get();
-            let instructions_used = instructions_limit
-                .checked_sub(instruction_counter)
-                .unwrap_or(instructions_limit);
-
-            PerformanceCounterType::Instructions(instructions_used.into())
+                load_value(&num_instructions_global, caller, log, canister_id)?;
+            caller
+                .data()
+                .system_api
+                .ic0_performance_counter(PerformanceCounterType::Instructions(instruction_counter))
+                .map_err(|e| process_err(caller, e))
         }
-        _ => {
-            return Err(process_err(
-                caller,
-                HypervisorError::ContractViolation(format!(
-                    "Error getting performance counter type {}",
-                    counter_type
-                )),
-            ));
-        }
-    };
-    caller
-        .data()
-        .system_api
-        .ic0_performance_counter(performance_counter_type)
-        .map_err(|e| process_err(caller, e))
+        _ => Err(process_err(
+            caller,
+            HypervisorError::ContractViolation(format!(
+                "Error getting performance counter type {}",
+                counter_type
+            )),
+        )),
+    }
 }
 
 pub(crate) fn syscalls<S: SystemApi>(

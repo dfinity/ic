@@ -89,10 +89,9 @@ mod test {
             ))
             .unwrap();
 
-        let system_api = &instance.store_data_mut().system_api;
-        let instructions_limit = system_api.total_instruction_limit();
-        let num_instructions = instance.get_num_instructions();
-        let instructions_used = instructions_limit - num_instructions;
+        let instruction_counter = instance.instruction_counter();
+        let system_api = &instance.store_data().system_api;
+        let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
         let call_msg_arg_data_copy_with_3_const = 4;
         let expected_instructions = call_msg_arg_data_copy_with_3_const
@@ -242,10 +241,9 @@ mod test {
             Global::I64(c) => c as u64,
             _ => panic!("Error getting performance_counter2"),
         };
-        let system_api = &instance.store_data_mut().system_api;
-        let instructions_limit = system_api.total_instruction_limit();
-        let num_instructions = instance.get_num_instructions();
-        let instructions_used = instructions_limit - num_instructions;
+        let instruction_counter = instance.instruction_counter();
+        let system_api = &instance.store_data().system_api;
+        let instructions_used = system_api.slice_instructions_executed(instruction_counter);
         assert_eq!(performance_counter1, expected_instructions_counter1);
         assert_eq!(performance_counter2, expected_instructions_counter2);
 
@@ -295,10 +293,9 @@ mod test {
             ))
             .unwrap();
 
-        let system_api = &instance.store_data_mut().system_api;
-        let instructions_limit = system_api.total_instruction_limit();
-        let num_instructions = instance.get_num_instructions();
-        let instructions_used = instructions_limit - num_instructions;
+        let instruction_counter = instance.instruction_counter();
+        let system_api = &instance.store_data().system_api;
+        let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
         let call_new_with_8_const = 9;
         let drop_with_call_perform = 2;

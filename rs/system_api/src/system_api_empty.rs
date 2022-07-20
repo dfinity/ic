@@ -40,10 +40,16 @@ impl SystemApi for SystemApiEmpty {
     fn subnet_type(&self) -> SubnetType {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn total_instruction_limit(&self) -> NumInstructions {
+    fn message_instruction_limit(&self) -> NumInstructions {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn message_instructions_executed(&self, _instruction_counter: i64) -> NumInstructions {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn slice_instruction_limit(&self) -> NumInstructions {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn slice_instructions_executed(&self, _instruction_counter: i64) -> NumInstructions {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_caller_copy(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
@@ -205,7 +211,7 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn out_of_instructions(&self, _instruction_counter: i64) -> Result<i64, HypervisorError> {
+    fn out_of_instructions(&mut self, _instruction_counter: i64) -> Result<i64, HypervisorError> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn update_available_memory(&mut self, _: i32, _: u32) -> HypervisorResult<i32> {
