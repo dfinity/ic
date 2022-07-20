@@ -126,11 +126,12 @@ impl TransportImpl {
         mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         mut writer: Box<TlsWriteHalf>,
         event_handler: TransportEventHandler,
+        data_plane_metrics: DataPlaneMetrics,
     ) -> JoinHandle<()> {
-        let _updater = MetricsUpdater::new(self.data_plane_metrics.clone(), true);
         let flow_tag_str = flow_tag.to_string();
         let weak_self = self.weak_self.read().unwrap().clone();
         self.rt_handle.spawn(async move  {
+            let _updater = MetricsUpdater::new(data_plane_metrics, true);
             loop {
                 let loop_start_time = Instant::now();
                 // If the TransportImpl has been deleted, abort.
@@ -221,12 +222,13 @@ impl TransportImpl {
         flow_label: String,
         mut event_handler: TransportEventHandler,
         mut reader: Box<TlsReadHalf>,
+        data_plane_metrics: DataPlaneMetrics,
     ) -> JoinHandle<()> {
         let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
-        let _updater = MetricsUpdater::new(self.data_plane_metrics.clone(), false);
         let flow_tag_str = flow_tag.to_string();
         let weak_self = self.weak_self.read().unwrap().clone();
         self.rt_handle.spawn(async move {
+            let _updater = MetricsUpdater::new(data_plane_metrics, false);
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
@@ -397,6 +399,7 @@ impl TransportImpl {
             send_queue_reader,
             Box::new(tls_writer),
             event_handler_cl,
+            self.data_plane_metrics.clone(),
         );
 
         let read_task = self.spawn_read_task(
@@ -405,6 +408,7 @@ impl TransportImpl {
             flow_label,
             event_handler,
             Box::new(tls_reader),
+            self.data_plane_metrics.clone(),
         );
 
         Connected {
