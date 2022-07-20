@@ -153,7 +153,7 @@ impl UtilityCommand {
                     .status()
                     .is_ok()
                 {
-                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    std::thread::sleep(std::time::Duration::from_secs(5));
                 }
             }
         }
