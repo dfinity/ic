@@ -162,7 +162,7 @@ use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -637,6 +637,22 @@ pub trait SshSession {
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
     fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
+
+    fn block_on_bash_script(&self, user: &str, script: &str) -> Result<String> {
+        let sess = self.block_on_ssh_session(user)?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("bash").unwrap();
+
+        channel.write_all(script.as_bytes())?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out)?;
+        if channel.exit_status()? != 0 {
+            bail!("block_on_bash_script: exit != 0");
+        }
+        Ok(out)
+    }
 }
 
 pub trait RetrieveIpv4Addr {
