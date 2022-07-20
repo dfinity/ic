@@ -293,7 +293,8 @@ async fn main() {
         .unwrap()
         .parse::<usize>()
         .unwrap();
-    let rps = matches.value_of("rps").unwrap().parse::<usize>().unwrap();
+    let rps = matches.value_of("rps").unwrap().parse::<f64>().unwrap();
+    let rpms = (rps * 1000f64).floor() as usize;
 
     let evaluate_max_rps = matches.is_present("evaluate-max-rps");
 
@@ -495,7 +496,7 @@ async fn main() {
 
             let facts = if evaluate_max_rps {
                 eng.evaluate_max_rps(
-                    rps,
+                    rpms,
                     request_type,
                     canister_method_name,
                     duration,
@@ -508,7 +509,7 @@ async fn main() {
                 .await
             } else {
                 eng.execute_rps(
-                    rps,
+                    rpms,
                     request_type,
                     canister_method_name,
                     duration,
