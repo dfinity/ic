@@ -3,6 +3,6 @@ name = "ic-vulnerable1"
 version = "0.1.0"
 
 [dependencies]
-wasmtime = "0.29.0"
+wasmtime = "0.38.1"
 prost-build = "0.7.0"
 ic-vulnerable2 = { path = "../ic-vulnerable2" }
