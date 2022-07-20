@@ -165,7 +165,8 @@ class DeclarativePreProcessor(PreProcessor):
         [
             "log",
             "reboot",
-            "reboot_intent" "p2p__node_added",
+            "reboot_intent",
+            "p2p__node_added",
             "p2p__node_removed",
             "deliver_batch",
             "consensus_finalized",

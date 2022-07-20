@@ -213,9 +213,9 @@ def main():
 
     if liveness_slack_token is None:
         warn_no_slack("Slack Liveness Service", "--liveness_slack_token")
-        liveness_slack = DummyAlertService(signature)
+        liveness_slack = DummyAlertService(signature, git_revision)
     else:
-        liveness_slack = AlertService(liveness_slack_token, signature)
+        liveness_slack = AlertService(liveness_slack_token, signature, git_revision)
 
     # If the following env var is specified, the policy violation repros will
     #  be emitted as portable Docker commands, regardless of whether the
