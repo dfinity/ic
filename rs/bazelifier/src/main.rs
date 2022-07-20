@@ -276,7 +276,7 @@ impl Bazelifier {
             self.generate_tests(&mut bf)?;
         }
 
-        bf.build_script = !bf.build_deps.is_empty() || self.manifest_dir.join("build.rs").is_file();
+        bf.build_script = self.manifest_dir.join("build.rs").is_file();
 
         if self.opts.dry_run {
             std::io::stdout().write_all(bf.render()?.as_bytes())?;
