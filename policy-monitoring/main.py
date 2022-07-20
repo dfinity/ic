@@ -140,6 +140,7 @@ def main():
         "--git_revision",
         "-gr",
         type=str,
+        default=None,
         help="The Git branch name or revision SHA of this pipeline invocation. Used to add policy definition links in violation alerts",
     )
     args = parser.parse_args()
@@ -207,9 +208,9 @@ def main():
 
     if slack_token is None:
         warn_no_slack("Slack Alert Service", "--slack_service_id")
-        slack = DummyAlertService(signature)
+        slack = DummyAlertService(signature, git_revision)
     else:
-        slack = AlertService(slack_token, signature)
+        slack = AlertService(slack_token, signature, git_revision)
 
     if liveness_slack_token is None:
         warn_no_slack("Slack Liveness Service", "--liveness_slack_token")
