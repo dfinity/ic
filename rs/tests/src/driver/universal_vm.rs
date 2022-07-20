@@ -16,7 +16,7 @@ use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
@@ -238,27 +238,28 @@ impl SshSession for DeployedUniversalVm {
     }
 }
 
-impl RetrieveIpv4Addr for DeployedUniversalVm {
-    fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
-        let sess = self.block_on_ssh_session(ADMIN)?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("bash").unwrap();
-
-        let get_ipv4_script = r#"set -e -o pipefail
+const IPV4_RETRIEVE_SH_SCRIPT: &str = r#"set -e -o pipefail
+count=0
 until ipv4=$(ip -j address show dev enp2s0 \
             | jq -r -e \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
+  if [ "$count" -ge 120 ]; then
+    exit 1
+  fi
   sleep 1
+  count=$((count+1))
 done
 echo "$ipv4"
 "#;
-        channel.write_all(get_ipv4_script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
-        Ok(ipv4)
+
+impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
+        use anyhow::Context;
+        let ipv4_string = self.block_on_bash_script(ADMIN, IPV4_RETRIEVE_SH_SCRIPT)?;
+        ipv4_string
+            .trim()
+            .parse::<Ipv4Addr>()
+            .context("ipv4 retrieval")
     }
 }
