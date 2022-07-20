@@ -33,11 +33,15 @@ pub enum CanisterHttpPermanentValidationError {
         metadata_hash: CryptoHashOf<CanisterHttpResponse>,
         calculated_hash: CryptoHashOf<CanisterHttpResponse>,
     },
-    /// The request has already timed out
+    /// The response has already timed out
     Timeout {
         timed_out_at: Time,
         validation_time: Time,
     },
+    /// A timeout refers to a CallbackId that is unknown by the StateManager
+    UnknownCallbackId(CallbackId),
+    /// A CallbackId was included as a timeout, however the Request has not timed out at all
+    NotTimedOut(CallbackId),
     /// The registry version of a response does not match the validation context
     RegistryVersionMismatch {
         expected: RegistryVersion,
@@ -54,6 +58,8 @@ pub enum CanisterHttpPermanentValidationError {
 pub enum CanisterHttpTransientValidationError {
     /// The registry for this subnet could not be retrieved
     RegistryUnavailable(RegistryClientError),
+    /// The state was not available at the time of validation
+    StateUnavailable,
     /// The consensus registry version could not be retreived from the summary
     ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled

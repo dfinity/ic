@@ -5,6 +5,7 @@ use crate::{
         CanisterHttpResponseWithConsensus,
     },
     crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash, CryptoHashOf, Signed},
+    messages::CallbackId,
     signature::MultiSignature,
     CountBytes, Time,
 };
@@ -18,12 +19,15 @@ pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterHttpPayload(pub Vec<CanisterHttpResponseWithConsensus>);
+pub struct CanisterHttpPayload {
+    pub responses: Vec<CanisterHttpResponseWithConsensus>,
+    pub timeouts: Vec<CallbackId>,
+}
 
 impl CanisterHttpPayload {
     /// Returns the number of responses that this payload contains
     pub fn num_responses(&self) -> usize {
-        self.0.len()
+        self.responses.len() + self.timeouts.len()
     }
 
     /// Returns true, if this is an empty payload
@@ -35,8 +39,8 @@ impl CanisterHttpPayload {
 impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
     fn from(payload: &CanisterHttpPayload) -> Self {
         Self {
-            payload: payload
-                .0
+            responses: payload
+                .responses
                 .iter()
                 .map(
                     |payload| canister_http_pb::CanisterHttpResponseWithConsensus {
@@ -61,6 +65,11 @@ impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
                     },
                 )
                 .collect(),
+            timeouts: payload
+                .timeouts
+                .iter()
+                .map(|timeout| timeout.get())
+                .collect(),
         }
     }
 }
@@ -69,9 +78,9 @@ impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
     type Error = String;
 
     fn try_from(mut payload: pb::CanisterHttpPayload) -> Result<Self, Self::Error> {
-        Ok(CanisterHttpPayload(
-            payload
-                .payload
+        Ok(CanisterHttpPayload {
+            responses: payload
+                .responses
                 .drain(..)
                 .map(
                     |payload| -> Result<CanisterHttpResponseWithConsensus, String> {
@@ -130,13 +139,19 @@ impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
                     },
                 )
                 .collect::<Result<Vec<CanisterHttpResponseWithConsensus>, String>>()?,
-        ))
+            timeouts: payload
+                .timeouts
+                .iter()
+                .map(|timeout| CallbackId::new(*timeout))
+                .collect(),
+        })
     }
 }
 
 impl CountBytes for CanisterHttpPayload {
     fn count_bytes(&self) -> usize {
-        self.0.iter().map(CountBytes::count_bytes).sum()
+        // TODO: Include timeout sizes here too
+        self.responses.iter().map(CountBytes::count_bytes).sum()
     }
 }
 
@@ -194,38 +209,41 @@ mod tests {
     /// `CanisterHttpPayload`
     #[test]
     fn into_canister_http_payload_and_back() {
-        let payload = CanisterHttpPayload(vec![CanisterHttpResponseWithConsensus {
-            content: CanisterHttpResponse {
-                id: CanisterHttpRequestId::new(1),
-                timeout: Time::from_nanos_since_unix_epoch(1234),
-                canister_id: crate::CanisterId::from(1),
-                content: CanisterHttpResponseContent::Success(
-                    Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                        status: 200,
-                        headers: vec![ic_ic00_types::HttpHeader {
-                            name: "test_header1".to_string(),
-                            value: "value1".to_string()
-                        }],
-                        body: b"Test data in body".to_vec(),
-                    })
-                    .unwrap(),
-                ),
-            },
-            proof: Signed {
-                content: CanisterHttpResponseMetadata {
+        let payload = CanisterHttpPayload {
+            responses: vec![CanisterHttpResponseWithConsensus {
+                content: CanisterHttpResponse {
                     id: CanisterHttpRequestId::new(1),
                     timeout: Time::from_nanos_since_unix_epoch(1234),
-                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                        0, 1, 2, 3,
-                    ])),
-                    registry_version: RegistryVersion::new(1),
+                    canister_id: crate::CanisterId::from(1),
+                    content: CanisterHttpResponseContent::Success(
+                        Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+                            status: 200,
+                            headers: vec![ic_ic00_types::HttpHeader {
+                                name: "test_header1".to_string(),
+                                value: "value1".to_string()
+                            }],
+                            body: b"Test data in body".to_vec(),
+                        })
+                        .unwrap(),
+                    ),
                 },
-                signature: MultiSignature {
-                    signature: CombinedMultiSigOf::from(CombinedMultiSig(vec![0, 1, 2, 3])),
-                    signers: vec![NodeId::from(PrincipalId::new_node_test_id(1))],
+                proof: Signed {
+                    content: CanisterHttpResponseMetadata {
+                        id: CanisterHttpRequestId::new(1),
+                        timeout: Time::from_nanos_since_unix_epoch(1234),
+                        content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
+                            0, 1, 2, 3,
+                        ])),
+                        registry_version: RegistryVersion::new(1),
+                    },
+                    signature: MultiSignature {
+                        signature: CombinedMultiSigOf::from(CombinedMultiSig(vec![0, 1, 2, 3])),
+                        signers: vec![NodeId::from(PrincipalId::new_node_test_id(1))],
+                    },
                 },
-            },
-        }]);
+            }],
+            timeouts: vec![CanisterHttpRequestId::new(2)],
+        };
 
         let pb_payload = pb::CanisterHttpPayload::from(&payload);
         let new_payload = CanisterHttpPayload::try_from(pb_payload).unwrap();

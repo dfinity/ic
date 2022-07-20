@@ -567,9 +567,11 @@ pub struct XNetPayload {
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpPayload {
     #[prost(message, repeated, tag = "1")]
-    pub payload: ::prost::alloc::vec::Vec<
+    pub responses: ::prost::alloc::vec::Vec<
         super::super::canister_http::v1::CanisterHttpResponseWithConsensus,
     >,
+    #[prost(uint64, repeated, tag = "2")]
+    pub timeouts: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {

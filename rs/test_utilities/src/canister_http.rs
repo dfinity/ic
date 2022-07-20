@@ -8,6 +8,7 @@ use ic_types::{
     CountBytes, Height,
 };
 
+// TODO: Allow for timeouts in payload builder
 #[derive(Default)]
 pub struct FakeCanisterHttpPayloadBuilder(Vec<CanisterHttpResponseWithConsensus>);
 
@@ -22,7 +23,10 @@ impl FakeCanisterHttpPayloadBuilder {
     }
 
     pub fn build(&self) -> CanisterHttpPayload {
-        CanisterHttpPayload(self.0.clone())
+        CanisterHttpPayload {
+            responses: self.0.clone(),
+            timeouts: vec![],
+        }
     }
 }
 
@@ -34,7 +38,10 @@ impl CanisterHttpPayloadBuilder for FakeCanisterHttpPayloadBuilder {
         _past_payloads: &[&CanisterHttpPayload],
         _byte_limit: NumBytes,
     ) -> CanisterHttpPayload {
-        CanisterHttpPayload(self.0.clone())
+        CanisterHttpPayload {
+            responses: self.0.clone(),
+            timeouts: vec![],
+        }
     }
 
     fn validate_canister_http_payload(
