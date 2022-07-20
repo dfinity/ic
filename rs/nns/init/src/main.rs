@@ -93,12 +93,12 @@ struct CliArgs {
     #[clap(long)]
     initialize_with_gtc_neurons: bool,
 
-    /// Create the ledger with existing accounts with 10_000 tokens in on
+    /// Create the ledger with existing accounts with 1_000_000_000 tokens in on
     /// behalf of these principals.
     #[clap(long, multiple_values(true))]
     initialize_ledger_with_test_accounts_for_principals: Vec<PrincipalId>,
 
-    /// Create the ledger with existing accounts with 10_000 tokens on
+    /// Create the ledger with existing accounts with 1_000_000_000 tokens on
     /// the specified ledger accounts.
     #[clap(long, multiple_values(true))]
     initialize_ledger_with_test_accounts: Vec<String>,
@@ -248,7 +248,7 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     for account in test_ledger_accounts.into_iter() {
         init_payloads_builder.ledger.initial_values.insert(
             account,
-            ledger_canister::Tokens::from_tokens(10000).expect("Couldn't create icpts"),
+            ledger_canister::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
         );
         eprintln!(
             "{}Initializing with test ledger account: {}",
