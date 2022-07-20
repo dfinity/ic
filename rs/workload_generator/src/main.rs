@@ -296,8 +296,6 @@ async fn main() {
     let rps = matches.value_of("rps").unwrap().parse::<f64>().unwrap();
     let rpms = (rps * 1000f64).floor() as usize;
 
-    let evaluate_max_rps = matches.is_present("evaluate-max-rps");
-
     let principal_id = matches
         .value_of("principal-id")
         .map(|x| PrincipalId::from_str(x).unwrap());
@@ -490,12 +488,12 @@ async fn main() {
 
             // Make sure to save the guard, see documentation for more information
             println!(
-                "Running {:?} rps for {} seconds, req_type = {:?}, evaluate_max_rps = {}",
-                rps, duration, request_type, evaluate_max_rps,
+                "Running {:?} rps for {} seconds, req_type = {:?}",
+                rps, duration, request_type
             );
 
-            let facts = if evaluate_max_rps {
-                eng.evaluate_max_rps(
+            let facts = eng
+                .execute_rps(
                     rpms,
                     request_type,
                     canister_method_name,
@@ -506,21 +504,7 @@ async fn main() {
                     &canister_id,
                     periodic_output,
                 )
-                .await
-            } else {
-                eng.execute_rps(
-                    rpms,
-                    request_type,
-                    canister_method_name,
-                    duration,
-                    nonce.clone(),
-                    call_payload_size,
-                    call_payload,
-                    &canister_id,
-                    periodic_output,
-                )
-                .await
-            };
+                .await;
 
             // Drop the engine with the hope that all client connections will be closed.
             // Sometimes we may end up in situation where all file decriptors
