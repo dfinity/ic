@@ -912,66 +912,6 @@ impl IcNodeContainer for SubnetSnapshot {
     }
 }
 
-/* ### HTTP File Store API ### */
-pub trait HasHttpFileStore {
-    fn http_file_store(&self) -> Box<dyn HttpFileStore>;
-}
-
-impl HasHttpFileStore for TestEnv {
-    fn http_file_store(&self) -> Box<dyn HttpFileStore> {
-        let ic_setup = IcSetup::read_attribute(self);
-        let farm = Farm::new(ic_setup.farm_base_url, self.logger());
-        Box::new(FarmFileStore { farm })
-    }
-}
-
-pub struct FarmFileStore {
-    farm: Farm,
-}
-
-pub trait HttpFileStore {
-    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>>;
-}
-
-impl HttpFileStore for FarmFileStore {
-    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>> {
-        let name = path
-            .file_name()
-            .expect("cannot fetch file_name")
-            .to_str()
-            .expect("cannot convert file_name to str");
-        let id = self.farm.upload_file(&path, name)?;
-        Ok(Box::new(FarmFileHandle {
-            farm: self.farm.clone(),
-            url: self
-                .farm
-                .base_url
-                .join(&format!("file/{}", id))
-                .expect("cannot join urls"),
-        }))
-    }
-}
-
-pub struct FarmFileHandle {
-    farm: Farm,
-    url: Url,
-}
-
-pub trait HttpFileHandle {
-    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()>;
-    fn url(&self) -> Url;
-}
-
-impl HttpFileHandle for FarmFileHandle {
-    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()> {
-        self.farm.download_file(self.url.clone(), sink)?;
-        Ok(())
-    }
-    fn url(&self) -> Url {
-        self.url.clone()
-    }
-}
-
 /* ### VM Control ### */
 
 pub trait VmControl {
