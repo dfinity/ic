@@ -5,10 +5,11 @@ from util.print import eprint
 
 
 class AlertService:
-    def __init__(self, secret_service: str, signature: str):
+    def __init__(self, secret_service: str, signature: str, git_revision: str):
         self.endpoint = "https://hooks.slack.com/services/" + secret_service
         self.webhook = WebhookClient(self.endpoint)
         self.signature = signature
+        self.git_revision = git_revision
 
     def _form_message(
         self,
@@ -20,7 +21,7 @@ class AlertService:
             message = " ".join((level, "%s\nSee <%s>" % (text, url)))
         else:
             message = " ".join((level, text))
-        return self.signature + "\n" + message
+        return f"{self.signature} @ <https://gitlab.com/dfinity-lab/public/ic/-/commit/{self.git_revision}|{self.git_revision}>\n{message}"
 
     def alert(
         self,
@@ -55,8 +56,9 @@ class AlertService:
 
 
 class DummyAlertService(AlertService):
-    def __init__(self, signature: str):
+    def __init__(self, signature: str, git_revision: str):
         self.signature = signature
+        self.git_revision = git_revision
 
     def alert(
         self,
