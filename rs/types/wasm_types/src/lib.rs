@@ -57,9 +57,12 @@ impl CanisterModule {
         }
     }
 
-    pub fn new_from_file(path: PathBuf) -> std::io::Result<Self> {
+    pub fn new_from_file(path: PathBuf, module_hash: Option<WasmHash>) -> std::io::Result<Self> {
         let module = ModuleStorage::mmap_file(path)?;
-        let module_hash = ic_crypto_sha::Sha256::hash(module.as_slice());
+        // It should only be necessary to compute the hash here when
+        // loading checkpoints written by older replica versions
+        let module_hash =
+            module_hash.map_or_else(|| ic_crypto_sha::Sha256::hash(module.as_slice()), |h| h.0);
         Ok(Self {
             module,
             module_hash,
@@ -126,9 +129,21 @@ impl std::hash::Hash for CanisterModule {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
+impl WasmHash {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
 impl From<&CanisterModule> for WasmHash {
     fn from(item: &CanisterModule) -> Self {
         Self(item.module_hash())
+    }
+}
+
+impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
+    fn from(item: [u8; WASM_HASH_LENGTH]) -> Self {
+        Self(item)
     }
 }
 

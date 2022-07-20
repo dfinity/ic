@@ -114,6 +114,7 @@ message ExecutionStateBits {
   repeated WasmMethod exports = 3;
   uint64 last_executed_round = 4;
   WasmMetadata metadata = 5;
+  optional bytes binary_hash = 6;
 }
 
 message StopCanisterContext {

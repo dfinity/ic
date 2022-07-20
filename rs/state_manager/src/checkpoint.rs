@@ -166,6 +166,7 @@ fn serialize_canister_to_tip(
                 exports: execution_state.exports.clone(),
                 last_executed_round: execution_state.last_executed_round,
                 metadata: execution_state.metadata.clone(),
+                binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
             })
         }
         None => None,
@@ -492,7 +493,11 @@ pub fn load_canister_state<P: ReadPolicy>(
             durations.insert("stable_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
-            let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
+            let wasm_binary = WasmBinary::new(
+                canister_layout
+                    .wasm()
+                    .deserialize(execution_state_bits.binary_hash)?,
+            );
             durations.insert("wasm_binary", starting_time.elapsed());
 
             let canister_root = canister_layout.raw_path();

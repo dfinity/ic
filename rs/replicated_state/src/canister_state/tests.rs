@@ -537,10 +537,15 @@ fn wasm_can_be_loaded_from_a_file() {
     let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
     tmp.write_all(wasm_in_memory.as_slice())
         .expect("failed to write Wasm to a temporary file");
-    let wasm_on_disk = CanisterModule::new_from_file(tmp.path().to_owned())
+    let wasm_on_disk = CanisterModule::new_from_file(tmp.path().to_owned(), None)
         .expect("failed to read Wasm from disk");
+    let wasm_hash = wasm_in_memory.module_hash();
+    let wasm_on_disk_with_hash =
+        CanisterModule::new_from_file(tmp.path().to_owned(), Some(wasm_hash.into()))
+            .expect("failed to read Wasm from disk");
 
     assert_eq!(wasm_in_memory.file(), None);
     assert_eq!(wasm_on_disk.file(), Some(tmp.path()));
     assert_eq!(wasm_in_memory, wasm_on_disk);
+    assert_eq!(wasm_in_memory, wasm_on_disk_with_hash);
 }
