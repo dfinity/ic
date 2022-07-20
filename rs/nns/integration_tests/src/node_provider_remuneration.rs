@@ -11,11 +11,12 @@ use ic_nns_governance::pb::v1::{
     GovernanceError, ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards,
     NnsFunction, NodeProvider, Proposal, ProposalStatus, RewardNodeProvider, RewardNodeProviders,
 };
-use ic_nns_test_utils::governance::{add_node_provider, submit_external_update_proposal};
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    governance::{add_node_provider, submit_external_update_proposal},
     governance::{get_pending_proposals, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
 use ic_protobuf::registry::node_rewards::v2::{

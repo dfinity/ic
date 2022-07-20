@@ -2,25 +2,13 @@
 //! initialize it, and to upgrade it, for tests.
 
 use crate::{
+    common::NnsInitPayloads,
     governance::{
         get_pending_proposals, submit_external_update_proposal,
         submit_external_update_proposal_binary, wait_for_final_state,
     },
     ids::TEST_NEURON_1_ID,
-    registry::invariant_compliant_mutation,
 };
-
-use std::{
-    convert::TryInto,
-    future::Future,
-    path::Path,
-    thread,
-    time::{Duration, SystemTime},
-};
-
-use futures::future::join_all;
-use prost::Message;
-
 use candid::Encode;
 use canister_test::{
     local_test_with_config_e, local_test_with_config_with_mutations, Canister, Project, Runtime,
@@ -28,6 +16,7 @@ use canister_test::{
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
+use futures::future::join_all;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
@@ -36,31 +25,25 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
-use ic_nns_common::{
-    init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder},
-    types::NeuronId,
-};
+use ic_nns_common::{init::LifelineCanisterInitPayload, types::NeuronId};
 use ic_nns_constants::*;
 use ic_nns_governance::{
-    governance::TimeWarp,
-    init::GovernanceCanisterInitPayloadBuilder,
-    pb::v1::{Governance, NnsFunction, ProposalStatus},
+    governance::TimeWarp, pb::v1::Governance, pb::v1::NnsFunction, pb::v1::ProposalStatus,
 };
-use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
-use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
-use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
-use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_nns_gtc::pb::v1::Gtc;
+use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_utils::byte_slice_fmt::truncate_and_format;
-use ledger::{LedgerCanisterInitPayload, Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
+use ledger::LedgerCanisterInitPayload;
 use ledger_canister as ledger;
-use ledger_canister::AccountIdentifier;
 use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{bytes, IntoWire};
-use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
+use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayload;
+use std::{future::Future, path::Path, thread, time::SystemTime};
 
 /// All the NNS canisters that exist at genesis.
 #[derive(Clone)]
@@ -75,177 +58,7 @@ pub struct NnsCanisters<'a> {
     pub genesis_token: Canister<'a>,
     pub identity: Canister<'a>,
     pub nns_ui: Canister<'a>,
-}
-
-/// Payloads for all the canisters that exist at genesis.
-#[derive(Clone)]
-pub struct NnsInitPayloads {
-    pub registry: RegistryCanisterInitPayload,
-    pub governance: Governance,
-    pub ledger: LedgerCanisterInitPayload,
-    pub root: RootCanisterInitPayload,
-    pub cycles_minting: CyclesCanisterInitPayload,
-    pub lifeline: LifelineCanisterInitPayload,
-    pub genesis_token: Gtc,
-}
-
-/// Builder to help create the intial payloads for the NNS canisters.
-pub struct NnsInitPayloadsBuilder {
-    pub registry: RegistryCanisterInitPayloadBuilder,
-    pub governance: GovernanceCanisterInitPayloadBuilder,
-    pub ledger: LedgerCanisterInitPayload,
-    pub root: RootCanisterInitPayloadBuilder,
-    pub cycles_minting: CyclesCanisterInitPayload,
-    pub lifeline: LifelineCanisterInitPayloadBuilder,
-    pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
-}
-
-#[allow(clippy::new_without_default)]
-impl NnsInitPayloadsBuilder {
-    pub fn new() -> NnsInitPayloadsBuilder {
-        NnsInitPayloadsBuilder {
-            registry: RegistryCanisterInitPayloadBuilder::new(),
-            governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .archive_options(ledger::ArchiveOptions {
-                    trigger_threshold: 2000,
-                    num_blocks_to_archive: 1000,
-                    // 1 GB, which gives us 3 GB space when upgrading
-                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                    // 128kb
-                    max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID.into(),
-                    cycles_for_archive_creation: Some(0),
-                })
-                .max_message_size_bytes(128 * 1024)
-                // 24 hour transaction window
-                .transaction_window(Duration::from_secs(24 * 60 * 60))
-                .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-                .transfer_fee(DEFAULT_TRANSFER_FEE)
-                .build()
-                .unwrap(),
-            root: RootCanisterInitPayloadBuilder::new(),
-            cycles_minting: CyclesCanisterInitPayload {
-                ledger_canister_id: LEDGER_CANISTER_ID,
-                governance_canister_id: GOVERNANCE_CANISTER_ID,
-                minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
-                last_purged_notification: Some(1),
-            },
-            lifeline: LifelineCanisterInitPayloadBuilder::new(),
-            genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
-        }
-    }
-
-    pub fn with_ledger_init_state(&mut self, state: LedgerCanisterInitPayload) -> &mut Self {
-        self.ledger = state;
-        self
-    }
-
-    pub fn with_ledger_account(&mut self, account: AccountIdentifier, icpts: Tokens) -> &mut Self {
-        self.ledger.initial_values.insert(account, icpts);
-        self
-    }
-
-    pub fn with_neurons_from_csv_file(&mut self, csv_file: &Path) -> &mut Self {
-        self.governance.add_all_neurons_from_csv_file(csv_file);
-        self
-    }
-
-    pub fn with_test_neurons(&mut self) -> &mut Self {
-        self.governance.with_test_neurons();
-        self
-    }
-
-    pub fn with_governance_init_payload(
-        &mut self,
-        governance_init_payload_builder: GovernanceCanisterInitPayloadBuilder,
-    ) -> &mut Self {
-        self.governance = governance_init_payload_builder;
-        self
-    }
-
-    pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
-        self.governance.with_governance_proto(proto);
-        self
-    }
-
-    pub fn with_initial_mutations(
-        &mut self,
-        mutate_reqs: Vec<RegistryAtomicMutateRequest>,
-    ) -> &mut Self {
-        for req in mutate_reqs.into_iter() {
-            self.registry.push_init_mutate_request(req);
-        }
-        self
-    }
-
-    pub fn with_initial_invariant_compliant_mutations(&mut self) -> &mut Self {
-        self.registry
-            .push_init_mutate_request(RegistryAtomicMutateRequest {
-                mutations: invariant_compliant_mutation(),
-                preconditions: vec![],
-            });
-        self
-    }
-
-    /// Create GTC neurons and add them to the GTC and Governance canisters'
-    /// initial payloads
-    pub fn with_gtc_neurons(&mut self) -> &mut Self {
-        self.genesis_token.add_sr_neurons(SEED_ROUND_ACCOUNTS);
-        self.genesis_token.add_ect_neurons(ECT_ACCOUNTS);
-
-        let gtc_neurons = self
-            .genesis_token
-            .get_gtc_neurons()
-            .into_iter()
-            .map(|mut neuron| {
-                neuron.followees = self.governance.proto.default_followees.clone();
-                neuron
-            })
-            .collect();
-
-        self.governance.add_gtc_neurons(gtc_neurons);
-        self
-    }
-
-    pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(self
-            .ledger
-            .initial_values
-            .get(&GOVERNANCE_CANISTER_ID.get().into())
-            .is_none());
-
-        for n in self.governance.proto.neurons.values() {
-            let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
-                panic!(
-                    "Subaccounts should be exactly 32 bytes in length. Got {} for neuron {}. {}",
-                    truncate_and_format(n.account.as_slice(), 80),
-                    n.id.as_ref()
-                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {:?}", n))
-                        .id,
-                    e
-                )
-            }));
-            let aid = ledger::AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(sub));
-            let previous_value = self
-                .ledger
-                .initial_values
-                .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
-
-            assert_eq!(previous_value, None);
-        }
-
-        NnsInitPayloads {
-            registry: self.registry.build(),
-            governance: self.governance.build(),
-            ledger: self.ledger.clone(),
-            root: self.root.build(),
-            cycles_minting: self.cycles_minting.clone(),
-            lifeline: self.lifeline.build(),
-            genesis_token: self.genesis_token.build(),
-        }
-    }
+    pub sns_wasms: Canister<'a>,
 }
 
 impl NnsCanisters<'_> {
@@ -269,6 +82,14 @@ impl NnsCanisters<'_> {
         maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
+        // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
+        // SNS-WASMs canister and delete following line. We avoid that so the canister ID is not added
+        // to a whitelist before it is deployed.  But we need one more canister for our tests.
+        runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed creating last canister");
+
         let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
         let mut governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
         let mut ledger = Canister::new(runtime, LEDGER_CANISTER_ID);
@@ -278,6 +99,7 @@ impl NnsCanisters<'_> {
         let mut genesis_token = Canister::new(runtime, GENESIS_TOKEN_CANISTER_ID);
         let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
+        let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
 
         // Install all the canisters
         // Registry and Governance need to first or the process hangs,
@@ -295,6 +117,7 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -312,6 +135,7 @@ impl NnsCanisters<'_> {
             genesis_token.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -327,6 +151,7 @@ impl NnsCanisters<'_> {
             genesis_token,
             identity,
             nns_ui,
+            sns_wasms,
         }
     }
 
@@ -352,7 +177,7 @@ impl NnsCanisters<'_> {
 }
 
 /// Installs a rust canister with the provided memory allocation.
-pub async fn install_rust_canister_with_memory_allocation(
+async fn install_rust_canister_with_memory_allocation(
     canister: &mut Canister<'_>,
     relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,

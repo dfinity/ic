@@ -1,13 +1,24 @@
+use crate::common::{
+    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm, build_ledger_wasm,
+    build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+    NnsInitPayloads,
+};
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
+use ic_nns_constants::{
+    memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use std::default::Default;
 use std::env;
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -192,4 +203,102 @@ pub fn try_call_with_cycles_via_universal_canister(
         .build();
 
     update(machine, sender, "update", universal_canister_payload)
+}
+
+/// Sets up the NNS for STateMachine tests.
+pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayloads) {
+    let registry_canister_id = create_canister(
+        machine,
+        build_registry_wasm(),
+        Some(Encode!(&init_payloads.registry).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(REGISTRY_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(registry_canister_id, REGISTRY_CANISTER_ID);
+
+    let governance_canister_id = create_canister(
+        machine,
+        build_governance_wasm(),
+        Some(Encode!(&init_payloads.governance).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(GOVERNANCE_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(governance_canister_id, GOVERNANCE_CANISTER_ID);
+
+    let ledger_canister_id = create_canister(
+        machine,
+        build_ledger_wasm(),
+        Some(Encode!(&init_payloads.ledger).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(LEDGER_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
+
+    let root_canister_id = create_canister(
+        machine,
+        build_root_wasm(),
+        Some(Encode!(&init_payloads.root).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(ROOT_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+
+    let cmc_canister_id = create_canister(
+        machine,
+        build_cmc_wasm(),
+        Some(Encode!(&init_payloads.cycles_minting).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(CYCLES_MINTING_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(cmc_canister_id, CYCLES_MINTING_CANISTER_ID);
+
+    let lifeline_canister_id = create_canister(
+        machine,
+        build_lifeline_wasm(),
+        Some(Encode!(&init_payloads.lifeline).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(LIFELINE_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(lifeline_canister_id, LIFELINE_CANISTER_ID);
+
+    let genesis_token_canister_id = create_canister(
+        machine,
+        build_genesis_token_wasm(),
+        Some(Encode!(&init_payloads.genesis_token).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(genesis_token_canister_id, GENESIS_TOKEN_CANISTER_ID);
+
+    // We need to fill in 2 CanisterIds, but don't use Identity or NNS-UI canisters in our tests
+    let identity_canister_id = machine.create_canister(None);
+    assert_eq!(identity_canister_id, IDENTITY_CANISTER_ID);
+
+    let nns_ui_canister_id = machine.create_canister(None);
+    assert_eq!(nns_ui_canister_id, NNS_UI_CANISTER_ID);
+
+    let sns_wasms_canister_id = create_canister(
+        machine,
+        build_sns_wasms_wasm(),
+        Some(Encode!(&init_payloads.sns_wasms).unwrap()),
+        Some(CanisterSettingsArgs {
+            memory_allocation: Some(memory_allocation_of(SNS_WASM_CANISTER_ID).into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(sns_wasms_canister_id, SNS_WASM_CANISTER_ID);
 }

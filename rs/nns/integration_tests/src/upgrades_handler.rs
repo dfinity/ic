@@ -6,11 +6,11 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
-use ic_nns_test_utils::ids::TEST_NEURON_2_ID;
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use registry_canister::mutations::do_bless_replica_version::BlessReplicaVersionPayload;
 

@@ -10,9 +10,10 @@ use ic_nns_governance::pb::v1::{
     ManageNeuronResponse, NeuronInfo, Proposal, ProposalStatus,
 };
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
-    itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
+    itest_helpers::NnsCanisters,
 };
 
 /// Integration test for the known neuron functionality.

@@ -6,7 +6,10 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::Governance as GovernanceProto;
 use ic_nns_init::make_hsm_sender;
 use ic_nns_init::set_up_env_vars_for_all_canisters;
-use ic_nns_test_utils::itest_helpers::{NnsCanisters, NnsInitPayloads, NnsInitPayloadsBuilder};
+use ic_nns_test_utils::{
+    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
+    itest_helpers::NnsCanisters,
+};
 use prost::Message;
 use std::fs;
 use std::io::Write;

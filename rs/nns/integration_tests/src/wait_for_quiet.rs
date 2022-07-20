@@ -15,8 +15,7 @@ use ic_nns_governance::pb::v1::{
     ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
-    ids::TEST_NEURON_2_ID,
-    itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
+    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_2_ID, itest_helpers::NnsCanisters,
 };
 
 #[test]

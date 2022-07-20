@@ -7,9 +7,10 @@ use ic_nns_governance::pb::v1::{
     Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron, ProposalData,
     RewardEvent, Vote,
 };
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    ids::TEST_NEURON_1_ID,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use std::iter::once;
 use std::time::{Duration, SystemTime};

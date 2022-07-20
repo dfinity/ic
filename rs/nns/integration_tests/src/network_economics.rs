@@ -1,7 +1,8 @@
 use dfn_candid::candid_one;
 use ic_nns_governance::pb::v1::NetworkEconomics;
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]

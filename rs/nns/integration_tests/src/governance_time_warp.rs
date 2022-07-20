@@ -15,8 +15,9 @@ use ic_nns_governance::pb::v1::manage_neuron_response;
 use ic_nns_governance::pb::v1::{
     neuron::DissolveState, ManageNeuron, ManageNeuronResponse, Neuron,
 };
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::AccountIdentifier;
 

@@ -14,10 +14,11 @@ use ic_nns_governance::pb::v1::{
     NnsFunction, ProposalStatus, Vote,
 };
 use ic_nns_governance::proposal_submission::create_external_update_proposal_candid;
-use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
+    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]

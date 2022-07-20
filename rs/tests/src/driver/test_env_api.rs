@@ -148,7 +148,7 @@ use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder};
+use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client_helpers::node::NodeRegistry;

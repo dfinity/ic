@@ -19,11 +19,12 @@ impl SnsWasmCanisterInitPayloadBuilder {
         }
     }
 
-    pub fn with_sns_subnet_ids(&mut self, subnet_ids: Vec<SubnetId>) {
+    pub fn with_sns_subnet_ids(&mut self, subnet_ids: Vec<SubnetId>) -> &mut Self {
         self.payload.sns_subnet_ids = subnet_ids;
+        self
     }
 
-    pub fn build(self) -> SnsWasmCanisterInitPayload {
-        self.payload
+    pub fn build(&mut self) -> SnsWasmCanisterInitPayload {
+        self.payload.clone()
     }
 }
