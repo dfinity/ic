@@ -7,8 +7,8 @@ Before=setupos.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/config.sh
-StandardOutput=file:/dev/tty1
-StandardError=file:/dev/tty1
+StandardOutput=tty
+StandardError=tty
 
 [Install]
 WantedBy=multi-user.target

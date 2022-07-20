@@ -21,20 +21,95 @@ function read_variables() {
 }
 
 function get_network_settings() {
+    # Full IPv6 address
+    retry=0
+
     ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
     log_and_reboot_on_error "${?}" "Unable to get full system's IPv6 address."
+
+    while [ -z "${ipv6_address_system_full}" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3 ]; then
+            log_and_reboot_on_error "1" "Unable to get full system's IPv6 address."
+            break
+        else
+            sleep 1
+            ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
+            log_and_reboot_on_error "${?}" "Unable to get full system's IPv6 address."
+        fi
+    done
+
+    # IPv6 prefix
+    retry=0
 
     ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
     log_and_reboot_on_error "${?}" "Unable to get system's IPv6 prefix."
 
+    while [ -z "${ipv6_prefix_system}" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3 ]; then
+            log_and_reboot_on_error "1" "Unable to get system's IPv6 prefix."
+            break
+        else
+            sleep 1
+            ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
+            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 prefix."
+        fi
+    done
+
+    # IPv6 subnet
+    retry=0
+
     ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
     log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+
+    while [ -z "${ipv6_subnet_system}" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3 ]; then
+            log_and_reboot_on_error "1" "Unable to get system's IPv6 subnet."
+            break
+        else
+            sleep 1
+            ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
+            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+        fi
+    done
+
+    # IPv6 gateway
+    retry=0
 
     ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
     log_and_reboot_on_error "${?}" "Unable to get system's IPv6 gateway."
 
+    while [ -z "${ipv6_gateway_system}" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3 ]; then
+            log_and_reboot_on_error "1" "Unable to get system's IPv6 gateway."
+            break
+        else
+            sleep 1
+            ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
+            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 gateway."
+        fi
+    done
+
+    # IPv6 address
+    retry=0
+
     ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
     log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+
+    while [ -z "${ipv6_address_system}" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3 ]; then
+            log_and_reboot_on_error "1" "Unable to get system's IPv6 subnet."
+            break
+        else
+            sleep 1
+            ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
+            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+        fi
+    done
 
     HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=0)
     GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)
