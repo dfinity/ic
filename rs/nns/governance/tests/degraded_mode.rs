@@ -7,7 +7,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{Environment, Governance, CMC},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{
@@ -82,6 +82,13 @@ impl Ledger for DegradedEnv {
     }
 }
 
+#[async_trait]
+impl CMC for DegradedEnv {
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+        unimplemented!()
+    }
+}
+
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 fn principal(i: u64) -> PrincipalId {
@@ -120,6 +127,7 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
+        Box::new(DegradedEnv {}),
         Box::new(DegradedEnv {}),
         Box::new(DegradedEnv {}),
     )

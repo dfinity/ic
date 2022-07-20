@@ -2087,6 +2087,8 @@ fn test_neuron_info_request_parsing() {
 pub enum NeuronState {
     #[serde(rename = "NOT_DISSOLVING")]
     NotDissolving,
+    #[serde(rename = "SPAWNING")]
+    Spawning,
     #[serde(rename = "DISSOLVING")]
     Dissolving,
     #[serde(rename = "DISSOLVED")]

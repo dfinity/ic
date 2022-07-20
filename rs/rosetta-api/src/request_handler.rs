@@ -544,6 +544,7 @@ impl RosettaRequestHandler {
         use ic_nns_governance::pb::v1::NeuronState as PbNeuronState;
         let state = match PbNeuronState::from_i32(res.state) {
             Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
             Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
             Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
             Some(PbNeuronState::Unspecified) | None => {

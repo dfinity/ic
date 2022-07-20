@@ -175,6 +175,11 @@ pub struct Neuron {
     /// this field for a dissolving neuron is `u64::MAX`.
     #[prost(uint64, tag = "8")]
     pub aging_since_timestamp_seconds: u64,
+    /// The timestamp, in seconds from the Unix epoch, at which this
+    /// neuron should be spawned and its maturity converted to ICP
+    /// according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
+    #[prost(uint64, optional, tag = "19")]
+    pub spawn_at_timestamp_seconds: ::core::option::Option<u64>,
     /// Map `Topic` to followees. The key is represented by an integer as
     /// Protobuf does not support enum keys in maps.
     #[prost(map = "int32, message", tag = "11")]
@@ -1428,6 +1433,16 @@ pub struct Governance {
     #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards:
         ::core::option::Option<MostRecentMonthlyNodeProviderRewards>,
+    /// Cached value for the maturity modulation as calculated each day.
+    #[prost(double, optional, tag = "17")]
+    pub cached_daily_maturity_modulation: ::core::option::Option<f64>,
+    /// The last time that the maturity modulation value was updated.
+    #[prost(uint64, optional, tag = "18")]
+    pub last_updated_maturity_modulation_cache: ::core::option::Option<u64>,
+    /// Whether the heartbeat function is currently spawning neurons, meaning
+    /// that it should finish before being called again.
+    #[prost(bool, optional, tag = "19")]
+    pub spawning_neurons: ::core::option::Option<bool>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1442,7 +1457,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 4, 5, 7, 8, 9, 10"
+            tags = "2, 3, 5, 7, 8, 9, 10, 20"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -1456,8 +1471,6 @@ pub mod governance {
             Disburse(super::super::manage_neuron::Disburse),
             #[prost(message, tag = "3")]
             Split(super::super::manage_neuron::Split),
-            #[prost(message, tag = "4")]
-            Spawn(super::super::manage_neuron::Spawn),
             #[prost(message, tag = "5")]
             DisburseToNeuron(super::super::manage_neuron::DisburseToNeuron),
             #[prost(message, tag = "7")]
@@ -1468,6 +1481,8 @@ pub mod governance {
             Configure(super::super::manage_neuron::Configure),
             #[prost(message, tag = "10")]
             Merge(super::super::manage_neuron::Merge),
+            #[prost(message, tag = "20")]
+            Spawn(::ic_nns_common::pb::v1::NeuronId),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -1780,6 +1795,9 @@ pub enum NeuronState {
     /// delay. If these incentives turn out to be insufficient, the NNS
     /// may decide to impose further restrictions on dissolved neurons.
     Dissolved = 3,
+    /// The neuron is in spawning state, meaning it's maturity will be
+    /// converted to ICP according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
+    Spawning = 4,
 }
 /// The types of votes the Neuron can issue.
 #[derive(candid::CandidType, candid::Deserialize)]

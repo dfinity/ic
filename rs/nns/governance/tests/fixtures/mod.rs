@@ -78,7 +78,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use ic_nns_governance::governance::{
-    HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+    HeapGrowthPotential, CMC, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
 };
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
@@ -487,6 +487,13 @@ impl Environment for NNSFixture {
         _request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
         unimplemented!();
+    }
+}
+
+#[async_trait]
+impl CMC for NNSFixture {
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+        Ok(0.01)
     }
 }
 
@@ -921,13 +928,14 @@ impl NNSBuilder {
             rng: StdRng::seed_from_u64(9539),
             ledger: self.ledger_builder.create(),
         });
+        let cmc: Box<dyn CMC> = Box::new(fixture.clone());
         let mut ledger: Box<dyn Ledger> = Box::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
         let mut nns = NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, Box::new(fixture), ledger),
+            governance: Governance::new(self.governance, Box::new(fixture), ledger, cmc),
             initial_state: None,
         };
         nns.capture_state();

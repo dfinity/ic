@@ -24,6 +24,7 @@ pub fn handle_neuron_info(
             let state = neuron.state(now);
             let state = match state {
                 NeuronState::NotDissolving => models::NeuronState::NotDissolving,
+                NeuronState::Spawning => models::NeuronState::Spawning,
                 NeuronState::Dissolving => models::NeuronState::Dissolving,
                 NeuronState::Dissolved => models::NeuronState::Dissolved,
                 NeuronState::Unspecified => models::NeuronState::Dissolved,

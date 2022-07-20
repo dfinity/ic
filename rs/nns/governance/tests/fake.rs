@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use ic_nns_governance::governance::HeapGrowthPotential;
+use ic_nns_governance::governance::{HeapGrowthPotential, CMC};
 use ic_nns_governance::pb::v1::ManageNeuronResponse;
 use ledger_canister::Subaccount;
 
@@ -167,6 +167,12 @@ impl FakeDriver {
         })
     }
 
+    pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
+        Box::new(FakeDriver {
+            state: Arc::clone(&self.state),
+        })
+    }
+
     /// Reads the time.
     pub fn now(&self) -> u64 {
         self.state.lock().unwrap().now
@@ -264,6 +270,13 @@ impl Ledger for FakeDriver {
         let accounts = &mut self.state.try_lock().unwrap().accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
+    }
+}
+
+#[async_trait]
+impl CMC for FakeDriver {
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+        Ok(0.01)
     }
 }
 

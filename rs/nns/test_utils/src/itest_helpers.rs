@@ -42,6 +42,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::*;
 use ic_nns_governance::{
+    governance::TimeWarp,
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{Governance, NnsFunction, ProposalStatus},
 };
@@ -342,6 +343,12 @@ impl NnsCanisters<'_> {
             &self.nns_ui,
         ]
     }
+
+    pub async fn set_time_warp(&self, delta_s: i64) -> Result<(), String> {
+        self.governance
+            .update_("set_time_warp", candid_one, TimeWarp { delta_s })
+            .await
+    }
 }
 
 /// Installs a rust canister with the provided memory allocation.
@@ -634,7 +641,7 @@ pub async fn install_sns_wasm_canister(
     .await;
 }
 
-/// Creates and installs the sns_wasm canister.  
+/// Creates and installs the sns_wasm canister.
 ///
 /// Use None for `cycles` to get max_cycles of normal NNS canisters when not testing cycle-dependent
 /// code (such as ensuring cycles are received and passed to created SNS canisters)

@@ -10,10 +10,11 @@
 // did definition of the method.
 
 use ic_nns_governance::{
-    governance::TimeWarp,
+    governance::{TimeWarp, CMC},
     pb::v1::{manage_neuron::NeuronIdOrSubaccount, NetworkEconomics, RewardNodeProviders},
 };
 use rand::rngs::StdRng;
+use rand::Rng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
 use std::time::SystemTime;
@@ -40,7 +41,7 @@ use ic_nns_common::{
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     ListNodeProvidersResponse, MostRecentMonthlyNodeProviderRewards, NodeProvider, RewardEvent,
     UpdateNodeProvider,
@@ -130,6 +131,42 @@ impl CanisterEnv {
 
             time_warp: TimeWarp { delta_s: 0 },
         }
+    }
+}
+
+struct CMCCanister {
+    rng: StdRng,
+    // TODO use this once the functionality is available in the CMC
+    #[allow(dead_code)]
+    canister_id: CanisterId,
+}
+
+impl CMCCanister {
+    fn new() -> Self {
+        CMCCanister {
+            canister_id: CYCLES_MINTING_CANISTER_ID,
+            rng: {
+                let now_nanos = now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let mut seed = [0u8; 32];
+                seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
+                seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
+                StdRng::from_seed(seed)
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl CMC for CMCCanister {
+    async fn neuron_maturity_modulation(&mut self) -> Result<f64, String> {
+        // For now just produce a value in the range [-0.05, 0.05] randomly
+        // TODO get this from the CMC canister.
+        let range = self.rng.gen_range(0i64, 1000) as f64;
+        let modulation = (range - 500f64) / 10000f64;
+        return Ok(modulation);
     }
 }
 
@@ -275,6 +312,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(LEDGER_CANISTER_ID)),
+            Box::new(CMCCanister::new()),
         ));
     }
     governance()
