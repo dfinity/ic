@@ -2112,7 +2112,7 @@ dependencies = [
  "ledger-canister",
  "on_wire",
  "prost 0.10.4",
- "rand 0.8.5",
+ "rand 0.7.3",
  "serde",
  "serde_cbor",
  "sha2 0.9.9",
