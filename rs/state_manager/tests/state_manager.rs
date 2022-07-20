@@ -13,7 +13,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, NumWasmPages, PageMap, ReplicatedState,
     Stream,
 };
-use ic_state_manager::{BitcoinPageMap, DirtyPageMap, PageMapType, StateManagerImpl};
+use ic_state_manager::{BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -2147,6 +2147,7 @@ fn can_short_circuit_state_sync() {
 fn can_get_dirty_pages() {
     use ic_replicated_state::page_map::PageIndex;
     use ic_state_manager::get_dirty_pages;
+    use ic_state_manager::Snapshot;
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
@@ -2186,68 +2187,93 @@ fn can_get_dirty_pages() {
 
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
+        let snapshot0 = Snapshot {
+            height: height(0),
+            state: Arc::new(state.clone()),
+        };
         insert_dummy_canister(&mut state, canister_test_id(80));
         insert_dummy_canister(&mut state, canister_test_id(90));
         insert_dummy_canister(&mut state, canister_test_id(100));
 
         update_state(&mut state, canister_test_id(80));
         update_bitcoin_page_maps(&mut state);
-        let dirty_pages = get_dirty_pages(&state);
+        let dirty_pages = get_dirty_pages(&state, Some(&snapshot0));
         // dirty_pages should be empty because there is no base checkpoint for the page
-        // deltas.
+        // deltas and the canister binaries are new.
         assert!(dirty_pages.is_empty());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
+        let snapshot1 = Snapshot {
+            height: height(1),
+            state: Arc::new(state.clone()),
+        };
         update_state(&mut state, canister_test_id(90));
         update_bitcoin_page_maps(&mut state);
-        let mut dirty_pages = get_dirty_pages(&state);
+        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot1));
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
+                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
+                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(100)),
+                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(100))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(100)],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium)),
                 page_delta_indices: vec![PageIndex::new(2), PageIndex::new(200)],
             },
             DirtyPageMap {
                 height: height(1),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(
+                    BitcoinPageMap::AddressOutpoints,
+                )),
                 page_delta_indices: vec![PageIndex::new(3), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::WasmBinary(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::WasmBinary(canister_test_id(90)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::WasmBinary(canister_test_id(100)),
+                page_delta_indices: vec![],
             },
         ];
 
@@ -2258,51 +2284,68 @@ fn can_get_dirty_pages() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
+        let snapshot2 = Snapshot {
+            height: height(2),
+            state: Arc::new(state.clone()),
+        };
         update_state(&mut state, canister_test_id(100));
         // It could happen during canister upgrade.
         drop_page_map(&mut state, canister_test_id(100));
         update_state(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state);
+        replace_wasm(&mut state, canister_test_id(100));
+        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot2));
         // wasm memory was dropped, but stable memory wasn't
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
+                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
+                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
+                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                page_type: PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
+                file_type: FileType::PageMap(PageMapType::Bitcoin(
+                    BitcoinPageMap::AddressOutpoints,
+                )),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::WasmBinary(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::WasmBinary(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
         ];
@@ -2374,7 +2417,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
 
-        // Second checkpoint can leverage heap chunks computed previously.
+        // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
         assert_eq!(
             PAGE_SIZE as u64
@@ -2382,7 +2425,8 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
                     + (NEW_STABLE_PAGE + 1)
                     + (NEW_UTXOS_SMALL_PAGE + 1)
                     + (NEW_UTXOS_MEDIUM_PAGE + 1)
-                    + (NEW_ADDRESS_OUTPOINTS_PAGE + 1)),
+                    + (NEW_ADDRESS_OUTPOINTS_PAGE + 1))
+                + empty_wasm_size() as u64,
             chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
         );
 

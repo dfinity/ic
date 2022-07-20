@@ -5,7 +5,7 @@ mod tests;
 
 use super::CheckpointError;
 use crate::{
-    DirtyPages, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED,
+    DirtyPages, FileType, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED,
     LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED,
 };
 use bit_vec::BitVec;
@@ -701,7 +701,18 @@ fn dirty_pages_to_dirty_chunks(
             continue;
         }
 
-        if let Ok(path) = dirty_page.page_type.path(&checkpoint_layout) {
+        let path = match dirty_page.file_type {
+            FileType::PageMap(page_type) => page_type.path(&checkpoint_layout),
+            FileType::WasmBinary(canister_id) => {
+                assert!(dirty_page.page_delta_indices.is_empty());
+
+                checkpoint_layout
+                    .canister(&canister_id)
+                    .map(|can| can.wasm().raw_path().to_owned())
+            }
+        };
+
+        if let Ok(path) = path {
             let relative_path = path
                 .strip_prefix(checkpoint_root_path)
                 .expect("failed to strip path prefix");

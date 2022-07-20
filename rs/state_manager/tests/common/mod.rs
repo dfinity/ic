@@ -35,11 +35,26 @@ use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 use tempfile::Builder;
 
+const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
+
 pub fn empty_wasm() -> CanisterModule {
-    CanisterModule::new(vec![
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65,
-        0x02, 0x01, 0x00,
-    ])
+    CanisterModule::new(EMPTY_WASM.to_vec())
+}
+
+pub fn empty_wasm_size() -> usize {
+    EMPTY_WASM.len()
+}
+
+const ALTERNATE_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+    0x02, 0x01, 0x00,
+];
+
+pub fn alternate_wasm() -> CanisterModule {
+    CanisterModule::new(ALTERNATE_WASM.to_vec())
 }
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -326,6 +341,18 @@ pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterI
     execution_state.wasm_binary = WasmBinary::new(wasm);
     canister_state.execution_state = Some(execution_state);
     state.put_canister_state(canister_state);
+}
+
+pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
+    let wasm = alternate_wasm();
+
+    state
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .wasm_binary = WasmBinary::new(wasm);
 }
 
 pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> StateSyncMessage {
