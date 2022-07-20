@@ -8,6 +8,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfigs;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -1431,6 +1432,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
+        subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
 

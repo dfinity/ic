@@ -5356,6 +5356,7 @@ version = "0.8.0"
 dependencies = [
  "ic-base-types",
  "ic-config",
+ "ic-constants",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
@@ -6662,6 +6663,7 @@ dependencies = [
  "clap 3.1.18",
  "fs_extra",
  "ic-config",
+ "ic-constants",
  "ic-crypto",
  "ic-http-utils",
  "ic-ic00-types",
@@ -8059,6 +8061,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-internal-types",
  "ic-crypto-sha",

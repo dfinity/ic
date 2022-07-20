@@ -316,8 +316,9 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         compute_allocation: ComputeAllocation,
         duration: Duration,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles = self.compute_allocation_cost(compute_allocation, duration);
+        let cycles = self.compute_allocation_cost(compute_allocation, duration, subnet_size);
 
         // Can charge all the way to the empty account (zero cycles)
         self.consume_with_threshold(system_state, cycles, Cycles::zero())
@@ -329,10 +330,22 @@ impl CyclesAccountManager {
         &self,
         compute_allocation: ComputeAllocation,
         duration: Duration,
+        subnet_size: usize,
     ) -> Cycles {
-        self.config.compute_percent_allocated_per_second_fee
+        let cycles = self.config.compute_percent_allocated_per_second_fee
             * duration.as_secs()
-            * compute_allocation.as_percent()
+            * compute_allocation.as_percent();
+        self.scale_compute_allocation_cost(cycles, subnet_size)
+    }
+
+    // Scale compute allocation cost according to subnet type and size.
+    fn scale_compute_allocation_cost(&self, cycles: Cycles, _subnet_size: usize) -> Cycles {
+        match self.own_subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                // TODO(EXC-1170): implement scaling function.
+                cycles
+            }
+        }
     }
 
     /// Computes the cost of inducting an ingress message.
@@ -471,8 +484,9 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         bytes: NumBytes,
         duration: Duration,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_amount = self.memory_cost(bytes, duration);
+        let cycles_amount = self.memory_cost(bytes, duration, subnet_size);
 
         // Can charge all the way to the empty account (zero cycles)
         self.consume_with_threshold(system_state, cycles_amount, Cycles::zero())
@@ -480,14 +494,25 @@ impl CyclesAccountManager {
 
     /// The cost of using `bytes` worth of memory.
     #[doc(hidden)] // pub for usage in tests
-    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
+    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration, subnet_size: usize) -> Cycles {
         let one_gib = 1024 * 1024 * 1024;
-        Cycles::from(
+        let cycles = Cycles::from(
             (bytes.get() as u128
                 * self.config.gib_storage_per_second_fee.get()
                 * duration.as_secs() as u128)
                 / one_gib,
-        )
+        );
+        self.scale_memory_cost(cycles, subnet_size)
+    }
+
+    // Scale memory cost according to subnet type and size.
+    fn scale_memory_cost(&self, cycles: Cycles, _subnet_size: usize) -> Cycles {
+        match self.own_subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                // TODO(EXC-1170): implement scaling function.
+                cycles
+            }
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -733,6 +758,7 @@ impl CyclesAccountManager {
         log: &ReplicaLogger,
         canister: &mut CanisterState,
         duration_between_blocks: Duration,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let bytes_to_charge = match canister.memory_allocation() {
             // The canister has explicitly asked for a memory allocation, so charge
@@ -745,6 +771,7 @@ impl CyclesAccountManager {
             &mut canister.system_state,
             bytes_to_charge,
             duration_between_blocks,
+            subnet_size,
         ) {
             info!(
                 log,
@@ -760,6 +787,7 @@ impl CyclesAccountManager {
             &mut canister.system_state,
             compute_allocation,
             duration_between_blocks,
+            subnet_size,
         ) {
             info!(
                 log,

@@ -676,7 +676,11 @@ impl SchedulerImpl {
 
     /// Charge canisters for their resource allocation and usage. Canisters
     /// that did not manage to pay are uninstalled.
-    fn charge_canisters_for_resource_allocation_and_usage(&self, state: &mut ReplicatedState) {
+    fn charge_canisters_for_resource_allocation_and_usage(
+        &self,
+        state: &mut ReplicatedState,
+        subnet_size: usize,
+    ) {
         let duration_since_last_charge = state
             .metadata
             .duration_between_batches(state.metadata.time_of_last_allocation_charge);
@@ -703,6 +707,7 @@ impl SchedulerImpl {
                     &self.log,
                     canister,
                     duration_since_last_charge,
+                    subnet_size,
                 )
                 .is_err()
             {
@@ -1173,7 +1178,10 @@ impl Scheduler for SchedulerImpl {
             }
             {
                 let _timer = self.metrics.round_finalization_charge.start_timer();
-                self.charge_canisters_for_resource_allocation_and_usage(&mut final_state);
+                self.charge_canisters_for_resource_allocation_and_usage(
+                    &mut final_state,
+                    registry_settings.subnet_size,
+                );
             }
         }
         match current_round_type {

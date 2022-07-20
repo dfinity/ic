@@ -41,6 +41,16 @@ An occurrence would indicate unexpectedly big response payload size.
 
 Escalate to the Execution team.
 
+=== `cycles_account_manager_missing_subnet_size_error`
+
+Cycles Account Manager did not receive a subnet size before executing the current
+round, which is required to scale cycles cost according to a subnet replication
+factor.
+
+An occurrence would indicate a broken network topology or an incorrect subnet ID.
+
+Escalate to the Execution team.
+
 === `mr_induct_response_failed`
 
 Inducting a canister `Response` has failed. There are two possible causes for

@@ -37,3 +37,8 @@ pub const PERMITTED_DRIFT_AT_ARTIFACT_MANAGER: Duration = Duration::from_secs(60
 /// Message count limit for `System` subnet outgoing streams used for throttling
 /// the matching input stream.
 pub const SYSTEM_SUBNET_STREAM_MSG_LIMIT: usize = 100;
+
+/// The configuration for app subnets is used for new app subnets with at most
+/// 13 nodes. App subnets with more nodes will be deployed with the NNS
+/// subnet configs.
+pub const SMALL_APP_SUBNET_MAX_SIZE: usize = 13;
