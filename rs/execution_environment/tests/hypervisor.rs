@@ -2980,6 +2980,7 @@ fn can_extract_exported_custom_sections() {
 
     let binary = include_bytes!("test-data/custom_sections.wasm").to_vec();
     let canister_id = test.canister_from_binary(binary).unwrap();
+
     let execution_state = test.execution_state(canister_id);
     assert_eq!(
         execution_state

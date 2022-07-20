@@ -24,6 +24,7 @@ nix = "0.23.0"
 serde_json = "1.0.54"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 threadpool = "1.8.1"
+rayon = "1.5.1"
 
 [dev-dependencies]
 ic-registry-routing-table = { path = "../../registry/routing_table" }

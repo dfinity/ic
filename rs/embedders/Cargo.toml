@@ -30,6 +30,7 @@ slog-term = "2.6.0"
 wasmtime = { version = "0.37", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos', 'wasm-backtrace'] }
 wasmtime-environ = "0.37"
 wasmtime-runtime = "0.37"
+rayon = "1.5.1"
 
 
 [dev-dependencies]

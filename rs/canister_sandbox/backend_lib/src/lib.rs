@@ -42,6 +42,15 @@ pub fn canister_sandbox_main() {
     let embedder_config = embedder_config_arg
         .expect("Error from the sandbox process due to unknown embedder config.");
 
+    // Currently Wasmtime uses the default rayon thread-pool with a thread per core.
+    // In production this results in 64 threads. This MR reduces the default
+    // thread pool size to 10 in the sandbox process because
+    // benchmarks show that 10 is the sweet spot.
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
+        .build_global()
+        .unwrap();
+
     run_canister_sandbox(socket, embedder_config);
 }
 
