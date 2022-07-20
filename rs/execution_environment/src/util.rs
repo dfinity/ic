@@ -51,25 +51,36 @@ pub fn process_responses(
 /// - if the response is for an ingress, then it returns the response.
 /// The function also returns other fields of the given result.
 pub fn process_result(
-    mut result: ExecuteMessageResult,
+    result: ExecuteMessageResult,
 ) -> (CanisterState, NumBytes, Option<(MessageId, IngressStatus)>) {
-    let ingress_status = match result.response {
-        ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
-        ExecutionResponse::Request(response) => {
-            debug_assert_eq!(
-                response.respondent,
-                result.canister.canister_id(),
-                "Respondent mismatch"
-            );
-            result.canister.push_output_response(response.into());
-            None
+    match result {
+        ExecuteMessageResult::Finished {
+            mut canister,
+            response,
+            heap_delta,
+        } => {
+            let ingress_status = match response {
+                ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
+                ExecutionResponse::Request(response) => {
+                    debug_assert_eq!(
+                        response.respondent,
+                        canister.canister_id(),
+                        "Respondent mismatch"
+                    );
+                    canister.push_output_response(response.into());
+                    None
+                }
+                ExecutionResponse::Empty => None,
+            };
+            (canister, heap_delta, ingress_status)
         }
-        ExecutionResponse::Empty => None,
-        ExecutionResponse::Paused(_) => {
-            unreachable!("Unexpected paused execution in process_result.");
+        ExecuteMessageResult::Paused {
+            canister: _,
+            paused_execution: _,
+        } => {
+            unreachable!("DTS is not enabled yet.")
         }
-    };
-    (result.canister, result.heap_delta, ingress_status)
+    }
 }
 
 /// Checks for stopping canisters and, if any of them are ready to stop,
