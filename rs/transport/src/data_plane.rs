@@ -18,7 +18,7 @@
 //! [`TransportImpl`](../types/struct.TransportImpl.html).
 
 use crate::{
-    metrics::DataPlaneMetrics,
+    metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
         Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader,
         TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
@@ -131,7 +131,7 @@ impl TransportImpl {
         let flow_tag_str = flow_tag.to_string();
         let weak_self = self.weak_self.read().unwrap().clone();
         self.rt_handle.spawn(async move  {
-            let _updater = MetricsUpdater::new(data_plane_metrics, true);
+            let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
             loop {
                 let loop_start_time = Instant::now();
                 // If the TransportImpl has been deleted, abort.
@@ -228,7 +228,7 @@ impl TransportImpl {
         let flow_tag_str = flow_tag.to_string();
         let weak_self = self.weak_self.read().unwrap().clone();
         self.rt_handle.spawn(async move {
-            let _updater = MetricsUpdater::new(data_plane_metrics, false);
+            let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
@@ -472,37 +472,5 @@ impl TransportImpl {
             .await;
         flow_state.update(ConnectionState::Connected(connected_state));
         Ok(())
-    }
-}
-
-/// Wrapper to update the metrics on destruction. This is needed as the async
-/// tasks can get cancelled, and the metrics may not be updated on exit
-struct MetricsUpdater {
-    metrics: DataPlaneMetrics,
-    write_task: bool,
-}
-
-impl MetricsUpdater {
-    fn new(metrics: DataPlaneMetrics, write_task: bool) -> Self {
-        if write_task {
-            metrics.write_tasks.inc();
-        } else {
-            metrics.read_tasks.inc();
-        }
-
-        Self {
-            metrics,
-            write_task,
-        }
-    }
-}
-
-impl Drop for MetricsUpdater {
-    fn drop(&mut self) {
-        if self.write_task {
-            self.metrics.write_tasks.dec();
-        } else {
-            self.metrics.read_tasks.dec();
-        }
     }
 }
