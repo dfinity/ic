@@ -688,7 +688,19 @@ pub struct SystemApiImpl {
     /// replica process.
     sandbox_safe_system_state: SandboxSafeSystemState,
 
+    /// A handler that is invoked when the instruction counter becomes negative
+    /// (exceeds the current slice instruction limit).
     out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+
+    /// The instruction limit of the currently executing slice. It is
+    /// initialized to `execution_parameters.instruction_limits.slice()` and
+    /// updated after each out-of-instructions call that starts a new slice.
+    current_slice_instruction_limit: i64,
+
+    /// The total number of instructions executed before the current slice. It
+    /// is initialized to 0 and updated after each out-of-instructions call that
+    /// starts a new slice.
+    instructions_executed_before_current_slice: i64,
 
     /// Tracks the total execution complexity.
     total_execution_complexity: ExecutionComplexity,
@@ -714,7 +726,7 @@ impl SystemApiImpl {
             subnet_available_memory,
         );
         let stable_memory = StableMemory::new(stable_memory);
-
+        let slice_limit = execution_parameters.instruction_limits.slice().get();
         Self {
             execution_error: None,
             api_type,
@@ -724,6 +736,8 @@ impl SystemApiImpl {
             sandbox_safe_system_state,
             out_of_instructions_handler,
             log,
+            current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
+            instructions_executed_before_current_slice: 0,
             total_execution_complexity: ExecutionComplexity::new(),
         }
     }
@@ -1158,12 +1172,28 @@ impl SystemApi for SystemApiImpl {
         self.execution_parameters.subnet_type
     }
 
-    fn total_instruction_limit(&self) -> NumInstructions {
+    fn message_instruction_limit(&self) -> NumInstructions {
         self.execution_parameters.instruction_limits.message()
     }
 
+    fn message_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
+        let result = (self.instructions_executed_before_current_slice as u64)
+            .saturating_add(self.slice_instructions_executed(instruction_counter).get());
+        NumInstructions::from(result)
+    }
+
     fn slice_instruction_limit(&self) -> NumInstructions {
-        self.execution_parameters.instruction_limits.slice()
+        // Note that `self.execution_parameters.instruction_limits.slice()` is
+        // the instruction limit of the first slice, not the current one.
+        NumInstructions::from(u64::try_from(self.current_slice_instruction_limit).unwrap_or(0))
+    }
+
+    fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
+        let result = self
+            .current_slice_instruction_limit
+            .saturating_sub(instruction_counter)
+            .max(0) as u64;
+        NumInstructions::from(result)
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
@@ -2278,18 +2308,27 @@ impl SystemApi for SystemApiImpl {
         performance_counter_type: PerformanceCounterType,
     ) -> HypervisorResult<u64> {
         let result = match performance_counter_type {
-            PerformanceCounterType::Instructions(instructions_executed) => {
-                Ok(instructions_executed.get())
-            }
+            PerformanceCounterType::Instructions(instruction_counter) => Ok(self
+                .message_instructions_executed(instruction_counter)
+                .get()),
         };
         trace_syscall!(self, ic0_performance_counter, result);
         result
     }
 
-    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64> {
+    fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
         let result = self
             .out_of_instructions_handler
             .out_of_instructions(instruction_counter);
+        if let Ok(new_slice_instruction_limit) = result {
+            // A new slice has started, update the instruction sum and limit.
+            let slice_instructions = self
+                .current_slice_instruction_limit
+                .saturating_sub(instruction_counter)
+                .max(0);
+            self.instructions_executed_before_current_slice += slice_instructions;
+            self.current_slice_instruction_limit = new_slice_instruction_limit;
+        }
         trace_syscall!(self, out_of_instructions, result, instruction_counter);
         result
     }

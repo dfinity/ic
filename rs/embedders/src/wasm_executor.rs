@@ -548,7 +548,6 @@ pub fn process(
     Option<WasmStateChanges>,
     Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
 ) {
-    let instruction_limit = execution_parameters.instruction_limits.slice();
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
     let system_api = SystemApiImpl::new(
@@ -561,6 +560,8 @@ pub fn process(
         out_of_instructions_handler,
         logger,
     );
+
+    let first_slice_instruction_limit = system_api.slice_instruction_limit();
 
     let mut instance = match embedder.new_instance(
         canister_id,
@@ -577,7 +578,7 @@ pub fn process(
             // the limit, not zero here.
             return (
                 SliceExecutionOutput {
-                    executed_instructions: instruction_limit,
+                    executed_instructions: first_slice_instruction_limit,
                 },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
@@ -594,10 +595,33 @@ pub fn process(
             );
         }
     };
-    instance.set_num_instructions(instruction_limit);
+
+    // Set the instruction limit for the first slice.
+    instance.set_instruction_counter(first_slice_instruction_limit.get() as i64);
+
+    // Execute Wasm code until it finishes or exceeds the message instruction
+    // limit. With deterministic time slicing, this call may execute multiple
+    // slices before it returns.
     let run_result = instance.run(func_ref);
 
-    let num_instructions_left = instance.get_num_instructions();
+    // Get the executed/remaining instructions for the message and the slice.
+    let instruction_counter = instance.instruction_counter();
+    let system_api = &instance.store_data().system_api;
+    let slice_instruction_limit = system_api.slice_instruction_limit();
+    // Capping at the limit to preserve the existing behaviour. It should be
+    // possible to remove capping after ensuring that all callers can handle
+    // instructions executed being larger than the limit.
+    let slice_instructions_executed = system_api
+        .slice_instructions_executed(instruction_counter)
+        .min(slice_instruction_limit);
+    let message_instruction_limit = system_api.message_instruction_limit();
+    // Capping at the limit to avoid an underflow when computing the remaining
+    // instructions below.
+    let message_instructions_executed = system_api
+        .message_instructions_executed(instruction_counter)
+        .min(message_instruction_limit);
+    let message_instructions_left = message_instruction_limit - message_instructions_executed;
+
     let instance_stats = instance.get_stats();
 
     // Has the side effect up deallocating memory if message failed and
@@ -654,15 +678,13 @@ pub fn process(
         Err(_) => None,
     };
 
-    let executed_instructions = instruction_limit - num_instructions_left.min(instruction_limit);
-
     (
         SliceExecutionOutput {
-            executed_instructions,
+            executed_instructions: slice_instructions_executed,
         },
         WasmExecutionOutput {
             wasm_result,
-            num_instructions_left,
+            num_instructions_left: message_instructions_left,
             allocated_bytes,
             allocated_message_bytes,
             instance_stats,

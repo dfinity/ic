@@ -23,7 +23,7 @@ use ic_replicated_state::{EmbedderCache, Global, NumWasmPages, PageIndex, PageMa
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions,
+    CanisterId,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
@@ -554,31 +554,27 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         }
     }
 
-    /// Sets the number of instructions for a method execution.
-    pub fn set_num_instructions(&mut self, num_instructions: NumInstructions) {
+    /// Sets the instruction counter to the given value.
+    pub fn set_instruction_counter(&mut self, instruction_counter: i64) {
         match self.store.data().num_instructions_global {
             Some(num_instructions_global) => {
-                match num_instructions_global
-                    .set(&mut self.store, Val::I64(num_instructions.get() as i64))
-                {
+                match num_instructions_global.set(&mut self.store, Val::I64(instruction_counter)) {
                     Ok(_) => (),
-                    Err(e) => panic!("couldn't set the num_instructions counter: {:?}", e),
+                    Err(e) => panic!("couldn't set the instruction counter: {:?}", e),
                 }
             }
-            None => panic!("couldn't find the num_instructions counter in the canister globals"),
+            None => panic!("couldn't find the instruction counter in the canister globals"),
         }
     }
 
-    /// Returns the number of instructions left.
-    pub fn get_num_instructions(&mut self) -> NumInstructions {
+    /// Returns the current instruction counter.
+    pub fn instruction_counter(&mut self) -> i64 {
         match self.store.data().num_instructions_global {
             Some(num_instructions) => match num_instructions.get(&mut self.store) {
-                Val::I64(num_instructions_i64) => {
-                    NumInstructions::from(num_instructions_i64.max(0) as u64)
-                }
-                _ => panic!("invalid num_instructions counter type"),
+                Val::I64(instruction_counter) => instruction_counter,
+                _ => panic!("invalid instruction counter type"),
             },
-            None => panic!("couldn't find the num_instructions counter in the canister globals"),
+            None => panic!("couldn't find the instruction counter in the canister globals"),
         }
     }
 
