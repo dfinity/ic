@@ -15,10 +15,11 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::{
-    CreateExecutionStateSuccessReply, OpenMemoryRequest,
+    CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
 };
 use ic_canister_sandbox_common::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
@@ -316,19 +317,21 @@ impl SandboxManager {
         &self,
         wasm_id: WasmId,
         serialized_module: &SerializedModuleBytes,
-    ) -> HypervisorResult<Arc<EmbedderCache>> {
+    ) -> HypervisorResult<(Arc<EmbedderCache>, Duration)> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.caches.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
+        let deserialization_timer = Instant::now();
         let cache = Arc::new(EmbedderCache::new(
             self.embedder.deserialize_module(serialized_module)?,
         ));
+        let deserialization_time = deserialization_timer.elapsed();
 
         guard.caches.insert(wasm_id, Arc::clone(&cache));
-        Ok(cache)
+        Ok((cache, deserialization_time))
     }
 
     /// Closes previously opened wasm instance, by id.
@@ -497,15 +500,24 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(MemoryModifications, Vec<Global>)> {
-        let embedder_cache = self.open_wasm_serialized(wasm_id, &serialized_module.bytes)?;
-        self.create_initial_memory_and_globals(
-            &embedder_cache,
-            &serialized_module.data_segments,
-            wasm_page_map,
-            next_wasm_memory_id,
-            canister_id,
-        )
+    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
+        let timer = Instant::now();
+        let (embedder_cache, deserialization_time) =
+            self.open_wasm_serialized(wasm_id, &serialized_module.bytes)?;
+        let (wasm_memory_modifications, exported_globals) = self
+            .create_initial_memory_and_globals(
+                &embedder_cache,
+                &serialized_module.data_segments,
+                wasm_page_map,
+                next_wasm_memory_id,
+                canister_id,
+            )?;
+        Ok(CreateExecutionStateSerializedSuccessReply {
+            wasm_memory_modifications,
+            exported_globals,
+            deserialization_time,
+            total_sandbox_time: timer.elapsed(),
+        })
     }
 
     fn create_initial_memory_and_globals(
