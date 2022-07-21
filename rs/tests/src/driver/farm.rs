@@ -327,6 +327,8 @@ pub struct CreateVmRequest {
     pub vcpus: NrOfVCPUs,
     #[serde(rename = "memoryKiB")]
     pub memory_kibibytes: AmountOfMemoryKiB,
+    #[serde(rename = "qemuCliArgs")]
+    pub qemu_cli_args: Vec<String>,
     #[serde(rename = "primaryImage")]
     pub primary_image: ImageLocation,
     #[serde(rename = "primaryImageMinimalSizeGiB")]
@@ -344,6 +346,7 @@ impl CreateVmRequest {
         name: String,
         vcpus: NrOfVCPUs,
         memory_kibibytes: AmountOfMemoryKiB,
+        qemu_cli_args: Vec<String>,
         primary_image: ImageLocation,
         primary_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
         has_ipv4: bool,
@@ -354,6 +357,7 @@ impl CreateVmRequest {
             name,
             vcpus,
             memory_kibibytes,
+            qemu_cli_args,
             primary_image,
             primary_image_minimal_size_gibibytes,
             has_ipv4,

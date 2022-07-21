@@ -42,6 +42,7 @@ fn mk_compressed_img_path() -> std::string::String {
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
+    pub qemu_cli_args: Vec<String>,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
@@ -55,6 +56,7 @@ impl BoundaryNode {
         Self {
             name,
             vm_resources: Default::default(),
+            qemu_cli_args: Default::default(),
             vm_allocation: Default::default(),
             required_host_features: Default::default(),
             has_ipv4: true,
@@ -62,6 +64,12 @@ impl BoundaryNode {
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
         }
+    }
+
+    /// Experimental method to set the command-line arguments passed through to QEMU.
+    pub fn with_qemu_cli_args_experimental(mut self, qemu_cli_args: Vec<String>) -> Self {
+        self.qemu_cli_args = qemu_cli_args;
+        self
     }
 
     pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
@@ -104,6 +112,7 @@ impl BoundaryNode {
                     .and_then(|vm_resources| vm_resources.memory_kibibytes)
                     .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
             }),
+            self.qemu_cli_args.clone(),
             match &self.boot_image {
                 None => {
                     let url = ic_setup.boundary_node_img_url;
