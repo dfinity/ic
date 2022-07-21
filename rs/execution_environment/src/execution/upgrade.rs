@@ -253,6 +253,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             layout.raw_path(),
             canister_id,
             round_limits,
+            compilation_cost_handling,
         ) {
             Err(err) => {
                 return InstallCodeRoutineResult::Finished {
