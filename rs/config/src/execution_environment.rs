@@ -140,7 +140,7 @@ impl Default for Config {
             // TODO(RUN-211): Increase the allocatable capacity.
             allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Disabled,
-            module_sharing: FlagStatus::Disabled,
+            module_sharing: FlagStatus::Enabled,
         }
     }
 }

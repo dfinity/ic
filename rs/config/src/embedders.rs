@@ -37,7 +37,7 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            module_sharing: FlagStatus::Disabled,
+            module_sharing: FlagStatus::Enabled,
         }
     }
 }
