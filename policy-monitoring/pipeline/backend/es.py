@@ -49,7 +49,7 @@ class Es:
 
     def __init__(self, es_url: str, alert_service: AlertService, mainnet: bool, fail=False):
         self.es_url = es_url
-        self.es = Elasticsearch(es_url)
+        self.es = Elasticsearch(es_url, max_retries=5, timeout=60.0)  # in seconds
         self.alert_service = alert_service
         self.stat = {"raw_logs": dict()}
         self.mainnet = mainnet
@@ -66,9 +66,9 @@ class Es:
 
     def find_testnet_indices(self, tag: str) -> List[str]:
         """
-        Returns a list of (non-empty) ES indices that are tagged with [tag]
+        Find a list of (non-empty) ES indices that are tagged with [tag]
         Exceptions:
-            - [EsException] if COUNT query fails for some index
+            - [self.fail] ==> [EsException] if COUNT query fails for some index
         """
         result = []
         index: str
@@ -129,7 +129,11 @@ class Es:
         return False
 
     def find_mainnet_inidices(self, window_minutes: int) -> List[str]:
-        """Find journalbeat indices for the past [num_days]"""
+        """
+        Find mainnet journalbeat indices for the past [num_days]
+        Exceptions:
+            - [self.fail] ==> [EsException] if COUNT query fails for some index
+        """
         dates = self._get_relevant_dates(window_minutes)
         body = {"query": Es._time_slice_query(window_minutes)}
         result = []
