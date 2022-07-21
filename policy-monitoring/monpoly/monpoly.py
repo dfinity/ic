@@ -578,9 +578,8 @@ class Monpoly:
 
         msg = (f"{datum}\n").encode(Monpoly.ENCODING)
 
-        self._proc.stdin.write(msg)
-
         try:
+            self._proc.stdin.write(msg)
             self._proc.stdin.flush()
         except BrokenPipeError:
             raise MonpolyIoClosed(
