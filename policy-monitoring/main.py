@@ -116,7 +116,7 @@ def main():
         type=str,
         help="Secret identifier of a Slack webhook service for liveness "
         "indication (alternatively, "
-        "export IC_SLACK_POLICY_MONITORING_ALERTS_SERVICE)",
+        "export IC_SLACK_POLICY_MONITORING_LIVENESS_SERVICE)",
     )
     parser.add_argument(
         "--install_monpoly_docker_image",

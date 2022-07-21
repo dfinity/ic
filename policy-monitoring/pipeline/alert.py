@@ -74,7 +74,8 @@ class DummyAlertService(AlertService):
 
         message = self._form_message(text, level, url)
 
-        print(
-            f"Warning: alert `{short_text}` cannot be sent via Slack (DummyAlertService has been requested).\nAlert message:"
-        )
+        if short_text is not None:
+            print(
+                f"Warning: alert `{short_text}` cannot be sent via Slack (DummyAlertService has been requested).\nAlert message:"
+            )
         print(message, flush=True)
