@@ -1,3 +1,4 @@
+use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCodeRoutine};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use crate::{
@@ -48,62 +49,25 @@ pub(crate) struct InstallCodeResult {
     pub new_wasm_hash: Option<[u8; 32]>,
 }
 
-/// Data structure used as result for most of canister installation
-/// or upgrade routines. It contains:
-/// - old_canister: an original, almost unmodified canister state,
-/// which can be used to abort paused execution.
-/// - response: a result of the current stage of the computation.
-///
-/// * If response is of type Paused, then old_canister is actually modified,
-/// and contains changes necessary for initiating execution of canister installation,
-/// re-installation or upgrade and any specific changes required for
-/// initiating their subroutines (such as withdrawing of execution cycles).
-/// Moreover, if it is a subsequent pause, old_canister may contain changes
-/// made by components outside of this module (such as scheduler, message routing etc),
-/// during the previous pause events.
-/// * If the response is of type Result with Err, then old_canister is either
-/// unmodified original version of the canister from before the execution of
-/// install_code, or a version with changes reverted/undone (except the changes
-/// that came from outside of this module during pausing; these changes are not undone).
-/// * If the response is of type Result with successful execution, then
-/// old_canister contains the same almost unmodified version of the canister as
-/// Paused variant would. The result itself contains also a new, modified version
-/// of the canister. The new_cansiter contains cumulative changes made by
-/// install/upgrade subroutines, as well as outside changes made the old_canister
-/// in case the execution was paused and resumed before reaching this Result.
+/// The result of executing a single slice of `install_code` message (i.e
+/// install, re-install, upgrade).
+/// * If execution has finished successfully, then the result contains the new
+///   canister state with all the changes done during execution.
+/// * If execution has failed, then the result contains the old canister state
+///   with some changes such charging of execution cycles.
+/// * If exection did not complete, then the result contains the old canister state,
+///   with some changes such reservation of execution cycles and a continuation.
+#[allow(dead_code)]
 #[derive(Debug)]
-pub(crate) struct DtsInstallCodeResult {
-    pub old_canister: CanisterState,
-    pub response: InstallCodeResponse,
-}
-
-/// This enum represents possible variants of results of install code
-/// execution routines. It is analogous to ExecutionResponse.
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-pub(crate) enum InstallCodeResponse {
-    Result(
-        (
-            NumInstructions,
-            Result<(InstallCodeResult, CanisterState), CanisterManagerError>,
-        ),
-    ),
-    Paused(Box<dyn PausedInstallCodeExecution>),
-}
-
-/// Represent a paused execution of install code routine,
-/// that can be resumed or aborted.
-pub(crate) trait PausedInstallCodeExecution: std::fmt::Debug {
-    /// Resumes a paused install code execution.
-    fn resume(
-        self: Box<Self>,
-        old_canister: CanisterState,
-        round: RoundContext,
-        round_limits: &mut RoundLimits,
-    ) -> DtsInstallCodeResult;
-
-    // Aborts the paused execution.
-    fn abort(self: Box<Self>);
+pub(crate) enum DtsInstallCodeResult {
+    Finished {
+        canister: CanisterState,
+        result: Result<InstallCodeResult, CanisterManagerError>,
+    },
+    Paused {
+        canister: CanisterState,
+        paused_execution: PausedInstallCodeExecution,
+    },
 }
 
 /// The different return types from `stop_canister()` function below.
@@ -604,7 +568,6 @@ impl CanisterManager {
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
     ) -> (
-        NumInstructions,
         Result<InstallCodeResult, CanisterManagerError>,
         Option<CanisterState>,
     ) {
@@ -616,14 +579,13 @@ impl CanisterManager {
         let old_canister = match state.take_canister_state(&context.canister_id) {
             None => {
                 return (
-                    execution_parameters.instruction_limits.message(),
                     Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
                     None,
                 );
             }
             Some(canister) => canister,
         };
-        let dts_res = self.install_code_dts(
+        let dts_result = self.install_code_dts(
             context,
             old_canister,
             time,
@@ -634,20 +596,18 @@ impl CanisterManager {
             round_limits,
             CompilationCostHandling::Charge,
         );
-        let (instructions_left, result, canister) = match dts_res.response {
-            InstallCodeResponse::Result((instructions_left, result)) => {
-                let (result, canister) = match result {
-                    Ok((result, new_canister)) => (Ok(result), new_canister),
-                    Err(err) => (Err(err), dts_res.old_canister),
-                };
-                (instructions_left, result, canister)
+        match dts_result {
+            DtsInstallCodeResult::Finished { canister, result } => (result, Some(canister)),
+            DtsInstallCodeResult::Paused {
+                canister: _,
+                paused_execution,
+            } => {
+                unreachable!(
+                    "Unexpected paused execution: {:?}. DTS is not enabled yet",
+                    paused_execution
+                );
             }
-            InstallCodeResponse::Paused(_) => {
-                unreachable!("DTS is not enabled in tests yet");
-            }
-        };
-
-        (instructions_left, result, Some(canister))
+        }
     }
 
     /// Installs code to a canister.
@@ -674,7 +634,7 @@ impl CanisterManager {
     pub(crate) fn install_code_dts(
         &self,
         context: InstallCodeContext,
-        mut old_canister: CanisterState,
+        mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
         memory_taken: NumBytes,
@@ -688,74 +648,65 @@ impl CanisterManager {
             warn!(
                 self.log,
                 "Setting compute or memory allocation in canister InstallCode is deprecated. Ignoring supplied parameter. (canister id: {})",
-                old_canister.canister_id()
+                canister.canister_id()
             );
         }
         // Perform a battery of validation checks.
         if let Err(err) =
-            self.validate_memory_allocation(memory_taken, &old_canister, context.memory_allocation)
+            self.validate_memory_allocation(memory_taken, &canister, context.memory_allocation)
         {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((message_instruction_limit, Err(err))),
+            return DtsInstallCodeResult::Finished {
+                canister,
+                result: Err(err),
             };
         }
-        if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((message_instruction_limit, Err(err))),
+        if let Err(err) = self.validate_controller(&canister, &context.sender) {
+            return DtsInstallCodeResult::Finished {
+                canister,
+                result: Err(err),
             };
         }
         match context.mode {
             CanisterInstallMode::Install => {
-                if old_canister.execution_state.is_some() {
-                    return DtsInstallCodeResult {
-                        old_canister,
-                        response: InstallCodeResponse::Result((
-                            message_instruction_limit,
-                            Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
-                        )),
+                if canister.execution_state.is_some() {
+                    return DtsInstallCodeResult::Finished {
+                        canister,
+                        result: Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
                     };
                 }
             }
             CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
         }
 
-        if old_canister.scheduler_state.install_code_debit.get() > 0
+        if canister.scheduler_state.install_code_debit.get() > 0
             && self.config.rate_limiting_of_instructions == FlagStatus::Enabled
         {
-            let can_id = old_canister.system_state.canister_id;
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    message_instruction_limit,
-                    Err(CanisterManagerError::InstallCodeRateLimited(can_id)),
-                )),
+            let can_id = canister.system_state.canister_id;
+            return DtsInstallCodeResult::Finished {
+                canister,
+                result: Err(CanisterManagerError::InstallCodeRateLimited(can_id)),
             };
         }
 
         // All validation checks have passed. Reserve cycles on the old canister
         // for executing the various hooks such as `start`, `pre_upgrade`,
         // `post_upgrade`.
-        let memory_usage = old_canister.memory_usage(self.config.own_subnet_type);
-        let compute_allocation = old_canister.scheduler_state.compute_allocation;
-        if let MemoryAllocation::Reserved(bytes) = old_canister.memory_allocation() {
+        let memory_usage = canister.memory_usage(self.config.own_subnet_type);
+        let compute_allocation = canister.scheduler_state.compute_allocation;
+        if let MemoryAllocation::Reserved(bytes) = canister.memory_allocation() {
             execution_parameters.canister_memory_limit = bytes;
         }
         execution_parameters.compute_allocation = compute_allocation;
 
         if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
-            &mut old_canister.system_state,
+            &mut canister.system_state,
             memory_usage,
             compute_allocation,
             message_instruction_limit,
         ) {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    message_instruction_limit,
-                    Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
-                )),
+            return DtsInstallCodeResult::Finished {
+                canister,
+                result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
             };
         }
 
@@ -770,10 +721,10 @@ impl CanisterManager {
             time,
         };
 
-        let res = match context.mode {
+        let result = match context.mode {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => execute_install(
                 context,
-                old_canister,
+                &canister,
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
@@ -783,7 +734,7 @@ impl CanisterManager {
             ),
             CanisterInstallMode::Upgrade => execute_upgrade(
                 context,
-                old_canister,
+                &canister,
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
@@ -793,9 +744,12 @@ impl CanisterManager {
             ),
         };
 
-        match res.response {
-            InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
-                res.old_canister,
+        match result {
+            InstallCodeRoutineResult::Finished {
+                instructions_left,
+                result,
+            } => finish_install_code(
+                canister,
                 message_instruction_limit,
                 instructions_left,
                 result,
@@ -804,17 +758,17 @@ impl CanisterManager {
                 &self.config,
                 round,
             ),
-            InstallCodeResponse::Paused(paused_install_code_execution) => {
-                let paused_execution = Box::new(PausedInstallCode {
-                    paused_install_code_execution,
+            InstallCodeRoutineResult::Paused { paused_execution } => {
+                let paused_execution = PausedInstallCodeExecution {
+                    paused_routine: paused_execution,
                     message_instruction_limit,
                     mode,
                     canister_layout_path,
                     config: self.config.clone(),
-                });
-                DtsInstallCodeResult {
-                    old_canister: res.old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
+                };
+                DtsInstallCodeResult::Paused {
+                    canister,
+                    paused_execution,
                 }
             }
         }
@@ -1790,7 +1744,7 @@ fn finish_install_code(
     mut old_canister: CanisterState,
     instruction_limit: NumInstructions,
     instructions_left: NumInstructions,
-    result: Result<(InstallCodeResult, CanisterState), CanisterManagerError>,
+    result: Result<(CanisterState, NumBytes), CanisterManagerError>,
     mode: CanisterInstallMode,
     canister_layout_path: PathBuf,
     config: &CanisterMgrConfig,
@@ -1798,8 +1752,30 @@ fn finish_install_code(
 ) -> DtsInstallCodeResult {
     let canister_id = old_canister.canister_id();
     let instructions_consumed = instruction_limit - instructions_left;
-    let result = match result {
-        Ok((res, mut new_canister)) => {
+    match result {
+        Ok((mut new_canister, heap_delta)) => {
+            if mode == CanisterInstallMode::Upgrade
+                && old_canister.system_state.queues().input_queues_stats()
+                    != new_canister.system_state.queues().input_queues_stats()
+            {
+                error!(
+                    round.log,
+                    "Input queues changed after upgrade. Before: {:?}. After: {:?}",
+                    old_canister.system_state.queues().input_queues_stats(),
+                    new_canister.system_state.queues().input_queues_stats()
+                );
+                let err = CanisterManagerError::Hypervisor(
+                    old_canister.canister_id(),
+                    HypervisorError::ContractViolation(
+                        "Input queues changed after upgrade".to_string(),
+                    ),
+                );
+                return DtsInstallCodeResult::Finished {
+                    canister: old_canister,
+                    result: Err(err),
+                };
+            }
+
             // Refund the left over execution cycles to the new canister and
             // replace the old canister with the new one.
             let old_wasm_hash = get_wasm_hash(&old_canister);
@@ -1826,14 +1802,16 @@ fn finish_install_code(
                 );
             }
 
-            Ok((
-                InstallCodeResult {
-                    heap_delta: res.heap_delta,
+            // TODO(RUN-221): Copy parts of `old_canister_state` that could have changed
+            // externally into the new canister state in `result`.
+            DtsInstallCodeResult::Finished {
+                canister: new_canister,
+                result: Ok(InstallCodeResult {
+                    heap_delta,
                     old_wasm_hash,
                     new_wasm_hash,
-                },
-                new_canister,
-            ))
+                }),
+            }
         }
         Err(err) => {
             // the install / upgrade failed. Refund the left over cycles to
@@ -1846,16 +1824,11 @@ fn finish_install_code(
                 instructions_left,
                 instruction_limit,
             );
-            Err(err)
+            DtsInstallCodeResult::Finished {
+                canister: old_canister,
+                result: Err(err),
+            }
         }
-    };
-
-    // TODO(RUN-221): Copy parts of `old_canister_state` that could have changed
-    // externally into the new canister state in `result`.
-
-    DtsInstallCodeResult {
-        old_canister,
-        response: InstallCodeResponse::Result((instructions_left, result)),
     }
 }
 
@@ -1866,27 +1839,29 @@ fn finish_install_code(
 /// which represents paused state of one of the subroutines of either (re)install
 /// or upgrade paths.
 #[derive(Debug)]
-struct PausedInstallCode {
-    paused_install_code_execution: Box<dyn PausedInstallCodeExecution>,
+pub(crate) struct PausedInstallCodeExecution {
+    paused_routine: Box<dyn PausedInstallCodeRoutine>,
     message_instruction_limit: NumInstructions,
     mode: CanisterInstallMode,
     canister_layout_path: PathBuf,
     config: CanisterMgrConfig,
 }
 
-impl PausedInstallCodeExecution for PausedInstallCode {
+impl PausedInstallCodeExecution {
+    #[allow(dead_code)]
     fn resume(
-        self: Box<Self>,
-        old_canister: CanisterState,
+        self,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
-        let res =
-            self.paused_install_code_execution
-                .resume(old_canister, round.clone(), round_limits);
-        match res.response {
-            InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
-                res.old_canister,
+        let result = self.paused_routine.resume(round.clone(), round_limits);
+        match result {
+            InstallCodeRoutineResult::Finished {
+                instructions_left,
+                result,
+            } => finish_install_code(
+                canister,
                 self.message_instruction_limit,
                 instructions_left,
                 result,
@@ -1895,21 +1870,17 @@ impl PausedInstallCodeExecution for PausedInstallCode {
                 &self.config,
                 round,
             ),
-            InstallCodeResponse::Paused(paused_install_code_execution) => {
-                let paused_execution = Box::new(PausedInstallCode {
-                    paused_install_code_execution,
-                    ..*self
-                });
-                DtsInstallCodeResult {
-                    old_canister: res.old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
+            InstallCodeRoutineResult::Paused { paused_execution } => {
+                let paused_execution = PausedInstallCodeExecution {
+                    paused_routine: paused_execution,
+                    ..self
+                };
+                DtsInstallCodeResult::Paused {
+                    canister,
+                    paused_execution,
                 }
             }
         }
-    }
-
-    fn abort(self: Box<Self>) {
-        todo!()
     }
 }
 
