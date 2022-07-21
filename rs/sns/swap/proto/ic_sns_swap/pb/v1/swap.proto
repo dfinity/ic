@@ -7,6 +7,8 @@ syntax = "proto3";
 
 package ic_sns_swap.pb.v1;
 
+import "ic_base_types/pb/v1/types.proto";
+
 // The initialisation data of the canister. Always specified on
 // canister creation, and cannot be modified afterwards.
 //
@@ -29,7 +31,7 @@ message Init {
   // so, in principle, any token type can be used as base token.
   string icp_ledger_canister_id = 4;
   
-  // The number of ICP that is "targetted" by this token swap. If this
+  // The number of ICP that is "targeted" by this token swap. If this
   // amount is achieved, the swap can be triggered immediately,
   // without waiting for the due date (end_timestamp_seconds). Must be
   // at least `min_participants * min_participant_icp_e8s`.
@@ -107,7 +109,7 @@ message BuyerState {
   bool sns_disbursing = 4;
 }
 
-// Lifecycle states of the swap cansiter's world state. The details of
+// Lifecycle states of the swap canister's world state. The details of
 // their meanings is provided in the documentation of the `Swap`.
 enum Lifecycle {
   // Canister is incorrectly configured. Not a real lifecycle state.
@@ -184,6 +186,15 @@ message GetStateRequest {}
 message GetStateResponse {
   Swap swap = 1;
   DerivedState derived = 2;
+}
+
+message GetBuyerStateRequest {
+  // The principal_id of the user who's buyer state is being queried for.
+  ic_base_types.pb.v1.PrincipalId principal_id = 1;
+}
+
+message GetBuyerStateResponse {
+  BuyerState buyer_state = 1;
 }
 
 message DerivedState {

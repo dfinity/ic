@@ -12,7 +12,14 @@ fn check_generated_files() {
     );
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let swap_proto = manifest_dir.join("proto");
-    generate_prost_files(ProtoPaths { swap: &swap_proto }, out.path());
+    let base_types_proto = manifest_dir.join("../../types/base_types/proto");
+    generate_prost_files(
+        ProtoPaths {
+            swap: &swap_proto,
+            base_types: &base_types_proto,
+        },
+        out.path(),
+    );
 
     let gen = manifest_dir.join("gen");
 

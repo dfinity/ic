@@ -30,17 +30,18 @@ use ic_nervous_system_common::stable_mem_utils::{
 use ic_sns_governance::ledger::{Ledger, LedgerCanister};
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
-use ic_sns_swap::pb::v1::{
-    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
-    FinalizeSwapResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
-    Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
-    RefreshSnsTokensResponse, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
-};
 use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
 
 use std::str::FromStr;
 
 use ic_ic00_types::CanisterStatusResultV2;
+use ic_sns_swap::pb::v1::{
+    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
+    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetCanisterStatusRequest,
+    GetStateRequest, GetStateResponse, Init, Lifecycle, RefreshBuyerTokensRequest,
+    RefreshBuyerTokensResponse, RefreshSnsTokensRequest, RefreshSnsTokensResponse,
+    SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
+};
 use prost::Message;
 use std::time::{Duration, SystemTime};
 
@@ -87,6 +88,23 @@ fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
         swap: Some(swap().clone()),
         derived: Some(swap().derived_state()),
     }
+}
+
+/// Get the state of a buyer. This will return a `GetBuyerStateResponse`
+/// with an optional `BuyerState` struct if the Swap Canister has
+/// been successfully notified of a buyer's ICP transfer.
+#[export_name = "canister_query get_buyer_state"]
+fn get_buyer_state() {
+    over(candid_one, get_buyer_state_)
+}
+
+/// Get the state of a buyer. This will return a `GetBuyerStateResponse`
+/// with an optional `BuyerState` struct if the Swap Canister has
+/// been successfully notified of a buyer's ICP transfer.
+#[candid_method(query, rename = "get_buyer_state")]
+fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
+    println!("{}get_buyer_state", LOG_PREFIX);
+    swap().get_buyer_state(&request)
 }
 
 /// Sets the window of time when buyers can participate.
