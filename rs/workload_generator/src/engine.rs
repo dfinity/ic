@@ -17,25 +17,17 @@ use ic_types::{
 
 use byte_unit::Byte;
 use itertools::Either;
-use leaky_bucket::RateLimiter;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     convert::TryFrom,
     env, fs,
     str::FromStr,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 use tokio::{
-    sync::{
-        mpsc::{channel, Receiver, Sender},
-        OwnedSemaphorePermit, Semaphore,
-    },
-    time::{sleep, sleep_until},
+    sync::mpsc::{channel, Receiver, Sender},
+    time::sleep_until,
 };
 use url::{Host, Url};
 
@@ -51,12 +43,6 @@ struct WaitRequest {
 
 // Time to wait until the first request is issued
 const START_OFFSET: Duration = Duration::from_millis(500);
-
-// The initial number of permits = (--rps) * INITIAL_PERMITS_MULTIPLIER.
-// This allows an initial burst @rps for INITIAL_PERMITS_MULTIPLIER secs,
-// so that the ingress pool is sufficiently built up. After that, the
-// permits are scaled down based on the response from the replicas.
-const INITIAL_PERMITS_MULTIPLIER: usize = 10;
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
@@ -210,117 +196,6 @@ impl Engine {
                 Engine::execute_request(agent, tx, time_origin, &plan, n).await;
             }));
         }
-        for tx_handle in tx_handles {
-            tx_handle.await.unwrap_or_else(|_| {
-                panic!("Await the tx failed.");
-            });
-        }
-        std::mem::drop(tx);
-        rx_handle.await.unwrap_or_else(|_| {
-            panic!("Await the rx failed.");
-        });
-
-        rec_handle.join().unwrap()
-    }
-
-    /// Finds the max rps currently possible with the given set of replicas.
-    /// - `rpms` - Initial estimate of the max requests per milliseconds
-    /// - `time_secs` - The time in seconds that the workload should be kept up
-    /// - `nonce` - Nonce to use for update calls
-    #[allow(clippy::too_many_arguments)]
-    pub async fn evaluate_max_rps(
-        &self,
-        rpms: usize,
-        request_type: RequestType,
-        canister_method_name: String,
-        time_secs: usize,
-        nonce: String,
-        call_payload_size: Byte,
-        call_payload: Vec<u8>,
-        canister_id: &CanisterId,
-        periodic_output: bool,
-    ) -> Vec<Fact> {
-        let requests: usize = ((time_secs * rpms) as f64 / 1000f64).ceil() as usize; // This is just an upper estimate
-        println!(
-            "⏱️  Evaluating rps: initial_rps = {}, duration = {} sec total requests = {}",
-            rpms as f64 / 1000f64,
-            time_secs,
-            requests
-        );
-
-        let plan = Plan::new(
-            requests,
-            nonce,
-            call_payload_size,
-            call_payload,
-            *canister_id,
-            request_type,
-            canister_method_name,
-        );
-        let (collector, rec_handle) = collector::start::<Fact>(plan.clone(), periodic_output);
-        let (tx, rx) = channel(requests);
-
-        let rate_limiter = if rpms > 10_000 {
-            RateLimiter::builder()
-                .initial(rpms / 1000)
-                .interval(Duration::from_secs(1))
-                .refill(rpms / 1000)
-                .build()
-        } else {
-            RateLimiter::builder()
-                .initial(1)
-                .interval(Duration::from_secs_f64(1000f64 / rpms as f64))
-                .refill(1)
-                .build()
-        };
-        // Initially holds (rps * INITIAL_PERMITS_MULTIPLIER) permits
-        let request_manager = RequestManager::new(rpms * INITIAL_PERMITS_MULTIPLIER / 1000);
-
-        let time_origin = Instant::now();
-        let rx_handle = tokio::task::spawn(Engine::evaluate_requests(
-            rx,
-            collector,
-            Some(rpms),
-            time_origin,
-        ));
-        let end_time = time_origin
-            .checked_add(Duration::from_secs(time_secs as u64))
-            .unwrap();
-        let end_time = tokio::time::Instant::from_std(end_time);
-
-        let mut tx_handles = vec![];
-        let mut n = 0;
-        sleep(START_OFFSET).await;
-        let mut last_print = SystemTime::now();
-        while tokio::time::Instant::now() < end_time {
-            // Wait for the rate limiter to allow the next request
-            rate_limiter.acquire_one().await;
-            // Wait for a free slot based on the current rps estimate
-            let permit =
-                match tokio::time::timeout_at(end_time, request_manager.alloc_permit()).await {
-                    Ok(permit) => permit,
-                    Err(_) => break,
-                };
-
-            let tx = tx.clone();
-            let plan = plan.clone();
-            let request_manager_cl = request_manager.clone();
-            let agent = self.agents[n % self.agents.len()].clone();
-            FUTURE_STARTED.inc();
-            tx_handles.push(tokio::task::spawn(async move {
-                REQUEST_STARTING.inc();
-                let ret = Engine::execute_request(agent, tx, time_origin, &plan, n).await;
-                request_manager_cl.free_permit(permit, ret);
-            }));
-
-            n += 1;
-            if last_print.elapsed().unwrap() > Duration::from_secs(10) {
-                request_manager.show();
-                last_print = SystemTime::now();
-            }
-        }
-        println!("⏱️  Evaluating rps done: {:?}", time_origin.elapsed());
-
         for tx_handle in tx_handles {
             tx_handle.await.unwrap_or_else(|_| {
                 panic!("Await the tx failed.");
@@ -773,70 +648,5 @@ impl Engine {
             .as_ref()
             .map(|bytes| Engine::interpret_counter_canister_response(bytes));
         Ok((call_response.status, counter_value))
-    }
-}
-
-// Manages the number of outstanding requests in flight
-#[derive(Clone)]
-struct RequestManager {
-    // Number of requests to start with
-    initial_requests: usize,
-
-    // The semaphore to acquire/release permits
-    permits: Arc<Semaphore>,
-
-    allocs: Arc<AtomicUsize>,
-    success: Arc<AtomicUsize>,
-    errors: Arc<AtomicUsize>,
-}
-
-impl RequestManager {
-    fn new(initial_requests: usize) -> Self {
-        Self {
-            initial_requests,
-            permits: Arc::new(Semaphore::new(initial_requests)),
-            allocs: Arc::new(AtomicUsize::new(0)),
-            success: Arc::new(AtomicUsize::new(0)),
-            errors: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-
-    // Waits for one permit to become available
-    async fn alloc_permit(&self) -> OwnedSemaphorePermit {
-        self.allocs.fetch_add(1, Ordering::SeqCst);
-        self.permits.clone().acquire_owned().await.unwrap()
-    }
-
-    // Called on request completion.
-    // If the request was successful, the token is returned to the
-    // free pool so that more requests can be issued in its place.
-    // If the request failed, the token is dropped without returning
-    // to the pool. This dynamically adjusts the pool size/max
-    // outstanding requests.
-    fn free_permit(&self, permit: OwnedSemaphorePermit, request_success: bool) {
-        if !request_success {
-            // TODO: keep a min threshold, look at the specific
-            // HTTP status code
-            permit.forget();
-            self.errors.fetch_add(1, Ordering::SeqCst);
-        } else {
-            self.success.fetch_add(1, Ordering::SeqCst);
-        }
-    }
-
-    fn show(&self) {
-        let allocs = self.allocs.load(Ordering::SeqCst);
-        let success = self.success.load(Ordering::SeqCst);
-        let errors = self.errors.load(Ordering::SeqCst);
-        println!(
-            "RequestManager: initial_capacity = {}, allocs = {}, success = {}, errors = {},\
-                    current capacity = {}, free permits = {}",
-            self.initial_requests,
-            allocs,
-            success,
-            errors,
-            self.initial_requests - errors,
-            self.permits.available_permits()
-        );
     }
 }
