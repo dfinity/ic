@@ -41,7 +41,6 @@ use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
 use std::str::FromStr;
 
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_sns_swap::GetCanisterStatusResponse;
 use prost::Message;
 use std::time::{Duration, SystemTime};
 
@@ -269,17 +268,15 @@ fn get_canister_status() {
 }
 
 #[candid_method(update, rename = "get_canister_status")]
-async fn get_canister_status_(_request: GetCanisterStatusRequest) -> GetCanisterStatusResponse {
+async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
     do_get_canister_status(&id(), &ProdManagementCanister::new()).await
 }
 
 async fn do_get_canister_status(
     canister_id: &CanisterId,
     management_canister: &impl ManagementCanister,
-) -> GetCanisterStatusResponse {
-    GetCanisterStatusResponse {
-        status: management_canister.canister_status(canister_id).await,
-    }
+) -> CanisterStatusResultV2 {
+    management_canister.canister_status(canister_id).await
 }
 
 // =============================================================================
@@ -481,11 +478,6 @@ mod tests {
     async fn test_get_canister_status() {
         let response =
             do_get_canister_status(&CanisterId::from_u64(1), &StubManagementCanister {}).await;
-        assert_eq!(
-            response,
-            GetCanisterStatusResponse {
-                status: basic_canister_status(),
-            }
-        );
+        assert_eq!(response, basic_canister_status(),);
     }
 }

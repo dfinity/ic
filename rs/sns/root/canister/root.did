@@ -35,10 +35,12 @@ type FailedUpdate = record {
   dapp_canister_id : opt principal;
 };
 type GetSnsCanistersSummaryResponse = record {
-  ledger_canister_summary : opt CanisterSummary;
-  governance_canister_summary : opt CanisterSummary;
-  root_canister_summary : opt CanisterSummary;
-  dapp_canister_summaries : vec CanisterSummary;
+  root : opt CanisterSummary;
+  swap : opt CanisterSummary;
+  ledger : opt CanisterSummary;
+  governance : opt CanisterSummary;
+  dapps : vec CanisterSummary;
+  archives : vec CanisterSummary;
 };
 type ListSnsCanistersResponse = record {
   root : opt principal;

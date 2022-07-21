@@ -14,6 +14,7 @@ pub use ic_test_utilities::assert_utils::assert_balance_equals;
 pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
+use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs};
 use std::convert::TryFrom;
 use std::env;
 use std::fmt;
@@ -621,6 +622,35 @@ impl<'a> Canister<'a> {
     /// out of date.
     pub fn set_wasm(&mut self, wasm: Vec<u8>) {
         self.wasm = Some(Wasm::from_bytes(wasm));
+    }
+
+    pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
+        let status_res: CanisterStatusResultV2 = self
+            .runtime
+            .get_management_canister()
+            .update_("canister_status", candid, (self.as_record(),))
+            .await?;
+
+        let mut controllers = status_res.controllers();
+        controllers.push(additional_controller);
+
+        self.runtime
+            .get_management_canister()
+            .update_(
+                ic00::Method::UpdateSettings.to_string(),
+                dfn_candid::candid_multi_arity,
+                (UpdateSettingsArgs {
+                    canister_id: self.canister_id.into(),
+                    settings: CanisterSettingsArgs {
+                        controller: None,
+                        controllers: Some(controllers),
+                        compute_allocation: None,
+                        memory_allocation: None,
+                        freezing_threshold: None,
+                    },
+                },),
+            )
+            .await
     }
 
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
