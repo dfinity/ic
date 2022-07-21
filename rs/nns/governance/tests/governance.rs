@@ -2843,39 +2843,11 @@ fn compute_maturities(
 
 proptest! {
 
-/// Check that voting a Governance proposal yields 20x more maturity
-/// than voting on a network economics proposal.
+/// Check that voting a exchange rate proposal yields 0.01 of the maturity of voting on
+/// any other proposal topic.
 #[cfg(feature = "test")]
 #[test]
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
-    // Neuron 0 proposes and votes on a governance proposal. Neuron 1
-    // proposes and votes on five network economics proposals. Neuron
-    // 0 gets 20 times the voting power and neuron 1 gets 5 tives the
-    // voting power. Thus, their ratio of voting rewards ought to be
-    // 20:5 or 4:1 or 80:20 regardless of the stakes.
-    //
-    // Note that compute_maturities returns the resulting maturities
-    // when 100 e8s of voting rewards are distributed.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"]),
-        vec![80, 20]
-    );
-    // Make sure that, when voting on proposals of the same type in
-    // the ratio 1:5, they get voting rewards in the ratio 1:5
-    // instead. Note that the maturities are truncated: 16.(6) to 16
-    // and 83.(3) to 83.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-P", "-P", "-P", "-P", "-P"]),
-        vec![16, 83]
-    );
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PG", "-PG", "-PG", "-PG", "-PG"]),
-        vec![16, 83]
-    );
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-E", "-PE", "-PE", "-PE", "-PE", "-PE"]),
-        vec![16, 83]
-    );
     // Ensure that voting on an exchange rate proposal gives 1% of the
     // voting rewards. Note that the maturities are truncated:
     // 99.(0099) to 99 and 0.(0099) to 0.
