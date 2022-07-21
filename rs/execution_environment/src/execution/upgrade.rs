@@ -2,17 +2,14 @@
 // `upgrade` is executed.
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 // and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
-use crate::canister_manager::PausedInstallCodeExecution;
-use crate::canister_manager::{
-    canister_layout, CanisterManagerError, DtsInstallCodeResult, InstallCodeContext,
-    InstallCodeResponse, InstallCodeResult,
-};
+use crate::canister_manager::{canister_layout, CanisterManagerError, InstallCodeContext};
 use crate::execution::common::update_round_limits;
+use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCodeRoutine};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
-use ic_logger::{error, fatal, info};
+use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, Memory, SystemState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
@@ -70,14 +67,14 @@ use std::path::PathBuf;
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn execute_upgrade(
     context: InstallCodeContext,
-    old_canister: CanisterState,
+    old_canister: &CanisterState,
     time: Time,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
     compilation_cost_handling: CompilationCostHandling,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = context.canister_id;
     let mut new_canister = old_canister.clone();
     let total_heap_delta = NumBytes::from(0);
@@ -90,12 +87,9 @@ pub(crate) fn execute_upgrade(
     // Validate that the Wasm module is present.
     let execution_state = match new_canister.execution_state.take() {
         None => {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    execution_parameters.instruction_limits.message(),
-                    Err((canister_id, HypervisorError::WasmModuleNotFound).into()),
-                )),
+            return InstallCodeRoutineResult::Finished {
+                instructions_left: execution_parameters.instruction_limits.message(),
+                result: Err((canister_id, HypervisorError::WasmModuleNotFound).into()),
             }
         }
         Some(es) => es,
@@ -109,7 +103,6 @@ pub(crate) fn execute_upgrade(
         upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             context,
             new_canister,
-            old_canister,
             canister_layout_path,
             execution_parameters,
             instructions_left,
@@ -140,7 +133,6 @@ pub(crate) fn execute_upgrade(
                     system_state_changes,
                     context,
                     new_canister,
-                    old_canister,
                     canister_layout_path,
                     execution_parameters,
                     total_heap_delta,
@@ -162,10 +154,7 @@ pub(crate) fn execute_upgrade(
                     time,
                     compilation_cost_handling,
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }
@@ -177,7 +166,6 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     system_state_changes: SystemStateChanges,
     context: InstallCodeContext,
     mut new_canister: CanisterState,
-    old_canister: CanisterState,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
@@ -185,7 +173,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     compilation_cost_handling: CompilationCostHandling,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -212,7 +200,6 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 context,
                 new_canister,
-                old_canister,
                 canister_layout_path,
                 execution_parameters,
                 instructions_left,
@@ -223,12 +210,9 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 compilation_cost_handling,
             )
         }
-        Err(err) => DtsInstallCodeResult {
-            old_canister,
-            response: InstallCodeResponse::Result((
-                instructions_left,
-                Err((canister_id, err).into()),
-            )),
+        Err(err) => InstallCodeRoutineResult::Finished {
+            instructions_left,
+            result: Err((canister_id, err).into()),
         },
     }
 }
@@ -237,7 +221,6 @@ fn upgrade_stage_1_process_pre_upgrade_result(
 fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     context: InstallCodeContext,
     mut new_canister: CanisterState,
-    old_canister: CanisterState,
     canister_layout_path: PathBuf,
     mut execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
@@ -246,7 +229,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     compilation_cost_handling: CompilationCostHandling,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
 
     info!(
@@ -272,12 +255,9 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             round_limits,
         ) {
             Err(err) => {
-                return DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Result((
-                        instructions_left,
-                        Err((canister_id, err).into()),
-                    )),
+                return InstallCodeRoutineResult::Finished {
+                    instructions_left,
+                    result: Err((canister_id, err).into()),
                 };
             }
             Ok((instructions_from_compilation, mut execution_state)) => {
@@ -312,16 +292,13 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let subnet_type = round.hypervisor.subnet_type();
     if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
         if bytes < new_canister.memory_usage(subnet_type) {
-            return DtsInstallCodeResult {
-                old_canister,
-                response: InstallCodeResponse::Result((
-                    instructions_left,
-                    Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        canister_id,
-                        memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(subnet_type),
-                    }),
-                )),
+            return InstallCodeRoutineResult::Finished {
+                instructions_left,
+                result: Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                    canister_id,
+                    memory_allocation_given: desired_memory_allocation,
+                    memory_usage_needed: new_canister.memory_usage(subnet_type),
+                }),
             };
         }
         execution_parameters.canister_memory_limit = bytes;
@@ -345,7 +322,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             context.sender,
             context.arg,
             new_canister,
-            old_canister,
             execution_parameters,
             instructions_left,
             total_heap_delta,
@@ -374,7 +350,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     context.sender,
                     context.arg,
                     new_canister,
-                    old_canister,
                     execution_parameters,
                     total_heap_delta,
                     time,
@@ -393,10 +368,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     context_arg: context.arg,
                     time,
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }
@@ -408,13 +380,12 @@ fn upgrade_stage_3b_process_start_result(
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
     new_canister: CanisterState,
-    old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
 
@@ -436,7 +407,6 @@ fn upgrade_stage_3b_process_start_result(
                 context_sender,
                 context_arg,
                 new_canister,
-                old_canister,
                 execution_parameters,
                 instructions_left,
                 total_heap_delta,
@@ -445,12 +415,9 @@ fn upgrade_stage_3b_process_start_result(
                 round_limits,
             )
         }
-        Err(err) => DtsInstallCodeResult {
-            old_canister,
-            response: InstallCodeResponse::Result((
-                instructions_left,
-                Err((canister_id, err).into()),
-            )),
+        Err(err) => InstallCodeRoutineResult::Finished {
+            instructions_left,
+            result: Err((canister_id, err).into()),
         },
     }
 }
@@ -460,14 +427,13 @@ fn upgrade_stage_4a_call_post_upgrade(
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
     mut new_canister: CanisterState,
-    old_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
 
     info!(
@@ -497,7 +463,6 @@ fn upgrade_stage_4a_call_post_upgrade(
         new_canister.execution_state = Some(execution_state);
         upgrade_stage_4c_finish_upgrade(
             new_canister,
-            old_canister,
             execution_parameters,
             instructions_left,
             total_heap_delta,
@@ -522,7 +487,6 @@ fn upgrade_stage_4a_call_post_upgrade(
                     output,
                     system_state_changes,
                     new_canister,
-                    old_canister,
                     execution_parameters,
                     total_heap_delta,
                     round,
@@ -537,10 +501,7 @@ fn upgrade_stage_4a_call_post_upgrade(
                     execution_parameters,
                     total_heap_delta,
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }
@@ -551,12 +512,11 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     output: WasmExecutionOutput,
     system_state_changes: SystemStateChanges,
     mut new_canister: CanisterState,
-    old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -582,31 +542,26 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             total_heap_delta += bytes;
             upgrade_stage_4c_finish_upgrade(
                 new_canister,
-                old_canister,
                 execution_parameters,
                 instructions_left,
                 total_heap_delta,
                 round,
             )
         }
-        Err(err) => DtsInstallCodeResult {
-            old_canister,
-            response: InstallCodeResponse::Result((
-                instructions_left,
-                Err((canister_id, err).into()),
-            )),
+        Err(err) => InstallCodeRoutineResult::Finished {
+            instructions_left,
+            result: Err((canister_id, err).into()),
         },
     }
 }
 
 fn upgrade_stage_4c_finish_upgrade(
     new_canister: CanisterState,
-    old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     round: RoundContext,
-) -> DtsInstallCodeResult {
+) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
 
     info!(
@@ -617,43 +572,9 @@ fn upgrade_stage_4c_finish_upgrade(
         instructions_left
     );
 
-    if old_canister.system_state.queues().input_queues_stats()
-        != new_canister.system_state.queues().input_queues_stats()
-    {
-        error!(
-            round.log,
-            "Input queues changed after upgrade. Before: {:?}. After: {:?}",
-            old_canister.system_state.queues().input_queues_stats(),
-            new_canister.system_state.queues().input_queues_stats()
-        );
-
-        return DtsInstallCodeResult {
-            old_canister,
-            response: InstallCodeResponse::Result((
-                instructions_left,
-                Err(CanisterManagerError::Hypervisor(
-                    new_canister.canister_id(),
-                    HypervisorError::ContractViolation(
-                        "Input queues changed after upgrade".to_string(),
-                    ),
-                )),
-            )),
-        };
-    }
-
-    DtsInstallCodeResult {
-        old_canister,
-        response: InstallCodeResponse::Result((
-            instructions_left,
-            Ok((
-                InstallCodeResult {
-                    heap_delta: total_heap_delta,
-                    old_wasm_hash: None,
-                    new_wasm_hash: None,
-                },
-                new_canister,
-            )),
-        )),
+    InstallCodeRoutineResult::Finished {
+        instructions_left,
+        result: Ok((new_canister, total_heap_delta)),
     }
 }
 
@@ -672,13 +593,12 @@ struct PausedPreUpgradeExecution {
     compilation_cost_handling: CompilationCostHandling,
 }
 
-impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
+impl PausedInstallCodeRoutine for PausedPreUpgradeExecution {
     fn resume(
         self: Box<Self>,
-        old_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-    ) -> DtsInstallCodeResult {
+    ) -> InstallCodeRoutineResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) =
@@ -692,7 +612,6 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     system_state_changes,
                     self.context,
                     new_canister,
-                    old_canister,
                     self.canister_layout_path,
                     self.execution_parameters,
                     self.total_heap_delta,
@@ -709,10 +628,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     paused_wasm_execution,
                     ..*self
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }
@@ -736,13 +652,12 @@ struct PausedStartExecutionDuringUpgrade {
     time: Time,
 }
 
-impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
+impl PausedInstallCodeRoutine for PausedStartExecutionDuringUpgrade {
     fn resume(
         self: Box<Self>,
-        old_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-    ) -> DtsInstallCodeResult {
+    ) -> InstallCodeRoutineResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) =
@@ -756,7 +671,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     self.context_sender,
                     self.context_arg,
                     new_canister,
-                    old_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
                     self.time,
@@ -771,10 +685,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
                     ..*self
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }
@@ -795,13 +706,12 @@ struct PausedPostUpgradeExecution {
     total_heap_delta: NumBytes,
 }
 
-impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
+impl PausedInstallCodeRoutine for PausedPostUpgradeExecution {
     fn resume(
         self: Box<Self>,
-        old_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-    ) -> DtsInstallCodeResult {
+    ) -> InstallCodeRoutineResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) =
@@ -814,7 +724,6 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     output,
                     system_state_changes,
                     new_canister,
-                    old_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
                     round,
@@ -828,10 +737,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     paused_wasm_execution,
                     ..*self
                 });
-                DtsInstallCodeResult {
-                    old_canister,
-                    response: InstallCodeResponse::Paused(paused_execution),
-                }
+                InstallCodeRoutineResult::Paused { paused_execution }
             }
         }
     }

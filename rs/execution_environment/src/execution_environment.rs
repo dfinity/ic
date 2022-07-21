@@ -1,4 +1,4 @@
-use crate::canister_manager::{CanisterManagerError, InstallCodeResponse};
+use crate::canister_manager::{CanisterManagerError, DtsInstallCodeResult};
 use crate::execution::{
     heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
     response::execute_response,
@@ -1671,7 +1671,7 @@ impl ExecutionEnvironment {
                 install_context.canister_id,
             ))?;
 
-        let dts_res = self.canister_manager.install_code_dts(
+        let dts_result = self.canister_manager.install_code_dts(
             install_context,
             old_canister,
             time,
@@ -1682,16 +1682,10 @@ impl ExecutionEnvironment {
             round_limits,
             compilation_cost_handling,
         );
-        let (result, canister) = match dts_res.response {
-            InstallCodeResponse::Result((_, result)) => {
-                let (result, canister) = match result {
-                    Ok((result, new_canister)) => (Ok(result), new_canister),
-                    Err(err) => (Err(err), dts_res.old_canister),
-                };
-                (result, canister)
-            }
-            InstallCodeResponse::Paused(_) => {
-                unimplemented!();
+        let (canister, result) = match dts_result {
+            DtsInstallCodeResult::Finished { canister, result } => (canister, result),
+            DtsInstallCodeResult::Paused { .. } => {
+                unimplemented!("Unexpected paused install_code: DTS is not enabled yet.")
             }
         };
         state.put_canister_state(canister);

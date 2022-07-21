@@ -1,4 +1,5 @@
 use crate::{
+    as_num_instructions,
     canister_manager::{
         canister_layout, uninstall_canister, CanisterManager, CanisterManagerError,
         CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
@@ -263,17 +264,8 @@ fn install_code(
     Result<InstallCodeResult, CanisterManagerError>,
     Option<CanisterState>,
 ) {
-    canister_manager.install_code(
-        context,
-        state,
-        EXECUTION_PARAMETERS.clone(),
-        &mut RoundLimits {
-            instructions: as_round_instructions(
-                (*EXECUTION_PARAMETERS).instruction_limits.message(),
-            ),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
-        },
-    )
+    let instruction_limit = (*EXECUTION_PARAMETERS).instruction_limits.message();
+    install_code_with_instruction_limit(canister_manager, context, state, instruction_limit)
 }
 
 fn install_code_with_instruction_limit(
@@ -286,22 +278,25 @@ fn install_code_with_instruction_limit(
     Result<InstallCodeResult, CanisterManagerError>,
     Option<CanisterState>,
 ) {
-    canister_manager.install_code(
-        context,
-        state,
-        ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                instruction_limit,
-                instruction_limit,
-            ),
-            ..EXECUTION_PARAMETERS.clone()
-        },
-        &mut RoundLimits {
-            instructions: as_round_instructions(instruction_limit),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
-        },
-    )
+    let execution_parameters = ExecutionParameters {
+        instruction_limits: InstructionLimits::new(
+            FlagStatus::Disabled,
+            instruction_limit,
+            instruction_limit,
+        ),
+        ..EXECUTION_PARAMETERS.clone()
+    };
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+    };
+    let instructions_before = round_limits.instructions;
+    let (result, canister) =
+        canister_manager.install_code(context, state, execution_parameters, &mut round_limits);
+    let instructions_after = round_limits.instructions;
+    let instructions_left = instruction_limit
+        - as_num_instructions(instructions_before - instructions_after).min(instruction_limit);
+    (instructions_left, result, canister)
 }
 
 fn with_setup<F>(f: F)
