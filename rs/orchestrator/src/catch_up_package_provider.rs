@@ -4,6 +4,7 @@ use ic_canister_client::Sender;
 use ic_canister_client::{Agent, HttpClient};
 use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::catchup::{
@@ -61,7 +62,6 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&CUPWithOriginalProtobuf>,
     ) -> Option<CUPWithOriginalProtobuf> {
-        use ic_protobuf::registry::node::v1::NodeRecord;
         use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
         use ic_types::NodeId;
         use rand::seq::SliceRandom;
@@ -76,41 +76,36 @@ impl CatchUpPackageProvider {
         // Randomize the order of peer_urls
         nodes.shuffle(&mut rand::thread_rng());
 
-        let peer_url = match &nodes.as_slice() {
-            [] => {
+        // Try only one peer at-a-time if there is already a local CUP,
+        // Otherwise, try not to fall back to the registry CUP.
+        let peers = match current_cup {
+            Some(_) => vec![nodes.pop().or_else(|| {
                 warn!(
                     self.logger,
                     "Empty peer list for subnet {} at version {}", subnet_id, registry_version
                 );
-                return None;
-            }
-            [(_, node_record), ..] => {
-                let http = node_record.clone().http?;
-                let url = format!("http://[{}]:{}", http.ip_addr, http.port);
-                Url::parse(&url)
-                    .map_err(|err| {
-                        warn!(
-                            self.logger,
-                            "Unable to parse the peer url {}: {:?}", url, err
-                        );
-                    })
-                    .ok()?
-            }
+                None
+            })?],
+            None => nodes,
         };
 
         let param = current_cup.map(CatchUpPackageParam::from);
-        let peer_cup = self
-            .fetch_verify_and_deserialize_catch_up_package(peer_url, param, subnet_id)
-            .await;
-        // Note: None is < Some(_)
-        if peer_cup.as_ref().map(CatchUpPackageParam::from) > param {
-            return peer_cup;
+        for (_, node_record) in peers.iter() {
+            let peer_cup = self
+                .fetch_verify_and_deserialize_catch_up_package(node_record, param, subnet_id)
+                .await;
+            // Note: None is < Some(_)
+            if peer_cup.as_ref().map(CatchUpPackageParam::from) > param {
+                return peer_cup;
+            } else if param.is_some() {
+                // There is a local CUP. Do not keep trying.
+                return None;
+            } // There is no local CUP
         }
-
         None
     }
 
-    // Download CUP from the given URL.
+    // Download CUP from the given node.
     //
     // If `param` is given, download only CUPs that are newer than the
     // given CUP. This avoids unnecessary CUP downloads and hence reduces
@@ -119,10 +114,27 @@ impl CatchUpPackageProvider {
     // Also checks the signature of the downloaded catch up package.
     async fn fetch_verify_and_deserialize_catch_up_package(
         &self,
-        url: Url,
+        node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
     ) -> Option<CUPWithOriginalProtobuf> {
+        let http = node_record.clone().http.or_else(|| {
+            warn!(
+                self.logger,
+                "Node record's http endpoint is None: {:?}", node_record
+            );
+            None
+        })?;
+        let url_str = format!("http://[{}]:{}", http.ip_addr, http.port);
+        let url = Url::parse(&url_str)
+            .map_err(|err| {
+                warn!(
+                    self.logger,
+                    "Unable to parse the peer url {}: {:?}", url_str, err
+                );
+            })
+            .ok()?;
+
         let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
         let cup = CUPWithOriginalProtobuf {
             cup: CatchUpPackage::try_from(&protobuf)
