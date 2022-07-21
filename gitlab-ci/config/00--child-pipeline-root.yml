@@ -82,7 +82,7 @@ include:
       # Build the test.
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- \
       timeout -k 10 "${CARGO_TEST_TIMEOUT}" nix-shell --run "
-        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-build -- cargo test -p ${CI_JOB_NAME} --benches --no-run ${CARGO_TEST_FLAGS_EXTRA}
+        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-build -- cargo test -vv -p ${CI_JOB_NAME} --benches --no-run ${CARGO_TEST_FLAGS_EXTRA}
       "
 
       # Run the test.
