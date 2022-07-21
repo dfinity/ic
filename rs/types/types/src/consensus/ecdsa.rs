@@ -22,7 +22,7 @@ use crate::crypto::{
         IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
         IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
     },
-    canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
+    canister_threshold_sig::ThresholdEcdsaSigShare,
     AlgorithmId, CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
@@ -37,7 +37,7 @@ use ic_protobuf::types::v1 as pb;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompletedSignature {
     ReportedToExecution,
-    Unreported(ThresholdEcdsaCombinedSignature),
+    Unreported(crate::messages::Response),
 }
 
 /// Common data that is carried in both `EcdsaSummaryPayload` and `EcdsaDataPayload`.
@@ -579,7 +579,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
-    Unreported(Box<InitialIDkgDealings>),
+    Unreported(crate::messages::Response),
 }
 
 /// To make sure all ids used in ECDSA payload are uniquely generated,
@@ -899,8 +899,8 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
         let mut signature_agreements = Vec::new();
         for (request_id, completed) in &summary.signature_agreements {
             let unreported = match completed {
-                CompletedSignature::Unreported(signature) => signature.signature.clone(),
-                CompletedSignature::ReportedToExecution => vec![],
+                CompletedSignature::Unreported(response) => Some(response.into()),
+                CompletedSignature::ReportedToExecution => None,
             };
             signature_agreements.push(pb::CompletedSignature {
                 request_id: Some((*request_id).into()),
@@ -960,7 +960,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
         for (request, completed) in &summary.xnet_reshare_agreements {
             let initial_dealings = match completed {
                 CompletedReshareRequest::Unreported(initial_dealings) => {
-                    Some(initial_dealings.as_ref().into())
+                    Some(initial_dealings.into())
                 }
                 CompletedReshareRequest::ReportedToExecution => None,
             };
@@ -1015,10 +1015,10 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
                 .as_ref()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
                 .and_then(RequestId::try_from)?;
-            let signature = if !completed_signature.unreported.is_empty() {
-                CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                    signature: completed_signature.unreported.clone(),
-                })
+            let signature = if let Some(unreported) = &completed_signature.unreported {
+                let response = crate::messages::Response::try_from(unreported.clone())
+                    .map_err(|err| format!("{:?}", err))?;
+                CompletedSignature::Unreported(response)
             } else {
                 CompletedSignature::ReportedToExecution
             };
@@ -1121,14 +1121,14 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
             let request: EcdsaReshareRequest = proto.try_into()?;
 
             let completed = match &agreement.initial_dealings {
-                Some(initial_dealings_proto) => {
-                    let unreported = initial_dealings_proto.try_into().map_err(|err| {
+                Some(response) => {
+                    let unreported = response.clone().try_into().map_err(|err| {
                         format!(
                             "pb::EcdsaSummaryPayload:: failed to convert initial dealing: {:?}",
                             err
                         )
                     })?;
-                    CompletedReshareRequest::Unreported(Box::new(unreported))
+                    CompletedReshareRequest::Unreported(unreported)
                 }
                 None => CompletedReshareRequest::ReportedToExecution,
             };

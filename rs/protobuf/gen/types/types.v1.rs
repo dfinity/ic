@@ -249,9 +249,8 @@ pub struct OngoingXnetReshare {
 pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<EcdsaReshareRequest>,
-    #[prost(message, optional, tag = "3")]
-    pub initial_dealings:
-        ::core::option::Option<super::super::registry::subnet::v1::InitialIDkgDealings>,
+    #[prost(message, optional, tag = "4")]
+    pub initial_dealings: ::core::option::Option<super::super::state::queues::v1::Response>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct RequestId {
@@ -375,8 +374,8 @@ pub struct ThresholdEcdsaSigInputsRef {
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "1")]
     pub request_id: ::core::option::Option<RequestId>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub unreported: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub unreported: ::core::option::Option<super::super::state::queues::v1::Response>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaReshareRequest {
