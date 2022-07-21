@@ -598,6 +598,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
+    m.add_suite(suite(
+        "large_subnet_count_suite",
+        vec![pot(
+            "xnet_120_subnets_pot",
+            xnet_120_subnets.build(),
+            par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+        )],
+    ));
+
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();
@@ -619,11 +628,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_29_subnets_test",
                     xnet_nightly_29_subnets.test(),
                 )]),
-            ),
-            pot(
-                "xnet_120_subnets_pot",
-                xnet_120_subnets.build(),
-                par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
             ),
             pot_with_setup(
                 "canister_http_remote",
