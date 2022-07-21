@@ -19,12 +19,49 @@ use std::fmt;
 
 pub type Subaccount = [u8; 32];
 
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
-)]
+const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
 pub struct Account {
     pub of: PrincipalId,
     pub subaccount: Option<Subaccount>,
+}
+
+impl Account {
+    #[inline]
+    pub fn effective_subaccount(&self) -> &Subaccount {
+        self.subaccount.as_ref().unwrap_or(DEFAULT_SUBACCOUNT)
+    }
+}
+
+impl PartialEq for Account {
+    fn eq(&self, other: &Self) -> bool {
+        self.of == other.of && self.effective_subaccount() == other.effective_subaccount()
+    }
+}
+
+impl Eq for Account {}
+
+impl std::cmp::PartialOrd for Account {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for Account {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.of.cmp(&other.of).then_with(|| {
+            self.effective_subaccount()
+                .cmp(other.effective_subaccount())
+        })
+    }
+}
+
+impl std::hash::Hash for Account {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.of.hash(state);
+        self.effective_subaccount().hash(state);
+    }
 }
 
 impl fmt::Display for Account {
