@@ -230,7 +230,7 @@ impl<M: Memory> Log<M> {
             }
             prev_entry = entry;
         }
-        return Ok(());
+        Ok(())
     }
 
     /// Returns the underlying memory of the log.
