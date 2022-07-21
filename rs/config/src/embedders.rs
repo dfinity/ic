@@ -29,7 +29,6 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
-    pub api_cycles_u128_flag: FlagStatus,
     pub rate_limiting_of_debug_prints: FlagStatus,
     pub module_sharing: FlagStatus,
 }
@@ -37,7 +36,6 @@ pub struct FeatureFlags {
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
-            api_cycles_u128_flag: FlagStatus::Enabled,
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             module_sharing: FlagStatus::Disabled,
         }
