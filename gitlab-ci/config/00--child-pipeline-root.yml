@@ -61,7 +61,7 @@ include:
     # Print backtrace if a test panics
     RUST_BACKTRACE: 1
     CARGO_TEST_FLAGS_EXTRA: "" # Allows passing any extra flags, such as "--release"
-    CARGO_TEST_TIMEOUT: 2400
+    CARGO_TEST_TIMEOUT: 3000
   script:
     - |
       set -eExuo pipefail
