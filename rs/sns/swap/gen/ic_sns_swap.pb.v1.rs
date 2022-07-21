@@ -23,7 +23,7 @@ pub struct Init {
     /// so, in principle, any token type can be used as base token.
     #[prost(string, tag = "4")]
     pub icp_ledger_canister_id: ::prost::alloc::string::String,
-    /// The number of ICP that is "targetted" by this token swap. If this
+    /// The number of ICP that is "targeted" by this token swap. If this
     /// amount is achieved, the swap can be triggered immediately,
     /// without waiting for the due date (end_timestamp_seconds). Must be
     /// at least `min_participants * min_participant_icp_e8s`.
@@ -182,6 +182,21 @@ pub struct GetStateResponse {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetBuyerStateRequest {
+    /// The principal_id of the user who's buyer state is being queried for.
+    #[prost(message, optional, tag = "1")]
+    pub principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetBuyerStateResponse {
+    #[prost(message, optional, tag = "1")]
+    pub buyer_state: ::core::option::Option<BuyerState>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,
@@ -309,7 +324,7 @@ pub struct ErrorRefundIcpRequest {
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorRefundIcpResponse {}
-/// Lifecycle states of the swap cansiter's world state. The details of
+/// Lifecycle states of the swap canister's world state. The details of
 /// their meanings is provided in the documentation of the `Swap`.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]

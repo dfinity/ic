@@ -1,7 +1,7 @@
 use crate::pb::v1::{
-    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSwapResponse, Init,
-    Lifecycle, SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap,
-    SweepResult, TimeWindow,
+    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSwapResponse,
+    GetBuyerStateRequest, GetBuyerStateResponse, Init, Lifecycle, SetModeCallResult,
+    SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap, SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
 use dfn_core::CanisterId;
@@ -1034,6 +1034,14 @@ impl Swap {
                 as f32,
         }
     }
+
+    pub fn get_buyer_state(&self, request: &GetBuyerStateRequest) -> GetBuyerStateResponse {
+        let buyer_state = match request.principal_id {
+            Some(buyer_principal_id) => self.state().get_buyer_state(&buyer_principal_id),
+            None => panic!("GetBuyerStateRequest must provide principal_id"),
+        };
+        GetBuyerStateResponse { buyer_state }
+    }
 }
 
 impl Init {
@@ -1082,6 +1090,10 @@ impl State {
     }
     pub fn is_valid(&self) -> bool {
         true
+    }
+    pub fn get_buyer_state(&self, buyer: &PrincipalId) -> Option<BuyerState> {
+        let key = buyer.to_string();
+        self.buyers.get(key.as_str()).cloned()
     }
 }
 

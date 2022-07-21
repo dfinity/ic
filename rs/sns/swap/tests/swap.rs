@@ -1434,3 +1434,118 @@ fn test_error_refund() {
         _ => panic!("Expected error refund to succeed"),
     }
 }
+
+/// Test that a single buyer states can be retrieved
+#[test]
+fn test_get_buyer_state() {
+    let init = Init {
+        max_icp_e8s: 10 * E8,
+        min_icp_e8s: 5 * E8,
+        min_participants: 1,
+        min_participant_icp_e8s: E8,
+        max_participant_icp_e8s: 6 * E8,
+        ..init()
+    };
+    let mut swap = new_swap(init);
+
+    // Refresh giving 100k SNS tokens
+    assert!(swap
+        .refresh_sns_token_e8s(
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: None
+                },
+                Ok(Tokens::from_e8s(100000 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
+    assert!(open_at_start(&mut swap).is_ok());
+    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+    // Deposit 6 ICP from one buyer.
+    assert!(swap
+        .refresh_buyer_token_e8s(
+            *TEST_USER1_PRINCIPAL,
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
+                },
+                Ok(Tokens::from_e8s(6 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    // Assert the balance is correct
+    assert_eq!(
+        swap.state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        6 * E8
+    );
+
+    // Assert the same balance using `get_buyer_state`
+    assert_eq!(
+        swap.get_buyer_state(&GetBuyerStateRequest {
+            principal_id: Some(*TEST_USER1_PRINCIPAL)
+        })
+        .buyer_state
+        .unwrap()
+        .amount_icp_e8s,
+        6 * E8
+    );
+
+    // Deposit 6 ICP from another buyer.
+    assert!(swap
+        .refresh_buyer_token_e8s(
+            *TEST_USER2_PRINCIPAL,
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                Account {
+                    of: SWAP_CANISTER_ID.get(),
+                    subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
+                },
+                Ok(Tokens::from_e8s(6 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    // But only 4 ICP is "accepted" as the swap's init.max_icp_e8s is 10 Tokens and has
+    // been reached by this point.
+    assert_eq!(
+        swap.state()
+            .buyers
+            .get(&TEST_USER2_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        4 * E8
+    );
+
+    // Assert the same balance using `get_buyer_state`
+    assert_eq!(
+        swap.get_buyer_state(&GetBuyerStateRequest {
+            principal_id: Some(*TEST_USER2_PRINCIPAL)
+        })
+        .buyer_state
+        .unwrap()
+        .amount_icp_e8s,
+        4 * E8
+    );
+
+    // Using `get_buyer_state` without a known principal returns None
+    assert!(swap
+        .get_buyer_state(&GetBuyerStateRequest {
+            principal_id: Some(*TEST_USER3_PRINCIPAL)
+        })
+        .buyer_state
+        .is_none());
+}

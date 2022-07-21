@@ -38,6 +38,8 @@ type FinalizeSwapResponse = record {
   sweep_sns : opt SweepResult;
   create_neuron : opt SweepResult;
 };
+type GetBuyerStateRequest = record { principal_id : opt principal };
+type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;
@@ -70,6 +72,7 @@ type TimeWindow = record {
 service : (Init) -> {
   error_refund_icp : (ErrorRefundIcpRequest) -> (record {});
   finalize_swap : (record {}) -> (FinalizeSwapResponse);
+  get_buyer_state : (GetBuyerStateRequest) -> (GetBuyerStateResponse) query;
   get_canister_status : (record {}) -> (CanisterStatusResultV2);
   get_state : (record {}) -> (GetStateResponse) query;
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (record {});
