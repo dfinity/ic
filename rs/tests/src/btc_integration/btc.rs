@@ -20,7 +20,10 @@ use std::net::{IpAddr, SocketAddr};
 
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
+use crate::driver::test_env_api::{
+    retry, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession, ADMIN, RETRY_BACKOFF,
+    RETRY_TIMEOUT,
+};
 use crate::driver::universal_vm::UniversalVms;
 use crate::nns::NnsExt;
 use crate::util::{self, *};
@@ -35,7 +38,11 @@ use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFe
 use ic_registry_subnet_type::SubnetType;
 use ic_universal_canister::{management, wasm};
 use slog::info;
-use std::{fs::File, io::Write};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 const MAX_RETRIES: usize = 10;
@@ -45,13 +52,11 @@ pub fn config(env: TestEnv) {
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
     let activate_script = r#"#!/bin/sh
-docker volume create --name=bitcoind-data
 cp /config/bitcoin.conf /tmp/bitcoin.conf
-docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
-  --privileged \
+docker run  --name=bitcoind-node -d \
   -p 8332:8332 \
   -p 18444:18444 \
-  -v /tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf \
+  -v /tmp:/bitcoin/.bitcoin \
   kylemanna/bitcoind
 "#;
     let config_dir = env
@@ -63,7 +68,8 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
     bitcoin_conf.write_all(r#"
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1
-
+    whitelist=[::]/0
+        
     # Dummy credentials that are required by `bitcoin-cli`.
     rpcuser=btc-dev-preview
     rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
@@ -97,6 +103,31 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+}
+
+fn get_bitcoind_log(env: &TestEnv) {
+    let f = || -> Result<(), anyhow::Error> {
+        let r = {
+            let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+
+            // Give log file user permisison to copy it from the host.
+            universal_vm.block_on_bash_script(
+                ADMIN,
+                "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
+            )?;
+
+            // log file is mapped from docker contrainer to tmp directory
+            let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
+            let (mut remote_file, _) = session.scp_recv(Path::new("/tmp/regtest/debug.log"))?;
+
+            let mut buf = String::new();
+            remote_file.read_to_string(&mut buf)?;
+            std::fs::write(env.base_path().join("bitcoind.log"), buf)
+        };
+        r.map_err(|e| e.into())
+    };
+
+    retry(env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, f).expect("Failed to get bitcoind logs");
 }
 
 pub fn get_balance(env: TestEnv) {
@@ -142,7 +173,7 @@ pub fn get_balance(env: TestEnv) {
 
     // TODO: adapt the test below to use the env directly
     // instead of using the deprecated IcHandle and Context.
-    let (handle, ctx) = get_ic_handle_and_ctx(env);
+    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
 
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
@@ -172,10 +203,12 @@ pub fn get_balance(env: TestEnv) {
                     .unwrap();
 
                 if res == expected_balance_in_satoshis {
+                    get_bitcoind_log(&env);
                     break;
                 }
 
                 if iterations > MAX_RETRIES {
+                    get_bitcoind_log(&env);
                     panic!(
                         "IC balance {:?} does not match bitcoind balance {}",
                         res, expected_balance_in_satoshis
