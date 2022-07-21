@@ -36,7 +36,7 @@ def quoted(text: str) -> str:
 class EsDoc:
     def __init__(self, repr):
         self.repr = repr
-        self.parsed_message = None
+        self._parsed_message = None
 
     def __repr__(self) -> str:
         """Returns internal representation of this EsDoc instance"""
@@ -104,9 +104,9 @@ class EsDoc:
         return round(1_000 * res)
 
     def parse_message(self):
-        if self.parsed_message is None:
-            self.parsed_message = json.loads(self.message())
-        return self.parsed_message
+        if self._parsed_message is None:
+            self._parsed_message = json.loads(self.message())
+        return self._parsed_message
 
     def is_systemd(self) -> bool:
         return self.component_identifier() == "systemd"
@@ -255,9 +255,9 @@ class ReplicaDoc(EsDoc):
     def _log_entry(self):
         return self.parse_message()["log_entry"]
 
-    def get_log_entry_message(self):
+    def get_message(self):
         le = self._log_entry()
-        return le["message"]
+        return le["message"].replace("\n", "<br>")
 
     def get_crate_module(self) -> Tuple[str, str]:
         le = self._log_entry()
@@ -270,7 +270,7 @@ class ReplicaDoc(EsDoc):
     def get_subnet_type(self) -> Optional[Tuple[str, str]]:
         m = re.search(
             r"{subnet_record: Registry subnet record SubnetRecord {.*subnet_type: ([A-Za-z]*),.*}, subnet_id: ([a-z0-9-]*)}",
-            self.get_log_entry_message(),
+            self.get_message(),
         )
         if m:
             assert len(m.groups()) == 2
@@ -287,9 +287,7 @@ class ReplicaDoc(EsDoc):
         return le["node_id"]
 
     def get_ipv6_prefixes(self) -> Optional[List[ipaddress.IPv6Network]]:
-        le = self._log_entry()
-
-        m = re.match(r".*ipv6_prefixes: \[(.*?)\].*", le["message"])
+        m = re.match(r".*ipv6_prefixes: \[(.*?)\].*", self.get_message())
         if not m or len(m.groups()) < 1:
             return None
         else:
@@ -318,8 +316,7 @@ class ReplicaDoc(EsDoc):
     # Jan 20 09:04:28 medium05-1-2 orchestrator[1128]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:04:28.911Z","message":"Consensus finalized height: 149, state available: false, DKG key material available: true","crate_":"ic_consensus","module":"consensus","line":434,"node_id":"ycnxt-nn7hh-sow5h-fmdzh-gyy54-ilhxf-xubix-pwv2c-aie7o-whivf-lae","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
     def get_consensus_finalized_params(self) -> Optional[ConsensusFinalizationParams]:
 
-        le = self._log_entry()
-        lem = le["message"]
+        lem = self.get_message()
         if "Consensus finalized height" not in lem:
             return None
         else:
@@ -339,8 +336,7 @@ class ReplicaDoc(EsDoc):
     #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.26', '_type': '_doc', '_id': 'vJT2AIEBwsYIEpaypvXf', '_score': None, '_source': {'@timestamp': '2022-05-26T15:22:39.304Z', 'ecs': {'version': '1.1.0'}, 'agent': {'id': 'da9e6660-f5f6-49e8-80ff-73160afdea22', 'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': '84239e09-a35b-4e16-b80a-e51f4b97ba1a', 'hostname': 'blank'}, 'process': {'uid': 108, 'pid': 878, 'name': 'replica', 'capabilites': '0', 'executable': '/opt/ic/bin/replica', 'cmd': '/opt/ic/bin/replica --replica-version=48e7a07bafda4afdabec202e38e2495cf01b25dc --config-file=/run/ic-node/config/ic.json5 --catch-up-package=/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb --force-subnet=mg46u-46ckl-x23kq-jezmy-jryfy-ltc4r-sff6p-xjkte-i2as4-q6fv3-gae'}, 'host': {'boot_id': 'cfb9b591a3c248db9192a09ac2eb7538', 'hostname': 'ip62001-4d78-40d-0-5000-20ff-fed1-a380', 'name': 'blank', 'id': '3e14f12542c34adbbb49cb3020d1a380'}, 'systemd': {'invocation_id': '91a04d5acb324611908b23c025c84f96', 'slice': 'system.slice', 'transport': 'stdout', 'cgroup': '/system.slice/ic-replica.service', 'unit': 'ic-replica.service'}, 'message': '{"log_entry":{"level":"INFO","utc_time":"2022-05-26T15:22:39.304Z","message":"Nodes pmqbk-2ih5f-bdbp6-lcssw-tli3p-nl2lu-t2vh7-jvvc2-xg5sf-wufl2-rqe added","crate_":"ic_p2p","module":"download_management","line":1480,"node_id":"3s3k7-ap7sp-277ph-w3gem-m5i2g-dmw6f-uddym-deqe3-2ibok-u2azb-2qe","subnet_id":"mg46u-46ckl-x23kq-jezmy-jryfy-ltc4r-sff6p-xjkte-i2as4-q6fv3-gae"}}', 'tags': ['system_test', 'hourly__node_reassignment_pot-martin-zh1-spm22_zh1_dfinity_network-1653578467'], 'journald': {'custom': {'stream_id': 'fff52fbfcaa84b3bac6b5d165f559522', 'selinux_context': 'system_u:system_r:ic_replica_t:s0'}}, 'event': {'created': '2022-05-26T15:22:39.462Z'}, 'syslog': {'priority': 6, 'identifier': 'orchestrator', 'facility': 3}}, 'sort': [1653578559304]}
     #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.26', '_type': '_doc', '_id': 'vpj5AIEBwsYIEpayjce6', '_score': None, '_source': {'@timestamp': '2022-05-26T15:26:02.663Z', 'message': '{"log_entry":{"level":"INFO","utc_time":"2022-05-26T15:26:02.663Z","message":"Nodes 5kbyr-a7hsu-6hmcc-72auv-lqgnh-yq3bs-itfea-xblyu-wjhp2-l3wg7-6qe removed","crate_":"ic_p2p","module":"download_management","line":1512,"node_id":"xkiab-vhf44-vczgd-yob6x-qncey-rl2ds-joc6w-6mwfl-cgnsx-a75ok-eae","subnet_id":"upygj-j6xmw-azx5r-24q2d-6mwdu-si5jx-p7skv-w3mex-h772r-f52ja-fqe"}}', 'journald': {'custom': {'selinux_context': 'system_u:system_r:ic_replica_t:s0', 'stream_id': '06c56b9df8bf41578e9360baa9e552b6'}}, 'ecs': {'version': '1.1.0'}, 'agent': {'id': '89d8aed6-f02a-4a81-bf9d-f2292d65f6ca', 'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': '500cff48-6b55-489b-93f7-8e837a011ae8', 'hostname': 'blank'}, 'tags': ['system_test', 'hourly__node_reassignment_pot-martin-zh1-spm22_zh1_dfinity_network-1653578467'], 'systemd': {'unit': 'ic-replica.service', 'invocation_id': '524e536cf54a4b759d88a3ced2f450d9', 'cgroup': '/system.slice/ic-replica.service', 'slice': 'system.slice', 'transport': 'stdout'}, 'host': {'boot_id': 'd377747e599d4c45ad00bc57c8399ce1', 'hostname': 'ip62001-4d78-40d-0-5000-dff-fe01-969f', 'name': 'blank', 'id': 'a04ab48f0d39481683fbb6570d01969f'}, 'process': {'capabilites': '0', 'pid': 873, 'cmd': '/opt/ic/bin/replica --replica-version=48e7a07bafda4afdabec202e38e2495cf01b25dc --config-file=/run/ic-node/config/ic.json5 --catch-up-package=/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb --force-subnet=upygj-j6xmw-azx5r-24q2d-6mwdu-si5jx-p7skv-w3mex-h772r-f52ja-fqe', 'name': 'replica', 'executable': '/opt/ic/bin/replica', 'uid': 116}, 'syslog': {'identifier': 'orchestrator', 'facility': 3, 'priority': 6}, 'event': {'created': '2022-05-26T15:26:02.687Z'}}, 'sort': [1653578762663]},
     def get_p2p_node_params(self, verb: str) -> Optional[NodeParams]:
-        le = self._log_entry()
-        m = re.match("Nodes (.*?) %s" % verb, le["message"])
+        m = re.match("Nodes (.*?) %s" % verb, self.get_message())
         if not m or len(m.groups()) < 1:
             return None
         else:
@@ -369,8 +365,7 @@ class ReplicaDoc(EsDoc):
     # {"log_entry":{"level":"CRITICAL","utc_time":"2021-11-25T11:40:22.215Z","message":"Replica diverged at height 10","crate_":"ic_state_manager","module":"ic_state_manager","line":2357,"node_id":"ux3rh-eqec7-sp4an-cvxzj-4mzgl-a4qba-ukccb-r5upa-njbya-rrsj4-yqe","subnet_id":"cpv7s-uecxn-abdz5-xkr3l-l5exk-f54in-66ebe-kyquf-ov2zm-wcq2m-nqe"}}
     def state_manager_replica_diverged_params(self) -> Optional[StateManagerReplicaDivergedParams]:
 
-        le = self._log_entry()
-        m = re.match(r"Replica diverged at height (\d+)", le["message"])
+        m = re.match(r"Replica diverged at height (\d+)", self.get_message())
         if not m or len(m.groups()) < 1:
             return None
         else:
@@ -384,8 +379,7 @@ class ReplicaDoc(EsDoc):
 
     # {"log_entry":{"level":"DEBUG","utc_time":"2021-11-25T11:40:22.079Z","message":"Proposing a CatchUpPackageShare at height 10","crate_":"ic_consensus","module":"catchup_package_maker","line":192,"node_id":"ctk2e-qe25c-zfjpi-s5ps2-uvvvk-uiofl-u3ab4-pryzz-tnyyv-egupe-cqe","subnet_id":"cpv7s-uecxn-abdz5-xkr3l-l5exk-f54in-66ebe-kyquf-ov2zm-wcq2m-nqe"}}
     def get_catchup_package_share_params(self) -> Optional[CatchUpPackageShare]:
-        le = self._log_entry()
-        lem = le["message"]
+        lem = self.get_message()
         m = re.match(r"Proposing a CatchUpPackageShare at height (\d+)", lem)
         if not m or len(m.groups()) < 1:
             return None
@@ -402,8 +396,9 @@ class ReplicaDoc(EsDoc):
 
     def get_control_plane_accept_params(self) -> Optional[ControlPlaneAcceptParams]:
 
-        le = self._log_entry()
-        m = re.match(r"ControlPlane::accept\(\): local_addr = (.*?), flow_tag = (.*?), error = (.*)", le["message"])
+        m = re.match(
+            r"ControlPlane::accept\(\): local_addr = (.*?), flow_tag = (.*?), error = (.*)", self.get_message()
+        )
         if not m or len(m.groups()) != 3:
             return None
         else:
@@ -411,8 +406,7 @@ class ReplicaDoc(EsDoc):
 
     def get_control_plane_spawn_accept_task_params(self) -> Optional[ControlPlaneAcceptParams]:
 
-        le = self._log_entry()
-        m = re.match(r"ControlPlane::spawn_accept_task\(\): local_addr = (.*?), flow_tag = (.*)", le["message"])
+        m = re.match(r"ControlPlane::spawn_accept_task\(\): local_addr = (.*?), flow_tag = (.*)", self.get_message())
         if not m or len(m.groups()) != 2:
             return None
         else:
@@ -429,8 +423,7 @@ class ReplicaDoc(EsDoc):
 
     def get_control_plane_accept_task_aborted_params(self) -> Optional[ControlPlaneAcceptTaskAbortedParams]:
 
-        le = self._log_entry()
-        m = re.match("ControlPlane: accept task aborted: flow_tag = (.*)", le["message"])
+        m = re.match("ControlPlane: accept task aborted: flow_tag = (.*)", self.get_message())
         if not m or len(m.groups()) != 1:
             return None
         else:
@@ -450,12 +443,11 @@ class ReplicaDoc(EsDoc):
         self,
     ) -> Optional[ControlPlaneTlsServerHandshakeFailureParams]:
 
-        le = self._log_entry()
         m = re.match(
             r"ControlPlane::tls_server_handshake\(\) failed: "
             r"node = (.*?)/(.*?), flow_tag = (.*?), peer_addr = (.*?), "
             r"error = (.*)",
-            le["message"],
+            self.get_message(),
         )
         if not m or len(m.groups()) != 5:
             return None
@@ -491,8 +483,7 @@ class ReplicaDoc(EsDoc):
 
     # Jan 20 09:03:22 medium05-1-2 orchestrator[817]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:03:22.721Z","message":"Moved proposal Signed { content: CryptoHash(0xa9643feda6a22d10b9e8453a72aaa7dd737ca35568aa197511173397979b4466), signature: BasicSignature { signature: BasicSig([166, 34, 28, 142, 115, 226, 234, 106, 174, 192, 206, 125, 78, 170, 234, 140, 61, 152, 1, 112, 100, 14, 231, 113, 209, 128, 109, 228, 154, 110, 105, 11, 62, 21, 198, 47, 2, 175, 193, 3, 241, 14, 10, 132, 48, 53, 56, 89, 233, 99, 217, 11, 255, 246, 135, 78, 80, 176, 176, 162, 16, 205, 250, 10]), signer: gvtfg-7gy73-jjgfh-6g6lv-sywtx-vk6xk-qfmrk-cabe4-uggxn-t7joz-zqe } } of rank Rank(0) to artifact pool","crate_":"ic_artifact_manager","module":"processors","line":381,"node_id":"zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
     def get_proposal_moved_params(self) -> Optional[ProposalParams]:
-        le = self._log_entry()
-        lem: str = le["message"]
+        lem: str = self.get_message()
         marker = "Moved proposal Signed"
         if not lem.startswith(marker):
             return None
@@ -509,8 +500,7 @@ class ReplicaDoc(EsDoc):
     # ); // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/artifact_manager/src/processors.rs?L370
     def get_validated_block_proposal_params(self, verb: str) -> Optional[ProposalParams]:
 
-        le = self._log_entry()
-        lem: str = le["message"]
+        lem: str = self.get_message()
         marker = rf"^{verb} proposal (.*?) of rank Rank\((.*?)\) to artifact pool$"
         m = re.match(marker, lem)
         if not m or len(m.groups()) != 2:
@@ -529,8 +519,7 @@ class ReplicaDoc(EsDoc):
 
     #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.30', '_type': '_doc', '_id': 'Z8S1FoEBKhMW8WgQsrY0', '_score': None, '_source': {'@timestamp': '2022-05-30T20:43:32.564Z', 'host': {'boot_id': 'a1b3d27c41cb4646bd959c6afb060f56', 'hostname': 'ip62001-4d78-40d-0-5000-eeff-fe2c-7449', 'name': 'ip62001-4d78-40d-0-5000-eeff-fe2c-7449', 'id': '7afdd2ccb04a411c9f1034a8ee2c7449'}, 'syslog': {'identifier': 'orchestrator', 'facility': 3, 'priority': 6}, 'journald': {'custom': {'stream_id': '8ae47b75323b4aaf952e3727c42a6b72', 'selinux_context': 'system_u:system_r:ic_replica_t:s0'}}, 'tags': ['system_test', 'hourly__node_reassignment_pot-martin-zh1-spm22_zh1_dfinity_network-1653943283'], 'systemd': {'slice': 'system.slice', 'unit': 'ic-replica.service', 'invocation_id': 'a4307262e55e40489d040d1bab983171', 'cgroup': '/system.slice/ic-replica.service', 'transport': 'stdout'}, 'process': {'cmd': '/opt/ic/bin/replica --replica-version=369ceb3f8893c8bafea9218da020b629425b6c99 --config-file=/run/ic-node/config/ic.json5 --catch-up-package=/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb --force-subnet=42a4b-yeccf-nwbcg-m6lx7-wa7ce-j44jz-4xpxr-etzzk-mphai-rsg2d-dae', 'name': 'replica', 'executable': '/opt/ic/bin/replica', 'capabilites': '0', 'uid': 116, 'pid': 837}, 'message': '{"log_entry":{"level":"DEBUG","utc_time":"2022-05-30T20:43:32.563Z","message":"replica ReplicaVersion { version_id: \\"369ceb3f8893c8bafea9218da020b629425b6c99\\" } delivered batch 1 for block_hash \\"0c40bafcb91b67ca31f1a4c1cd84c3e4fb90c129fe0ed67ba1380593ddb71398\\"","crate_":"ic_consensus","module":"batch_delivery","line":170,"node_id":"lqyhp-6xpyo-tncs6-bj7nk-x3zsy-a3cc3-s4twf-pp4qq-2a3hr-6fdnf-nae","subnet_id":"42a4b-yeccf-nwbcg-m6lx7-wa7ce-j44jz-4xpxr-etzzk-mphai-rsg2d-dae"}}', 'event': {'created': '2022-05-30T20:43:32.898Z'}, 'ecs': {'version': '1.1.0'}, 'agent': {'type': 'journalbeat', 'ephemeral_id': '91c0a6ca-6c7e-4033-afcb-c7bca1572757', 'hostname': 'ip62001-4d78-40d-0-5000-eeff-fe2c-7449', 'id': '1929297b-dfd4-423f-a72c-788bfcadc5f8', 'version': '7.5.1'}}, 'sort': [1653943412564]},
     def get_batch_delivery_params(self) -> Optional[BatchDeliveryParams]:
-        le = self._log_entry()
-        m = re.match('.*block_hash \\"(.*?)\\".*', le["message"])
+        m = re.match('.*block_hash \\"(.*?)\\".*', self.get_message())
         if not m or len(m.groups()) < 1:
             return None
         else:
@@ -566,7 +555,7 @@ class ReplicaDoc(EsDoc):
 
         le = self._log_entry()
         lel = le["level"]
-        lem = le["message"]
+        lem = self.get_message()
         # Note: We opt for pre-processing all events, even that are not unusual.
         # This allows us to test the pre-processor more thoroughly.
         # if lel != "CRITICAL" and lel != "ERROR":
