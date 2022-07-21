@@ -249,7 +249,7 @@ pub struct CatchUpContentProtobufBytes(pub Vec<u8>);
 /// A catch up package paired with the original protobuf. Note that the protobuf
 /// contained in this struct is only partially deserialized and has the ORIGINAL
 /// bytes CatchUpContent bytes that were signed in yet to be deserialized form.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CUPWithOriginalProtobuf {
     /// The CUP as [`CatchUpPackage`](type@CatchUpPackage)
     pub cup: CatchUpPackage,

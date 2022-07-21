@@ -252,6 +252,19 @@ pub(crate) mod test_utils {
     use std::convert::TryFrom;
     use std::sync::Mutex;
 
+    pub(crate) fn empty_response() -> ic_types::messages::Response {
+        ic_types::messages::Response {
+            originator: ic_types::CanisterId::ic_00(),
+            respondent: ic_types::CanisterId::ic_00(),
+            originator_reply_callback: ic_types::messages::CallbackId::from(0),
+            // Execution is responsible for burning the appropriate cycles
+            // before pushing the new context, so any remaining cycles can
+            // be refunded to the canister.
+            refund: ic_types::Cycles::new(0),
+            response_payload: ic_types::messages::Payload::Data(vec![]),
+        }
+    }
+
     pub(crate) struct TestTranscriptParams {
         idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
         transcript_params_ref: IDkgTranscriptParamsRef,

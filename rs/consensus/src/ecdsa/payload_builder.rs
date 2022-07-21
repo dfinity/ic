@@ -648,20 +648,20 @@ pub(crate) fn create_data_payload_helper(
             .insert(transcript.transcript_id, transcript);
     }
 
+    let ecdsa_dealings_contexts = &state
+        .get_ref()
+        .metadata
+        .subnet_call_context_manager
+        .ecdsa_dealings_contexts;
     update_completed_reshare_requests(
         &mut ecdsa_payload,
+        &make_reshare_dealings_response(ecdsa_dealings_contexts),
         current_key_transcript.as_ref(),
         block_reader,
         transcript_builder,
         &log,
     );
-    let reshare_requests = get_reshare_requests(
-        &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .ecdsa_dealings_contexts,
-    );
+    let reshare_requests = get_reshare_requests(ecdsa_dealings_contexts);
     initiate_reshare_requests(
         &mut ecdsa_payload,
         current_key_transcript.as_ref(),
@@ -862,9 +862,9 @@ pub(crate) fn update_signature_agreements(
     log: ReplicaLogger,
 ) {
     let all_random_ids = all_requests
-        .values()
-        .map(|context| context.pseudo_random_id)
-        .collect::<BTreeSet<_>>();
+        .iter()
+        .map(|(callback_id, context)| (context.pseudo_random_id, (callback_id, context)))
+        .collect::<BTreeMap<_, _>>();
     // We first clean up the existing signature_agreements by keeping those
     // that can still be found in the signing_requests for dedup purpose.
     // We only need the "Reported" status because they would have already
@@ -873,7 +873,7 @@ pub(crate) fn update_signature_agreements(
     let mut old_agreements = BTreeMap::new();
     std::mem::swap(&mut payload.signature_agreements, &mut old_agreements);
     for (request_id, _) in old_agreements.into_iter() {
-        if all_random_ids.contains(&request_id.pseudo_random_id) {
+        if all_random_ids.get(&request_id.pseudo_random_id).is_some() {
             new_agreements.insert(request_id, ecdsa::CompletedSignature::ReportedToExecution);
         }
     }
@@ -886,10 +886,28 @@ pub(crate) fn update_signature_agreements(
                 "ECDSA signing request {:?} is not found in payload but we have a signature for it",
                 request_id
             );
-        } else {
+        } else if let Some(&(callback_id, context)) =
+            all_random_ids.get(&request_id.pseudo_random_id)
+        {
+            use ic_ic00_types::{Payload, SignWithECDSAReply};
+            let response = ic_types::messages::Response {
+                originator: context.request.sender,
+                respondent: ic_types::CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                // Execution is responsible for burning the appropriate cycles
+                // before pushing the new context, so any remaining cycles can
+                // be refunded to the canister.
+                refund: context.request.payment,
+                response_payload: ic_types::messages::Payload::Data(
+                    SignWithECDSAReply {
+                        signature: signature.signature.clone(),
+                    }
+                    .encode(),
+                ),
+            };
             payload
                 .signature_agreements
-                .insert(request_id, ecdsa::CompletedSignature::Unreported(signature));
+                .insert(request_id, ecdsa::CompletedSignature::Unreported(response));
         }
     }
 }
@@ -1346,9 +1364,47 @@ pub(crate) fn initiate_reshare_requests(
     }
 }
 
+fn make_reshare_dealings_response(
+    ecdsa_dealings_contexts: &'_ BTreeMap<CallbackId, EcdsaDealingsContext>,
+) -> impl Fn(&ecdsa::EcdsaReshareRequest, &InitialIDkgDealings) -> Option<ic_types::messages::Response>
+       + '_ {
+    Box::new(
+        move |request: &ecdsa::EcdsaReshareRequest, initial_dealings: &InitialIDkgDealings| {
+            for (callback_id, context) in ecdsa_dealings_contexts.iter() {
+                if request
+                    == &(ecdsa::EcdsaReshareRequest {
+                        key_id: context.key_id.clone(),
+                        receiving_node_ids: context.nodes.iter().cloned().collect(),
+                        registry_version: context.registry_version,
+                    })
+                {
+                    use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+                    return Some(ic_types::messages::Response {
+                        originator: context.request.sender,
+                        respondent: ic_types::CanisterId::ic_00(),
+                        originator_reply_callback: *callback_id,
+                        refund: context.request.payment,
+                        response_payload: ic_types::messages::Payload::Data(
+                            ComputeInitialEcdsaDealingsResponse {
+                                initial_dkg_dealings: initial_dealings.into(),
+                            }
+                            .encode(),
+                        ),
+                    });
+                }
+            }
+            None
+        },
+    )
+}
+
 /// Checks and updates the completed reshare requests.
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut ecdsa::EcdsaPayload,
+    make_reshare_dealings_response: &dyn Fn(
+        &ecdsa::EcdsaReshareRequest,
+        &InitialIDkgDealings,
+    ) -> Option<ic_types::messages::Response>,
     current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
@@ -1395,11 +1451,18 @@ pub(crate) fn update_completed_reshare_requests(
         .for_each(|(_, value)| *value = ecdsa::CompletedReshareRequest::ReportedToExecution);
 
     for (request, initial_dealings) in completed_reshares {
-        payload.ongoing_xnet_reshares.remove(&request);
-        payload.xnet_reshare_agreements.insert(
-            request.clone(),
-            ecdsa::CompletedReshareRequest::Unreported(Box::new(initial_dealings)),
-        );
+        if let Some(response) = make_reshare_dealings_response(&request, &initial_dealings) {
+            payload.ongoing_xnet_reshares.remove(&request);
+            payload.xnet_reshare_agreements.insert(
+                request.clone(),
+                ecdsa::CompletedReshareRequest::Unreported(response),
+            );
+        } else {
+            warn!(
+                log,
+                "Cannot find the request for the initial dealings created: {:?}", request
+            );
+        }
     }
 }
 
@@ -1493,7 +1556,6 @@ mod tests {
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::{BlockPayload, DataPayload, HashedBlock, Payload, SummaryPayload};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
@@ -2307,9 +2369,7 @@ mod tests {
                 pseudo_random_id: [1; 32],
                 height,
             },
-            ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                signature: vec![1; 32],
-            }),
+            ecdsa::CompletedSignature::Unreported(empty_response()),
         );
         ecdsa_payload.signature_agreements.insert(
             ecdsa::RequestId {
@@ -2317,9 +2377,7 @@ mod tests {
                 pseudo_random_id: [0; 32],
                 height,
             },
-            ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                signature: vec![2; 32],
-            }),
+            ecdsa::CompletedSignature::Unreported(empty_response()),
         );
         let signature_builder = TestEcdsaSignatureBuilder::new();
         // old signature in the agreement AND in state is replaced by ReportedToExecution
@@ -2658,6 +2716,7 @@ mod tests {
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
+            &|_, _| Some(empty_response()),
             Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
@@ -2678,6 +2737,7 @@ mod tests {
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
+            &|_, _| Some(empty_response()),
             Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
@@ -2696,6 +2756,7 @@ mod tests {
 
         update_completed_reshare_requests(
             &mut payload,
+            &|_, _| Some(empty_response()),
             Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
@@ -3099,9 +3160,7 @@ mod tests {
             let req_2 = create_reshare_request(2, 2);
             ecdsa_payload.xnet_reshare_agreements.insert(
                 req_2,
-                ecdsa::CompletedReshareRequest::Unreported(Box::new(
-                    dummy_initial_idkg_dealing_for_tests(),
-                )),
+                ecdsa::CompletedReshareRequest::Unreported(empty_response()),
             );
 
             // Add some quadruples in creation
@@ -3151,9 +3210,7 @@ mod tests {
                     pseudo_random_id: [3; 32],
                     height: payload_height_1,
                 },
-                ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                    signature: vec![10; 10],
-                }),
+                ecdsa::CompletedSignature::Unreported(empty_response()),
             );
             ecdsa_payload.xnet_reshare_agreements.insert(
                 create_reshare_request(6, 6),

@@ -4,6 +4,7 @@ package types.v1;
 import "registry/crypto/v1/crypto.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/types.proto";
+import "state/queues/v1/queues.proto";
 
 message EcdsaSummaryPayload {
   repeated CompletedSignature signature_agreements = 1;
@@ -44,7 +45,8 @@ message XnetReshareAgreement {
   reserved 2;
   reserved "response";
   EcdsaReshareRequest request = 1;
-  registry.subnet.v1.InitialIDkgDealings initial_dealings = 3;
+  reserved 3;
+  state.queues.v1.Response initial_dealings = 4;
 }
 
 message RequestId {
@@ -131,7 +133,8 @@ message ThresholdEcdsaSigInputsRef {
 
 message CompletedSignature {
   RequestId request_id = 1;
-  bytes unreported = 2;
+  reserved 2;
+  state.queues.v1.Response unreported = 3;
 }
 
 message EcdsaReshareRequest {

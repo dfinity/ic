@@ -45,13 +45,14 @@ use ic_types::{
             IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError,
         },
-        idkg::{IDkgTranscript, IDkgTranscriptId},
+        idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
     Height, RegistryVersion, SubnetId,
 };
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
@@ -88,6 +89,7 @@ pub enum PermanentError {
     NewSignatureMissingInput(ecdsa::RequestId),
     XNetReshareAgreementWithoutRequest(ecdsa::EcdsaReshareRequest),
     XNetReshareRequestDisappeared(ecdsa::EcdsaReshareRequest),
+    DecodingError(String),
 }
 
 impl From<PermanentError> for EcdsaValidationError {
@@ -440,19 +442,31 @@ fn validate_reshare_dealings(
     let mut new_dealings = BTreeMap::new();
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
-            if let Some(dealings) = new_reshare_agreement.get(request) {
-                let transcript_id = config.as_ref().transcript_id;
-                let param = config
-                    .as_ref()
-                    .translate(block_reader)
-                    .map_err(PermanentError::from)?;
-                let dealings = dealings.dealings();
-                for dealing in dealings.iter() {
-                    crypto
-                        .verify_dealing_public(&param, dealing.dealer_id(), dealing.idkg_dealing())
+            if let Some(response) = new_reshare_agreement.get(request) {
+                use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+                if let ic_types::messages::Payload::Data(data) = &response.response_payload {
+                    let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
+                        .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
+                    let transcript_id = config.as_ref().transcript_id;
+                    let param = config
+                        .as_ref()
+                        .translate(block_reader)
                         .map_err(PermanentError::from)?;
+                    let dealings =
+                        InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
+                            .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?
+                            .dealings();
+                    for dealing in dealings.iter() {
+                        crypto
+                            .verify_dealing_public(
+                                &param,
+                                dealing.dealer_id(),
+                                dealing.idkg_dealing(),
+                            )
+                            .map_err(PermanentError::from)?;
+                    }
+                    new_dealings.insert(transcript_id, dealings);
                 }
-                new_dealings.insert(transcript_id, dealings);
             } else {
                 return Err(XNetReshareRequestDisappeared(request.clone()).into());
             }
@@ -472,20 +486,29 @@ fn validate_new_signature_agreements(
     use PermanentError::*;
     let mut new_signatures = Vec::new();
     for (request_id, completed) in curr_payload.signature_agreements.iter() {
-        if let ecdsa::CompletedSignature::Unreported(signature) = completed {
-            if prev_payload.signature_agreements.get(request_id).is_some() {
-                return Err(PermanentError::NewSignatureUnexpected(*request_id).into());
+        if let ecdsa::CompletedSignature::Unreported(response) = completed {
+            if let ic_types::messages::Payload::Data(data) = &response.response_payload {
+                use ic_ic00_types::{Payload, SignWithECDSAReply};
+                let reply = SignWithECDSAReply::decode(data)
+                    .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
+                let signature = ThresholdEcdsaCombinedSignature {
+                    signature: reply.signature,
+                };
+                if prev_payload.signature_agreements.get(request_id).is_some() {
+                    return Err(PermanentError::NewSignatureUnexpected(*request_id).into());
+                }
+
+                let input = prev_payload
+                    .ongoing_signatures
+                    .get(request_id)
+                    .ok_or(NewSignatureMissingInput(*request_id))?
+                    .translate(block_reader)
+                    .map_err(PermanentError::from)?;
+                crypto
+                    .verify_combined_sig(&input, &signature)
+                    .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
+                new_signatures.push((*request_id, signature.clone()));
             }
-            let input = prev_payload
-                .ongoing_signatures
-                .get(request_id)
-                .ok_or(NewSignatureMissingInput(*request_id))?
-                .translate(block_reader)
-                .map_err(PermanentError::from)?;
-            crypto
-                .verify_combined_sig(&input, signature)
-                .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-            new_signatures.push((*request_id, signature.clone()));
         }
     }
     Ok(new_signatures)
@@ -515,7 +538,6 @@ mod test {
     use ic_types::{
         consensus::ecdsa::TranscriptAttributes, crypto::AlgorithmId, messages::CallbackId, Height,
     };
-    use std::convert::TryFrom;
     use std::{collections::BTreeSet, str::FromStr};
 
     #[test]
@@ -587,6 +609,21 @@ mod test {
         );
     }
 
+    fn make_dealings_response(
+        _request: &ecdsa::EcdsaReshareRequest,
+        initial_dealings: &InitialIDkgDealings,
+    ) -> Option<ic_types::messages::Response> {
+        use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+        let mut response = empty_response();
+        response.response_payload = ic_types::messages::Payload::Data(
+            ComputeInitialEcdsaDealingsResponse {
+                initial_dkg_dealings: initial_dealings.into(),
+            }
+            .encode(),
+        );
+        Some(response)
+    }
+
     #[test]
     fn test_validate_reshare_dealings() {
         let num_of_nodes = 4;
@@ -625,6 +662,7 @@ mod test {
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
+            &make_dealings_response,
             Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
@@ -659,6 +697,7 @@ mod test {
         let mut prev_payload = payload.clone();
         update_completed_reshare_requests(
             &mut payload,
+            &make_dealings_response,
             Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,

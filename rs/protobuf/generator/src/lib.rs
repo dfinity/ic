@@ -294,7 +294,27 @@ fn build_messaging_proto(def: &Path, out: &Path) {
 
 /// Generates Rust structs from state Protobuf messages.
 fn build_state_proto(def: &Path, out: &Path) {
-    let config = base_config(out, "state");
+    let mut config = base_config(out, "state");
+    config.type_attribute(
+        ".state.queues.v1.Funds",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".state.queues.v1.Cycles",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".state.queues.v1.RejectContext",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".state.queues.v1.response.ResponsePayload",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".state.queues.v1.Response",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
 
     let state_files = [
         def.join("state/ingress/v1/ingress.proto"),

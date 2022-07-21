@@ -205,13 +205,13 @@ pub fn generate_responses_to_subnet_calls(
 ) -> Vec<Response> {
     let mut consensus_responses = Vec::<Response>::new();
     let block_payload = &block.payload;
-    if let Ok(state) = state_manager.get_state_at(block.context.certified_height) {
-        let setup_initial_dkg_contexts = &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .setup_initial_dkg_contexts;
-        if block_payload.is_summary() {
+    if block_payload.is_summary() {
+        if let Ok(state) = state_manager.get_state_at(block.context.certified_height) {
+            let setup_initial_dkg_contexts = &state
+                .get_ref()
+                .metadata
+                .subnet_call_context_manager
+                .setup_initial_dkg_contexts;
             let summary = block_payload.as_ref().as_summary();
             info!(
                 log,
@@ -224,35 +224,19 @@ pub fn generate_responses_to_subnet_calls(
                 summary.dkg.transcripts_for_new_subnets(),
                 log,
             ));
-        } else {
-            let block_payload = block_payload.as_ref().as_data();
-            if let Some(payload) = &block_payload.ecdsa {
-                let sign_with_ecdsa_contexts = &state
-                    .get_ref()
-                    .metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts;
-                consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
-                    sign_with_ecdsa_contexts,
-                    payload,
-                ));
-
-                let ecdsa_dealings_contexts = &state
-                    .get_ref()
-                    .metadata
-                    .subnet_call_context_manager
-                    .ecdsa_dealings_contexts;
-                consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(
-                    ecdsa_dealings_contexts,
-                    payload,
-                ));
-            }
-            consensus_responses.append(
-                &mut generate_execution_responses_for_canister_http_responses(
-                    &block_payload.batch.canister_http,
-                ),
-            );
         }
+    } else {
+        let block_payload = block_payload.as_ref().as_data();
+        if let Some(payload) = &block_payload.ecdsa {
+            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(payload));
+            consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
+        }
+
+        consensus_responses.append(
+            &mut generate_execution_responses_for_canister_http_responses(
+                &block_payload.batch.canister_http,
+            ),
+        );
     }
     consensus_responses
 }
@@ -399,35 +383,12 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
 /// Creates responses to `SignWithECDSA` system calls with the computed
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
-    contexts: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     ecdsa_payload: &ecdsa::EcdsaPayload,
 ) -> Vec<Response> {
-    use ic_ic00_types::{Payload, SignWithECDSAReply};
     let mut consensus_responses = Vec::<Response>::new();
-    let mut completed_set = ecdsa_payload
-        .signature_agreements
-        .iter()
-        .map(|(request_id, sig)| (request_id.pseudo_random_id, sig))
-        .collect::<BTreeMap<_, _>>();
-    for (callback_id, context) in contexts.iter() {
-        if let Some(CompletedSignature::Unreported(response)) =
-            completed_set.remove(context.pseudo_random_id.as_slice())
-        {
-            consensus_responses.push(Response {
-                originator: context.request.sender,
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                // Execution is responsible for burning the appropriate cycles
-                // before pushing the new context, so any remaining cycles can
-                // be refunded to the canister.
-                refund: context.request.payment,
-                response_payload: messages::Payload::Data(
-                    SignWithECDSAReply {
-                        signature: response.signature.clone(),
-                    }
-                    .encode(),
-                ),
-            });
+    for completed in ecdsa_payload.signature_agreements.values() {
+        if let CompletedSignature::Unreported(response) = completed {
+            consensus_responses.push(response.clone());
         }
     }
     consensus_responses
@@ -436,33 +397,12 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
 /// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
     ecdsa_payload: &ecdsa::EcdsaPayload,
 ) -> Vec<Response> {
-    use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
     let mut consensus_responses = Vec::<Response>::new();
-    for (callback_id, context) in contexts.iter() {
-        let request = ecdsa::EcdsaReshareRequest {
-            key_id: context.key_id.clone(),
-            receiving_node_ids: context.nodes.iter().cloned().collect(),
-            registry_version: context.registry_version,
-        };
-
-        if let Some(ecdsa::CompletedReshareRequest::Unreported(initial_dealings)) =
-            ecdsa_payload.xnet_reshare_agreements.get(&request)
-        {
-            consensus_responses.push(Response {
-                originator: context.request.sender,
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: context.request.payment,
-                response_payload: messages::Payload::Data(
-                    ComputeInitialEcdsaDealingsResponse {
-                        initial_dkg_dealings: (initial_dealings.as_ref()).into(),
-                    }
-                    .encode(),
-                ),
-            });
+    for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
+        if let ecdsa::CompletedReshareRequest::Unreported(response) = agreement {
+            consensus_responses.push(response.clone());
         }
     }
     consensus_responses
