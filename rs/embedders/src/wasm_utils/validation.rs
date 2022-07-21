@@ -3,10 +3,7 @@
 
 use super::errors::into_parity_wasm_error;
 
-use ic_config::{
-    embedders::{Config as EmbeddersConfig, FeatureFlags},
-    flag_status::FlagStatus,
-};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -48,10 +45,8 @@ const API_VERSION_IC0: &str = "ic0";
 // user tries to import a function that doesn't exist in any of the expected
 // modules vs the case where the function exists but is imported from the wrong
 // module.
-fn get_valid_system_apis(
-    feature_flags: &FeatureFlags,
-) -> HashMap<String, HashMap<String, FunctionSignature>> {
-    let mut valid_system_apis = vec![
+fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>> {
+    let valid_system_apis = vec![
         (
             // Public methods
             "msg_caller_size",
@@ -535,64 +530,57 @@ fn get_valid_system_apis(
                 },
             )],
         ),
+        (
+            "call_cycles_add128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I64, ValueType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_cycle_balance128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_available128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_refunded128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_accept128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I64, ValueType::I64, ValueType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
-
-    let experimental_apis = match feature_flags.api_cycles_u128_flag {
-        FlagStatus::Disabled => vec![],
-        FlagStatus::Enabled => vec![
-            (
-                "call_cycles_add128",
-                vec![(
-                    API_VERSION_IC0,
-                    FunctionSignature {
-                        param_types: vec![ValueType::I64, ValueType::I64],
-                        return_type: vec![],
-                    },
-                )],
-            ),
-            (
-                "canister_cycle_balance128",
-                vec![(
-                    API_VERSION_IC0,
-                    FunctionSignature {
-                        param_types: vec![ValueType::I32],
-                        return_type: vec![],
-                    },
-                )],
-            ),
-            (
-                "msg_cycles_available128",
-                vec![(
-                    API_VERSION_IC0,
-                    FunctionSignature {
-                        param_types: vec![ValueType::I32],
-                        return_type: vec![],
-                    },
-                )],
-            ),
-            (
-                "msg_cycles_refunded128",
-                vec![(
-                    API_VERSION_IC0,
-                    FunctionSignature {
-                        param_types: vec![ValueType::I32],
-                        return_type: vec![],
-                    },
-                )],
-            ),
-            (
-                "msg_cycles_accept128",
-                vec![(
-                    API_VERSION_IC0,
-                    FunctionSignature {
-                        param_types: vec![ValueType::I64, ValueType::I64, ValueType::I32],
-                        return_type: vec![],
-                    },
-                )],
-            ),
-        ],
-    };
-    valid_system_apis.extend(experimental_apis);
 
     valid_system_apis
         .into_iter()
@@ -720,14 +708,11 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
 //
 // Returns information about what IC0 methods are imported via
 // `WasmImportsDetails`.
-fn validate_import_section(
-    module: &Module,
-    feature_flags: &FeatureFlags,
-) -> Result<WasmImportsDetails, WasmValidationError> {
+fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmValidationError> {
     let mut imports_details = WasmImportsDetails::default();
 
     if let Some(section) = module.import_section() {
-        let valid_system_apis = get_valid_system_apis(feature_flags);
+        let valid_system_apis = get_valid_system_apis();
         for entry in section.entries() {
             let import_module = entry.module();
             let field = entry.field();
@@ -1131,7 +1116,7 @@ pub(super) fn validate_wasm_binary(
     can_compile(wasm)?;
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice())
         .map_err(|err| WasmValidationError::ParityDeserializeError(into_parity_wasm_error(err)))?;
-    let imports_details = validate_import_section(&module, &config.feature_flags)?;
+    let imports_details = validate_import_section(&module)?;
     let reserved_exports = validate_export_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
