@@ -78,16 +78,6 @@ impl NodeRegistration {
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
         UtilityCommand::notify_host("Starting node registration.", 1);
-        let nns_urls_col = loop {
-            match self.collect_nns_urls().await {
-                Ok(urls) => break urls,
-                Err(e) => {
-                    warn!(self.log, "Failed to collect the NNS URLs: {:?}", e);
-                    tokio::time::sleep(Duration::from_secs(10)).await;
-                }
-            }
-        };
-        let mut nns_urls = nns_urls_col.iter().cycle();
         UtilityCommand::notify_host("Attaching HSM.", 1);
         let sign_cmd = |msg: &[u8]| {
             UtilityCommand::try_to_attach_hsm();
@@ -117,17 +107,21 @@ impl NodeRegistration {
             if self.is_node_registered() {
                 return;
             }
-            tokio::time::sleep(Duration::from_secs(2)).await;
         };
         // we have the public key
 
         UtilityCommand::notify_host("Sending add_node request.", 1);
         while !self.is_node_registered() {
+            tokio::time::sleep(Duration::from_secs(2)).await;
             let sender = Sender::ExternalHsm {
                 pub_key: hsm_pub_key.clone(),
                 sign: Arc::new(sign_cmd),
             };
-            let agent = Agent::new(nns_urls.next().unwrap().clone(), sender);
+            let nns_url = match self.get_random_nns_url().await {
+                Some(url) => url,
+                None => continue,
+            };
+            let agent = Agent::new(nns_url, sender);
 
             if let Err(e) = agent
                 .execute_update(
@@ -141,7 +135,6 @@ impl NodeRegistration {
             {
                 warn!(self.log, "Error when sending add node request: {:?}", e);
             };
-            tokio::time::sleep(Duration::from_secs(2)).await;
         }
 
         UtilityCommand::notify_host(
@@ -209,14 +202,10 @@ impl NodeRegistration {
     }
 
     async fn try_to_register_additional_key(&self, idkg_pk: PublicKey) {
-        let nns_urls = match self.collect_nns_urls().await {
-            Ok(urls) => urls,
-            Err(e) => {
-                warn!(self.log, "Error collecting URLs: {:?}", e);
-                return;
-            }
+        let nns_url = match self.get_random_nns_url().await {
+            Some(url) => url,
+            None => return,
         };
-
         let node_id = self.node_id;
 
         let node_pub_key = if let Some(pk) = self.key_handler.node_public_keys().node_signing_pk {
@@ -242,7 +231,7 @@ impl NodeRegistration {
             sign: Arc::new(sign_cmd),
         };
 
-        let agent = Agent::new(nns_urls[0].clone(), sender);
+        let agent = Agent::new(nns_url.clone(), sender);
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -264,7 +253,17 @@ impl NodeRegistration {
         }
     }
 
-    async fn collect_nns_urls(&self) -> Result<Vec<Url>, String> {
+    async fn get_random_nns_url(&self) -> Option<Url> {
+        match self.collect_shuffled_nns_urls().await {
+            Ok(mut urls) => urls.pop(),
+            Err(e) => {
+                warn!(self.log, "Failed to collect NNS URLs: {}", e);
+                None
+            }
+        }
+    }
+
+    async fn collect_shuffled_nns_urls(&self) -> Result<Vec<Url>, String> {
         let version = self.registry_client.get_latest_version();
         if version == ZERO_REGISTRY_VERSION {
             return Err("Registry cache is still at version 0".to_string());
