@@ -464,6 +464,67 @@ fn test_single_transfer() {
 }
 
 #[test]
+fn test_account_canonicalization() {
+    let env = StateMachine::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let canister_id = install_ledger(
+        &env,
+        vec![
+            (Account::from(p1), 10_000_000),
+            (Account::from(p2), 5_000_000),
+        ],
+    );
+
+    assert_eq!(
+        10_000_000u64,
+        balance_of(
+            &env,
+            canister_id,
+            Account {
+                of: p1,
+                subaccount: None
+            }
+        )
+    );
+    assert_eq!(
+        10_000_000u64,
+        balance_of(
+            &env,
+            canister_id,
+            Account {
+                of: p1,
+                subaccount: Some([0; 32])
+            }
+        )
+    );
+
+    transfer(
+        &env,
+        canister_id,
+        p1.into(),
+        Account {
+            of: p2,
+            subaccount: Some([0; 32]),
+        },
+        1_000_000,
+    )
+    .expect("transfer failed");
+
+    assert_eq!(
+        6_000_000u64,
+        balance_of(
+            &env,
+            canister_id,
+            Account {
+                of: p2,
+                subaccount: None
+            }
+        )
+    );
+}
+
+#[test]
 fn test_tx_time_bounds() {
     let env = StateMachine::new();
     let p1 = PrincipalId::new_user_test_id(1);
