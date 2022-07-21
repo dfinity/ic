@@ -81,6 +81,7 @@ pub(crate) fn execute_install(
             layout.raw_path(),
             canister_id,
             round_limits,
+            compilation_cost_handling,
         ) {
             Ok(result) => result,
             Err(err) => {

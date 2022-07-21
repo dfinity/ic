@@ -180,7 +180,7 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
@@ -1753,8 +1753,11 @@ impl ExecutionEnvironment {
     }
 }
 
+/// Indicates whether the time spent compiling this canister should count
+/// against Instruction limits or should be ignored. Only public for testing.
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum CompilationCostHandling {
+pub enum CompilationCostHandling {
     Ignore,
     Charge,
 }

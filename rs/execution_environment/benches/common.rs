@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion};
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
-use ic_execution_environment::{as_round_instructions, RoundLimits};
+use ic_execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SubnetAvailableMemory};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -76,6 +76,7 @@ where
             canister_root,
             canister_id,
             &mut round_limits,
+            CompilationCostHandling::Charge,
         )
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);

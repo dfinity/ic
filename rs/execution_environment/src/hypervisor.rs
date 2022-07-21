@@ -26,7 +26,8 @@ use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::update_round_limits;
-use crate::execution_environment::{as_round_instructions, RoundLimits};
+use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::RoundInstructions;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -167,6 +168,7 @@ impl Hypervisor {
         canister_root: PathBuf,
         canister_id: CanisterId,
         round_limits: &mut RoundLimits,
+        compilation_cost_handling: CompilationCostHandling,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         let (execution_state, compilation_cost, compilation_result) =
             self.wasm_executor.create_execution_state(
@@ -179,7 +181,10 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
-        round_limits.instructions -= as_round_instructions(compilation_cost);
+        round_limits.instructions -= match compilation_cost_handling {
+            CompilationCostHandling::Ignore => RoundInstructions::from(0),
+            CompilationCostHandling::Charge => as_round_instructions(compilation_cost),
+        };
         Ok((compilation_cost, execution_state))
     }
 
