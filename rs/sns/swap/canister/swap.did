@@ -38,7 +38,6 @@ type FinalizeSwapResponse = record {
   sweep_sns : opt SweepResult;
   create_neuron : opt SweepResult;
 };
-type GetCanisterStatusResponse = record { status : CanisterStatusResultV2 };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;
@@ -71,7 +70,7 @@ type TimeWindow = record {
 service : (Init) -> {
   error_refund_icp : (ErrorRefundIcpRequest) -> (record {});
   finalize_swap : (record {}) -> (FinalizeSwapResponse);
-  get_canister_status : (record {}) -> (GetCanisterStatusResponse);
+  get_canister_status : (record {}) -> (CanisterStatusResultV2);
   get_state : (record {}) -> (GetStateResponse) query;
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (record {});
   refresh_sns_tokens : (record {}) -> (record {});

@@ -4,6 +4,7 @@ use dfn_candid::candid_one;
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
+use ic_ic00_types::CanisterStatusResultV2;
 use ic_interfaces::registry::RegistryClient;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
@@ -19,7 +20,6 @@ use ic_sns_root::{
     CanisterStatusType::Running, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use ic_sns_swap::GetCanisterStatusResponse;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -256,7 +256,7 @@ fn test_canisters_are_created_and_installed() {
         swap_canister.set_wasm(swap_wasm.bytes());
 
         // Check Swap status
-        let response: GetCanisterStatusResponse = swap_canister
+        let response: CanisterStatusResultV2 = swap_canister
             .update_(
                 "get_canister_status",
                 candid_one,
@@ -266,7 +266,7 @@ fn test_canisters_are_created_and_installed() {
             .unwrap();
 
         assert_eq!(
-            response.status.controllers(),
+            response.controllers(),
             vec![ROOT_CANISTER_ID.get(), swap_canister_id.get()]
         );
         Ok(())

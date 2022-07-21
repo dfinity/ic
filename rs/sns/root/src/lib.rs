@@ -11,6 +11,7 @@ use dfn_core::api::call;
 use dfn_core::CanisterId;
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_nervous_system_root::LOG_PREFIX;
+use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use num_traits::cast::ToPrimitive;
 use std::{cell::RefCell, thread::LocalKey};
 
@@ -243,31 +244,44 @@ pub struct GetSnsCanistersSummaryRequest {
 
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryResponse {
-    root_canister_summary: Option<CanisterSummary>,
-    governance_canister_summary: Option<CanisterSummary>,
-    ledger_canister_summary: Option<CanisterSummary>,
-    dapp_canister_summaries: Vec<CanisterSummary>,
+    pub root: Option<CanisterSummary>,
+    pub governance: Option<CanisterSummary>,
+    pub ledger: Option<CanisterSummary>,
+    pub swap: Option<CanisterSummary>,
+    pub dapps: Vec<CanisterSummary>,
+    pub archives: Vec<CanisterSummary>,
 }
 
 impl GetSnsCanistersSummaryResponse {
     pub fn root_canister_summary(&self) -> &CanisterSummary {
-        self.root_canister_summary.as_ref().unwrap()
+        self.root.as_ref().unwrap()
     }
+
     pub fn governance_canister_summary(&self) -> &CanisterSummary {
-        self.governance_canister_summary.as_ref().unwrap()
+        self.governance.as_ref().unwrap()
     }
+
     pub fn ledger_canister_summary(&self) -> &CanisterSummary {
-        self.ledger_canister_summary.as_ref().unwrap()
+        self.ledger.as_ref().unwrap()
     }
+
+    pub fn swap_canister_summary(&self) -> &CanisterSummary {
+        self.swap.as_ref().unwrap()
+    }
+
     pub fn dapp_canister_summaries(&self) -> &Vec<CanisterSummary> {
-        &self.dapp_canister_summaries
+        &self.dapps
+    }
+
+    pub fn archives_canister_summaries(&self) -> &Vec<CanisterSummary> {
+        &self.archives
     }
 }
 
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct CanisterSummary {
-    canister_id: Option<PrincipalId>,
-    status: Option<CanisterStatusResultV2>,
+    pub canister_id: Option<PrincipalId>,
+    pub status: Option<CanisterStatusResultV2>,
 }
 
 impl CanisterSummary {
@@ -304,12 +318,13 @@ impl SnsRootCanister {
         own_canister_id: CanisterId,
     ) -> GetSnsCanistersSummaryResponse {
         // Get ID of other canisters.
-        let (governance_canister_id, ledger_canister_id, dapp_canister_ids) =
+        let (governance_canister_id, ledger_canister_id, swap_canister_id, dapp_canister_ids) =
             self_ref.with(|self_ref| {
                 let self_ref = self_ref.borrow();
                 (
                     self_ref.governance_canister_id(),
                     self_ref.ledger_canister_id(),
+                    self_ref.swap_canister_id(),
                     self_ref.dapp_canister_ids.clone(),
                 )
             });
@@ -351,6 +366,13 @@ impl SnsRootCanister {
             status: Some(ledger_status),
         });
 
+        // Get status of swap.
+        let swap_status = get_swap_status(swap_canister_id).await;
+        let swap_canister_summary = Some(CanisterSummary {
+            canister_id: Some(swap_canister_id),
+            status: swap_status,
+        });
+
         // Get status of dapp canister(s).
         let mut dapp_canister_summaries = vec![];
         for dapp_canister_id in dapp_canister_ids {
@@ -380,10 +402,12 @@ impl SnsRootCanister {
         }
 
         GetSnsCanistersSummaryResponse {
-            root_canister_summary,
-            governance_canister_summary,
-            ledger_canister_summary,
-            dapp_canister_summaries: vec![],
+            root: root_canister_summary,
+            governance: governance_canister_summary,
+            ledger: ledger_canister_summary,
+            swap: swap_canister_summary,
+            dapps: dapp_canister_summaries,
+            archives: vec![],
         }
     }
 
@@ -595,6 +619,29 @@ async fn get_root_status(governance_id: PrincipalId) -> CanisterStatusResultV2 {
     )
     .await
     .unwrap()
+}
+
+async fn get_swap_status(swap_id: PrincipalId) -> Option<CanisterStatusResultV2> {
+    let response: Result<CanisterStatusResultV2, (Option<i32>, String)> = call(
+        CanisterId::new(swap_id).unwrap(),
+        "get_canister_status",
+        dfn_candid::candid,
+        (GetCanisterStatusRequest {},),
+    )
+    .await;
+
+    match response {
+        Ok(canister_status) => Some(canister_status),
+        Err(err) => {
+            println!(
+                "Couldn't get the CanisterStatus of the SNS Swap Canister({}). This may be \
+                due to the Swap concluding and the canister stopping. Err: {:?}",
+                swap_id, err
+            );
+
+            None
+        }
+    }
 }
 
 #[cfg(test)]

@@ -44,6 +44,7 @@ use ic_sns_governance::pb::v1::manage_neuron::disburse::Amount;
 use ic_sns_governance::pb::v1::manage_neuron::{Disburse, Split, StartDissolving};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_init::SnsCanisterInitPayloads;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_types::{CanisterId, PrincipalId};
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
@@ -57,6 +58,7 @@ pub struct SnsCanisters<'a> {
     pub root: Canister<'a>,
     pub governance: Canister<'a>,
     pub ledger: Canister<'a>,
+    pub swap: Canister<'a>,
 }
 
 /// Builder to help create the initial payloads for the SNS canisters in tests.
@@ -204,7 +206,7 @@ impl SnsCanisters<'_> {
             .await
             .expect("Couldn't create Ledger canister");
 
-        let swap = runtime
+        let mut swap = runtime
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Couldn't create Ledger canister");
@@ -263,6 +265,7 @@ impl SnsCanisters<'_> {
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root),
+            install_swap_canister(&mut swap, init_payloads.swap),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -273,6 +276,10 @@ impl SnsCanisters<'_> {
             root.set_controller_with_retries(governance_canister_id.get()),
             governance.set_controller_with_retries(root_canister_id.get()),
             ledger.set_controller_with_retries(root_canister_id.get()),
+            // Swap Canister is controlled by NNS Root and Swap itself. For the integration tests
+            // add the swap canister as its own controller, and leave the Runtime in control
+            // as well for some amount of control
+            swap.add_controller(swap_canister_id.get()),
         )
         .unwrap();
 
@@ -282,6 +289,7 @@ impl SnsCanisters<'_> {
             root,
             governance,
             ledger,
+            swap,
         }
     }
 
@@ -930,6 +938,18 @@ impl SnsCanisters<'_> {
         )
     }
 
+    /// Get the summary of the SNS from root
+    pub async fn get_sns_canisters_summary(&self) -> GetSnsCanistersSummaryResponse {
+        self.root
+            .update_(
+                "get_sns_canisters_summary",
+                candid_one,
+                GetSnsCanistersSummaryRequest {},
+            )
+            .await
+            .expect("Error calling the get_sns_canisters_summary API")
+    }
+
     async fn send_manage_neuron(
         &self,
         sender: &Sender,
@@ -1067,5 +1087,25 @@ pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCan
 pub async fn set_up_root_canister(runtime: &'_ Runtime, args: SnsRootCanister) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_root_canister(&mut canister, args).await;
+    canister
+}
+
+/// Builds the swap canister wasm binary, serializes canister_init args for it, and installs it.
+pub async fn install_swap_canister(canister: &mut Canister<'_>, args: Init) {
+    install_rust_canister_with_memory_allocation(
+        canister,
+        "sns/swap",
+        "sns-swap-canister",
+        &[],
+        Some(CandidOne(args).into_bytes().unwrap()),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+    )
+    .await
+}
+
+/// Creates and installs the swap canister.
+pub async fn set_up_swap_canister(runtime: &'_ Runtime, args: Init) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_swap_canister(&mut canister, args).await;
     canister
 }
