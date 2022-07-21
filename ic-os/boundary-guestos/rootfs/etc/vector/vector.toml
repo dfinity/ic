@@ -13,6 +13,8 @@ default_namespace = "vector"
 type = "journald"
 include_units = ["nginx"]
 
+# nginx access
+
 [transforms.nginx_access]
 type = "filter"
 inputs = ["nginx"]
@@ -35,6 +37,8 @@ if .@timestamp == 0 {
 }
 """
 
+# nginx access (elasticsearch)
+
 [sinks.elasticsearch_nginx_access]
 type = "elasticsearch"
 inputs = ["nginx_access_json"]
@@ -43,6 +47,42 @@ mode = "bulk"
 bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
 tls.enabled = true
 tls.verify_certificate = false
+
+# nginx access (metrics)
+
+[transforms.nginx_access_metrics]
+type = "log_to_metric"
+inputs = ["nginx_access_json"]
+
+  [[transforms.nginx_access_metrics.metrics]]
+  type = "counter"
+  field = "status"
+  name = "request_total"
+
+    [transforms.nginx_access_metrics.metrics.tags]
+    hostname = "{{ hostname }}"
+    ic_node_id = "{{ ic_node_id }}"
+    ic_subnet_id = "{{ ic_subnet_id }}"
+    request_method = "{{ request_method }}"
+    status = "{{ status }}"
+    upstream_cache_status = "{{ upstream_cache_status }}"
+    upstream_status = "{{ upstream_status }}"
+
+  [[transforms.nginx_access_metrics.metrics]]
+  type = "histogram"
+  field = "request_time"
+  name = "request_sec_duration"
+
+    [transforms.nginx_access_metrics.metrics.tags]
+    hostname = "{{ hostname }}"
+    ic_node_id = "{{ ic_node_id }}"
+    ic_subnet_id = "{{ ic_subnet_id }}"
+    request_method = "{{ request_method }}"
+    status = "{{ status }}"
+    upstream_cache_status = "{{ upstream_cache_status }}"
+    upstream_status = "{{ upstream_status }}"
+
+# nginx error
 
 [transforms.nginx_error]
 type = "filter"
@@ -71,6 +111,8 @@ if err != null {
 }
 """
 
+# nginx error (elasticsearch)
+
 [sinks.elasticsearch_nginx_error]
 type = "elasticsearch"
 inputs = ["nginx_error_json"]
@@ -79,6 +121,28 @@ mode = "bulk"
 bulk.index = "boundary-node-nginx-error-%Y.%m.%d"
 tls.enabled = true
 tls.verify_certificate = false
+
+# nginx error (metrics)
+
+[transforms.nginx_error_metrics]
+type = "log_to_metric"
+inputs = ["nginx_error_json"]
+
+  [[transforms.nginx_error_metrics.metrics]]
+  type = "counter"
+  field = "message"
+  name = "error_total"
+
+    [transforms.nginx_error_metrics.metrics.tags]
+    hostname = "{{ host }}"
+
+# nginx (prometheus)
+
+[sinks.prometheus_exporter_nginx]
+type = "prometheus_exporter"
+inputs = ["nginx_access_metrics", "nginx_error_metrics"]
+address = "${NGINX_PROMETHUS_ADDR}"
+default_namespace = "nginx_access"
 
 # prober
 
