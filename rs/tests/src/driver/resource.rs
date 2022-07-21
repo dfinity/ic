@@ -214,6 +214,7 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             name.clone(),
             vm_config.vcpus,
             vm_config.memory_kibibytes,
+            vec![],
             match &vm_config.boot_image {
                 BootImage::GroupDefault => From::from(req.primary_image.clone()),
                 BootImage::Image(disk_image) => From::from(disk_image.clone()),
