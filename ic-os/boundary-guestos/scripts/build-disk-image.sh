@@ -53,6 +53,7 @@ done
 
 # Preparatory steps and temporary build directory.
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
+EXTERNAL_DIR="${BASE_DIR}/external"
 
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
 
@@ -97,10 +98,26 @@ declare -a IC_EXECUTABLES=(
     "ic-balance-exporter"
 )
 
+# Build sev-tool
+(
+    cd "${EXTERNAL_DIR}"
+    if [ ! -e sev-tool ]; then
+        git clone https://github.com/AMDESE/sev-tool.git sev-tool
+        (
+            cd sev-tool
+            git checkout 3e6418e09f5ca91d789e115d0751ead1227aab47
+        )
+    fi
+    cd sev-tool
+    autoreconf -i && ./configure && make
+)
+
 declare -a INSTALL_EXEC_ARGS=()
 for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
     INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
 done
+
+INSTALL_EXEC_ARGS+=("${EXTERNAL_DIR}/sev-tool/src/sevtool:/opt/ic/bin/sevtool:0755")
 
 echo "${VERSION}" >"${TMPDIR}/version.txt"
 
