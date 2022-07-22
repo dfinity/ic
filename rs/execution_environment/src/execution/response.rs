@@ -256,7 +256,7 @@ pub fn execute_response(
 
     let (output_execution_state, result) = round.hypervisor.execute_dts(
         api_type,
-        canister.system_state.clone(),
+        &canister.system_state,
         canister.memory_usage(round.hypervisor.subnet_type()),
         execution_parameters.clone(),
         func_ref,
@@ -316,7 +316,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             time: original.time,
         },
-        canister.system_state.clone(),
+        &canister.system_state,
         canister.memory_usage(own_subnet_type),
         execution_parameters,
         func_ref,
