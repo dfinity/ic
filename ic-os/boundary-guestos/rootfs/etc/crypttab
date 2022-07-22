@@ -1,1 +1,1 @@
-vda10-crypt /dev/vda10  /boot/grub/store.keyfile  luks2
+vda10-crypt /dev/vda10  /run/vda10key  luks2
