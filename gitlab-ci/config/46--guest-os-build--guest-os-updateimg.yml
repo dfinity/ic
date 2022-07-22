@@ -5,7 +5,8 @@ guest-os-updateimg-build:
   retry: 1
   stage: guest-os-build
   needs:
-    - artifacts-upload-to-s3
+    - job: cargo-build-release-linux-native
+      artifacts: false
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""

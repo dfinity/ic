@@ -6,9 +6,12 @@ legacy-system-tests:
   retry: 2
   stage: cargo-test
   needs:
-    - cargo-build-canisters
-    - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-malicious
+    - job: cargo-build-canisters
+      artifacts: false
+    - job: cargo-build-release-linux-native
+      artifacts: false
+    - job: cargo-build-release-linux-native-malicious
+      artifacts: false
   artifacts:
     paths:
       - replica-logs/
@@ -25,8 +28,16 @@ legacy-system-tests:
       RUST_BACKTRACE: 1
   script:
     - |
-      # Capsule for system tests is configured in Capsule.toml
-      capsule -v -- "${CI_PROJECT_DIR}/gitlab-ci/src/job_scripts/system-tests.sh"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
+          --out="artifacts/release"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="release-malicious" \
+          --out="artifacts/release-malicious"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$CI_COMMIT_SHA" --remote-path="canisters" \
+          --out="artifacts/canisters"
+      "${CI_PROJECT_DIR}/gitlab-ci/src/job_scripts/system-tests.sh"
 
 check-bins-linux:
   extends:

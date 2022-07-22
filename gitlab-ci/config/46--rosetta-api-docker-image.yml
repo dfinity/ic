@@ -4,10 +4,14 @@ rosetta-api-docker-image:
     - .rules-protected-branch-manual
   stage: guest-os-build
   needs:
-    - cargo-build-release-linux-native
+    - job: cargo-build-release-linux-native
+      artifacts: false
   script:
     - |
       set -exuo pipefail
+
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
+        --remote-path=release --out="artifacts/release"
 
       gunzip artifacts/release/ic-rosetta-api.gz
       chmod +x artifacts/release/ic-rosetta-api
