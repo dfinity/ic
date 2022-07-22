@@ -89,23 +89,25 @@ impl Service<SignedIngress> for IngressEventHandler {
         let node_id = self.node_id;
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.threadpool.execute(move || {
-            // We ingnore the error in case the receiver was dropped. This can happen when the
-            // client drops the future executing this code.
-            let _ = tx.send(if throttler.read().unwrap().exceeds_threshold() {
-                Err(IngressError::Overloaded)
-            } else {
-                let advert = IngressArtifact::message_to_advert(&signed_ingress);
-                artifact_manager
-                    .on_artifact(
-                        Artifact::IngressMessage(signed_ingress.into()),
-                        advert.into(),
-                        &node_id,
-                    )
-                    .map_err(|e| {
-                        info!(log, "Artifact not inserted {:?}", e);
-                        IngressError::Overloaded
-                    })
-            });
+            if !tx.is_closed() {
+                // We ingnore the error in case the receiver was dropped. This can happen when the
+                // client drops the future executing this code.
+                let _ = tx.send(if throttler.read().unwrap().exceeds_threshold() {
+                    Err(IngressError::Overloaded)
+                } else {
+                    let advert = IngressArtifact::message_to_advert(&signed_ingress);
+                    artifact_manager
+                        .on_artifact(
+                            Artifact::IngressMessage(signed_ingress.into()),
+                            advert.into(),
+                            &node_id,
+                        )
+                        .map_err(|e| {
+                            info!(log, "Artifact not inserted {:?}", e);
+                            IngressError::Overloaded
+                        })
+                });
+            }
         });
         Box::pin(async move { Ok(rx.await.expect("Ingress ingestion task MUST NOT panic.")) })
     }
