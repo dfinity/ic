@@ -125,6 +125,7 @@
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - gitlab-ci/docker/*
+        - gitlab-ci/config/20--test--docker-autobuild.yml
 
 .rules-any-schedule:
   rules:

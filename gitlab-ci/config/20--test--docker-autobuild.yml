@@ -69,6 +69,12 @@ docker-autobuild:
     - .rules-prs-dockerfile-changes
   needs: []
   stage: test
+  # build container image in ch due to better network uplink
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+    - ch
   script:
     - |
       set -euo pipefail
