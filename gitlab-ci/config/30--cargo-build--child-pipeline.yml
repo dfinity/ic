@@ -37,7 +37,7 @@ cargo-build-release-darwin:
       - artifacts/nix-release/*
   variables:
     BUILD_COMMAND: "cargo build --release"
-    BUILD_COMMAND_POST: "pushd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/nix-release; popd; gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/nix-release' nix-release/x86_64-darwin"
+    BUILD_COMMAND_POST: "cd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/nix-release; cd ${CI_PROJECT_DIR} && gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/nix-release' nix-release/x86_64-darwin"
 
 cargo-build-release-linux-native:
   extends:
@@ -92,7 +92,7 @@ dfx-build-release-darwin:
       - artifacts/sdk-release/*
   variables:
     BUILD_COMMAND: "${CI_PROJECT_DIR}/gitlab-ci/tools/build-dfx-binaries"
-    BUILD_COMMAND_POST: "pushd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/sdk-release/x86_64-darwin && popd; gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/sdk-release' sdk-release"
+    BUILD_COMMAND_POST: "cd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/sdk-release/x86_64-darwin; cd ${CI_PROJECT_DIR} && gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/sdk-release' sdk-release"
 
 dfx-build-release-linux:
   extends:
