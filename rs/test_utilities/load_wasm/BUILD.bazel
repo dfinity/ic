@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "load_wasm",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_load_wasm",
+    edition = "2018",
+    deps = [
+        "@crate_index//:cargo_metadata",
+        "@crate_index//:escargot",
+    ],
+)

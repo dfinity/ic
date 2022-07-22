@@ -2743,9 +2743,9 @@ dependencies = [
 
 [[package]]
 name = "escargot"
-version = "0.5.2"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44bb3f795fe1b9d34f089c7fab034c2b757998d65361d95ef008045b57665262"
+checksum = "f5584ba17d7ab26a8a7284f13e5bd196294dd2f2d79773cff29b9e9edef601a6"
 dependencies = [
  "log",
  "once_cell",
@@ -5757,7 +5757,6 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "candid",
- "canister-test",
  "cddl",
  "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
  "hex",
@@ -5770,6 +5769,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "leb128",
  "num-traits",
  "proptest 0.9.6",
@@ -8130,6 +8130,14 @@ dependencies = [
 [[package]]
 name = "ic-test-utilities-compare-dirs"
 version = "0.8.0"
+
+[[package]]
+name = "ic-test-utilities-load-wasm"
+version = "0.8.0"
+dependencies = [
+ "cargo_metadata",
+ "escargot",
+]
 
 [[package]]
 name = "ic-test-utilities-metrics"

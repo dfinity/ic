@@ -1,6 +1,5 @@
 use candid::types::number::Nat;
 use candid::{Decode, Encode};
-use canister_test::Project;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
     endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
@@ -15,6 +14,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
@@ -40,17 +40,22 @@ const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
 fn ledger_wasm() -> Vec<u8> {
-    let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    proj.cargo_bin("ic-icrc1-ledger", &[]).bytes()
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ic-icrc1-ledger",
+        &[],
+    )
 }
 
 fn archive_wasm() -> Vec<u8> {
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rosetta-api/icrc1/archive",
+    ic_test_utilities_load_wasm::load_wasm(
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
+            .unwrap()
+            .join("archive"),
         "ic-icrc1-archive",
         &[],
     )
-    .bytes()
 }
 
 fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> CanisterId {

@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_canister(
+    name = "archive",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_icrc1_archive",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    deps = [
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/stable-structures",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "archive_test",
+    crate = ":_wasm_archive",
+    data = [
+        ":archive.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/archive",
+    },
+)
