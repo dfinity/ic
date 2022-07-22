@@ -5,7 +5,7 @@ use bitcoin::{
 };
 use futures::future::TryFutureExt;
 use http::Uri;
-use ic_logger::{debug, error, ReplicaLogger};
+use ic_logger::{debug, error, info, ReplicaLogger};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
@@ -298,7 +298,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
                 stream
             }
             Err(err) => {
-                error!(&logger, "Failed to connect to {} ::: {}", address, err);
+                info!(every_n_seconds => 300, &logger, "Failed to connect to {} ::: {}", address, err);
                 let kind = match err {
                     StreamError::Io(_) => StreamEventKind::FailedToConnect,
                     StreamError::Timeout => StreamEventKind::FailedToConnect,
