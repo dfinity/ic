@@ -23,8 +23,8 @@ serde = "1.0"
 serde_bytes = "0.11"
 
 [dev-dependencies]
-canister-test = { path = "../../../rust_canisters/canister_test" }
 cddl = "0.9.0-beta.1"
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 leb128 = "0.2.4"
 proptest = "0.9.4"

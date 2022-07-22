@@ -130,6 +130,9 @@ def external_crates_repository(name, annotations):
             "cc": crate.spec(
                 version = "^1.0",
             ),
+            "cddl": crate.spec(
+                version = "^0.9.0-beta.1",
+            ),
             "cfg-if": crate.spec(version = "^0.1.10"),
             "chrono": crate.spec(
                 version = "^0.4.19",
@@ -203,7 +206,8 @@ def external_crates_repository(name, annotations):
                 version = "^0.3.11",
             ),
             "escargot": crate.spec(
-                version = "^0.5.2",
+                version = "^0.5.7",
+                features = ["print"],
             ),
             "exec": crate.spec(
                 version = "^0.3.1",

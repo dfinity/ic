@@ -1,0 +1,104 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "ledger",
+    srcs = [
+        "src/cdk_runtime.rs",
+        "src/lib.rs",
+    ],
+    compile_data = [
+        "//rs/rosetta-api/icrc1/archive",
+    ],
+    crate_name = "ic_icrc1_ledger",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    rustc_env = {
+        "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/archive)",
+    },
+    deps = [
+        "//rs/crypto/tree_hash",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_canister(
+    name = "ledger_canister",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_icrc1_ledger_canister",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    deps = [
+        ":ledger",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:num-traits",
+    ],
+)
+
+rust_test(
+    name = "ledger_canister_test",
+    crate = ":_wasm_ledger_canister",
+    data = [
+        ":icrc1.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
+    },
+)
+
+rust_test(
+    name = "ledger_test",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":block.cddl",
+        ":ledger_canister",
+        "//rs/rosetta-api/icrc1/archive",
+    ],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister)",
+        "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive)",
+    },
+    deps = [
+        ":ledger",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:cddl",
+        "@crate_index//:hex",
+        "@crate_index//:leb128",
+        "@crate_index//:num-traits",
+        "@crate_index//:proptest",
+    ],
+)
