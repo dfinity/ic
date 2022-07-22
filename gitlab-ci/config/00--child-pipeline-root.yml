@@ -67,10 +67,19 @@ include:
     - |
       set -eExuo pipefail
 
-      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
+      # required binary artifacts
+      mkdir -p artifacts/release
+      pushd artifacts/release
+      curl -sfS --retry 5 --retry-delay 10 \
+        "http://download.proxy.dfinity.systems:8080/ic/$CI_COMMIT_SHA/release/canister_sandbox.gz" -O
+      curl -sfS --retry 5 --retry-delay 10 \
+        "http://download.proxy.dfinity.systems:8080/ic/$CI_COMMIT_SHA/release/sandbox_launcher.gz" -O
+      popd
+
+      # required canisters
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py \
+        --git-rev "$CI_COMMIT_SHA" \
         --remote-path=canisters --out="artifacts/canisters"
-      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
-        --remote-path=release --out="artifacts/release"
 
       # Setup the cargo canister sandbox
       cd "${CI_PROJECT_DIR}/rs"
