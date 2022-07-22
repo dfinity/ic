@@ -428,6 +428,8 @@ impl SchedulerImpl {
                 if let Some(execution_state) = canister.execution_state.as_mut() {
                     execution_state.task_queue.retain(|task| match task {
                         ExecutionTask::Heartbeat => false,
+                        ExecutionTask::PausedExecution(..)
+                        | ExecutionTask::AbortedExecution(..) => true,
                     });
                 }
             }
@@ -1085,6 +1087,14 @@ impl Scheduler for SchedulerImpl {
             &measurement_scope,
             &mut round_limits,
         );
+
+        // Abort all paused execution before the checkpoint.
+        match current_round_type {
+            ExecutionRoundType::OrdinaryRound => {}
+            ExecutionRoundType::CheckpointRound => {
+                self.exec_env.abort_paused_executions(&mut state);
+            }
+        }
 
         let mut final_state;
         {

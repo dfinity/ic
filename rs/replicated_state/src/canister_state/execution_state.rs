@@ -1,5 +1,6 @@
 use super::SessionNonce;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
+use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -319,16 +320,28 @@ impl SandboxMemoryHandle {
     }
 }
 
+/// The id of a paused execution stored in the execution environment.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct PausedExecutionId(pub u64);
+
 /// Represents a task that needs to be executed before processing canister
-/// inputs. Currently the only task is a heartbeat task.
-/// DTS will add the following tasks:
-/// - PausedExecution(..)
-/// - AbortedExecution(CanisterInputMessage)
+/// inputs. The following tasks will be added in the future:
 /// - PausedInstallCode(..)
 /// - AbortedInstallCode(CanisterInputMessage)
 #[derive(Clone, Debug)]
 pub enum ExecutionTask {
+    // A heartbeat task exists only within an execution round. It is never
+    // serialized.
     Heartbeat,
+
+    // A paused execution task exists only within an epoch (between
+    // checkpoints). It is never serialized and turns into `AbortedExecution`
+    // before the checkpoint.
+    PausedExecution(PausedExecutionId),
+
+    // Any paused execution that doesn't finish until the next checkpoint
+    // becomes an aborted execution that should be retried after the checkpoint.
+    AbortedExecution(CanisterInputMessage),
 }
 
 /// The part of the canister state that can be accessed during execution

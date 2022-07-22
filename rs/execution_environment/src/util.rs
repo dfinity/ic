@@ -1,16 +1,13 @@
-use crate::{
-    execution_environment::{ExecuteMessageResult, ExecutionResponse},
-    types::Response,
-};
-use ic_base_types::{NumBytes, SubnetId};
+use crate::types::Response;
+use ic_base_types::SubnetId;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EmptyBlob, IC_00};
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{error, ReplicaLogger};
-use ic_replicated_state::{CanisterState, CanisterStatus, ReplicatedState};
+use ic_replicated_state::{CanisterStatus, ReplicatedState};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, Payload, StopCanisterContext},
+    messages::{Payload, StopCanisterContext},
     CanisterId,
 };
 use std::{mem, sync::Arc};
@@ -43,44 +40,6 @@ pub fn process_responses(
             }
         }
     });
-}
-
-/// Inspects the response produced by message execution:
-/// - if the response is for a call, then it pushes the response onto the output
-///   queue of the canister.
-/// - if the response is for an ingress, then it returns the response.
-/// The function also returns other fields of the given result.
-pub fn process_result(
-    result: ExecuteMessageResult,
-) -> (CanisterState, NumBytes, Option<(MessageId, IngressStatus)>) {
-    match result {
-        ExecuteMessageResult::Finished {
-            mut canister,
-            response,
-            heap_delta,
-        } => {
-            let ingress_status = match response {
-                ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
-                ExecutionResponse::Request(response) => {
-                    debug_assert_eq!(
-                        response.respondent,
-                        canister.canister_id(),
-                        "Respondent mismatch"
-                    );
-                    canister.push_output_response(response.into());
-                    None
-                }
-                ExecutionResponse::Empty => None,
-            };
-            (canister, heap_delta, ingress_status)
-        }
-        ExecuteMessageResult::Paused {
-            canister: _,
-            paused_execution: _,
-        } => {
-            unreachable!("DTS is not enabled yet.")
-        }
-    }
 }
 
 /// Checks for stopping canisters and, if any of them are ready to stop,

@@ -464,9 +464,6 @@ impl WasmExecutor for SandboxedExecutionController {
     ) {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
         let slice_instruction_limit = execution_parameters.instruction_limits.slice();
-        // TODO(RUN-59): Adjust this assertion once the execution environment
-        // supports deterministic time slicing with sandbox.
-        assert_eq!(message_instruction_limit, slice_instruction_limit);
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics
