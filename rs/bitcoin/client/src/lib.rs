@@ -5,6 +5,7 @@ use crate::metrics::{
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
 use bitcoin::consensus::Decodable;
+use ic_adapter_metrics::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
@@ -280,6 +281,22 @@ pub fn setup_bitcoin_adapter_clients(
     adapters_config: AdaptersConfig,
 ) -> BitcoinAdapterClients {
     let metrics = Metrics::new(metrics_registry);
+
+    // Register bitcoin adapters metrics.
+    if let Some(metrics_uds_path) = adapters_config.bitcoin_testnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "btctestnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
+    if let Some(metrics_uds_path) = adapters_config.bitcoin_mainnet_uds_metrics_path {
+        metrics_registry.register_adapter(AdapterMetrics::new(
+            "btcmainnet",
+            metrics_uds_path,
+            rt_handle.clone(),
+        ));
+    }
     BitcoinAdapterClients {
         btc_testnet_client: setup_bitcoin_adapter_client(
             log.clone(),

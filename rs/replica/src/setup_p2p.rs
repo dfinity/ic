@@ -241,10 +241,11 @@ pub fn construct_ic_stack(
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
     let canister_http_adapter_client = ic_canister_http_adapter_client::setup_canister_http_client(
-        replica_logger.clone(),
         rt_handle.clone(),
-        config.adapters_config.canister_http_uds_path,
+        &metrics_registry,
+        config.adapters_config,
         execution_services.anonymous_query_handler.clone(),
+        replica_logger.clone(),
     );
 
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(

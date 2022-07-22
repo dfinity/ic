@@ -4,9 +4,7 @@ use crate::{
     AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{
-    ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
-};
+use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
@@ -117,10 +115,6 @@ pub fn spawn_grpc_server(
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
 ) {
-    // make sure we receive only one socket from systemd
-    if config.incoming_source == IncomingSource::Systemd {
-        ensure_single_systemd_socket();
-    }
     let btc_adapter_impl = BtcServiceImpl {
         adapter_state,
         get_successors_handler,
@@ -139,7 +133,11 @@ pub fn spawn_grpc_server(
             IncomingSource::Systemd => {
                 Server::builder()
                     .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    .serve_with_incoming(incoming_from_first_systemd_socket())
+                    // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
+                    // Additionally this function is only called once here.
+                    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-btc-<testnet,mainnet>-adapter.socket
+                    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-btc-<testnet,mainnet>-adapter.service
+                    .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
                     .await
                     .expect("gRPC server crashed");
             }

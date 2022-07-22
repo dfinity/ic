@@ -2,7 +2,6 @@
 name = "ic-canister-http-adapter"
 version = "0.1.0"
 edition = "2018"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -16,10 +15,12 @@ http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-socks2 = "0.6.0"
 hyper-tls = "0.5.0"
+ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
-ic-canister-http-service = { path = "../service"}
+ic-canister-http-service = { path = "../service" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
 itertools = "0.10.3"
 prost = "0.10.4"
 rand = "0.8.3"
@@ -35,5 +36,5 @@ tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 
 [dev-dependencies]
 fast-socks5 = "0.7.0"
-wiremock = "0.5.10"
 uuid = { version = "0.8.2", features = ["v4"] }
+wiremock = "0.5.10"

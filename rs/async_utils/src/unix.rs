@@ -28,19 +28,12 @@ pub fn incoming_from_path<P: AsRef<std::path::Path>>(
     }
 }
 
-/// listener_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
-/// more FDs are passed to the process. Make sure to call ensure_single_systemd_socket() before!
-/// To ensure that only one listener on the socket exists this function should only be called once!
-fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
-    const SD_LISTEN_FDS_START: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
-
-    let std_unix_listener = unsafe {
-        // SAFETY: Primitives returned by `FromRawFd::from_raw_fd` have the contract
-        // that they are the sole owner of the file descriptor they are wrapping.
-        // Because no other function is calling `tokio::net::UnixListener::from_raw_fd` on
-        // the first file descriptor provided by systemd, we consider this call safe.
-        std::os::unix::net::UnixListener::from_raw_fd(SD_LISTEN_FDS_START)
-    };
+/// # Safety
+/// To ensure safety caller needs to ensure that the FD exists and only consumed once.
+unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListener {
+    // unsafe
+    // https://doc.rust-lang.org/std/os/unix/io/trait.FromRawFd.html#tymethod.from_raw_fd
+    let std_unix_listener = std::os::unix::net::UnixListener::from_raw_fd(socket_fds);
 
     // Set non-blocking mode as required by `tokio::net::UnixListener::from_std`.
     std_unix_listener
@@ -51,30 +44,33 @@ fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
         .expect("Failed to convert UnixListener into Tokio equivalent")
 }
 
-/// ensure_single_systemd_socket() makes sure that only one FD is received.
-pub fn ensure_single_systemd_socket() {
-    // This env. variable is set by the systemd service manager and can be used to check what file
-    // descriptors are passed.
-    // Setting the env. variable is done by ic-os/guestos/rootfs/etc/systemd/system/*.socket.
-    // For more info see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
-    const SYSTEMD_SOCKET_NAMES: &str = "LISTEN_FDS";
-    let systemd_sockets: u64 = std::env::var(SYSTEMD_SOCKET_NAMES)
-        .expect("failed to read number systemd sockets")
-        .parse()
-        .expect("failed to parse number of socket to integer");
-    if systemd_sockets != 1 {
-        panic!(
-            "Expected to receive a single systemd socket but instead got '{}'",
-            systemd_sockets
-        );
+/// incoming_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
+/// more FDs are passed to the process.
+///
+/// # Safety
+/// To ensure safety caller needs to ensure that the FD(3) exists and only consumed once.
+pub unsafe fn incoming_from_first_systemd_socket(
+) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+    const SOCKET_FD: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
+    let uds = listener_from_systemd_socket(SOCKET_FD);
+    async_stream::stream! {
+        loop {
+            let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
+
+            yield item;
+        }
     }
 }
 
-/// Creates an incoming async stream using the first systemd socket.
-pub fn incoming_from_first_systemd_socket(
+/// incoming_from_second_systemd_socket() takes the second FD(4) passed by systemd. It does not check if
+/// more FDs are passed to the process.
+///
+/// # Safety
+///  To ensure safety caller needs to ensure that the FD(4) exists and only consumed once.
+pub unsafe fn incoming_from_second_systemd_socket(
 ) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
-    let uds = listener_from_first_systemd_socket();
-
+    const SOCKET_FD: i32 = 4; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
+    let uds = listener_from_systemd_socket(SOCKET_FD);
     async_stream::stream! {
         loop {
             let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;

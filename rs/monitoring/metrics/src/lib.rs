@@ -1,3 +1,4 @@
+mod adapter_metrics_registry;
 pub mod buckets;
 pub mod histogram_vec_timer;
 #[cfg(target_os = "linux")]

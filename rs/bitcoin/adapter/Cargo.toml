@@ -2,7 +2,6 @@
 name = "ic-btc-adapter"
 version = "0.1.0"
 edition = "2018"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -12,11 +11,13 @@ futures = "0.3.17"
 hashlink = "0.8.0"
 hex = "0.4.2"
 http = "0.2"
+ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
 ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = "0.11.1"
 prost = "0.10.4"
 rand = "0.8.3"

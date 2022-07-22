@@ -2,12 +2,14 @@ mod client;
 
 pub use crate::client::BrokenCanisterHttpClient;
 use crate::client::CanisterHttpAdapterClientImpl;
+use ic_adapter_metrics::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
+use ic_config::adapters::AdaptersConfig;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient;
 use ic_logger::{error, info, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use std::convert::TryFrom;
-use std::path::PathBuf;
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
@@ -15,12 +17,13 @@ use tower::service_fn;
 const CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY: usize = 100;
 
 pub fn setup_canister_http_client(
-    log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
-    uds_path: Option<PathBuf>,
+    metrics_registry: &MetricsRegistry,
+    adapter_config: AdaptersConfig,
     anononymous_query_handler: AnonymousQueryService,
+    log: ReplicaLogger,
 ) -> CanisterHttpAdapterClient {
-    match uds_path {
+    match adapter_config.canister_http_uds_path {
         None => {
             error!(
                 log,
@@ -44,6 +47,16 @@ pub fn setup_canister_http_client(
                             // Connect to a Uds socket
                             UnixStream::connect(uds_path.clone())
                         }));
+
+                    // Register canister http adapter metrics with replica metrics. The adapter exposes a
+                    // UDS metrics endpoint that can be scraped by the replica process.
+                    if let Some(metrics_uds_path) = adapter_config.canister_http_uds_metrics_path {
+                        metrics_registry.register_adapter(AdapterMetrics::new(
+                            "canisterhttp",
+                            metrics_uds_path,
+                            rt_handle.clone(),
+                        ));
+                    }
                     Box::new(CanisterHttpAdapterClientImpl::new(
                         rt_handle,
                         channel,

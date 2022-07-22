@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+package adapter_metrics.v1;
+
+// Encoded adapter metrics.
+message ScrapeResponse {
+  repeated bytes metrics = 1;
+}
+
+// Metrics grpc endpoints.
+service AdapterMetricsService {
+    rpc Scrape(google.protobuf.Empty) returns (ScrapeResponse);
+}

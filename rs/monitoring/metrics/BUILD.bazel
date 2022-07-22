@@ -16,8 +16,11 @@ rust_library(
     crate_name = "ic_metrics",
     edition = "2018",
     deps = [
+        "//rs/monitoring/adapter_metrics",
+        "@crate_index//:futures",
         "@crate_index//:libc",
         "@crate_index//:prometheus",
+        "@crate_index//:tokio",
     ] + select({
         "@rules_rust//rust/platform:linux": [
             "@crate_index//:procfs",

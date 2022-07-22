@@ -9,7 +9,9 @@ pub use self::{
     http::{receive_body, receive_body_without_timeout, BodyReceiveError},
     hyper::ExecuteOnTokioRuntime,
     observable_counting_semaphore::*,
-    unix::{ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path},
+    unix::{
+        incoming_from_first_systemd_socket, incoming_from_path, incoming_from_second_systemd_socket,
+    },
 };
 
 /// Aborts the whole program with a core dump if a single thread panics.
