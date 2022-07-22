@@ -8037,6 +8037,7 @@ dependencies = [
  "nix 0.23.0",
  "phantom_newtype",
  "tempfile",
+ "wait-timeout",
  "wsl",
 ]
 

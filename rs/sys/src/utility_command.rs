@@ -1,6 +1,9 @@
+use std::io::prelude::*;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
-use std::process::{Command as StdCommand, ExitStatus, Stdio};
+use std::process::{Child, Command as StdCommand, ExitStatus, Output, Stdio};
+use std::time::Duration;
+use wait_timeout::ChildExt;
 
 const VSOCK_AGENT_PATH: &str = "/opt/ic/bin/vsock_agent";
 
@@ -34,6 +37,7 @@ pub struct UtilityCommand {
     program: String,
     args: Vec<String>,
     input: Vec<u8>,
+    timeout: Option<Duration>,
 }
 
 impl UtilityCommand {
@@ -43,11 +47,17 @@ impl UtilityCommand {
             program,
             args,
             input: vec![],
+            timeout: None,
         }
     }
 
     pub fn with_input(mut self, input: Vec<u8>) -> Self {
         self.input = input;
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -76,7 +86,14 @@ impl UtilityCommand {
         stdin.write_all(self.input.as_slice()).map_err(map_to_err)?;
         stdin.flush().map_err(map_to_err)?;
         drop(stdin);
-        let output = child.wait_with_output().map_err(map_to_err)?;
+
+        let output = if let Some(timeout) = self.timeout {
+            wait_timeout_with_output(child, timeout)
+        } else {
+            child.wait_with_output()
+        }
+        .map_err(map_to_err)?;
+
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -135,6 +152,7 @@ impl UtilityCommand {
             .collect::<Vec<_>>(),
         )
         .with_input(ic_crypto_sha::Sha256::hash(msg.as_slice()).to_vec())
+        .with_timeout(Duration::from_secs(30))
     }
 
     /// Try to attach the USB HSM, if the VSOCK_AGENT_PATH binary
@@ -201,4 +219,39 @@ impl std::fmt::Display for UtilityCommand {
         self.args.iter().try_for_each(|a| write!(f, " {}", a))?;
         write!(f, "` input: {}", hex::encode(self.input.clone()))
     }
+}
+
+// NOTE: Adapted from https://github.com/rust-lang/rust/blob/62b272d25c5bb8b6bb8ac73797d82b8b9a1eabda/library/std/src/process.rs#L1987
+// to use with `wait_timeout`.
+pub fn wait_timeout_with_output(mut child: Child, timeout: Duration) -> std::io::Result<Output> {
+    drop(child.stdin.take());
+
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    match (child.stdout.take(), child.stderr.take()) {
+        (None, None) => {}
+        (Some(mut out), None) => {
+            out.read_to_end(&mut stdout)?;
+        }
+        (None, Some(mut err)) => {
+            err.read_to_end(&mut stderr)?;
+        }
+        (Some(mut out), Some(mut err)) => {
+            out.read_to_end(&mut stdout)?;
+            err.read_to_end(&mut stderr)?;
+        }
+    }
+
+    let status = match child.wait_timeout(timeout)? {
+        Some(status) => status,
+        None => {
+            child.kill()?;
+            child.wait()?
+        }
+    };
+
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }

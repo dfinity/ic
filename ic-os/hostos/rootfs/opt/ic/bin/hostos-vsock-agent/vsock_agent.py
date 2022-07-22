@@ -1,6 +1,9 @@
 """
 Attaches the HSM to the guest VM domains, when they request HSM access.
 
+WARNING: Much of the logic in this comment does not hold true. This script is
+not in a good state and is a prime candidate to be rewritten in Rust.
+
 The script periodically scans the attached HSMs and the guest VM domains.
 * If an "attach-hsm" message comes from a guest VM domain (A) and the HSM is not already attached
   to any guest, the HSM will immediately be attached to the requesting VM.
@@ -27,8 +30,8 @@ import requests
 
 HSM_VENDOR = "20a0"
 HSM_PRODUCT = "4230"
-HSM_ATTACH_SECONDS = 10  # Period after which the HSM is passed to another domain, if there are requests.
-RESET_AFTER_SECONDS = 60  # After this many seconds, reset the object (and detach the HSM from all domains)
+HSM_ATTACH_SECONDS = 20  # Period after which the HSM is passed to another domain, if there are requests.
+RESET_AFTER_SECONDS = 120  # After this many seconds, reset the object (and detach the HSM from all domains)
 
 
 class VsockAgent:
@@ -187,6 +190,9 @@ class VsockAgent:
                 self.attached_cid = None
                 self.attached_timestamp = None
                 return
+        # The HSM is kept attached if other guest do not needs the HSM
+        if not self.hsm_attach_reqs:
+            return
         if self.attached_cid and self.attached_timestamp:
             # HSM is attached to the domain guest
             if time.time() - self.attached_timestamp < HSM_ATTACH_SECONDS:
