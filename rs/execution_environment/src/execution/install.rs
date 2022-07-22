@@ -160,7 +160,7 @@ pub(crate) fn execute_install(
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::start(),
-            SystemState::new_for_start(canister_id),
+            &SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
@@ -304,7 +304,7 @@ fn install_stage_2b_continue_install_after_start(
     let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
     let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
         ApiType::init(time, context_arg, context_sender),
-        new_canister.system_state.clone(),
+        &new_canister.system_state,
         memory_usage,
         execution_parameters.clone(),
         FuncRef::Method(method),

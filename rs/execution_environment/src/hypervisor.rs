@@ -284,34 +284,22 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
-        let api_type_str = api_type.as_str();
-        let static_system_state = SandboxSafeSystemState::new(
+        let (execution_state, execution_result) = self.execute_dts(
+            api_type,
             &system_state,
-            *self.cycles_account_manager,
+            canister_current_memory_usage,
+            execution_parameters,
+            func_ref,
+            execution_state,
+            round_limits,
             network_topology,
         );
-        let (compilation_result, execution_state, execution_result) =
-            Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
-                api_type,
-                sandbox_safe_system_state: static_system_state,
-                canister_current_memory_usage,
-                execution_parameters,
-                subnet_available_memory: round_limits.subnet_available_memory.get(),
-                func_ref,
-                execution_state,
-                compilation_cache: Arc::clone(&self.compilation_cache),
-            });
-        if let Some(compilation_result) = compilation_result {
-            self.metrics
-                .observe_compilation_metrics(&compilation_result);
-        }
-        self.metrics.observe(api_type_str, &execution_result);
         let (slice, output, system_state_changes) = match execution_result {
             WasmExecutionResult::Finished(slice, output, system_state_changes) => {
                 (slice, output, system_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
-                unreachable!("DTS is not enabled yet.");
+                unreachable!("DTS is not supported");
             }
         };
         // The unwrap is guaranteed to succeed because without DTS the subnet
@@ -339,7 +327,7 @@ impl Hypervisor {
     pub fn execute_dts(
         &self,
         api_type: ApiType,
-        system_state: SystemState,
+        system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
@@ -359,7 +347,7 @@ impl Hypervisor {
         }
         let api_type_str = api_type.as_str();
         let static_system_state = SandboxSafeSystemState::new(
-            &system_state,
+            system_state,
             *self.cycles_account_manager,
             network_topology,
         );

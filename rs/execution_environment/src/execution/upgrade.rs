@@ -115,7 +115,7 @@ pub(crate) fn execute_upgrade(
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::pre_upgrade(time, context.sender),
-            new_canister.system_state.clone(),
+            &new_canister.system_state,
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
@@ -333,7 +333,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::start(),
-            SystemState::new_for_start(canister_id),
+            &SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
@@ -472,7 +472,7 @@ fn upgrade_stage_4a_call_post_upgrade(
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::init(time, context_arg, context_sender),
-            new_canister.system_state.clone(),
+            &new_canister.system_state,
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),

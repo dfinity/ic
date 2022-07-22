@@ -187,7 +187,7 @@ fn execute_update_method(
 
     let (output_execution_state, result) = round.hypervisor.execute_dts(
         api_type,
-        canister.system_state.clone(),
+        &canister.system_state,
         memory_usage,
         execution_parameters.clone(),
         FuncRef::Method(method),
