@@ -48,13 +48,15 @@ impl ValidatorExecutor {
         let mf = malicious_flags.clone();
         let validator = self.validator.clone();
         self.threadpool.lock().unwrap().execute(move || {
-            let _ = tx.send(validate_request(
-                r.as_ref(),
-                validator.as_ref(),
-                current_time(),
-                registry_version,
-                &mf,
-            ));
+            if !tx.is_closed() {
+                let _ = tx.send(validate_request(
+                    r.as_ref(),
+                    validator.as_ref(),
+                    current_time(),
+                    registry_version,
+                    &mf,
+                ));
+            }
         });
         rx.await
             .map_err(|recv_err| HttpError {
@@ -79,13 +81,15 @@ impl ValidatorExecutor {
         let mf = malicious_flags.clone();
         let validator = self.validator.clone();
         self.threadpool.lock().unwrap().execute(move || {
-            let _ = tx.send(get_authorized_canisters(
-                &r,
-                validator.as_ref(),
-                current_time(),
-                registry_version,
-                &mf,
-            ));
+            if !tx.is_closed() {
+                let _ = tx.send(get_authorized_canisters(
+                    &r,
+                    validator.as_ref(),
+                    current_time(),
+                    registry_version,
+                    &mf,
+                ));
+            }
         });
         rx.await
             .map_err(|recv_err| HttpError {

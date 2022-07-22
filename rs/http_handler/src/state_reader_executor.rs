@@ -32,7 +32,9 @@ impl StateReaderExecutor {
         let (tx, rx) = oneshot::channel();
         let state = self.state_reader.clone();
         self.threadpool.lock().unwrap().execute(move || {
-            let _ = tx.send(state.get_latest_state());
+            if !tx.is_closed() {
+                let _ = tx.send(state.get_latest_state());
+            }
         });
 
         rx.await.map_err(|e| HttpError {
@@ -49,7 +51,9 @@ impl StateReaderExecutor {
         let sr = self.state_reader.clone();
         let lt = labeled_tree.clone();
         self.threadpool.lock().unwrap().execute(move || {
-            let _ = tx.send(sr.read_certified_state(&lt));
+            if !tx.is_closed() {
+                let _ = tx.send(sr.read_certified_state(&lt));
+            }
         });
 
         rx.await.map_err(|e| HttpError {
