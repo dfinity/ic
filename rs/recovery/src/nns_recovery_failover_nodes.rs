@@ -243,7 +243,7 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                         state_params.hash,
                         &[],
                         Some(registry_params),
-                    )))
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

@@ -166,7 +166,10 @@ impl Upgrade {
         if new_replica_version != self.replica_version {
             info!(
                 self.logger,
-                "Starting version upgrade: {} -> {}", self.replica_version, new_replica_version
+                "Starting version upgrade at CUP registry version {}: {} -> {}",
+                cup_registry_version,
+                self.replica_version,
+                new_replica_version
             );
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
@@ -256,7 +259,10 @@ impl Upgrade {
         if new_replica_version != self.replica_version {
             info!(
                 self.logger,
-                "Version upgrade detected: {} -> {}", self.replica_version, new_replica_version
+                "Replica version upgrade detected at registry version {}: {} -> {}",
+                registry_version,
+                self.replica_version,
+                new_replica_version
             );
             self.prepare_upgrade(&new_replica_version).await?
         }

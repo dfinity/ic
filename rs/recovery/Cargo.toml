@@ -14,6 +14,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-replay = { path = "../replay" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
 reqwest = { version = "0.11.1", features = [ "blocking", "json", "multipart", "native-tls" ] }
 serde = { version = "1.0.115", features = ["derive"] }
