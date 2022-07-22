@@ -412,9 +412,9 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::InstallCode) => {
-                let res =
-                    self.execute_install_code(&msg, &mut state, instruction_limits, round_limits);
-                Some((res, msg.take_cycles()))
+                // Tail call is needed for deterministic time slicing here to
+                // properly handle the case of a paused execution.
+                return self.execute_install_code(msg, state, instruction_limits, round_limits);
             }
 
             Ok(Ic00Method::UninstallCode) => {
@@ -856,13 +856,12 @@ impl ExecutionEnvironment {
             }
         };
 
+        // Note that some branches above like `InstallCode` and `SignWithECDSA`
+        // have early returns. If you modify code below, please also update
+        // these cases.
         match result {
             Some((res, refund)) => {
-                // Request has been executed. Observe metrics and respond.
-                let method_name = String::from(msg.method_name());
-                self.metrics
-                    .observe_subnet_message(method_name.as_str(), timer, &res);
-                self.output_subnet_response(msg, state, res, refund)
+                self.finish_subnet_message_execution(state, msg, res, refund, timer)
             }
             None => {
                 // This scenario happens when calling ic00::stop_canister on a
@@ -880,6 +879,22 @@ impl ExecutionEnvironment {
                 state
             }
         }
+    }
+
+    /// Observes a subnet message metrics and outputs the given subnet response.
+    fn finish_subnet_message_execution(
+        &self,
+        state: ReplicatedState,
+        message: RequestOrIngress,
+        response: Result<Vec<u8>, UserError>,
+        refund: Cycles,
+        timer: Timer,
+    ) -> ReplicatedState {
+        // Request has been executed. Observe metrics and respond.
+        let method_name = String::from(message.method_name());
+        self.metrics
+            .observe_subnet_message(method_name.as_str(), timer, &response);
+        self.output_subnet_response(message, state, response, refund)
     }
 
     /// Executes a replicated message sent to a canister.
@@ -1633,16 +1648,40 @@ impl ExecutionEnvironment {
 
     fn execute_install_code(
         &self,
-        msg: &RequestOrIngress,
-        state: &mut ReplicatedState,
+        mut msg: RequestOrIngress,
+        mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
-        let payload = msg.method_payload();
-        let args = InstallCodeArgs::decode(payload).map_err(candid_error_to_user_error)?;
-        let install_context = InstallCodeContext::try_from((*msg.sender(), args))?;
+    ) -> ReplicatedState {
+        // A helper function to make error handling more compact using `?`.
+        fn decode_input_and_take_canister(
+            msg: &RequestOrIngress,
+            state: &mut ReplicatedState,
+        ) -> Result<(InstallCodeContext, CanisterState), UserError> {
+            let payload = msg.method_payload();
+            let args = InstallCodeArgs::decode(payload).map_err(candid_error_to_user_error)?;
+            let install_context = InstallCodeContext::try_from((*msg.sender(), args))?;
+            let canister = state
+                .take_canister_state(&install_context.canister_id)
+                .ok_or(CanisterManagerError::CanisterNotFound(
+                    install_context.canister_id,
+                ))?;
+            Ok((install_context, canister))
+        }
 
-        let canister_id = install_context.canister_id;
+        // Start logging execution time for `install_code`.
+        let timer = Timer::start();
+
+        let (install_context, old_canister) = match decode_input_and_take_canister(&msg, &mut state)
+        {
+            Ok(result) => result,
+            Err(err) => {
+                let refund = msg.take_cycles();
+                return self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+            }
+        };
+
+        let canister_id = old_canister.canister_id();
         let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
         let compilation_cost_handling = if self.config.module_sharing == FlagStatus::Enabled
             && state
@@ -1654,15 +1693,13 @@ impl ExecutionEnvironment {
         } else {
             CompilationCostHandling::Charge
         };
+
         info!(
             self.log,
             "Start executing install_code message on canister {:?}, contains module {:?}",
             canister_id,
             install_context.wasm_module.is_empty().to_string(),
         );
-
-        // Start logging execution time for `install_code`.
-        let timer = Timer::start();
 
         let execution_parameters = ExecutionParameters {
             instruction_limits,
@@ -1672,67 +1709,77 @@ impl ExecutionEnvironment {
             execution_mode: ExecutionMode::Replicated,
         };
 
-        let time = state.time();
-        let canister_layout_path = state.path().to_path_buf();
-        let memory_taken = state.total_memory_taken();
-        let network_topology = state.metadata.network_topology.clone();
-        let old_canister = state
-            .take_canister_state(&install_context.canister_id)
-            .ok_or(CanisterManagerError::CanisterNotFound(
-                install_context.canister_id,
-            ))?;
-
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
             old_canister,
-            time,
-            canister_layout_path,
-            memory_taken,
-            &network_topology,
+            state.time(),
+            state.path().to_path_buf(),
+            state.total_memory_taken(),
+            &state.metadata.network_topology,
             execution_parameters,
             round_limits,
             compilation_cost_handling,
         );
-        let (canister, result) = match dts_result {
-            DtsInstallCodeResult::Finished { canister, result } => (canister, result),
-            DtsInstallCodeResult::Paused { .. } => {
+        self.process_install_code_result(state, msg, dts_result, timer, new_wasm_hash)
+    }
+
+    /// Processes the result of install code message that was executed using
+    /// deterministic time slicing:
+    /// - If the execution is finished, then it outputs the subnet response.
+    /// - If the execution is paused, then it enqueues it to the task queue of
+    ///   the canister.
+    /// In both cases, the functions gets the canister from the result and adds
+    /// it to the replicated state.
+    fn process_install_code_result(
+        &self,
+        mut state: ReplicatedState,
+        mut message: RequestOrIngress,
+        dts_result: DtsInstallCodeResult,
+        timer: Timer,
+        new_wasm_hash: WasmHash,
+    ) -> ReplicatedState {
+        let execution_duration = timer.elapsed();
+        match dts_result {
+            DtsInstallCodeResult::Finished { canister, result } => {
+                let canister_id = canister.canister_id();
+                let result = match result {
+                    Ok(result) => {
+                        state.metadata.heap_delta_estimate += result.heap_delta;
+                        if self.config.module_sharing == FlagStatus::Enabled {
+                            state.metadata.expected_compiled_wasms.insert(new_wasm_hash);
+                        }
+                        info!(
+                            self.log,
+                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}",
+                            canister_id,
+                            execution_duration,
+                            result.old_wasm_hash,
+                            result.new_wasm_hash);
+
+                        Ok(EmptyBlob::encode())
+                    }
+                    Err(err) => {
+                        info!(
+                            self.log,
+                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}",
+                            canister_id,
+                            execution_duration,
+                            err);
+                        Err(err.into())
+                    }
+                };
+                state.put_canister_state(canister);
+                let refund = message.take_cycles();
+                self.finish_subnet_message_execution(state, message, result, refund, timer)
+            }
+            DtsInstallCodeResult::Paused {
+                canister,
+                paused_execution: _,
+            } => {
+                state.put_canister_state(canister);
                 unimplemented!("Unexpected paused install_code: DTS is not enabled yet.")
             }
-        };
-        state.put_canister_state(canister);
-
-        let execution_duration = timer.elapsed();
-
-        let result = match result {
-            Ok(result) => {
-                state.metadata.heap_delta_estimate += result.heap_delta;
-                if self.config.module_sharing == FlagStatus::Enabled {
-                    state.metadata.expected_compiled_wasms.insert(new_wasm_hash);
-                }
-
-                info!(
-                    self.log,
-                    "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}",
-                    canister_id,
-                    execution_duration,
-                    result.old_wasm_hash,
-                    result.new_wasm_hash,
-                );
-
-                Ok(EmptyBlob::encode())
-            }
-            Err(err) => {
-                info!(
-                    self.log,
-                    "Finished executing install_code message on canister {:?} after {:?} with error: {:?}",
-                    canister_id,
-                    execution_duration,
-                    err
-                );
-                Err(err.into())
-            }
-        };
-        result
+        }
     }
 
     /// For testing purposes only.
