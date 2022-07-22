@@ -4,12 +4,11 @@
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
 use clap::Parser;
-use ic_async_utils::{
-    abort_on_panic, ensure_single_systemd_socket, incoming_from_first_systemd_socket,
-    incoming_from_path,
-};
+use ic_adapter_metrics_server::start_metrics_grpc;
+use ic_async_utils::{abort_on_panic, incoming_from_first_systemd_socket, incoming_from_path};
 use ic_canister_http_adapter::{AdapterServer, Cli, IncomingSource};
 use ic_logger::{error, info, new_replica_logger_from_config};
+use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 
 #[tokio::main]
@@ -30,9 +29,18 @@ pub async fn main() {
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
+    let metrics_registry = MetricsRegistry::global();
+
+    // Metrics server should only be started if we are managed by systemd and receive the
+    // metrics socket as FD(4).
+    // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
+    // Additionally this function is only called once here.
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socketi
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
-        // make sure we receive only one socket from systemd
-        ensure_single_systemd_socket();
+        unsafe {
+            start_metrics_grpc(metrics_registry, logger.clone());
+        }
     }
 
     info!(
@@ -50,7 +58,10 @@ pub async fn main() {
             .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
             .expect("gRPC server crashed"),
         IncomingSource::Systemd => server
-            .serve(incoming_from_first_systemd_socket())
+            // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
+            // Additionally, this is the only call to connnect with the systemd socket and
+            // therefore we are sole owner.
+            .serve(unsafe { incoming_from_first_systemd_socket() })
             .await
             .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
             .expect("gRPC server crashed"),

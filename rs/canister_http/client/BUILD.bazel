@@ -18,9 +18,12 @@ rust_library(
     deps = [
         "//rs/async_utils",
         "//rs/canister_http/service",
+        "//rs/config",
         "//rs/interfaces",
         "//rs/interfaces/canister_http_adapter_client",
+        "//rs/monitoring/adapter_metrics",
         "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/types/error_types",
         "//rs/types/ic00_types",

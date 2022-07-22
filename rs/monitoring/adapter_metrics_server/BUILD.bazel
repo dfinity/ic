@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/monitoring/adapter_metrics_service",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "@crate_index//:futures",
+    "@crate_index//:prometheus",
+    "@crate_index//:protobuf",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+]
+
+rust_library(
+    name = "adapter_metrics_server",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_adapter_metrics_server",
+    edition = "2021",
+    deps = DEPENDENCIES,
+)

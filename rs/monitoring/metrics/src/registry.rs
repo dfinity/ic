@@ -1,3 +1,5 @@
+use crate::adapter_metrics_registry::AdapterMetricsRegistry;
+use ic_adapter_metrics::AdapterMetrics;
 use prometheus::{
     core::Collector, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
     IntCounterVec, IntGauge, IntGaugeVec, Opts,
@@ -9,15 +11,25 @@ use prometheus::{
 /// the metrics. Besides that, passing the registry around explicitly is useful
 /// for detecting the situation when two different versions of Prometheus are
 /// are used in different packages.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MetricsRegistry {
     registry: prometheus::Registry,
+    /// A collection of adapters (remote processes) that expose
+    /// a metrics endpoint to scrape prometheus metrics from.  
+    adapter_metrics: AdapterMetricsRegistry,
+}
+
+impl Default for MetricsRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsRegistry {
     /// Get the registry that is global to this process.
     pub fn global() -> Self {
         let registry = prometheus::default_registry().clone();
+        let adapter_metrics = AdapterMetricsRegistry::new(&registry);
 
         // Remove this when the `prometheus` crate exports the `process_threads` metric.
         #[cfg(target_os = "linux")]
@@ -27,13 +39,19 @@ impl MetricsRegistry {
             // collector once.
             .ok();
 
-        Self { registry }
+        Self {
+            registry,
+            adapter_metrics,
+        }
     }
 
     /// Create a new, empty registry.
     pub fn new() -> Self {
+        let registry = prometheus::Registry::new();
+        let adapter_metrics = AdapterMetricsRegistry::new(&registry);
         Self {
-            registry: prometheus::Registry::new(),
+            registry,
+            adapter_metrics,
         }
     }
 
@@ -156,8 +174,21 @@ impl MetricsRegistry {
         &self.registry
     }
 
+    pub fn adapter_registry(&self) -> &AdapterMetricsRegistry {
+        &self.adapter_metrics
+    }
+
     pub fn register<C: 'static + Collector + Clone>(&self, c: C) -> C {
         self.registry.register(Box::new(C::clone(&c))).unwrap();
         c
+    }
+    /// Since adapter are remote processes and are unaware of the replica metrics registry
+    /// we need to make sure that the metrics exported by the adapter are unique. We do this
+    /// by namespacing the adapter with a name.
+    ///
+    /// This function panics if you try to register an adapter with the same name as an
+    /// already registered adapter.
+    pub fn register_adapter(&self, adapter_metrics: AdapterMetrics) {
+        self.adapter_metrics.register(adapter_metrics).unwrap()
     }
 }

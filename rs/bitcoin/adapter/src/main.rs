@@ -1,9 +1,12 @@
 use clap::Parser;
+use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_btc_adapter::{
-    cli::Cli, spawn_grpc_server, start_router, AdapterState, BlockchainState, GetSuccessorsHandler,
+    cli::Cli, config::IncomingSource, spawn_grpc_server, start_router, AdapterState,
+    BlockchainState, GetSuccessorsHandler,
 };
 use ic_logger::{info, new_replica_logger_from_config};
+use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 use std::sync::Arc;
 use tokio::sync::{mpsc::channel, Mutex};
@@ -29,6 +32,20 @@ pub async fn main() {
         "Starting the adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
+
+    let metrics_registry = MetricsRegistry::global();
+
+    // Metrics server should only be started if we are managed by systemd and receive the
+    // metrics socket as FD(4).
+    // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
+    // Additionally this function is only called once here.
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
+    if config.incoming_source == IncomingSource::Systemd {
+        unsafe {
+            start_metrics_grpc(metrics_registry, logger.clone());
+        }
+    }
 
     // TODO: establish what the buffer size should be
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);

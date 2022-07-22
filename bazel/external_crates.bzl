@@ -569,6 +569,9 @@ def external_crates_repository(name, annotations):
             "prost-derive": crate.spec(
                 version = "^0.10",
             ),
+            "protobuf": crate.spec(
+                version = "^2.27.1",
+            ),
             "quickcheck": crate.spec(
                 version = "^1.0.3",
             ),

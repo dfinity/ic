@@ -21,6 +21,7 @@ rust_library(
         "//rs/bitcoin/types/internal",
         "//rs/config",
         "//rs/interfaces/bitcoin_adapter_client",
+        "//rs/monitoring/adapter_metrics",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "@crate_index//:bitcoin",

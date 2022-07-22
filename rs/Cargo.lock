@@ -3703,6 +3703,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71a816c97c42258aa5834d07590b718b4c9a598944cd39a52dc25b351185d678"
 
 [[package]]
+name = "ic-adapter-metrics"
+version = "0.8.0"
+dependencies = [
+ "ic-adapter-metrics-service",
+ "ic-async-utils",
+ "prometheus 0.12.0",
+ "protobuf",
+ "slog",
+ "slog-async",
+ "tokio",
+ "tonic",
+ "tower",
+]
+
+[[package]]
+name = "ic-adapter-metrics-server"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "ic-adapter-metrics-service",
+ "ic-async-utils",
+ "ic-logger",
+ "ic-metrics",
+ "prometheus 0.12.0",
+ "protobuf",
+ "slog",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "ic-adapter-metrics-service"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-build",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "ic-admin"
 version = "0.8.0"
 dependencies = [
@@ -3967,11 +4008,13 @@ dependencies = [
  "hashlink 0.8.0",
  "hex",
  "http",
+ "ic-adapter-metrics-server",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-validation",
  "ic-config",
  "ic-logger",
+ "ic-metrics",
  "parking_lot 0.11.1",
  "prost",
  "rand 0.8.5",
@@ -3992,6 +4035,7 @@ name = "ic-btc-adapter-client"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
+ "ic-adapter-metrics",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-types-internal",
@@ -4179,10 +4223,12 @@ dependencies = [
  "hyper",
  "hyper-socks2",
  "hyper-tls",
+ "ic-adapter-metrics-server",
  "ic-async-utils",
  "ic-canister-http-service",
  "ic-config",
  "ic-logger",
+ "ic-metrics",
  "itertools 0.10.3",
  "prost",
  "rand 0.8.5",
@@ -4205,13 +4251,16 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "futures",
+ "ic-adapter-metrics",
  "ic-async-utils",
  "ic-canister-http-service",
+ "ic-config",
  "ic-error-types",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-canister-http-adapter-client",
  "ic-logger",
+ "ic-metrics",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types 0.8.0",
@@ -6071,11 +6120,15 @@ dependencies = [
 name = "ic-metrics"
 version = "0.8.0"
 dependencies = [
+ "futures",
+ "ic-adapter-metrics",
  "ic-logger",
  "libc",
  "procfs",
  "prometheus 0.12.0",
  "slog",
+ "slog-async",
+ "tokio",
 ]
 
 [[package]]
@@ -11015,9 +11068,9 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.14.0"
+version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e86d370532557ae7573551a1ec8235a0f8d6cb276c7c9e6aa490b511c447485"
+checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
 
 [[package]]
 name = "proxy_canister"

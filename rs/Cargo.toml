@@ -102,6 +102,8 @@ members = [
   "log_analyzer",
   "memory_tracker",
   "messaging",
+  "monitoring/adapter_metrics",
+  "monitoring/adapter_metrics_service",
   "monitoring/context_logger",
   "monitoring/logger",
   "monitoring/metrics",
