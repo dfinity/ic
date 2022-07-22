@@ -16,8 +16,14 @@
 # AMD SEV-SNP support version and sha256
 ARG snp_tag=sev-snp-release-2022-06-01
 ARG snp_sha=d61ed4419c2e98925e28ccc6e55dbb0b2c5d4b1c
-ARG snp_kernel_version=5.17.0-rc6-snp-guest-dfa5ba8348e4
-ARG snp_kernel_pkg=linux-image-${snp_kernel_version}_${snp_kernel_version}-1_amd64.deb
+ARG snp_libc_host_sha=c3c6024b36aeb10a4414627088a642ab0795c660
+ARG snp_libc_guest_sha=9591f3b5f157a6ec985c9ab441f0f2529613323e
+
+ARG snp_kernel_version_guest=5.17.0-rc6-snp-guest-dfa5ba8348e4
+ARG snp_kernel_version_host=5.14.0-rc2-snp-host-6d4469b86f90
+ARG snp_kernel_pkg=linux-image-${snp_kernel_version_guest}_${snp_kernel_version_guest}-1_amd64.deb
+ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
+ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
 # Service worker version and sha256
 ARG sw_version=1.2.1
@@ -40,16 +46,32 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     ssl-cert \
     rustc \
     cargo \
-    perl
+    perl \
+    git \
+    autoconf \
+    make \
+    automake \
+    g++ \
+    gcc \
+    uuid-dev
 
 WORKDIR /tmp
 
 # Download SNP support
 ARG snp_tag
 ARG snp_sha
+ARG snp_libc_host_sha
+ARG snp_libc_guest_sha
 ARG snp_kernel_pkg
+ARG snp_kernel_libc_host
+ARG snp_kernel_libc_guest
+
 RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_pkg} && \
     echo "${snp_sha}  ${snp_kernel_pkg}" | shasum -c
+RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_libc_guest} && \
+    echo "${snp_libc_guest_sha}  ${snp_kernel_libc_guest}" | shasum -c
+RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_libc_host} && \
+    echo "${snp_libc_host_sha}  ${snp_kernel_libc_host}" | shasum -c
 
 # Download and verify journalbeat
 RUN \
@@ -93,6 +115,13 @@ RUN \
    curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
    echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
+# Download and build sev-guest tool
+RUN \
+    git clone https://github.com/dfinity/sev-guest.git && \
+    dpkg -i /tmp/${snp_kernel_libc_guest} && \
+    dpkg -i /tmp/${snp_kernel_libc_host} && \
+    dpkg -i /tmp/${snp_kernel_libc_guest} && \
+    cd /tmp/sev-guest && make
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
@@ -167,25 +196,33 @@ ARG CPU_SUPPORT=common
 # Copy AMD SEV-SNP kernel support
 ARG snp_tag
 ARG snp_kernel_pkg
+ARG snp_kernel_libc_guest
+ARG snp_kernel_libc_host
 COPY --from=download /tmp/${snp_kernel_pkg} /tmp/${snp_kernel_pkg}
+
+# Copy sev-guest tool
+COPY --from=download /tmp/sev-guest/sev-guest-get-report /opt/ic/bin/sev-guest-get-report
+COPY --from=download /tmp/sev-guest/sev-guest-parse-report /opt/ic/bin/sev-guest-parse-report
+COPY --from=download /tmp/sev-guest/sev-guest-kdf /opt/ic/bin/sev-guest-kdf
 
 # Install AMD SEV-SNP kernel support
 ARG CPU_SUPPORT
 ARG snp_tag
-ARG snp_kernel_version
+ARG snp_kernel_version_guest
 ARG snp_kernel_pkg
+
 RUN \
     echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
     if [ "${CPU_SUPPORT}" = "snp" ] ; then \
 		dpkg -i /tmp/${snp_kernel_pkg} && \
 		# Create initrd for the new kernel
-		update-initramfs -b /boot -c -k ${snp_kernel_version} && \
+		update-initramfs -b /boot -c -k ${snp_kernel_version_guest} && \
 		# Create soft link for vmlinuz and initrd.img pointing to the updated images
         cd /boot && \
 		unlink vmlinuz && \
 		unlink initrd.img && \
-		ln -s vmlinuz-${snp_kernel_version} vmlinuz && \
-		ln -s initrd.img-${snp_kernel_version} initrd.img ; \
+		ln -s vmlinuz-${snp_kernel_version_guest} vmlinuz && \
+		ln -s initrd.img-${snp_kernel_version_guest} initrd.img ; \
      fi
 
 # Cleanup
