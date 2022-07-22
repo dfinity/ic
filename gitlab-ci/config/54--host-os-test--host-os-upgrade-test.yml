@@ -17,7 +17,7 @@ host-os-upgrade-test:
   extends:
     - .host-e2e-test-base
   needs:
-    - job: artifacts-upload-to-s3
+    - job: cargo-build-release-linux-native
       artifacts: false
     - job: host-os-diskimg
       artifacts: false
