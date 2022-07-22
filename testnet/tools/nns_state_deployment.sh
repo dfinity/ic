@@ -37,6 +37,7 @@ for tool in ic-replay ic-recovery ic-admin sandbox_launcher canister_sandbox; do
 done
 
 # Select all IPs
+export HOSTS_INI_FILENAME=hosts_unassigned.ini
 cd $SCRIPT_DIR/../env/$TESTNET/
 NNS_IP=$(./hosts --nodes | grep "\.0\.0" | head -1 | cut -d ' ' -f 2)
 AUX_IP=$(./hosts --nodes | grep aux | cut -d ' ' -f 2)
@@ -54,9 +55,9 @@ rsync -av dev@zh1-pyr07.dc1.dfinity.network:~/nns_state/ "$DATA_DIR/"
 scp $SSH_ARGS "admin@[$NNS_IP]:/run/ic-node/config/ic.json5" "$WORKING_DIR/"
 
 # Create a neuron followed by trusted neurons.
-NEURON_ID=$($TMP_DIR/ic-replay --subnet-id $ORIGINAL_NNS_ID --state-root "$DATA_DIR/ic_state" --local-registry-store "$DATA_DIR/ic_registry_local_store" "$WORKING_DIR/ic.json5" with-neuron-for-tests $CONTROLLER 1000000000 | grep "neuron_id=" | cut -d '=' -f 2)
+NEURON_ID=$($TMP_DIR/ic-replay --subnet-id $ORIGINAL_NNS_ID --data-root "$DATA_DIR" "$WORKING_DIR/ic.json5" with-neuron-for-tests $CONTROLLER 1000000000 | grep "neuron_id=" | cut -d '=' -f 2)
 echo "Created neuron with id=$NEURON_ID"
-$TMP_DIR/ic-replay --subnet-id $ORIGINAL_NNS_ID --state-root "$DATA_DIR/ic_state" --local-registry-store "$DATA_DIR/ic_registry_local_store" "$WORKING_DIR/ic.json5" with-trusted-neurons-following-neuron-for-tests $NEURON_ID $CONTROLLER &>/dev/null
+$TMP_DIR/ic-replay --subnet-id $ORIGINAL_NNS_ID --data-root "$DATA_DIR" "$WORKING_DIR/ic.json5" with-trusted-neurons-following-neuron-for-tests $NEURON_ID $CONTROLLER &>/dev/null
 
 # Get all unassigned nodes.
 mapfile -d " " -t node_ids <<<"$($TMP_DIR/ic-admin --nns-url "$NNS_URL" get-topology | jq -r '.topology.unassigned_nodes | map_values(.node_id) | join(" ")')"
