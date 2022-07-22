@@ -1,4 +1,5 @@
 use ic_base_types::{NodeId, RegistryVersion};
+use ic_ic00_types::EcdsaKeyId;
 use ic_types::Height;
 use ic_types::{ReplicaVersion, SubnetId};
 
@@ -136,6 +137,7 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
+        ecdsa_key_ids: Vec<EcdsaKeyId>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
     ) -> IcAdmin {
@@ -147,6 +149,17 @@ impl AdminHelper {
         ic_admin.push(checkpoint_height.to_string());
         ic_admin.push("--state-hash".to_string());
         ic_admin.push(state_hash);
+
+        if !ecdsa_key_ids.is_empty() {
+            ic_admin.push("--ecdsa-keys-to-request".to_string());
+            let keys = ecdsa_key_ids
+                .iter()
+                .map(|e| format!(r#"{{ "key_id": "{}" }}"#, e))
+                .collect::<Vec<String>>()
+                .join(" , ");
+            ic_admin.push(format!("'[ {} ]'", keys));
+        }
+
         if !replacement_nodes.is_empty() {
             ic_admin.push("--replacement-nodes".to_string());
             replacement_nodes
@@ -208,7 +221,13 @@ impl AdminHelper {
 
     pub fn to_system_command(ic_admin: &IcAdmin) -> Command {
         let mut cmd = Command::new(&ic_admin[0]);
-        cmd.args(ic_admin[1..].iter().map(|s| s.replace('\"', "")));
+        cmd.args(ic_admin[1..].iter().map(|s| {
+            if !s.contains("key_id") {
+                s.replace('\"', "")
+            } else {
+                s.replace('\'', "")
+            }
+        }));
         cmd
     }
 }

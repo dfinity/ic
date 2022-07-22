@@ -254,7 +254,7 @@ pub struct ValidateReplayStep {
 
 impl Step for ValidateReplayStep {
     fn descr(&self) -> String {
-        "Compare height after replay to certification and finalization heights of subnet as reported by prometheus.".to_string()
+        "Compare height after replay to certification and finalization heights of subnet as reported by individual nodes.".to_string()
     }
 
     fn exec(&self) -> RecoveryResult<()> {

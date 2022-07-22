@@ -12,6 +12,7 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_nns_data_provider::create_nns_data_provider;
 use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
 use ic_replay::player::StateParams;
@@ -225,7 +226,6 @@ impl Recovery {
 
     /// Lookup IP addresses of all members of the given subnet
     pub fn get_member_ips(&self, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
-        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
         let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
         let result = rt
             .block_on(async {
@@ -519,8 +519,28 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-    ) -> impl Step {
-        AdminStep {
+    ) -> RecoveryResult<impl Step> {
+        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
+        let key_ids = rt
+            .block_on(async {
+                let nns_data_provider = create_nns_data_provider(
+                    tokio::runtime::Handle::current(),
+                    vec![self.admin_helper.nns_url.clone()],
+                    None,
+                );
+                let registry_client = RegistryClientImpl::new(nns_data_provider, None);
+                if let Err(err) = registry_client.poll_once() {
+                    return Err(format!("couldn't poll the registry: {:?}", err));
+                };
+                let version = registry_client.get_latest_version();
+                match registry_client.get_ecdsa_config(subnet_id, version) {
+                    Ok(Some(config)) => Ok(config.key_ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(err) => Err(format!("Failed to get ECDSA config: {:?}", err)),
+                }
+            })
+            .map_err(|err| RecoveryError::UnexpectedError(err))?;
+        Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
@@ -528,10 +548,11 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
+                    key_ids,
                     replacement_nodes,
                     registry_params,
                 ),
-        }
+        })
     }
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to

@@ -167,7 +167,7 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
-                )))
+                )?))
             }
 
             StepType::WaitForCUP => {
