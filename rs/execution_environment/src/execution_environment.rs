@@ -3,7 +3,6 @@ use crate::execution::{
     heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
     response::execute_response,
 };
-use crate::util::process_result;
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
@@ -44,6 +43,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::PausedExecutionId;
 use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
@@ -68,9 +68,10 @@ use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
 use rand::RngCore;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
@@ -192,7 +193,7 @@ pub struct RoundLimits {
 }
 
 /// Represent a paused execution that can be resumed or aborted.
-pub trait PausedExecution: std::fmt::Debug {
+pub trait PausedExecution: std::fmt::Debug + Send {
     /// Resumes a paused execution.
     /// It takes:
     /// - the canister state,
@@ -214,6 +215,19 @@ pub trait PausedExecution: std::fmt::Debug {
     fn abort(self: Box<Self>) -> CanisterInputMessage;
 }
 
+/// Stores all paused executions keyed by their ids.
+#[derive(Default)]
+struct PausedExecutionRegistry {
+    // A counter that increases monotonically until it wraps around.
+    // Wrapping around is not a problem because all paused executions
+    // are aborted before the next checkpoint and there cannot be
+    // more than 2^64 paused executions between two checkpoints.
+    next_id: u64,
+
+    // All paused executions.
+    registry: HashMap<PausedExecutionId, Box<dyn PausedExecution>>,
+}
+
 /// ExecutionEnvironment is the component responsible for executing messages
 /// on the IC.
 pub struct ExecutionEnvironment {
@@ -226,6 +240,7 @@ pub struct ExecutionEnvironment {
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
+    paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
 }
 
 /// Errors when executing `canister_heartbeat`.
@@ -312,6 +327,7 @@ impl ExecutionEnvironment {
             cycles_account_manager,
             own_subnet_id,
             own_subnet_type,
+            paused_execution_registry: Default::default(),
         }
     }
 
@@ -1735,6 +1751,88 @@ impl ExecutionEnvironment {
         result
     }
 
+    /// Returns the paused execution by its id.
+    fn take_paused_execution(&self, id: PausedExecutionId) -> Option<Box<dyn PausedExecution>> {
+        let mut guard = self.paused_execution_registry.lock().unwrap();
+        guard.registry.remove(&id)
+    }
+
+    /// Registers the given paused execution and returns its id.
+    fn register_paused_execution(&self, paused: Box<dyn PausedExecution>) -> PausedExecutionId {
+        let mut guard = self.paused_execution_registry.lock().unwrap();
+        let id = PausedExecutionId(guard.next_id);
+        guard.next_id += 1;
+        guard.registry.insert(id, paused);
+        id
+    }
+
+    /// Aborts all paused execution in the given state.
+    pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
+        for canister in state.canisters_iter_mut() {
+            if let Some(execution_state) = canister.execution_state.as_mut() {
+                if !execution_state.task_queue.is_empty() {
+                    let task_queue = std::mem::take(&mut execution_state.task_queue);
+                    execution_state.task_queue = task_queue
+                        .into_iter()
+                        .map(|task| match task {
+                            ExecutionTask::AbortedExecution(..) | ExecutionTask::Heartbeat => task,
+                            ExecutionTask::PausedExecution(id) => {
+                                let paused = self.take_paused_execution(id).unwrap();
+                                let message = paused.abort();
+                                ExecutionTask::AbortedExecution(message)
+                            }
+                        })
+                        .collect();
+                };
+            }
+        }
+    }
+
+    /// If the given result corresponds to a finished execution, then it processes
+    /// the response and return the ingress status (if any). Otherwise, it registers
+    /// the paused execution and adds it to the task queue.
+    pub fn process_result(
+        &self,
+        result: ExecuteMessageResult,
+    ) -> (CanisterState, NumBytes, Option<(MessageId, IngressStatus)>) {
+        match result {
+            ExecuteMessageResult::Finished {
+                mut canister,
+                response,
+                heap_delta,
+            } => {
+                let ingress_status = match response {
+                    ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
+                    ExecutionResponse::Request(response) => {
+                        debug_assert_eq!(
+                            response.respondent,
+                            canister.canister_id(),
+                            "Respondent mismatch"
+                        );
+                        canister.push_output_response(response.into());
+                        None
+                    }
+                    ExecutionResponse::Empty => None,
+                };
+                (canister, heap_delta, ingress_status)
+            }
+            ExecuteMessageResult::Paused {
+                mut canister,
+                paused_execution,
+            } => {
+                let id = self.register_paused_execution(paused_execution);
+                // The execution state is guaranteed to exist because we have a paused execution.
+                canister
+                    .execution_state
+                    .as_mut()
+                    .unwrap()
+                    .task_queue
+                    .push_front(ExecutionTask::PausedExecution(id));
+                (canister, NumBytes::from(0), None)
+            }
+        }
+    }
+
     /// For testing purposes only.
     #[doc(hidden)]
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
@@ -1787,6 +1885,35 @@ pub struct ExecuteCanisterResult {
     pub description: Option<String>,
 }
 
+/// Executes the given input message.
+/// This is a helper for `execute_canister()`.
+fn execute_message(
+    message: CanisterInputMessage,
+    exec_env: &ExecutionEnvironment,
+    canister: CanisterState,
+    instruction_limits: InstructionLimits,
+    network_topology: Arc<NetworkTopology>,
+    time: Time,
+    round_limits: &mut RoundLimits,
+) -> ExecuteCanisterResult {
+    let msg_info = message.to_string();
+    let result = exec_env.execute_canister_message(
+        canister,
+        instruction_limits,
+        message,
+        time,
+        network_topology,
+        round_limits,
+    );
+    let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
+    ExecuteCanisterResult {
+        canister,
+        heap_delta,
+        ingress_status,
+        description: Some(msg_info),
+    }
+}
+
 /// Executes either a single task from the task queue of the canister or a
 /// single input message if there is no task.
 pub fn execute_canister(
@@ -1823,26 +1950,45 @@ pub fn execute_canister(
                     description: Some("heartbeat".to_string()),
                 }
             }
+            ExecutionTask::PausedExecution(id) => {
+                let paused = exec_env.take_paused_execution(id).unwrap();
+                let round_context = RoundContext {
+                    network_topology: &network_topology,
+                    hypervisor: &exec_env.hypervisor,
+                    cycles_account_manager: &exec_env.cycles_account_manager,
+                    log: &exec_env.log,
+                    time,
+                };
+                let result = paused.resume(canister, round_context, round_limits);
+                let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
+                ExecuteCanisterResult {
+                    canister,
+                    heap_delta,
+                    ingress_status,
+                    description: Some("paused execution".to_string()),
+                }
+            }
+            ExecutionTask::AbortedExecution(message) => execute_message(
+                message,
+                exec_env,
+                canister,
+                instruction_limits,
+                network_topology,
+                time,
+                round_limits,
+            ),
         },
         None => {
             let message = canister.pop_input().unwrap();
-            let msg_info = message.to_string();
-
-            let result = exec_env.execute_canister_message(
+            execute_message(
+                message,
+                exec_env,
                 canister,
                 instruction_limits,
-                message,
-                time,
                 network_topology,
+                time,
                 round_limits,
-            );
-            let (canister, heap_delta, ingress_status) = process_result(result);
-            ExecuteCanisterResult {
-                canister,
-                heap_delta,
-                ingress_status,
-                description: Some(msg_info),
-            }
+            )
         }
     }
 }

@@ -13,8 +13,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
-    as_num_instructions,
-    util::{process_result, process_stopping_canisters},
+    as_num_instructions, execute_canister, util::process_stopping_canisters,
     CanisterHeartbeatError, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
     Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
@@ -781,28 +780,28 @@ impl ExecutionTest {
         for canister_id in canister_ids {
             let network_topology = Arc::new(state.metadata.network_topology.clone());
             let mut canister = canisters.remove(&canister_id).unwrap();
-            while canister.has_input() {
-                let message = canister.pop_input().unwrap();
+            while canister.is_active() {
                 let instructions_before = round_limits.instructions;
-                let result = self.exec_env.execute_canister_message(
+                let result = execute_canister(
+                    &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    message,
-                    self.time,
                     Arc::clone(&network_topology),
+                    self.time,
                     &mut round_limits,
                 );
                 let instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
-                let (new_canister, heap_delta, ingress) = process_result(result);
-                state.metadata.heap_delta_estimate += heap_delta;
+                state.metadata.heap_delta_estimate += result.heap_delta;
+                self.subnet_available_memory
+                    .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
                     self.instruction_limits.message(),
                     instructions_executed,
                 );
-                canister = new_canister;
-                if let Some(ir) = ingress {
+                canister = result.canister;
+                if let Some(ir) = result.ingress_status {
                     self.ingress_history_writer
                         .set_status(&mut state, ir.0, ir.1);
                 };
@@ -819,44 +818,57 @@ impl ExecutionTest {
 
     /// Executes a pending message of the given canister.
     pub fn execute_message(&mut self, canister_id: CanisterId) {
+        self.execute_slice(canister_id);
+        while self.canister_state(canister_id).has_task() {
+            self.execute_slice(canister_id);
+        }
+    }
+
+    /// Executes a slice of the given canister.
+    pub fn execute_slice(&mut self, canister_id: CanisterId) {
         let mut state = self.state.take().unwrap();
         let mut canisters = state.take_canister_states();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut canister = canisters.remove(&canister_id).unwrap();
-        if canister.has_input() {
-            let message = canister.pop_input().unwrap();
+        if canister.is_active() {
             let mut round_limits = RoundLimits {
                 instructions: RoundInstructions::from(i64::MAX),
                 subnet_available_memory: self.subnet_available_memory.get().into(),
             };
             let instructions_before = round_limits.instructions;
-            let result = self.exec_env.execute_canister_message(
+            let result = execute_canister(
+                &self.exec_env,
                 canister,
                 self.instruction_limits.clone(),
-                message,
-                self.time,
                 Arc::clone(&network_topology),
+                self.time,
                 &mut round_limits,
             );
             let instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
+            state.metadata.heap_delta_estimate += result.heap_delta;
             self.subnet_available_memory
                 .set(round_limits.subnet_available_memory.get());
-            let (new_canister, heap_delta, ingress) = process_result(result);
-            state.metadata.heap_delta_estimate += heap_delta;
             self.update_execution_stats(
                 canister_id,
                 self.instruction_limits.message(),
                 instructions_executed,
             );
-            canister = new_canister;
-            if let Some(ir) = ingress {
+            canister = result.canister;
+            if let Some(ir) = result.ingress_status {
                 self.ingress_history_writer
                     .set_status(&mut state, ir.0, ir.1);
             };
         }
         canisters.insert(canister_id, canister);
         state.put_canister_states(canisters);
+        self.state = Some(state);
+    }
+
+    /// Aborts all paused executions.
+    pub fn abort_paused_executions(&mut self) {
+        let mut state = self.state.take().unwrap();
+        self.exec_env.abort_paused_executions(&mut state);
         self.state = Some(state);
     }
 
@@ -1369,7 +1381,7 @@ impl ExecutionTestBuilder {
                 self.slice_instruction_limit,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                deterministic_time_slicing,
+                FlagStatus::Disabled, // TODO(RUN-221): Enable once implemented.
                 self.install_code_instruction_limit,
                 self.slice_instruction_limit,
             ),

@@ -3941,3 +3941,68 @@ fn can_use_more_instructions_during_install_code() {
     let result = test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec());
     assert_eq!(Ok(()), result);
 }
+
+#[test]
+fn dts_pause_resume_works_in_update_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let work = wasm()
+        .push_bytes(&[1, 2, 3, 4, 5])
+        .append_and_reply()
+        .build();
+
+    // The workload above finishes in 5 slices.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
+    for _ in 0..4 {
+        test.execute_slice(canister_id);
+        assert!(test.canister_state(canister_id).has_task());
+    }
+    test.execute_slice(canister_id);
+    assert!(!test.canister_state(canister_id).has_task());
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
+}
+
+#[test]
+fn dts_abort_works_in_update_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let work = wasm()
+        .push_bytes(&[1, 2, 3, 4, 5])
+        .append_and_reply()
+        .build();
+
+    // The workload above finishes in 5 slices.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
+    for _ in 0..4 {
+        test.execute_slice(canister_id);
+        assert!(test.canister_state(canister_id).has_task());
+    }
+    assert!(test.canister_state(canister_id).has_task());
+
+    // Abort before executing the last slice.
+    test.abort_paused_executions();
+    assert!(test.canister_state(canister_id).has_task());
+
+    // Now execute from scratch.
+    for _ in 0..4 {
+        test.execute_slice(canister_id);
+        assert!(test.canister_state(canister_id).has_task());
+    }
+    test.execute_slice(canister_id);
+    assert!(!test.canister_state(canister_id).has_task());
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
+}

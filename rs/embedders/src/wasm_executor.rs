@@ -119,7 +119,7 @@ pub struct SliceExecutionOutput {
 }
 
 /// Represents a paused WebAssembly execution that can be resumed or aborted.
-pub trait PausedWasmExecution: std::fmt::Debug {
+pub trait PausedWasmExecution: std::fmt::Debug + Send {
     /// Resumes the paused execution.
     /// It takes the execution state before this execution has started and
     /// the current subnet available memory.

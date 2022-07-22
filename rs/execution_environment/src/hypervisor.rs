@@ -119,6 +119,7 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
+    deterministic_time_slicing: FlagStatus,
 }
 
 impl Hypervisor {
@@ -230,6 +231,7 @@ impl Hypervisor {
             log,
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(config.module_sharing)),
+            deterministic_time_slicing: config.deterministic_time_slicing,
         }
     }
 
@@ -241,6 +243,7 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
+        deterministic_time_slicing: FlagStatus,
     ) -> Self {
         Self {
             wasm_executor,
@@ -252,6 +255,7 @@ impl Hypervisor {
             compilation_cache: Arc::new(CompilationCache::new(
                 FeatureFlags::default().module_sharing,
             )),
+            deterministic_time_slicing,
         }
     }
 
@@ -276,6 +280,10 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
+        assert_eq!(
+            execution_parameters.instruction_limits.message(),
+            execution_parameters.instruction_limits.slice()
+        );
         let api_type_str = api_type.as_str();
         let static_system_state = SandboxSafeSystemState::new(
             &system_state,
@@ -339,6 +347,16 @@ impl Hypervisor {
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
     ) -> (ExecutionState, WasmExecutionResult) {
+        match self.deterministic_time_slicing {
+            FlagStatus::Enabled => assert!(
+                execution_parameters.instruction_limits.message()
+                    >= execution_parameters.instruction_limits.slice()
+            ),
+            FlagStatus::Disabled => assert_eq!(
+                execution_parameters.instruction_limits.message(),
+                execution_parameters.instruction_limits.slice()
+            ),
+        }
         let api_type_str = api_type.as_str();
         let static_system_state = SandboxSafeSystemState::new(
             &system_state,
