@@ -399,7 +399,7 @@ pub fn start_server(
                         // Do a move of the permit so it gets dropped at the end of the scope.
                         let _request_permit_deleter = request_permit;
                         let mut b = [0_u8; 1];
-                        let serve_https = match timeout(
+                        let app_layer = match timeout(
                             Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
                             tcp_stream.peek(&mut b),
                         )
@@ -407,14 +407,20 @@ pub fn start_server(
                         {
                             // The peek operation didn't timeout, and the peek oparation didn't return
                             // an error.
-                            Ok(Ok(_)) => b[0] == 22,
+                            Ok(Ok(_)) => {
+                                if b[0] == 22 {
+                                    AppLayer::Https
+                                } else {
+                                    AppLayer::Http
+                                }
+                            }
                             Ok(Err(err)) => {
                                 warn!(log, "Connection error (can't peek). {}", err);
                                 metrics.observe_connection_error(
                                     ConnectionError::Peek,
                                     connection_start_time,
                                 );
-                                false
+                                AppLayer::Http
                             }
                             Err(err) => {
                                 warn!(
@@ -428,36 +434,20 @@ pub fn start_server(
                                     ConnectionError::PeekTimeout,
                                     connection_start_time,
                                 );
-                                false
+                                AppLayer::Http
                             }
                         };
-                        if serve_https {
-                            serve_secure_connection(
-                                tls_handshake,
-                                tcp_stream,
-                                metrics,
-                                http,
-                                http_handler,
-                                connection_start_time,
-                                log,
-                            )
-                            .await;
-                        } else {
-                            // If either
-                            //      1. peeking timed out
-                            //      2. peeking failed
-                            //      3. first byte is not 22
-                            // then fallback to HTTP.
-                            serve_unsecure_connection(
-                                metrics,
-                                http,
-                                http_handler,
-                                tcp_stream,
-                                connection_start_time,
-                                log,
-                            )
-                            .await;
-                        }
+                        serve_connection(
+                            log,
+                            app_layer,
+                            http,
+                            tcp_stream,
+                            tls_handshake,
+                            http_handler,
+                            metrics,
+                            connection_start_time,
+                        )
+                        .await;
                     });
                 }
                 // Don't exit the loop on a connection error. We will want to
@@ -512,66 +502,59 @@ fn create_main_service(
     )
 }
 
-async fn serve_unsecure_connection(
-    metrics: HttpHandlerMetrics,
-    http: Http,
-    http_handler: HttpHandler,
-    tcp_stream: TcpStream,
-    connection_start_time: Instant,
+async fn serve_connection(
     log: ReplicaLogger,
+    app_layer: AppLayer,
+    http: Http,
+    tcp_stream: TcpStream,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    http_handler: HttpHandler,
+    metrics: HttpHandlerMetrics,
+    connection_start_time: Instant,
 ) {
-    let service = create_main_service(metrics.clone(), http_handler, AppLayer::Http);
-    if let Err(err) = http.serve_connection(tcp_stream, service).await {
-        metrics.observe_connection_error(
-            ConnectionError::ServingHttpConnection,
-            connection_start_time,
-        );
+    let service = create_main_service(metrics.clone(), http_handler.clone(), app_layer);
+    let connection_result = match app_layer {
+        AppLayer::Https => {
+            let peer_addr = tcp_stream.peer_addr();
+            let tls_stream = match tls_handshake
+                .perform_tls_server_handshake_without_client_auth(
+                    tcp_stream,
+                    http_handler.registry_client.get_latest_version(),
+                )
+                .await
+            {
+                Err(err) => {
+                    metrics.observe_connection_error(
+                        ConnectionError::TlsHandshake,
+                        connection_start_time,
+                    );
+                    warn!(
+                        log,
+                        "Connection error (TLS handshake): peer_addr = {:?}, error = {}",
+                        peer_addr,
+                        err
+                    );
+                    return;
+                }
+                Ok(tls_stream) => tls_stream,
+            };
+            http.serve_connection(tls_stream, service).await
+        }
+        AppLayer::Http => http.serve_connection(tcp_stream, service).await,
+    };
+
+    if let Err(err) = connection_result {
+        let e = match app_layer {
+            AppLayer::Http => ConnectionError::ServingHttpConnection,
+            AppLayer::Https => ConnectionError::ServingHttpsConnection,
+        };
+        metrics.observe_connection_error(e, connection_start_time);
         warn!(
             log,
             "Connection error (can't serve HTTP connection): {}", err
         );
     } else {
-        metrics.observe_connection_setup(AppLayer::Http, connection_start_time)
-    }
-}
-
-async fn serve_secure_connection(
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    tcp_stream: TcpStream,
-    metrics: HttpHandlerMetrics,
-    http: Http,
-    http_handler: HttpHandler,
-    connection_start_time: Instant,
-    log: ReplicaLogger,
-) {
-    let registry_version = http_handler.registry_client.get_latest_version();
-    let service = create_main_service(metrics.clone(), http_handler, AppLayer::Https);
-    let peer_addr = tcp_stream.peer_addr();
-    match tls_handshake
-        .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-        .await
-    {
-        Err(err) => {
-            metrics.observe_connection_error(ConnectionError::TlsHandshake, connection_start_time);
-            warn!(
-                log,
-                "Connection error (TLS handshake): peer_addr = {:?}, error = {}", peer_addr, err
-            );
-        }
-        Ok(tls_stream) => {
-            if let Err(err) = http.serve_connection(tls_stream, service).await {
-                metrics.observe_connection_error(
-                    ConnectionError::ServingHttpsConnection,
-                    connection_start_time,
-                );
-                warn!(
-                    log,
-                    "Connection error (can't serve HTTPS connection): {}", err
-                );
-            } else {
-                metrics.observe_connection_setup(AppLayer::Https, connection_start_time)
-            }
-        }
+        metrics.observe_connection_setup(app_layer, connection_start_time)
     }
 }
 
