@@ -1,0 +1,105 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/tree_hash",
+    "//rs/monitoring/metrics_encoder",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/protobuf",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:build-info",
+    "@crate_index//:candid",
+    "@crate_index//:ic-certified-map",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:sha2",
+    "@crate_index//:yansi",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/nervous_system/common/build_metadata",
+]
+
+BUILD_DEPENDENCIES = [
+    "@crate_index//:build-info-build",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = [],  # build script data (e.g. template files) goes here
+    edition = "2018",
+    version = "0.8.0",
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_library(
+    name = "cmc",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "cycles_minting_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_canister(
+    name = "cycles-minting-canister",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":cmc"] + [":build_script"],
+)
+
+rust_test(
+    name = "cmc_test",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_root = "src/main.rs",
+    data = ["cmc.did"],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/cmc",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":cmc"] + [":build_script"],
+)
