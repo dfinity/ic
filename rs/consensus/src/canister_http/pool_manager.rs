@@ -122,13 +122,13 @@ impl CanisterHttpPoolManagerImpl {
             .map(|(callback_id, _)| *callback_id)
             .collect();
 
-        let ids_to_remove: Vec<_> = self
+        let ids_to_remove_from_cache: Vec<_> = self
             .requested_id_cache
             .difference(&active_callback_ids)
             .cloned()
             .collect();
 
-        for callback_id in ids_to_remove.iter() {
+        for callback_id in ids_to_remove_from_cache.iter() {
             self.requested_id_cache.remove(callback_id);
         }
 
@@ -153,6 +153,17 @@ impl CanisterHttpPoolManagerImpl {
                             Some(CanisterHttpChangeAction::RemoveUnvalidated(
                                 ic_crypto_hash::crypto_hash(share),
                             ))
+                        }
+                    }),
+            )
+            .chain(
+                canister_http_pool
+                    .get_response_content_items()
+                    .filter_map(|content| {
+                        if active_callback_ids.contains(&content.1.id) {
+                            None
+                        } else {
+                            Some(CanisterHttpChangeAction::RemoveContent(content.0.clone()))
                         }
                     }),
             )
@@ -290,7 +301,6 @@ impl CanisterHttpPoolManagerImpl {
             .op_duration
             .with_label_values(&["validate_shares"])
             .start_timer();
-        // TODO: Selection of registry version may technically need to be more deterministic.
         let registry_version = if let Some(registry_version) =
             registry_version_at_height(consensus_cache, consensus_cache.finalized_block().height())
         {

@@ -140,6 +140,9 @@ impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
                     self.unvalidated.remove(&id);
                 }
+                CanisterHttpChangeAction::RemoveContent(id) => {
+                    self.content.remove(&id);
+                }
                 CanisterHttpChangeAction::HandleInvalid(id, _) => {
                     self.unvalidated.remove(&id);
                 }

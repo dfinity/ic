@@ -928,6 +928,7 @@ impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
                             );
                         }
                     }
+                    CanisterHttpChangeAction::RemoveContent(_) => {}
                     CanisterHttpChangeAction::RemoveValidated(_) => {}
                     CanisterHttpChangeAction::RemoveUnvalidated(_) => {}
                     CanisterHttpChangeAction::HandleInvalid(_, _) => {}
