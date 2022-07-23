@@ -74,6 +74,7 @@ pub enum CanisterHttpChangeAction {
     MoveToValidated(CanisterHttpResponseId),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
+    RemoveContent(CryptoHashOf<CanisterHttpResponse>),
     HandleInvalid(CanisterHttpResponseId, String),
 }
 
