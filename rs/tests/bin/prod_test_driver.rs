@@ -6,7 +6,7 @@ use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
 use ic_tests::driver::config::{
-    self, ENG_CONSENSUS_CHANNEL, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL,
+    self, ENG_CONSENSUS_CHANNEL, ENG_NODE_CHANNEL, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL,
 };
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
@@ -15,9 +15,10 @@ use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
-    api_test, basic_health_test, boundary_nodes_integration, btc_integration, canister_http,
-    consensus, execution, ledger_tests, message_routing, networking, nns_tests, orchestrator,
-    rosetta_test, spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
+    api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
+    btc_integration, canister_http, consensus, execution, ledger_tests, message_routing,
+    networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -217,20 +218,31 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "boundary_nodes_pre_master",
-            vec![pot_with_setup(
-                "boundary_nodes_pot",
-                boundary_nodes_integration::boundary_nodes::config,
-                par(vec![
-                    sys_t(
-                        "boundary_nodes_test",
-                        boundary_nodes_integration::boundary_nodes::test,
-                    ),
-                    sys_t(
-                        "boundary_nodes_nginx_test",
-                        boundary_nodes_integration::boundary_nodes::nginx_test,
-                    ),
-                ]),
-            )],
+            vec![
+                pot_with_setup(
+                    "boundary_nodes_pot",
+                    boundary_nodes_integration::boundary_nodes::config,
+                    par(vec![
+                        sys_t(
+                            "boundary_nodes_test",
+                            boundary_nodes_integration::boundary_nodes::test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_test,
+                        ),
+                    ]),
+                ),
+                pot_with_setup(
+                    "boundary_nodes_snp_pot",
+                    boundary_nodes_snp_tests::boundary_nodes_snp::config,
+                    par(vec![sys_t(
+                        "boundary_nodes_snp_kernel_test",
+                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                    )]),
+                )
+                .with_alert(ENG_NODE_CHANNEL),
+            ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
@@ -293,22 +305,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("btc_get_balance", btc_integration::btc::get_balance),
                 ]),
             ),
-            /*
-            pot_with_setup(
-                "boundary_nodes_pot",
-                boundary_nodes_integration::boundary_nodes::config,
-                par(vec![
-                    sys_t(
-                        "boundary_nodes_test",
-                        boundary_nodes_integration::boundary_nodes::test,
-                    ),
-                    sys_t(
-                        "boundary_nodes_nginx_test",
-                        boundary_nodes_integration::boundary_nodes::nginx_test,
-                    ),
-                ]),
-            ),
-             */
             pot_with_setup(
                 "firewall_priority_pot",
                 networking::firewall_priority::config,

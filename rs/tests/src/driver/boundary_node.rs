@@ -12,7 +12,7 @@ use crate::driver::driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use super::{
     farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse},
     ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
-    resource::DiskImage,
+    resource::{DiskImage, ImageType},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
@@ -89,6 +89,18 @@ impl BoundaryNode {
 
     pub fn with_nns_public_key(mut self, nns_public_key: PathBuf) -> Self {
         self.nns_public_key = Some(nns_public_key);
+        self
+    }
+
+    pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
+        let ic_setup = IcSetup::read_attribute(env);
+        let snp_image = DiskImage {
+            image_type: ImageType::IcOsImage,
+            url: ic_setup.boundary_node_snp_img_url,
+            sha256: ic_setup.boundary_node_snp_img_sha256,
+        };
+
+        self.boot_image = Some(snp_image);
         self
     }
 

@@ -301,6 +301,9 @@ def main(
     BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(
         f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-dev/"
     )
+    BOUNDARY_NODE_SNP_IMG_SHA256, BOUNDARY_NODE_SNP_IMG_URL = get_ic_os_image_sha(
+        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-snp-dev/"
+    )
     IC_OS_UPD_DEV_IMG_SHA256, IC_OS_UPD_DEV_IMG_URL = get_ic_os_image_sha(
         f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/update-img-dev/", filename="update-img.tar.zst"
     )
@@ -368,6 +371,7 @@ def main(
         f"CI_PROJECT_URL={CI_PROJECT_URL}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, CI_COMMIT_SHA={CI_COMMIT_SHA}, ARTIFACT_DIR={ARTIFACT_DIR}, "
         f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}, CI_JOB_NAME={CI_JOB_NAME}, "
         f"BOUNDARY_NODE_IMG_URL={BOUNDARY_NODE_IMG_URL}, BOUNDARY_NODE_IMG_SHA256={BOUNDARY_NODE_IMG_SHA256}, "
+        f"BOUNDARY_NODE_SNP_IMG_URL={BOUNDARY_NODE_SNP_IMG_URL}, BOUNDARY_NODE_SNP_IMG_SHA256={BOUNDARY_NODE_SNP_IMG_SHA256}, "
         f"SYSTEM_TESTS_TIMEOUT_SEC={SYSTEM_TESTS_TIMEOUT_SEC}"
     )
 
@@ -419,6 +423,8 @@ def main(
             f"--ic-os-update-img-sha256={IC_OS_UPD_DEV_IMG_SHA256}",
             f"--boundary-node-img-url={BOUNDARY_NODE_IMG_URL}",
             f"--boundary-node-img-sha256={BOUNDARY_NODE_IMG_SHA256}",
+            f"--boundary-node-snp-img-url={BOUNDARY_NODE_SNP_IMG_URL}",
+            f"--boundary-node-snp-img-sha256={BOUNDARY_NODE_SNP_IMG_SHA256}",
             f"--nns-canister-path={ARTIFACT_DIR}",
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
