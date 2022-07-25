@@ -2,27 +2,6 @@
 Utilities for building IC replica and canisters.
 """
 
-def _optimize_canister(ctx):
-    """Invokes canister WebAssembly module optimizer.
-    """
-    name = ctx.label.name
-    output_file = ctx.actions.declare_file(name if name.endswith(".wasm") else name + ".wasm")
-    ctx.actions.run(
-        mnemonic = "IcCdkOptimizer",
-        executable = "/usr/bin/ic-cdk-optimizer",
-        arguments = [f.path for f in ctx.attr.wasm.files.to_list()] + ["-o", output_file.path],
-        inputs = ctx.attr.wasm.files.to_list(),
-        outputs = [output_file],
-    )
-    return [DefaultInfo(files = depset([output_file]))]
-
-optimized_canister = rule(
-    implementation = _optimize_canister,
-    attrs = {
-        "wasm": attr.label(allow_files = True),
-    },
-)
-
 def _pigz_compress(ctx):
     """GZip-compresses source files."""
     output_file = ctx.actions.declare_file(ctx.label.name)

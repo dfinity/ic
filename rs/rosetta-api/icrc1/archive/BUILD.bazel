@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,7 +9,7 @@ filegroup(
 )
 
 rust_canister(
-    name = "archive",
+    name = "archive_canister_raw",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_archive",
     edition = "2018",
@@ -28,9 +28,14 @@ rust_canister(
     ],
 )
 
+optimized_canister(
+    name = "archive_canister",
+    wasm = ":archive_canister_raw",
+)
+
 rust_test(
     name = "archive_test",
-    crate = ":_wasm_archive",
+    crate = ":_wasm_archive_canister_raw",
     data = [
         ":archive.did",
     ],
