@@ -197,6 +197,13 @@ message GetBuyerStateResponse {
   BuyerState buyer_state = 1;
 }
 
+message GetBuyersTotalRequest {}
+
+message GetBuyersTotalResponse {
+  // The total amount of ICP deposited by buyers.
+  uint64 buyers_total  = 1;
+}
+
 message DerivedState {
   uint64 buyer_total_icp_e8s = 1;
   // Current approximate rate SNS tokens per ICP.
