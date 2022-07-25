@@ -1,0 +1,65 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/types/public",
+    "//rs/interfaces",
+    "//rs/interfaces/bitcoin_adapter_client",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/helpers",
+    "//rs/registry/subnet_features",
+    "//rs/replicated_state",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+    "@crate_index//:thiserror",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/protobuf",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "consensus",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_btc_consensus",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "consensus_test",
+    aliases = ALIASES,
+    crate = ":consensus",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

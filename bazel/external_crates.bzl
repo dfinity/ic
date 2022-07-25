@@ -183,6 +183,9 @@ def external_crates_repository(name, annotations):
             "cvt": crate.spec(
                 version = "^0.1.1",
             ),
+            "dashmap": crate.spec(
+                version = "^5.3.4",
+            ),
             "debug_stub_derive": crate.spec(
                 version = "^0.3.0",
             ),
