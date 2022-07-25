@@ -449,6 +449,10 @@ impl DownloadManager for DownloadManagerImpl {
         // Record metrics.
         self.metrics.artifacts_received.inc();
 
+        self.metrics
+            .artifact_download_time
+            .observe(artifact_tracker.get_duration_sec());
+
         let completed_artifact = completed_artifact.unwrap();
 
         // Check whether the artifact matches the advertised integrity hash.
