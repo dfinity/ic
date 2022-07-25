@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 ic-utils-rustfmt = { path = "../../../utils/rustfmt" }
-prost-build = "0.10"
+prost-build = "0.10.4"

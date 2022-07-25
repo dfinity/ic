@@ -11,12 +11,20 @@ fn check_generated_files() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
     let swap_proto = manifest_dir.join("proto");
+    // TODO(NNS1-1589): Uncomment.
+    // let sns_root_proto = manifest_dir.join("../root/proto");
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
+    let ledger_proto = manifest_dir.join("../../rosetta-api/ledger_canister/proto");
+
     generate_prost_files(
         ProtoPaths {
             swap: &swap_proto,
+            // TODO(NNS1-1589): Uncomment.
+            // sns_root: &sns_root_proto,
             base_types: &base_types_proto,
+            ledger: &ledger_proto,
         },
         out.path(),
     );

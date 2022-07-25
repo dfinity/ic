@@ -2,7 +2,6 @@
 
 TODO - REQUIRED
 - Unit tests: WIP.
-- Neuron creation: implement.
 - Canister methods for token distributions.
 
 TODO - OPTIONAL / SEMI-REQUIRED
@@ -23,6 +22,7 @@ use dfn_core::{
     over, over_async, over_init, println,
 };
 use ic_base_types::PrincipalId;
+use ic_ic00_types::CanisterStatusResultV2;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
@@ -30,6 +30,11 @@ use ic_nervous_system_common::stable_mem_utils::{
 use ic_sns_governance::ledger::{Ledger, LedgerCanister};
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
+
+// TODO(NNS1-1589): Unhack.
+// use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+
 use ic_sns_swap::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
     FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
@@ -37,12 +42,9 @@ use ic_sns_swap::pb::v1::{
     Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
     RefreshSnsTokensResponse, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
 };
-use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
-
-use std::str::FromStr;
-
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_sns_swap::swap::{SnsGovernanceClient, SnsRootClient, LOG_PREFIX};
 use prost::Message;
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
@@ -164,6 +166,33 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     }
 }
 
+struct RealSnsRootClient {
+    canister_id: CanisterId,
+}
+
+impl RealSnsRootClient {
+    fn new(canister_id: CanisterId) -> Self {
+        Self { canister_id }
+    }
+}
+
+#[async_trait]
+impl SnsRootClient for RealSnsRootClient {
+    async fn set_dapp_controllers(
+        &mut self,
+        request: SetDappControllersRequest,
+    ) -> Result<SetDappControllersResponse, CanisterCallError> {
+        dfn_core::api::call(
+            self.canister_id,
+            "set_dapp_controllers",
+            dfn_candid::candid_one,
+            request,
+        )
+        .await
+        .map_err(CanisterCallError::from)
+    }
+}
+
 struct RealSnsGovernanceClient {
     canister_id: CanisterId,
 }
@@ -215,12 +244,14 @@ fn finalize_swap() {
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     // Helpers.
+    let mut sns_root_client = RealSnsRootClient::new(swap().init().sns_root());
     let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
     let icp_ledger_factory = create_real_icp_ledger;
     let icrc1_ledger_factory = create_real_icrc1_ledger;
 
     swap_mut()
         .finalize(
+            &mut sns_root_client,
             &mut sns_governance_client,
             icp_ledger_factory,
             icrc1_ledger_factory,

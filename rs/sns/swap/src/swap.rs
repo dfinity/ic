@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSwapResponse,
-    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, Init, Lifecycle,
-    SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap,
-    SweepResult, TimeWindow,
+    set_dapp_controllers_call_result, set_mode_call_result, BuyerState, CanisterCallError,
+    DerivedState, FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse,
+    GetBuyersTotalResponse, Init, Lifecycle, SetDappControllersCallResult, SetModeCallResult,
+    SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap, SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
 use dfn_core::CanisterId;
@@ -19,6 +19,10 @@ use ic_sns_governance::{
     },
     types::DEFAULT_TRANSFER_FEE,
 };
+
+// TODO(NNS1-1589): Undo hack.
+// use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+use crate::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
 
 use lazy_static::lazy_static;
 use std::{ops::RangeInclusive, str::FromStr};
@@ -65,6 +69,18 @@ impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
     }
 }
 
+impl From<Result<SetDappControllersResponse, CanisterCallError>> for SetDappControllersCallResult {
+    fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
+        use set_dapp_controllers_call_result::Possibility as P;
+        let possibility = Some(match native_result {
+            Ok(response) => P::Ok(response),
+            Err(err) => P::Err(err),
+        });
+
+        Self { possibility }
+    }
+}
+
 #[async_trait]
 pub trait SnsGovernanceClient {
     async fn manage_neuron(
@@ -73,6 +89,14 @@ pub trait SnsGovernanceClient {
     ) -> Result<ManageNeuronResponse, CanisterCallError>;
 
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError>;
+}
+
+#[async_trait]
+pub trait SnsRootClient {
+    async fn set_dapp_controllers(
+        &mut self,
+        request: SetDappControllersRequest,
+    ) -> Result<SetDappControllersResponse, CanisterCallError>;
 }
 
 /**
@@ -607,6 +631,7 @@ impl Swap {
     /// phase), then ICP is send back to the buyers.
     pub async fn finalize(
         &mut self,
+        sns_root_client: &mut impl SnsRootClient,
         sns_governance_client: &mut impl SnsGovernanceClient,
         icp_ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
         icrc1_ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
@@ -622,11 +647,27 @@ impl Swap {
             .sweep_icp(DEFAULT_TRANSFER_FEE, &icp_ledger_factory)
             .await;
         if lifecycle != Lifecycle::Committed {
+            // Restore controllers of dapp canisters to their original owners (i.e. self.init.fallback_controller_principal_ids).
+            let set_dapp_controllers_result = sns_root_client.set_dapp_controllers(
+                SetDappControllersRequest {
+                    controller_principal_ids: self
+                        .init()
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|s| PrincipalId::from_str(s)
+                             .expect("Unable to parse element in fallback_controller_principal_ids as a PrincipalId.")
+                        )
+                        .collect(),
+                }
+            )
+            .await;
+
             return FinalizeSwapResponse {
                 sweep_icp: Some(sweep_icp),
                 sweep_sns: None,
                 create_neuron: None,
                 sns_governance_normal_mode_enabled: None,
+                set_dapp_controllers_result: Some(set_dapp_controllers_result.into()),
             };
         }
 
@@ -648,6 +689,7 @@ impl Swap {
             sweep_sns: Some(sweep_sns),
             create_neuron: Some(create_neuron),
             sns_governance_normal_mode_enabled,
+            set_dapp_controllers_result: None,
         }
     }
 
@@ -1068,6 +1110,10 @@ impl Init {
         CanisterId::new(PrincipalId::from_str(&self.nns_governance_canister_id).unwrap()).unwrap()
     }
 
+    pub fn sns_root(&self) -> CanisterId {
+        CanisterId::new(PrincipalId::from_str(&self.sns_root_canister_id).unwrap()).unwrap()
+    }
+
     pub fn sns_governance(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.sns_governance_canister_id).unwrap()).unwrap()
     }
@@ -1080,13 +1126,38 @@ impl Init {
         CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
     }
 
+    #[rustfmt::skip]
     pub fn is_valid(&self) -> bool {
-        // TODO: check that the (canister) principal IDs are valid.
-        //
-        !self.nns_governance_canister_id.is_empty()
-            && !self.sns_governance_canister_id.is_empty()
-            && !self.sns_ledger_canister_id.is_empty()
-            && !self.icp_ledger_canister_id.is_empty()
+        fn is_canister_id(role: &str, s: &str) -> bool {
+            let id = match PrincipalId::from_str(s) {
+                Err(err) => {
+                    println!(
+                        "{LOG_PREFIX}ERROR: {s} was given as the {role} canister ID, \
+                         but could not be parsed as such: {err:#?}"
+                    );
+                    return false;
+                }
+                Ok(id) => id,
+            };
+
+            match CanisterId::new(id) {
+                Err(err) => {
+                    println!(
+                        "{LOG_PREFIX}ERROR: {s} was given as the {role} canister ID, \
+                         but could not be parsed as such: {err:#?}"
+                    );
+                    false
+                }
+                Ok(_id) => true,
+            }
+        }
+
+               is_canister_id("NNS governance", &self.nns_governance_canister_id)
+            && is_canister_id("ICP ledger",     &self.icp_ledger_canister_id)
+            && is_canister_id("SNS root",       &self.sns_root_canister_id)
+            && is_canister_id("SNS governance", &self.sns_governance_canister_id)
+            && is_canister_id("SNS ledger",     &self.sns_ledger_canister_id)
+
             && !self.fallback_controller_principal_ids.is_empty()
             && self.min_participants > 0
             && self.min_participant_icp_e8s > 0

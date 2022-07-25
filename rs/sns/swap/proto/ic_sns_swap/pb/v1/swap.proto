@@ -8,6 +8,8 @@ syntax = "proto3";
 package ic_sns_swap.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+// TODO(NNS1-1589): Uncomment.
+// import "ic_sns_root/pb/v1/root.proto";
 
 // The initialisation data of the canister. Always specified on
 // canister creation, and cannot be modified afterwards.
@@ -63,6 +65,10 @@ message Init {
   // If the swap is aborted, control of the canister(s) should be set to these
   // principal(s). Must not be empty.
   repeated string fallback_controller_principal_ids = 11;
+
+  // Analogous to sns_governance_canister_id. Of course, this relates to SNS
+  // root, rather than SNS governance.
+  string sns_root_canister_id = 12;
 }
 
 message BuyerState {
@@ -247,6 +253,7 @@ message FinalizeSwapResponse {
   SweepResult sweep_sns = 2;
   SweepResult create_neuron = 3;
   SetModeCallResult sns_governance_normal_mode_enabled = 4;
+  SetDappControllersCallResult set_dapp_controllers_result = 5;
 }
 
 message SweepResult {
@@ -263,6 +270,28 @@ message SetModeCallResult {
     // TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
     CanisterCallError err = 2;
   }
+}
+
+// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+message SetDappControllersCallResult {
+  oneof possibility {
+    // TODO(NNS1-1589): Uncomment.
+    // ic_sns_root.pb.v1.
+    SetDappControllersResponse ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
+// TODO(NNS1-1589): Delete these.
+message SetDappControllersRequest {
+  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 1;
+}
+message SetDappControllersResponse {
+  message FailedUpdate {
+    ic_base_types.pb.v1.PrincipalId dapp_canister_id = 1;
+    CanisterCallError err = 2;
+  }
+  repeated FailedUpdate failed_updates = 1;
 }
 
 message CanisterCallError {

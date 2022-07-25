@@ -15,6 +15,7 @@ fn check_generated_files() {
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
     let ledger_proto = manifest_dir.join("../../rosetta-api/ledger_canister/proto");
     let nns_common_proto = manifest_dir.join("../common/proto");
+    let sns_root_proto = manifest_dir.join("../../sns/root/proto");
     let sns_swap_proto = manifest_dir.join("../../sns/swap/proto");
     generate_prost_files(
         ProtoPaths {
@@ -22,6 +23,7 @@ fn check_generated_files() {
             ledger: &ledger_proto,
             base_types: &base_types_proto,
             nns_common: &nns_common_proto,
+            sns_root: &sns_root_proto,
             sns_swap: &sns_swap_proto,
         },
         out.path(),

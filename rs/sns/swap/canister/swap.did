@@ -32,7 +32,12 @@ type ErrorRefundIcpRequest = record {
   icp_e8s : nat64;
   fee_override_e8s : nat64;
 };
+type FailedUpdate = record {
+  err : opt CanisterCallError;
+  dapp_canister_id : opt principal;
+};
 type FinalizeSwapResponse = record {
+  set_dapp_controllers_result : opt SetDappControllersCallResult;
   sns_governance_normal_mode_enabled : opt SetModeCallResult;
   sweep_icp : opt SweepResult;
   sweep_sns : opt SweepResult;
@@ -43,6 +48,7 @@ type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
 type GetBuyersTotalResponse = record { buyers_total : nat64 };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type Init = record {
+  sns_root_canister_id : text;
   min_participant_icp_e8s : nat64;
   fallback_controller_principal_ids : vec text;
   max_icp_e8s : nat64;
@@ -54,9 +60,15 @@ type Init = record {
   sns_governance_canister_id : text;
   min_icp_e8s : nat64;
 };
-type Possibility = variant { Err : CanisterCallError };
+type Possibility = variant {
+  Ok : SetDappControllersResponse;
+  Err : CanisterCallError;
+};
+type Possibility_1 = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
-type SetModeCallResult = record { possibility : opt Possibility };
+type SetDappControllersCallResult = record { possibility : opt Possibility };
+type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
+type SetModeCallResult = record { possibility : opt Possibility_1 };
 type SetOpenTimeWindowRequest = record { open_time_window : opt TimeWindow };
 type State = record {
   open_time_window : opt TimeWindow;

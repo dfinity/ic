@@ -1,7 +1,6 @@
 use async_trait::async_trait;
-use dfn_core::CanisterId;
 use futures::future::FutureExt;
-use ic_base_types::{ic_types::principal::Principal, PrincipalId};
+use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
@@ -16,20 +15,23 @@ use ic_sns_governance::{
         governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
     },
 };
+
+// TODO(NNS1-1589): Unhack.
+// use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+
 use ic_sns_swap::{
     pb::v1::{
-        Lifecycle::{Committed, Pending},
+        Lifecycle::{Aborted, Committed, Pending},
         *,
     },
     swap::{
-        principal_to_subaccount, SnsGovernanceClient, TransferResult, SECONDS_PER_DAY,
-        START_OF_2022_TIMESTAMP_SECONDS,
+        principal_to_subaccount, SnsGovernanceClient, SnsRootClient, TransferResult,
+        SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     },
 };
-
-use lazy_static::lazy_static;
+use ledger_canister::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
-
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
@@ -41,19 +43,23 @@ const E8: u64 = 100_000_000;
 
 // For tests only. This does not imply that the canisters must have these IDs.
 pub const SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(1152);
+
 pub const NNS_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1185);
+pub const ICP_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1630);
+
+pub const SNS_ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(4347);
 pub const SNS_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1380);
 pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
-pub const ICP_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1630);
 
 /// Returns a valid Init.
 fn init() -> Init {
     let result = Init {
         // TODO: should fail until canister ids have been changed to something real.
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
+        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
-        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
         max_icp_e8s: 1000000 * E8,
         min_icp_e8s: 0,
         min_participants: 3,
@@ -870,17 +876,21 @@ fn i2principal_id_string(i: u64) -> String {
 }
 
 #[tokio::test]
-async fn test_finalize_swap() {
+async fn test_finalize_swap_ok() {
     // Step 0: Define helper types.
-    #[rustfmt::skip]
-    lazy_static! {
-        static ref NNS_GOVERNANCE_CANISTER_ID : String = i2principal_id_string(1);
-        static ref ICP_LEDGER_CANISTER_ID     : String = i2principal_id_string(2);
 
-        static ref SNS_GOVERNANCE_CANISTER_ID : String = i2principal_id_string(3);
-        static ref SNS_LEDGER_CANISTER_ID     : String = i2principal_id_string(4);
-
-        static ref SWAP_CANISTER_ID: CanisterId = CanisterId::from(100);
+    // Explodes, because in this scenario, it is expect that no SNS root calls
+    // will be made.
+    #[derive(Default, Debug)]
+    struct ExplodingSnsRootClient;
+    #[async_trait]
+    impl SnsRootClient for ExplodingSnsRootClient {
+        async fn set_dapp_controllers(
+            &mut self,
+            _request: SetDappControllersRequest,
+        ) -> Result<SetDappControllersResponse, CanisterCallError> {
+            unimplemented!();
+        }
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -962,7 +972,7 @@ async fn test_finalize_swap() {
             assert_eq!(
                 account_id,
                 Account {
-                    of: (*SWAP_CANISTER_ID).into(),
+                    of: SWAP_CANISTER_ID.into(),
                     subaccount: None,
                 }
             );
@@ -979,11 +989,12 @@ async fn test_finalize_swap() {
 
     #[rustfmt::skip]
     let init = Some(Init {
-        nns_governance_canister_id : NNS_GOVERNANCE_CANISTER_ID .clone(),
-        icp_ledger_canister_id     :     ICP_LEDGER_CANISTER_ID .clone(),
+        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
+            icp_ledger_canister_id:     ICP_LEDGER_CANISTER_ID.to_string(),
 
-        sns_governance_canister_id : SNS_GOVERNANCE_CANISTER_ID .clone(),
-        sns_ledger_canister_id     :     SNS_LEDGER_CANISTER_ID .clone(),
+              sns_root_canister_id:       SNS_ROOT_CANISTER_ID.to_string(),
+        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
+            sns_ledger_canister_id:     SNS_LEDGER_CANISTER_ID.to_string(),
 
         max_icp_e8s: 100,
         min_icp_e8s: 0,
@@ -1034,7 +1045,7 @@ async fn test_finalize_swap() {
     // Quickly run through the lifecycle.
     {
         let r = swap
-            .refresh_sns_token_e8s(*SWAP_CANISTER_ID, &ledger_factory)
+            .refresh_sns_token_e8s(SWAP_CANISTER_ID, &ledger_factory)
             .await;
         assert!(r.is_ok(), "{r:#?}");
     }
@@ -1045,11 +1056,17 @@ async fn test_finalize_swap() {
     assert!(swap.try_commit_or_abort(/* now_seconds: */ 1));
     assert_eq!(swap.state().lifecycle(), Committed);
 
+    let mut sns_root_client = ExplodingSnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
-        .finalize(&mut sns_governance_client, ledger_factory, ledger_factory)
+        .finalize(
+            &mut sns_root_client,
+            &mut sns_governance_client,
+            ledger_factory,
+            ledger_factory,
+        )
         .await;
 
     // Step 3: Inspect the results.
@@ -1072,6 +1089,7 @@ async fn test_finalize_swap() {
                 skipped: 0,
             }),
             sns_governance_normal_mode_enabled: Some(SetModeCallResult { possibility: None }),
+            set_dapp_controllers_result: None,
         },
     );
 
@@ -1148,7 +1166,7 @@ async fn test_finalize_swap() {
         .map(Clone::clone)
         .collect::<HashSet<_>>();
     let expected_to = Account {
-        of: PrincipalId::from_str(&SNS_GOVERNANCE_CANISTER_ID).unwrap(),
+        of: SNS_GOVERNANCE_CANISTER_ID.into(),
         subaccount: None,
     };
     for t in &observed_nns_ledger_calls {
@@ -1180,7 +1198,7 @@ async fn test_finalize_swap() {
     // SNS tokens should be sent to neuron (sub)accounts (i.e. SNS governance subaccounts).
     let observed_sns_ledger_calls: HashSet<_> = ledger_calls
         .iter()
-        .filter(|t| t.canister_id.to_string() == *SNS_LEDGER_CANISTER_ID)
+        .filter(|t| t.canister_id == SNS_LEDGER_CANISTER_ID)
         .map(Clone::clone)
         .collect();
     for t in &observed_sns_ledger_calls {
@@ -1196,7 +1214,7 @@ async fn test_finalize_swap() {
         let buyer = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
 
         let to = Account {
-            of: PrincipalId::from_str(&*SNS_GOVERNANCE_CANISTER_ID).unwrap(),
+            of: SNS_GOVERNANCE_CANISTER_ID.into(),
             subaccount: Some(
                 ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes(buyer, 0),
             ),
@@ -1213,6 +1231,294 @@ async fn test_finalize_swap() {
             .collect::<HashMap<_, _>>(),
         expected_sns_ledger_calls,
         "{observed_sns_ledger_calls:#?}",
+    );
+}
+
+#[tokio::test]
+async fn test_finalize_swap_abort() {
+    // Step 0: Define helper types.
+
+    #[derive(Default, Debug)]
+    struct SpySnsRootClient {
+        observed_calls: Vec<SetDappControllersRequest>,
+    }
+    #[async_trait]
+    impl SnsRootClient for SpySnsRootClient {
+        async fn set_dapp_controllers(
+            &mut self,
+            request: SetDappControllersRequest,
+        ) -> Result<SetDappControllersResponse, CanisterCallError> {
+            self.observed_calls.push(request);
+            Ok(SetDappControllersResponse {
+                failed_updates: vec![],
+            })
+        }
+    }
+
+    #[allow(clippy::large_enum_variant)]
+    #[derive(Debug, PartialEq)]
+    enum SnsGovernanceClientCall {
+        ManageNeuron(ManageNeuron),
+        SetMode(SetMode),
+    }
+    #[derive(Default, Debug)]
+    struct SpySnsGovernanceClient {
+        calls: Vec<SnsGovernanceClientCall>,
+    }
+    #[async_trait]
+    impl SnsGovernanceClient for SpySnsGovernanceClient {
+        async fn manage_neuron(
+            &mut self,
+            request: ManageNeuron,
+        ) -> Result<ManageNeuronResponse, CanisterCallError> {
+            self.calls
+                .push(SnsGovernanceClientCall::ManageNeuron(request));
+            Ok(ManageNeuronResponse::default())
+        }
+        async fn set_mode(
+            &mut self,
+            request: SetMode,
+        ) -> Result<SetModeResponse, CanisterCallError> {
+            self.calls.push(SnsGovernanceClientCall::SetMode(request));
+            Ok(SetModeResponse {})
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    enum LedgerCall {
+        TransferFunds {
+            canister_id: CanisterId,
+
+            amount_e8s: u64,
+            fee_e8s: u64,
+            from_subaccount: Option<Subaccount>,
+            to: Account,
+            memo: u64,
+        },
+
+        AccountBalance {
+            canister_id: CanisterId,
+
+            account_id: Account,
+        },
+    }
+
+    struct SpyLedger {
+        calls: Arc<Mutex<Vec<LedgerCall>>>,
+        canister_id: CanisterId,
+    }
+    impl SpyLedger {
+        fn new(calls: Arc<Mutex<Vec<LedgerCall>>>, canister_id: CanisterId) -> Self {
+            Self { calls, canister_id }
+        }
+    }
+    #[async_trait]
+    impl Ledger for SpyLedger {
+        async fn transfer_funds(
+            &self,
+            amount_e8s: u64,
+            fee_e8s: u64,
+            from_subaccount: Option<Subaccount>,
+            to: Account,
+            memo: u64,
+        ) -> Result</* block_height: */ u64, NervousSystemError> {
+            self.calls.lock().unwrap().push(LedgerCall::TransferFunds {
+                canister_id: self.canister_id,
+                amount_e8s,
+                fee_e8s,
+                from_subaccount,
+                to,
+                memo,
+            });
+
+            Ok(42)
+        }
+
+        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+            unimplemented!();
+        }
+
+        async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
+            self.calls.lock().unwrap().push(LedgerCall::AccountBalance {
+                canister_id: self.canister_id,
+                account_id,
+            });
+
+            Ok(Tokens::from_e8s(10 * E8))
+        }
+    }
+
+    // Step 1: Prepare the world.
+    let ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
+    let ledger_factory = |canister_id: CanisterId| -> Box<dyn Ledger> {
+        Box::new(SpyLedger::new(Arc::clone(&ledger_calls), canister_id))
+    };
+
+    #[rustfmt::skip]
+    let init = Init {
+        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
+        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+
+        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
+        sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
+        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
+
+        // This absurdly large number ensures that the swap reaches the Aborted state.
+        max_icp_e8s: E8 * E8,
+        min_icp_e8s: E8 * E8,
+        min_participant_icp_e8s: 1,
+        max_participant_icp_e8s: E8 * E8,
+
+        // There will only be one participant; therefore, this also ensures that
+        // the swap reaches the Aborted state.
+        min_participants: 2,
+
+        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+    };
+    let nns_governance = PrincipalId::from(init.nns_governance());
+    let mut swap = Swap {
+        init: Some(init.clone()),
+        state: Some(State {
+            buyers: btreemap! {},
+            lifecycle: Pending as i32,
+            sns_token_e8s: 0,
+            open_time_window: None,
+        }),
+    };
+    swap.set_open_time_window(
+        nns_governance,
+        START_TIMESTAMP_SECONDS,
+        &SetOpenTimeWindowRequest {
+            open_time_window: Some(OPEN_TIME_WINDOW),
+        },
+    );
+
+    // Quickly run through the lifecycle.
+    {
+        let r = swap
+            .refresh_sns_token_e8s(SWAP_CANISTER_ID, &ledger_factory)
+            .await;
+        assert!(r.is_ok(), "{r:#?}");
+    }
+    {
+        let r = open_at_start(&mut swap);
+        assert!(r.is_ok(), "{r:#?}");
+    }
+
+    let buyer_principal_id = PrincipalId::new_user_test_id(8502);
+    swap.refresh_buyer_token_e8s(buyer_principal_id, SWAP_CANISTER_ID, &ledger_factory)
+        .await
+        .unwrap();
+
+    let (_, end_timestamp_seconds) = swap
+        .state()
+        .open_time_window
+        .unwrap()
+        .to_boundaries_timestamp_seconds();
+    assert!(swap.try_commit_or_abort(/* now_seconds: */ end_timestamp_seconds + 1));
+    assert_eq!(swap.state().lifecycle(), Aborted);
+
+    let mut sns_root_client = SpySnsRootClient::default();
+    let mut sns_governance_client = SpySnsGovernanceClient::default();
+
+    // Step 2: Run the code under test. To wit, finalize_swap.
+    let result = swap
+        .finalize(
+            &mut sns_root_client,
+            &mut sns_governance_client,
+            ledger_factory,
+            ledger_factory,
+        )
+        .await;
+
+    // Step 3: Inspect the results.
+    assert_eq!(
+        result,
+        FinalizeSwapResponse {
+            sweep_icp: Some(SweepResult {
+                success: 1,
+                failure: 0,
+                skipped: 0,
+            }),
+            sweep_sns: None,
+            create_neuron: None,
+            sns_governance_normal_mode_enabled: None,
+            // This is the main assertion:
+            set_dapp_controllers_result: Some(SetDappControllersCallResult {
+                possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                    SetDappControllersResponse {
+                        failed_updates: vec![]
+                    }
+                )),
+            }),
+        },
+    );
+
+    // Step 3.1: Assert that no neurons were created, and SNS governance was not set to normal mode.
+    assert_eq!(
+        sns_governance_client.calls,
+        vec![],
+        "{:#?}",
+        sns_governance_client.calls
+    );
+
+    // Step 3.2: Since there were no participants, there is no ICP to
+    // refund. Also, there are no participants to give SNS tokens to (in the
+    // form of neurons); therefore, no SNS tokens should be sent either.
+    let ledger_calls = ledger_calls
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .collect::<Vec<LedgerCall>>();
+    assert_eq!(
+        ledger_calls,
+        vec![
+            // Caused by refresh_sns_tokens.
+            LedgerCall::AccountBalance {
+                canister_id: SNS_LEDGER_CANISTER_ID,
+                account_id: Account {
+                    of: PrincipalId::from(SWAP_CANISTER_ID),
+                    subaccount: None,
+                },
+            },
+            // Caused by refresh_icp_tokens.
+            LedgerCall::AccountBalance {
+                canister_id: ICP_LEDGER_CANISTER_ID,
+                account_id: Account {
+                    of: SWAP_CANISTER_ID.into(),
+                    subaccount: Some(principal_to_subaccount(&buyer_principal_id))
+                },
+            },
+            // Refund ICP to buyer.
+            LedgerCall::TransferFunds {
+                canister_id: ICP_LEDGER_CANISTER_ID,
+
+                // 10 is the amount of ICP that the buyer put into the swap,
+                // because that's what SpyLedger always returns as someone's
+                // balance.
+                amount_e8s: 10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+
+                fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
+                from_subaccount: Some(principal_to_subaccount(&buyer_principal_id)),
+                to: Account::from(buyer_principal_id),
+                memo: 0,
+            }
+        ],
+        "{ledger_calls:#?}"
+    );
+
+    // Step 3.3: SNS root was told to set dapp canister controllers.
+    let controller_principal_ids = init
+        .fallback_controller_principal_ids
+        .iter()
+        .map(|s| PrincipalId::from_str(s).unwrap())
+        .collect();
+    assert_eq!(
+        sns_root_client.observed_calls,
+        vec![SetDappControllersRequest {
+            controller_principal_ids
+        }],
     );
 }
 

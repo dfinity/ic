@@ -237,10 +237,13 @@ impl SnsInitPayload {
     /// Precondition: self must be valid (see fn validate).
     fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Init {
         Init {
+            sns_root_canister_id: sns_canister_ids.root.to_string(),
             sns_governance_canister_id: sns_canister_ids.governance.to_string(),
-            nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
             sns_ledger_canister_id: sns_canister_ids.ledger.to_string(),
+
+            nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
             icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+
             max_icp_e8s: self.max_icp_e8s.expect("Field max_icp_e8 cannot be None"),
             min_participants: self
                 .min_participants

@@ -56,6 +56,10 @@ pub struct Init {
     /// principal(s). Must not be empty.
     #[prost(string, repeated, tag = "11")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Analogous to sns_governance_canister_id. Of course, this relates to SNS
+    /// root, rather than SNS governance.
+    #[prost(string, tag = "12")]
+    pub sns_root_canister_id: ::prost::alloc::string::String,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
@@ -278,6 +282,8 @@ pub struct FinalizeSwapResponse {
     pub create_neuron: ::core::option::Option<SweepResult>,
     #[prost(message, optional, tag = "4")]
     pub sns_governance_normal_mode_enabled: ::core::option::Option<SetModeCallResult>,
+    #[prost(message, optional, tag = "5")]
+    pub set_dapp_controllers_result: ::core::option::Option<SetDappControllersCallResult>,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
@@ -307,6 +313,55 @@ pub mod set_mode_call_result {
         /// TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
         #[prost(message, tag = "2")]
         Err(super::CanisterCallError),
+    }
+}
+/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetDappControllersCallResult {
+    #[prost(oneof = "set_dapp_controllers_call_result::Possibility", tags = "1, 2")]
+    pub possibility: ::core::option::Option<set_dapp_controllers_call_result::Possibility>,
+}
+/// Nested message and enum types in `SetDappControllersCallResult`.
+pub mod set_dapp_controllers_call_result {
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Possibility {
+        /// TODO(NNS1-1589): Uncomment.
+        /// ic_sns_root.pb.v1.
+        #[prost(message, tag = "1")]
+        Ok(super::SetDappControllersResponse),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
+}
+/// TODO(NNS1-1589): Delete these.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetDappControllersRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetDappControllersResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub failed_updates: ::prost::alloc::vec::Vec<set_dapp_controllers_response::FailedUpdate>,
+}
+/// Nested message and enum types in `SetDappControllersResponse`.
+pub mod set_dapp_controllers_response {
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FailedUpdate {
+        #[prost(message, optional, tag = "1")]
+        pub dapp_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        #[prost(message, optional, tag = "2")]
+        pub err: ::core::option::Option<super::CanisterCallError>,
     }
 }
 #[derive(candid::CandidType, candid::Deserialize)]
