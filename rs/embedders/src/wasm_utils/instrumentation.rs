@@ -119,60 +119,18 @@ enum InjectedImports {
     Count = 2,
 }
 
-// Converts a Wasm instruction to a string mnemonic.
-// TODO(EXC-221): Consider optimizing this to "cache" results, so we don't have
-// to extract the mnemomic each time this function is called.
-fn instruction_to_mnemonic(i: &Instruction) -> String {
-    let out = i.to_string();
-    let mut iter = out.split_whitespace();
-    iter.next()
-        .expect("The string representation of a Wasm instruction is never empty.")
-        .to_string()
-}
-
-/// The metering can be configured by providing a cost-per-instruction table and
-/// the default cost for an instruction in case it's not present in the cost
-/// table.
-pub(super) struct InstructionCostTable {
-    // mapping of instruction mnemonic to its cost
-    instruction_cost: HashMap<String, u64>,
-    // default cost of an instruction (if not present in the cost table)
-    default_cost: u64,
-}
-
-impl InstructionCostTable {
-    // Returns the cost of a Wasm instruction from the cost table or the default
-    // cost if the instruction is not in the cost table.
-    fn cost(&self, i: &Instruction) -> u64 {
-        let mnemonic = instruction_to_mnemonic(i);
-        *self
-            .instruction_cost
-            .get(&mnemonic)
-            .unwrap_or(&self.default_cost)
-    }
-}
-
-impl Default for InstructionCostTable {
-    fn default() -> Self {
-        let mut instruction_cost = HashMap::new();
-
+// Gets the cost of an instruction.
+fn instruction_to_cost(i: &Instruction) -> u64 {
+    match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
-        instruction_cost.insert(
-            instruction_to_mnemonic(&Instruction::Block(BlockType::NoResult)),
-            0,
-        );
-        instruction_cost.insert(instruction_to_mnemonic(&Instruction::Else), 0);
-        instruction_cost.insert(instruction_to_mnemonic(&Instruction::End), 0);
-        instruction_cost.insert(
-            instruction_to_mnemonic(&Instruction::Loop(BlockType::NoResult)),
-            0,
-        );
+        Instruction::Block(_bt) => 0,
+        Instruction::Else => 0,
+        Instruction::End => 0,
+        Instruction::Loop(_bt) => 0,
 
-        Self {
-            default_cost: 1,
-            instruction_cost,
-        }
+        // Default cost of an instruction is 1.
+        _ => 1,
     }
 }
 
@@ -404,7 +362,6 @@ pub struct ExportModuleData {
 /// not be instrumented.
 pub(super) fn instrument(
     wasm: &BinaryEncodedWasm,
-    instruction_cost_table: &InstructionCostTable,
     cost_to_compile_wasm_instruction: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice()).map_err(|err| {
@@ -432,7 +389,7 @@ pub(super) fn instrument(
         if let Some(code_section) = module.code_section_mut() {
             for func_body in code_section.bodies_mut().iter_mut() {
                 let code = func_body.code_mut();
-                inject_metering(code, instruction_cost_table, &export_module_data);
+                inject_metering(code, &export_module_data);
             }
         }
     }
@@ -649,12 +606,8 @@ impl InjectionPoint {
 // - we insert a function call before each dynamic cost instruction which
 //   performs an overflow check and then decrements the counter by the value at
 //   the top of the stack.
-fn inject_metering(
-    code: &mut Instructions,
-    instruction_cost_table: &InstructionCostTable,
-    export_data_module: &ExportModuleData,
-) {
-    let points = injections(code.elements(), instruction_cost_table);
+fn inject_metering(code: &mut Instructions, export_data_module: &ExportModuleData) {
+    let points = injections(code.elements());
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
             scope: Scope::ReentrantBlockStart,
@@ -750,18 +703,14 @@ fn inject_update_available_memory(func_body: &mut FuncBody, func_type: &Function
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections(
-    code: &[Instruction],
-    instruction_cost_table: &InstructionCostTable,
-) -> Vec<InjectionPoint> {
+fn injections(code: &[Instruction]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     let mut stack = Vec::new();
     use Instruction::*;
     // The function itself is a re-entrant code block.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail
-            .increment_cost(instruction_cost_table.cost(i));
+        curr.cost_detail.increment_cost(instruction_to_cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop(_) => {
