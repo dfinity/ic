@@ -274,10 +274,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
     execution_parameters
         .instruction_limits
-        .reduce_by(match compilation_cost_handling {
-            CompilationCostHandling::Ignore => NumInstructions::from(0),
-            CompilationCostHandling::Charge => instructions_from_compilation,
-        });
+        .reduce_by(instructions_from_compilation);
     let instructions_left = execution_parameters.instruction_limits.message();
 
     // Update allocations.  This must happen after we have created the new

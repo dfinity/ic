@@ -183,8 +183,8 @@ impl Hypervisor {
                 .observe_compilation_metrics(&compilation_result);
         }
         round_limits.instructions -= match compilation_cost_handling {
-            CompilationCostHandling::Ignore => RoundInstructions::from(0),
-            CompilationCostHandling::Charge => as_round_instructions(compilation_cost),
+            CompilationCostHandling::CountReducedAmount => RoundInstructions::from(0),
+            CompilationCostHandling::CountFullAmount => as_round_instructions(compilation_cost),
         };
         Ok((compilation_cost, execution_state))
     }
