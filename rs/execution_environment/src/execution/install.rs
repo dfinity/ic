@@ -440,7 +440,7 @@ impl PausedInstallCodeRoutine for PausedInitExecution {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.paused_wasm_execution.abort();
     }
 }
 
@@ -496,6 +496,6 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.paused_wasm_execution.abort();
     }
 }

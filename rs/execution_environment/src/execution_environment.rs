@@ -1727,6 +1727,7 @@ impl ExecutionEnvironment {
 
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
+            msg,
             old_canister,
             state.time(),
             state.path().to_path_buf(),
@@ -1736,7 +1737,7 @@ impl ExecutionEnvironment {
             round_limits,
             compilation_cost_handling,
         );
-        self.process_install_code_result(state, msg, dts_result, timer, new_wasm_hash)
+        self.process_install_code_result(state, dts_result, timer, new_wasm_hash)
     }
 
     /// Processes the result of install code message that was executed using
@@ -1749,14 +1750,17 @@ impl ExecutionEnvironment {
     fn process_install_code_result(
         &self,
         mut state: ReplicatedState,
-        mut message: RequestOrIngress,
         dts_result: DtsInstallCodeResult,
         timer: Timer,
         new_wasm_hash: WasmHash,
     ) -> ReplicatedState {
         let execution_duration = timer.elapsed();
         match dts_result {
-            DtsInstallCodeResult::Finished { canister, result } => {
+            DtsInstallCodeResult::Finished {
+                canister,
+                mut message,
+                result,
+            } => {
                 let canister_id = canister.canister_id();
                 let result = match result {
                     Ok(result) => {
