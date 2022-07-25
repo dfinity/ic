@@ -1,7 +1,8 @@
 use crate::pb::v1::{
     set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSwapResponse,
-    GetBuyerStateRequest, GetBuyerStateResponse, Init, Lifecycle, SetModeCallResult,
-    SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap, SweepResult, TimeWindow,
+    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, Init, Lifecycle,
+    SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap,
+    SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
 use dfn_core::CanisterId;
@@ -1041,6 +1042,23 @@ impl Swap {
             None => panic!("GetBuyerStateRequest must provide principal_id"),
         };
         GetBuyerStateResponse { buyer_state }
+    }
+
+    /// Returns the total amount of ICP deposited by participants in the swap.
+    pub fn get_buyers_total(&self) -> GetBuyersTotalResponse {
+        GetBuyersTotalResponse {
+            buyers_total: self
+                .state
+                .as_ref()
+                .map(|state| {
+                    state
+                        .buyers
+                        .iter()
+                        .map(|(_, buyer_state)| buyer_state.amount_icp_e8s)
+                        .sum()
+                })
+                .unwrap_or(0),
+        }
     }
 }
 

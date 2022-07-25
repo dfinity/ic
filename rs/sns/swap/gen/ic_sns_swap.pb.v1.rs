@@ -197,6 +197,18 @@ pub struct GetBuyerStateResponse {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetBuyersTotalRequest {}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetBuyersTotalResponse {
+    /// The total amount of ICP deposited by buyers.
+    #[prost(uint64, tag = "1")]
+    pub buyers_total: u64,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,

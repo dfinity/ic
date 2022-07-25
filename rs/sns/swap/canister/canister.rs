@@ -30,18 +30,18 @@ use ic_nervous_system_common::stable_mem_utils::{
 use ic_sns_governance::ledger::{Ledger, LedgerCanister};
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
+use ic_sns_swap::pb::v1::{
+    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
+    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
+    GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
+    Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
+    RefreshSnsTokensResponse, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
+};
 use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
 
 use std::str::FromStr;
 
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_sns_swap::pb::v1::{
-    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
-    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetCanisterStatusRequest,
-    GetStateRequest, GetStateResponse, Init, Lifecycle, RefreshBuyerTokensRequest,
-    RefreshBuyerTokensResponse, RefreshSnsTokensRequest, RefreshSnsTokensResponse,
-    SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
-};
 use prost::Message;
 use std::time::{Duration, SystemTime};
 
@@ -295,6 +295,18 @@ async fn do_get_canister_status(
     management_canister: &impl ManagementCanister,
 ) -> CanisterStatusResultV2 {
     management_canister.canister_status(canister_id).await
+}
+
+/// Returns the total amount of ICP deposited by participants in the swap.
+#[export_name = "canister_update get_buyers_total"]
+fn get_buyers_total() {
+    over_async(candid_one, get_buyers_total_)
+}
+
+/// Returns the total amount of ICP deposited by participants in the swap.
+#[candid_method(update, rename = "get_buyers_total")]
+async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
+    swap().get_buyers_total()
 }
 
 // =============================================================================
