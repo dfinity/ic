@@ -67,9 +67,6 @@ crates_config_override:
   ic-execution-environment:
     extends: .cargo-crate-test
     retry: 2
-  cycles-minting-canister:
-    extends: .cargo-crate-test
-    allow_failure: true
 
 # Jobs which must be present in the CI config for the config to be accepted as valid.
 # If a job from from this list isn't present in the CI config, the CI config validation will fail.
