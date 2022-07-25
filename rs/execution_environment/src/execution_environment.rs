@@ -1705,9 +1705,9 @@ impl ExecutionEnvironment {
                 .expected_compiled_wasms
                 .contains(&new_wasm_hash)
         {
-            CompilationCostHandling::Ignore
+            CompilationCostHandling::CountReducedAmount
         } else {
-            CompilationCostHandling::Charge
+            CompilationCostHandling::CountFullAmount
         };
 
         info!(
@@ -1897,12 +1897,14 @@ impl ExecutionEnvironment {
 }
 
 /// Indicates whether the time spent compiling this canister should count
-/// against Instruction limits or should be ignored. Only public for testing.
+/// against the round instruction limits or should be ignored. Canisters should
+/// always be charged for compilation costs even when they aren't counted
+/// against the round limits. Only public for testing.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub enum CompilationCostHandling {
-    Ignore,
-    Charge,
+    CountReducedAmount,
+    CountFullAmount,
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).

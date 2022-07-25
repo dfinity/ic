@@ -88,10 +88,7 @@ pub(crate) fn execute_install(
 
     execution_parameters
         .instruction_limits
-        .reduce_by(match compilation_cost_handling {
-            CompilationCostHandling::Ignore => NumInstructions::from(0),
-            CompilationCostHandling::Charge => instructions_from_compilation,
-        });
+        .reduce_by(instructions_from_compilation);
 
     let system_state = old_canister.system_state.clone();
     let scheduler_state = old_canister.scheduler_state.clone();

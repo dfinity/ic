@@ -1,5 +1,6 @@
 mod execution_tests {
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+    use ic_state_machine_tests::Cycles;
     use ic_test_utilities::execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
     use ic_test_utilities_metrics::fetch_histogram_stats;
     use ic_types::NumInstructions;
@@ -221,7 +222,10 @@ mod execution_tests {
 
         // Install two canisters with the same wat.
         let canister_id1 = test.canister_from_wat(WAT_EMPTY).unwrap();
-        let canister_id2 = test.canister_from_wat(WAT_EMPTY).unwrap();
+        let initial_balance = Cycles::new(1_000_000_000_000);
+        let canister_id2 = test
+            .canister_from_cycles_and_wat(initial_balance, WAT_EMPTY)
+            .unwrap();
 
         // Only the first install should have cost instructions.
         assert_eq!(
@@ -234,6 +238,15 @@ mod execution_tests {
                 FlagStatus::Enabled => NumInstructions::from(0),
                 FlagStatus::Disabled => wat_compilation_cost(WAT_EMPTY),
             }
+        );
+        // Even though we didn't need to recompile, the canister should still be
+        // charged for it.
+        assert_eq!(
+            test.canister_state(canister_id2).system_state.balance(),
+            initial_balance
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(wat_compilation_cost(WAT_EMPTY))
         );
     }
 

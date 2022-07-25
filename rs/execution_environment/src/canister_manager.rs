@@ -598,7 +598,7 @@ impl CanisterManager {
             &network_topology,
             execution_parameters,
             round_limits,
-            CompilationCostHandling::Charge,
+            CompilationCostHandling::CountFullAmount,
         );
         match dts_result {
             DtsInstallCodeResult::Finished {

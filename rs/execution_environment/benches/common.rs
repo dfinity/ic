@@ -76,7 +76,7 @@ where
             canister_root,
             canister_id,
             &mut round_limits,
-            CompilationCostHandling::Charge,
+            CompilationCostHandling::CountFullAmount,
         )
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);

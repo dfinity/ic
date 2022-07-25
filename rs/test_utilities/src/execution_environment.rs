@@ -60,6 +60,10 @@ use crate::{crypto::mock_random_number_generator, mock_time, types::messages::In
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
+pub fn universal_canister_compilation_cost() -> NumInstructions {
+    wasm_compilation_cost(UNIVERSAL_CANISTER_WASM)
+}
+
 /// A helper for execution tests.
 ///
 /// Example usage:
