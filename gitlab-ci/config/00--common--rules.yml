@@ -304,7 +304,6 @@
 .rules-test-prod-test-driver-e2e:
   rules:
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      allow_failure: true
       changes:
         - 'rs/tests/run-system-tests.py'
         - 'rs/tests/bin/*'

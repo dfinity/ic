@@ -182,6 +182,19 @@ test-prod-test-driver-e2e:
   - .rules-test-prod-test-driver-e2e
  script:
    - |
+     # IC_VERSION_ID is needed for run-system-tests.py.
+     IC_VERSION_ID="$CI_COMMIT_SHA"
+     export IC_VERSION_ID
+     # required binary artifacts
+     mkdir -p artifacts/release
+     pushd artifacts/release
+     curl -sfS --retry 5 --retry-delay 10 \
+        "http://download.proxy.dfinity.systems:8080/ic/$CI_COMMIT_SHA/release/prod-test-driver.gz" -O
+     popd
+      # required canisters
+     "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+         --git-rev="${IC_VERSION_ID}" --remote-path="canisters" \
+         --out="artifacts/canisters"
      WORKING_DIR="${CI_PROJECT_DIR}/working_dir/"
      mkdir -p "$WORKING_DIR"
      # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
