@@ -66,7 +66,7 @@ use metrics::HttpHandlerMetrics;
 use rand::Rng;
 use std::{
     convert::TryFrom,
-    io::{Error, ErrorKind, Write},
+    io::{Error, Write},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -126,9 +126,6 @@ pub(crate) const MAX_REQUEST_SIZE_BYTES: Byte = Byte::from_bytes(5 * 1024 * 1024
 // appropriate error code will be returned to the user.
 pub(crate) const MAX_REQUEST_RECEIVE_DURATION: Duration = Duration::from_secs(300); // 5 min
 
-// Number of times to try fetching the root delegation before giving up.
-const MAX_FETCH_DELEGATION_ATTEMPTS: u8 = 10;
-
 const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -184,15 +181,11 @@ fn start_server_initialization(
 ) {
     rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
-        let mut check_count: i32 = 0;
         // Sleep one second between retries, only log every 10th round.
         info!(log, "Waiting for certified state...");
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForCertifiedState;
         while common::get_latest_certified_state(state_reader.as_ref()).is_none() {
-            check_count += 1;
-            if check_count % 10 == 0 {
-                info!(log, "Certified state is not yet available...");
-            }
+            info!(every_n_seconds => 10, log, "Certified state is not yet available...");
             sleep(Duration::from_secs(1)).await;
         }
         info!(log, "Certified state is now available.");
@@ -744,8 +737,14 @@ async fn load_root_delegation(
         return Ok(None);
     }
 
-    for _ in 0..MAX_FETCH_DELEGATION_ATTEMPTS {
-        info!(log, "Fetching delegation from the nns subnet...");
+    let mut fetching_root_delagation_attempts = 0;
+    loop {
+        fetching_root_delagation_attempts += 1;
+        info!(
+            log,
+            "Fetching delegation from the nns subnet. Attempts: {}.",
+            fetching_root_delagation_attempts
+        );
 
         async fn log_err_and_backoff(log: &ReplicaLogger, err: impl std::fmt::Display) {
             // Fetching the NNS delegation failed. Do a random backoff and try again.
@@ -895,13 +894,6 @@ async fn load_root_delegation(
             }
         }
     }
-    Err(Error::new(
-        ErrorKind::TimedOut,
-        format!(
-            "Couldn't load NNS delegation after {} attempts.",
-            MAX_FETCH_DELEGATION_ATTEMPTS
-        ),
-    ))
 }
 
 fn get_random_node_from_nns_subnet(
