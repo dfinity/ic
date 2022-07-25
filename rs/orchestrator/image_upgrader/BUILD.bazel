@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/http_utils",
+    "//rs/monitoring/logger",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "image_upgrader",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_image_upgrader",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
+# rust_doc_test(
+#     name = "image_upgrader_doc_test",
+#     crate = ":image_upgrader",
+# )
+
+rust_test(
+    name = "image_upgrader_test",
+    aliases = ALIASES,
+    crate = ":image_upgrader",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
