@@ -105,6 +105,29 @@ pub(crate) struct ArtifactTracker {
     pub chunkable: Box<dyn Chunkable + Send + Sync>,
     /// The ID of the node whose quota is charged for this artifact.
     pub peer_id: NodeId,
+    // Stores the e2e duration of downloading the artifact.
+    duration: Instant,
+}
+
+impl ArtifactTracker {
+    pub fn new(
+        artifact_id: ArtifactId,
+        expiry_instant: Instant,
+        chunkable: Box<dyn Chunkable + Send + Sync>,
+        peer_id: NodeId,
+    ) -> Self {
+        ArtifactTracker {
+            artifact_id,
+            expiry_instant,
+            chunkable,
+            peer_id,
+            duration: Instant::now(),
+        }
+    }
+
+    pub fn get_duration_sec(&mut self) -> f64 {
+        self.duration.elapsed().as_secs_f64()
+    }
 }
 
 /// The implementation of the `ArtifactDownloadList` trait.
@@ -165,12 +188,12 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
                 let expiry_instant = requested_instant + Duration::from_millis(download_eta_ms);
                 self.artifacts.insert(
                     advert.integrity_hash.clone(),
-                    ArtifactTracker {
-                        artifact_id: artifact_id.clone(),
+                    ArtifactTracker::new(
+                        artifact_id.clone(),
                         expiry_instant,
-                        chunkable: chunk_tracker,
+                        chunk_tracker,
                         peer_id,
-                    },
+                    ),
                 );
                 self.expiry_index
                     .entry(expiry_instant)

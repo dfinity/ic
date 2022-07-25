@@ -50,6 +50,8 @@ pub struct DownloadManagementMetrics {
     pub received_artifact_size: IntGauge,
     /// The number of failed integrity hash checks.
     pub integrity_hash_check_failed: IntCounter,
+    // The time to download an artifact
+    pub artifact_download_time: Histogram,
 
     // Chunking fields.
     /// The number of requested chunks.
@@ -139,7 +141,12 @@ impl DownloadManagementMetrics {
                 decimal_buckets(-4, -1),
                 &["op"],
             ),
-
+            artifact_download_time: metrics_registry.histogram(
+                "artifact_download_time_seconds",
+                "The time it took to download the artifact in seconds",
+                // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s, 10s, 20s, 50s
+                decimal_buckets(-3, 1),
+            ),
             // Artifact fields.
             artifacts_received: metrics_registry
                 .int_counter("gossip_artifacts_received", "number of artifact received"),
