@@ -48,6 +48,7 @@ pub mod pool_manager;
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    log: ReplicaLogger,
 }
 
 impl CanisterHttpGossipImpl {
@@ -55,10 +56,12 @@ impl CanisterHttpGossipImpl {
     pub fn new(
         consensus_cache: Arc<dyn ConsensusPoolCache>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        log: ReplicaLogger,
     ) -> Self {
         CanisterHttpGossipImpl {
             consensus_cache,
             state_manager,
+            log,
         }
     }
 }
@@ -81,6 +84,7 @@ impl CanisterHttpGossip for CanisterHttpGossipImpl {
             .iter()
             .map(|item| *item.0)
             .collect();
+        let log = self.log.clone();
         Box::new(
             move |_, attr: &'_ CanisterHttpResponseAttribute| match attr {
                 CanisterHttpResponseAttribute::Share(
@@ -89,6 +93,7 @@ impl CanisterHttpGossip for CanisterHttpGossipImpl {
                     _content_hash,
                 ) => {
                     if *msg_registry_version != registry_version {
+                        warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", callback_id, msg_registry_version, registry_version);
                         return Priority::Drop;
                     }
                     if known_request_ids.contains(callback_id) {
