@@ -635,7 +635,7 @@ impl PausedInstallCodeRoutine for PausedPreUpgradeExecution {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.paused_wasm_execution.abort();
     }
 }
 
@@ -692,7 +692,7 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringUpgrade {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.paused_wasm_execution.abort();
     }
 }
 
@@ -744,6 +744,6 @@ impl PausedInstallCodeRoutine for PausedPostUpgradeExecution {
     }
 
     fn abort(self: Box<Self>) {
-        todo!()
+        self.paused_wasm_execution.abort();
     }
 }

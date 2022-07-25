@@ -20,7 +20,10 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType,
     CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, HypervisorError};
+use ic_interfaces::{
+    execution_environment::{AvailableMemory, ExecutionMode, HypervisorError},
+    messages::RequestOrIngress,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -45,7 +48,7 @@ use ic_test_utilities::{
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{RequestBuilder, SignedIngressBuilder},
+        messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
     },
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
@@ -54,7 +57,7 @@ use ic_types::{
     messages::{CallbackId, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    QueryAllocation, SubnetId,
+    QueryAllocation, SubnetId, UserId,
 };
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
@@ -290,9 +293,30 @@ fn install_code_with_instruction_limit(
         instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
     };
+
+    let args = InstallCodeArgs::new(
+        context.mode,
+        context.canister_id,
+        context.wasm_module.as_slice().into(),
+        context.arg.clone(),
+        None,
+        None,
+        None,
+    );
+    let ingress = IngressBuilder::new()
+        .source(UserId::from(context.sender))
+        .receiver(CanisterId::ic_00())
+        .method_name(Method::InstallCode)
+        .method_payload(args.encode())
+        .build();
     let instructions_before = round_limits.instructions;
-    let (result, canister) =
-        canister_manager.install_code(context, state, execution_parameters, &mut round_limits);
+    let (result, canister) = canister_manager.install_code(
+        context,
+        RequestOrIngress::Ingress(Arc::new(ingress)),
+        state,
+        execution_parameters,
+        &mut round_limits,
+    );
     let instructions_after = round_limits.instructions;
     let instructions_left = instruction_limit
         - as_num_instructions(instructions_before - instructions_after).min(instruction_limit);

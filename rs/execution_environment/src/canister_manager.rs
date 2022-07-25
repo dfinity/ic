@@ -19,6 +19,7 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter,
 };
+use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -62,6 +63,7 @@ pub(crate) struct InstallCodeResult {
 pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
+        message: RequestOrIngress,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
     Paused {
@@ -564,6 +566,7 @@ impl CanisterManager {
     pub(crate) fn install_code(
         &self,
         context: InstallCodeContext,
+        message: RequestOrIngress,
         state: &mut ReplicatedState,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -587,6 +590,7 @@ impl CanisterManager {
         };
         let dts_result = self.install_code_dts(
             context,
+            message,
             old_canister,
             time,
             canister_layout_path,
@@ -597,7 +601,11 @@ impl CanisterManager {
             CompilationCostHandling::Charge,
         );
         match dts_result {
-            DtsInstallCodeResult::Finished { canister, result } => (result, Some(canister)),
+            DtsInstallCodeResult::Finished {
+                canister,
+                message: _,
+                result,
+            } => (result, Some(canister)),
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,
@@ -634,6 +642,7 @@ impl CanisterManager {
     pub(crate) fn install_code_dts(
         &self,
         context: InstallCodeContext,
+        message: RequestOrIngress,
         mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
@@ -657,12 +666,14 @@ impl CanisterManager {
         {
             return DtsInstallCodeResult::Finished {
                 canister,
+                message,
                 result: Err(err),
             };
         }
         if let Err(err) = self.validate_controller(&canister, &context.sender) {
             return DtsInstallCodeResult::Finished {
                 canister,
+                message,
                 result: Err(err),
             };
         }
@@ -671,6 +682,7 @@ impl CanisterManager {
                 if canister.execution_state.is_some() {
                     return DtsInstallCodeResult::Finished {
                         canister,
+                        message,
                         result: Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
                     };
                 }
@@ -684,6 +696,7 @@ impl CanisterManager {
             let can_id = canister.system_state.canister_id;
             return DtsInstallCodeResult::Finished {
                 canister,
+                message,
                 result: Err(CanisterManagerError::InstallCodeRateLimited(can_id)),
             };
         }
@@ -706,6 +719,7 @@ impl CanisterManager {
         ) {
             return DtsInstallCodeResult::Finished {
                 canister,
+                message,
                 result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
             };
         }
@@ -750,6 +764,7 @@ impl CanisterManager {
                 result,
             } => finish_install_code(
                 canister,
+                message,
                 message_instruction_limit,
                 instructions_left,
                 result,
@@ -765,6 +780,7 @@ impl CanisterManager {
                     mode,
                     canister_layout_path,
                     config: self.config.clone(),
+                    message,
                 };
                 DtsInstallCodeResult::Paused {
                     canister,
@@ -1742,6 +1758,7 @@ impl TryFrom<(CanisterSettings, usize)> for ValidatedCanisterSettings {
 #[allow(clippy::too_many_arguments)]
 fn finish_install_code(
     mut old_canister: CanisterState,
+    message: RequestOrIngress,
     instruction_limit: NumInstructions,
     instructions_left: NumInstructions,
     result: Result<(CanisterState, NumBytes), CanisterManagerError>,
@@ -1772,6 +1789,7 @@ fn finish_install_code(
                 );
                 return DtsInstallCodeResult::Finished {
                     canister: old_canister,
+                    message,
                     result: Err(err),
                 };
             }
@@ -1806,6 +1824,7 @@ fn finish_install_code(
             // externally into the new canister state in `result`.
             DtsInstallCodeResult::Finished {
                 canister: new_canister,
+                message,
                 result: Ok(InstallCodeResult {
                     heap_delta,
                     old_wasm_hash,
@@ -1826,6 +1845,7 @@ fn finish_install_code(
             );
             DtsInstallCodeResult::Finished {
                 canister: old_canister,
+                message,
                 result: Err(err),
             }
         }
@@ -1845,6 +1865,7 @@ pub(crate) struct PausedInstallCodeExecution {
     mode: CanisterInstallMode,
     canister_layout_path: PathBuf,
     config: CanisterMgrConfig,
+    message: RequestOrIngress,
 }
 
 impl PausedInstallCodeExecution {
@@ -1862,6 +1883,7 @@ impl PausedInstallCodeExecution {
                 result,
             } => finish_install_code(
                 canister,
+                self.message,
                 self.message_instruction_limit,
                 instructions_left,
                 result,
@@ -1881,6 +1903,12 @@ impl PausedInstallCodeExecution {
                 }
             }
         }
+    }
+
+    #[allow(dead_code)]
+    fn abort(self) -> RequestOrIngress {
+        self.paused_routine.abort();
+        self.message
     }
 }
 
