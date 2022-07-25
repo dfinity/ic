@@ -21,7 +21,7 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 async-trait = "0.1.42"
 bytes = "1.0.1"
 candid = "0.7.4"
-comparable = { version = "0.5", features = ["derive"] }
+comparable = { version = "0.5.1", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
@@ -38,6 +38,10 @@ ic-nervous-system-common-test-keys = {path = "../../nervous_system/common/test_k
 ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
+
+# TODO(NNS1-1589): Delete hack, and uncomment this.
+# ic-sns-root = { path = "../root" }
+
 lazy_static = "1.4.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
@@ -59,7 +63,6 @@ ic-base-types = { path = "../../types/base_types" }
 prost-build = "0.10.4"
 
 [dev-dependencies]
-lazy_static = "1.4.0"
 criterion = "0.3"
 ic-config = { path = "../../config" }
 proptest = "1.0"
@@ -75,4 +78,8 @@ tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = [ "full" ] }
 
 [features]
-test = []
+test = [
+    "ic-base-types/test",
+    # TODO(NNS1-1589): Uncomment.
+    # "ic-sns-root/test",
+]

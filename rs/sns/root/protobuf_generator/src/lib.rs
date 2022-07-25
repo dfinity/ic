@@ -12,7 +12,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.out_dir(out);
 
     // Make all PB types also Candid types.
-    config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize)]");
+    config.type_attribute(
+        ".",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
 
     // Imported stuff.
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
