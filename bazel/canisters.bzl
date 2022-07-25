@@ -58,3 +58,15 @@ def rust_canister(name, **kwargs):
         name = name,
         binary = ":" + wasm_name,
     )
+
+def optimized_canister(name, wasm):
+    """Invokes canister WebAssembly module optimizer.
+    """
+    native.genrule(
+        name = name,
+        srcs = [wasm],
+        outs = [name + ".wasm"],
+        message = "Shrinking canister " + name,
+        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        cmd_bash = "$(location @crate_index//:ic-wasm__ic-wasm) $< -o $@ shrink",
+    )

@@ -334,6 +334,9 @@ def external_crates_repository(name, annotations):
             "ic-utils": crate.spec(
                 version = "^0.20.0",
             ),
+            "ic-wasm": crate.spec(
+                version = "^0.1.3",
+            ),
             "indicatif": crate.spec(
                 version = "^0.15",
                 features = [

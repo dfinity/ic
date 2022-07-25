@@ -1,4 +1,5 @@
-load("//bazel:defs.bzl", "cargo_build", "gzip_compress", "optimized_canister")
+load("//bazel:defs.bzl", "cargo_build", "gzip_compress")
+load("//bazel:canisters.bzl", "optimized_canister")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("//bazel:buildifier.bzl", "buildifier_test")
 
@@ -118,7 +119,7 @@ cargo_build(
 )
 
 [optimized_canister(
-    name = canister + "-opt.wasm",
+    name = canister + "-opt",
     wasm = ":" + canister + ".wasm",
 ) for canister in CANISTERS]
 

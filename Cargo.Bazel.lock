@@ -1,5 +1,5 @@
 {
-  "checksum": "e599f78fc811f16f9d937d5e073980a3f89f6a4f176161f6aff337a0f8358bf5",
+  "checksum": "f2dc5c32a008d39e5a0c543fc6da7cbd2f1530b18b420acf0aab9f690f767792",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -156,7 +156,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -499,7 +499,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -585,7 +585,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -2323,7 +2323,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -2757,7 +2757,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -6373,6 +6373,7 @@
         ],
         "crate_features": [
           "atty",
+          "cargo",
           "clap_derive",
           "color",
           "default",
@@ -9634,7 +9635,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -10843,6 +10844,10 @@
               "target": "ic_utils"
             },
             {
+              "id": "ic-wasm 0.1.3",
+              "target": "ic_wasm"
+            },
+            {
               "id": "indicatif 0.15.0",
               "target": "indicatif"
             },
@@ -11332,7 +11337,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -13309,7 +13314,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -15996,7 +16001,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -17208,7 +17213,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -17293,7 +17298,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -17372,7 +17377,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -17422,7 +17427,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -17480,7 +17485,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -18161,6 +18166,115 @@
         "version": "0.20.0"
       },
       "license": "Apache-2.0"
+    },
+    "ic-wasm 0.1.3": {
+      "name": "ic-wasm",
+      "version": "0.1.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-wasm/0.1.3/download",
+          "sha256": "41e494b1607f1d7b1e07041e711dd6b15e885edbc7802d02eb7fd3ad70ee5e06"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_wasm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "ic-wasm",
+            "crate_root": "src/bin/main.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_wasm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "anyhow",
+          "clap",
+          "default",
+          "exe"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.58",
+              "target": "anyhow"
+            },
+            {
+              "id": "candid 0.7.15",
+              "target": "candid"
+            },
+            {
+              "id": "clap 3.2.14",
+              "target": "clap"
+            },
+            {
+              "id": "walrus 0.19.0",
+              "target": "walrus"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.3"
+      },
+      "license": "Apache-2.0"
+    },
+    "id-arena 2.2.1": {
+      "name": "id-arena",
+      "version": "2.2.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/id-arena/2.2.1/download",
+          "sha256": "25a2bc672d1148e28034f176e01fffebb08b35768468cc954630da77a1449005"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "id_arena",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "id_arena",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2015",
+        "version": "2.2.1"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "ident_case 1.0.1": {
       "name": "ident_case",
@@ -20083,7 +20197,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -32595,7 +32709,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.20.0",
+                "id": "tokio 1.20.1",
                 "target": "tokio"
               },
               {
@@ -38835,7 +38949,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -40099,13 +40213,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.20.0": {
+    "tokio 1.20.1": {
       "name": "tokio",
-      "version": "1.20.0",
+      "version": "1.20.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.20.0/download",
-          "sha256": "57aec3cfa4c296db7255446efb4928a6be304b431a806216105542a67b6ca82e"
+          "url": "https://crates.io/api/v1/crates/tokio/1.20.1/download",
+          "sha256": "7a8325f63a7d4774dd041e363b2409ed1c5cbbd0f867795e661df066b2b0a581"
         }
       },
       "targets": [
@@ -40201,7 +40315,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "build_script_build"
             }
           ],
@@ -40234,7 +40348,7 @@
           ],
           "selects": {}
         },
-        "version": "1.20.0"
+        "version": "1.20.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -40287,7 +40401,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -40383,7 +40497,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -40449,7 +40563,7 @@
               "target": "openssl_sys"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -40507,7 +40621,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -40562,7 +40676,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -40704,7 +40818,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -40758,7 +40872,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -40812,7 +40926,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -40888,7 +41002,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -40952,7 +41066,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -41117,7 +41231,7 @@
               "alias": "prost1"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -41318,7 +41432,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             },
             {
@@ -43214,18 +43328,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -43240,6 +43342,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43355,6 +43469,127 @@
         "version": "2.3.2"
       },
       "license": "Unlicense/MIT"
+    },
+    "walrus 0.19.0": {
+      "name": "walrus",
+      "version": "0.19.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/walrus/0.19.0/download",
+          "sha256": "4eb08e48cde54c05f363d984bb54ce374f49e242def9468d2e1b6c2372d291f8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "walrus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "walrus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.58",
+              "target": "anyhow"
+            },
+            {
+              "id": "id-arena 2.2.1",
+              "target": "id_arena"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "log 0.4.17",
+              "target": "log"
+            },
+            {
+              "id": "wasmparser 0.77.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "walrus-macro 0.19.0",
+              "target": "walrus_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.19.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "walrus-macro 0.19.0": {
+      "name": "walrus-macro",
+      "version": "0.19.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/walrus-macro/0.19.0/download",
+          "sha256": "0a6e5bd22c71e77d60140b0bd5be56155a37e5bd14e24f5f87298040d0cc40d7"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "walrus_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "walrus_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.3.3",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.41",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.20",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.98",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.19.0"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "want 0.3.0": {
       "name": "want",
@@ -43896,6 +44131,39 @@
         "links": "wasm_bindgen"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "wasmparser 0.77.0": {
+      "name": "wasmparser",
+      "version": "0.77.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wasmparser/0.77.0/download",
+          "sha256": "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.77.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
     },
     "wasmparser 0.84.0": {
       "name": "wasmparser",
@@ -45823,7 +46091,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.20.0",
+              "id": "tokio 1.20.1",
               "target": "tokio"
             }
           ],
@@ -46556,6 +46824,7 @@
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
+    "ic-wasm 0.1.3",
     "inferno 0.11.6",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
