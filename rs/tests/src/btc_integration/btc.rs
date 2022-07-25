@@ -68,6 +68,7 @@ docker run  --name=bitcoind-node -d \
     bitcoin_conf.write_all(r#"
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1
+    debug=1
     whitelist=[::]/0
         
     # Dummy credentials that are required by `bitcoin-cli`.
