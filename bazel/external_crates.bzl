@@ -172,7 +172,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.8.0",
             ),
             "crossbeam-channel": crate.spec(
-                version = "^0.5.0",
+                version = "^0.5.5",
             ),
             "csv": crate.spec(
                 version = "^1.1",
@@ -503,7 +503,7 @@ def external_crates_repository(name, annotations):
                 ],
             ),
             "parking_lot": crate.spec(
-                version = "^0.11.1",
+                version = "^0.12.1",
             ),
             "parse_int": crate.spec(
                 version = "^0.4.0",
@@ -694,7 +694,7 @@ def external_crates_repository(name, annotations):
                 version = "^1.6.2",
             ),
             "serial_test": crate.spec(
-                version = "^0.5.0",
+                version = "^0.8.0",
             ),
             "sha2": crate.spec(
                 version = "^0.9.1",

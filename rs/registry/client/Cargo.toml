@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.31"
-crossbeam-channel = "0.5.0"
+crossbeam-channel = "0.5.5"
 ic-config = { path = "../../config" }
 ic-interfaces = { path = "../../interfaces" }
 ic-metrics = { path = "../../monitoring/metrics" }

@@ -10,7 +10,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }
 colored = "2.0.0"
-crossbeam-channel = "0.5.0"
+crossbeam-channel = "0.5.5"
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
