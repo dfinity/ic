@@ -72,7 +72,7 @@ async fn create_canister(
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 

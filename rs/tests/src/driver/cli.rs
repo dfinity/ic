@@ -115,6 +115,19 @@ used."#
     boundary_node_img_url: Url,
 
     #[clap(
+        long = "boundary-node-snp-img-sha256",
+        help = r#"The SHA-256 hash of the Boundary Node SNP disk image"#
+    )]
+    boundary_node_snp_img_sha256: String,
+
+    #[clap(
+            long = "boundary-node-snp-img-url",
+            help = r#"The URL of the Boundary Node SNP disk image"#,
+            parse(try_from_str = url::Url::parse)
+        )]
+    boundary_node_snp_img_url: Url,
+
+    #[clap(
             long = "farm-base-url",
             help = r#"The base URL of the Farm-service to be used for resource
             management. (default: https://farm.dfinity.systems)"#,
@@ -258,6 +271,8 @@ impl RunTestsArgs {
             ic_os_update_img_url: self.ic_os_update_img_url,
             boundary_node_img_sha256: self.boundary_node_img_sha256,
             boundary_node_img_url: self.boundary_node_img_url,
+            boundary_node_snp_img_sha256: self.boundary_node_snp_img_sha256,
+            boundary_node_snp_img_url: self.boundary_node_snp_img_url,
             farm_base_url: self.farm_base_url,
             nns_canister_path,
             artifacts_path,
@@ -303,6 +318,8 @@ pub struct ValidatedCliRunTestsArgs {
     pub ic_os_update_img_url: Url,
     pub boundary_node_img_sha256: String,
     pub boundary_node_img_url: Url,
+    pub boundary_node_snp_img_sha256: String,
+    pub boundary_node_snp_img_url: Url,
     pub farm_base_url: Option<Url>,
     pub nns_canister_path: Option<PathBuf>,
     pub artifacts_path: Option<PathBuf>,
