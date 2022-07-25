@@ -38,7 +38,7 @@ lazy_static = "1.4.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 crossbeam = "0.8.0"
-crossbeam-channel = "0.5.1"
+crossbeam-channel = "0.5.5"
 ed25519-dalek = "1.0.1"
 futures-util = "0.3.8"
 hex = "0.4.2"

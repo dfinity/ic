@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.36"
-crossbeam-channel = "0.5.0"
+crossbeam-channel = "0.5.5"
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces-transport = { path = "../interfaces/transport" }

@@ -16,7 +16,7 @@ proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }
-crossbeam-channel = "0.5.1"
+crossbeam-channel = "0.5.5"
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }

@@ -1825,7 +1825,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd01a6eb3daaafa260f6fc94c3a6c36390abc2080e38e3e34ced87393fb77d80"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "crossbeam-deque 0.8.1",
  "crossbeam-epoch 0.9.1",
  "crossbeam-queue 0.3.1",
@@ -1844,9 +1844,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.1"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ed27e177f16d65f0f0c22a213e17c696ace5dd64b14258b52f9417ccb52db4"
+checksum = "c2dd04ddaf88237dc3b8d8f9a3c1004b506b54b3313403944054d23c0870c521"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.3",
@@ -2172,7 +2172,7 @@ checksum = "3495912c9c1ccf2e18976439f4443f3fee0fd61f424ff99fde6a66b15ecb448f"
 dependencies = [
  "cfg-if 1.0.0",
  "hashbrown 0.12.0",
- "lock_api 0.4.7",
+ "lock_api",
  "parking_lot_core 0.9.3",
 ]
 
@@ -3858,7 +3858,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "bincode",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-message",
@@ -4015,7 +4015,7 @@ dependencies = [
  "ic-config",
  "ic-logger",
  "ic-metrics",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "prost",
  "rand 0.8.5",
  "serde",
@@ -4672,7 +4672,7 @@ dependencies = [
  "mockall 0.8.3",
  "num-integer",
  "openssl",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "prometheus 0.12.0",
  "proptest 0.9.6",
  "proptest-derive",
@@ -4927,7 +4927,7 @@ dependencies = [
  "lazy_static",
  "mockall 0.7.2",
  "openssl",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "proptest 0.9.6",
  "proptest-derive",
  "prost",
@@ -5621,7 +5621,7 @@ dependencies = [
  "bincode",
  "canister-test",
  "chrono",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "either",
  "flate2",
  "fs_extra",
@@ -6469,7 +6469,7 @@ dependencies = [
  "candid",
  "canister-test",
  "crossbeam 0.8.0",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
@@ -6612,7 +6612,7 @@ dependencies = [
  "linked-hash-map",
  "lru",
  "mockall 0.7.2",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "phantom_newtype",
  "prometheus 0.12.0",
  "proptest 0.9.6",
@@ -6634,7 +6634,7 @@ dependencies = [
  "anyhow",
  "clap 3.1.18",
  "crossbeam 0.8.0",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "elastic_common_schema",
  "erased-serde",
  "futures-util",
@@ -6854,7 +6854,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "ic-config",
  "ic-interfaces",
  "ic-metrics",
@@ -7257,7 +7257,7 @@ dependencies = [
  "ic-state-manager",
  "ic-transport",
  "ic-types 0.8.0",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "slog",
  "threadpool",
  "tokio",
@@ -7446,7 +7446,7 @@ dependencies = [
  "chrono",
  "clap 3.1.18",
  "colored",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "dfn_candid",
  "dfn_core",
  "dfn_json",
@@ -7960,7 +7960,7 @@ dependencies = [
  "bit-vec 0.6.3",
  "criterion",
  "criterion-time",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "hex",
  "ic-base-types",
  "ic-btc-types",
@@ -7989,7 +7989,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "ic-wasm-types",
  "maplit",
- "parking_lot 0.11.1",
+ "parking_lot 0.12.1",
  "prometheus 0.12.0",
  "proptest 0.9.6",
  "proptest-derive",
@@ -8222,7 +8222,7 @@ name = "ic-transport"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "ic-base-types",
  "ic-config",
  "ic-crypto",
@@ -8250,7 +8250,7 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "clap 3.1.18",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "futures",
  "ic-config",
  "ic-crypto",
@@ -8475,7 +8475,7 @@ name = "ic-xnet-endpoint"
 version = "0.8.0"
 dependencies = [
  "bytes",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "hyper",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
@@ -9233,15 +9233,6 @@ checksum = "84f9a2d3e27ce99ce2c3aad0b09b1a7b916293ea9b2bf624c13fe646fadd8da4"
 
 [[package]]
 name = "lock_api"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4da24a77a3d8a6d4862d95f72e6fdb9c09a643ecdb402d754004a557f2bec75"
-dependencies = [
- "scopeguard",
-]
-
-[[package]]
-name = "lock_api"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "327fa5b6a6940e4699ec49a9beae1ea4845c6bab9314e4f84ac68742139d8c53"
@@ -9281,7 +9272,7 @@ dependencies = [
  "libc",
  "log",
  "log-mdc",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "serde",
  "serde-value",
  "serde_json",
@@ -10159,7 +10150,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1cf9b1c4e9a6c4de793c632496fa490bdc0e1eea73f0c91394f7b6990935d22"
 dependencies = [
  "async-trait",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "futures",
  "js-sys",
  "lazy_static",
@@ -10176,7 +10167,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
 dependencies = [
  "async-trait",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "dashmap 4.0.2",
  "fnv",
  "futures-channel",
@@ -10313,47 +10304,23 @@ checksum = "427c3892f9e783d91cc128285287e70a59e206ca452770ece88a76f7a3eddd72"
 
 [[package]]
 name = "parking_lot"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
-dependencies = [
- "lock_api 0.3.4",
- "parking_lot_core 0.7.2",
-]
-
-[[package]]
-name = "parking_lot"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d7744ac029df22dca6284efe4e898991d28e3085c706c972bcd7da4a27a15eb"
 dependencies = [
  "instant",
- "lock_api 0.4.7",
+ "lock_api",
  "parking_lot_core 0.8.0",
 ]
 
 [[package]]
 name = "parking_lot"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87f5ec2493a61ac0506c0f4199f99070cbe83857b0337006a30f3e6719b8ef58"
+checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
- "lock_api 0.4.7",
+ "lock_api",
  "parking_lot_core 0.9.3",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
-dependencies = [
- "cfg-if 0.1.10",
- "cloudabi 0.0.3",
- "libc",
- "redox_syscall 0.1.56",
- "smallvec",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -10716,7 +10683,7 @@ dependencies = [
  "log",
  "nix 0.24.1",
  "once_cell",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "prost",
  "prost-build",
  "prost-derive",
@@ -10956,7 +10923,7 @@ dependencies = [
  "fnv",
  "lazy_static",
  "memchr",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "protobuf",
  "thiserror",
 ]
@@ -11431,7 +11398,7 @@ version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "258bcdb5ac6dad48491bb2992db6b7cf74878b0384908af124823d118c99683f"
 dependencies = [
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "crossbeam-deque 0.8.1",
  "crossbeam-utils 0.8.3",
  "num_cpus",
@@ -12286,23 +12253,27 @@ dependencies = [
 
 [[package]]
 name = "serial_test"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b15f74add9a9d4a3eb2bf739c9a427d266d3895b53d992c3a7c234fec2ff1f1"
+checksum = "7eec42e7232e5ca56aa59d63af3c7f991fe71ee6a3ddd2d3480834cf3902b007"
 dependencies = [
+ "futures",
  "lazy_static",
- "parking_lot 0.10.2",
+ "log",
+ "parking_lot 0.12.1",
  "serial_test_derive",
 ]
 
 [[package]]
 name = "serial_test_derive"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65f59259be9fc1bf677d06cc1456e97756004a1a5a577480f71430bd7c17ba33"
+checksum = "f1b95bb2f4f624565e8fe8140c789af7e2082c0e0561b5a82a1b678baa9703dc"
 dependencies = [
+ "proc-macro-error",
  "proc-macro2 1.0.39",
  "quote 1.0.17",
+ "rustversion",
  "syn 1.0.96",
 ]
 
@@ -12538,7 +12509,7 @@ version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "766c59b252e62a34651412870ff55d8c4e6d04df19b43eecb2703e417b097ffe"
 dependencies = [
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "slog",
  "take_mut",
  "thread_local",
@@ -13115,7 +13086,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 3.1.18",
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
@@ -13364,7 +13335,7 @@ dependencies = [
  "mio 0.8.3",
  "num_cpus",
  "once_cell",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.4.4",
@@ -13642,7 +13613,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
 dependencies = [
- "crossbeam-channel 0.5.1",
+ "crossbeam-channel 0.5.6",
  "time 0.3.5",
  "tracing-subscriber 0.3.11",
 ]
