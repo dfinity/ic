@@ -32,7 +32,11 @@ struct CanisterHttpPoolManagerMetrics {
     /// The total number of requests for which we are currently waiting for responses.
     in_client_requests: IntGauge,
     /// A count of the total number of shares signed.
-    signed_share_count: IntCounter,
+    shares_signed: IntCounter,
+    /// A count of the total number of shares validated.
+    shares_validated: IntCounter,
+    /// A count of the total number of shares marked invalid.
+    shares_marked_invalid: IntCounter,
 }
 
 impl CanisterHttpPoolManagerMetrics {
@@ -48,12 +52,18 @@ impl CanisterHttpPoolManagerMetrics {
             in_flight_requests: metrics_registry.int_gauge(
                 "canister_http_in_flight_requests", "The total number of requests that are currently in flight according to the latest state."
             ),
-        in_client_requests: metrics_registry.int_gauge(
-            "canister_http_in_client_requests", "The total number of requests for which we are currently waiting for responses from the http client."
-        ),
-        signed_share_count: metrics_registry.int_counter(
-            "canister_http_signed_shares", "A count of the total number of shares signed."
-        )
+            in_client_requests: metrics_registry.int_gauge(
+                "canister_http_in_client_requests", "The total number of requests for which we are currently waiting for responses from the http client."
+            ),
+            shares_signed: metrics_registry.int_counter(
+                "canister_http_shares_signed", "A count of the total number of shares signed."
+            ),
+            shares_validated: metrics_registry.int_counter(
+                "canister_http_shares_validated", "A count of the total number of shares validated."
+            ),
+            shares_marked_invalid: metrics_registry.int_counter(
+                "canister_http_shares_marked_invalid", "A count of the total number of shares marked invalid."
+            )
         }
     }
 }
@@ -282,7 +292,7 @@ impl CanisterHttpPoolManagerImpl {
                         signature,
                     };
                     self.requested_id_cache.remove(&response.id);
-                    self.metrics.signed_share_count.inc();
+                    self.metrics.shares_signed.inc();
                     change_set.push(CanisterHttpChangeAction::AddToValidated(share, response));
                 }
             }
@@ -319,11 +329,13 @@ impl CanisterHttpPoolManagerImpl {
                 // TODO: more precise error handling
                 if let Err(err) = self.crypto.verify(share, registry_version) {
                     error!(self.log, "Unable to verify signature of share, {}", err);
+                    self.metrics.shares_marked_invalid.inc();
                     CanisterHttpChangeAction::HandleInvalid(
                         ic_crypto::crypto_hash(share),
                         format!("Unable to verify signature of share, {}", err),
                     )
                 } else {
+                    self.metrics.shares_validated.inc();
                     CanisterHttpChangeAction::MoveToValidated(ic_crypto::crypto_hash(share))
                 }
             })

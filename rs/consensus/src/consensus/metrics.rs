@@ -145,6 +145,8 @@ pub struct BatchStats {
     pub ingress_message_bytes_delivered: usize,
     pub xnet_bytes_delivered: usize,
     pub ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
+    pub canister_http_success_delivered: usize,
+    pub canister_http_timeouts_delivered: usize,
 }
 
 impl From<&Batch> for BatchStats {
@@ -155,6 +157,8 @@ impl From<&Batch> for BatchStats {
             ingress_message_bytes_delivered: batch.payload.ingress.count_bytes(),
             xnet_bytes_delivered: batch.payload.xnet.count_bytes(),
             ingress_ids: batch.payload.ingress.message_ids(),
+            canister_http_success_delivered: batch.payload.canister_http.responses.len(),
+            canister_http_timeouts_delivered: batch.payload.canister_http.timeouts.len(),
         }
     }
 }
@@ -222,6 +226,9 @@ pub struct FinalizerMetrics {
     pub ecdsa_quadruples_in_creation: IntGauge,
     pub ecdsa_ongoing_xnet_reshares: IntGauge,
     pub ecdsa_xnet_reshare_agreements: IntCounter,
+    // canister http payload metrics
+    pub canister_http_success_delivered: IntCounter,
+    pub canister_http_timeouts_delivered: IntCounter,
 }
 
 impl FinalizerMetrics {
@@ -286,6 +293,14 @@ impl FinalizerMetrics {
                 "consensus_ecdsa_reshare_agreements",
                 "Total number of ECDSA reshare agreements created",
             ),
+            canister_http_success_delivered: metrics_registry.int_counter(
+                "canister_http_success_delivered",
+                "Total number of canister http messages successfully delivered",
+            ),
+            canister_http_timeouts_delivered: metrics_registry.int_counter(
+                "canister_http_timeouts_delivered",
+                "Total number of canister http messages delivered as timeouts",
+            ),
         }
     }
 
@@ -301,6 +316,10 @@ impl FinalizerMetrics {
         self.finalization_certified_state_difference.set(
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
+        self.canister_http_success_delivered
+            .inc_by(batch_stats.canister_http_success_delivered as u64);
+        self.canister_http_timeouts_delivered
+            .inc_by(batch_stats.canister_http_timeouts_delivered as u64);
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
             self.ecdsa_key_transcript_created
                 .inc_by(ecdsa.key_transcript_created);

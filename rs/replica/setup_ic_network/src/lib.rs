@@ -460,6 +460,7 @@ fn setup_artifact_manager(
                     canister_http::CanisterHttpGossipImpl::new(
                         Arc::clone(&artifact_pools.consensus_pool_cache),
                         Arc::clone(&state_manager) as Arc<_>,
+                        replica_logger.clone(),
                     ),
                 )
             },
