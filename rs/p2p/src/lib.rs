@@ -168,14 +168,6 @@ pub fn start_p2p(
     malicious_flags: MaliciousFlags,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
-    let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(
-        node_id,
-        log.clone(),
-        &metrics_registry,
-        event_handler::ChannelConfig::from(gossip_config),
-    );
-    transport.set_event_handler(BoxCloneService::new(event_handler.clone()));
-
     let p2p_flow_tags = transport_config
         .p2p_flows
         .iter()
@@ -193,7 +185,15 @@ pub fn start_p2p(
         &metrics_registry,
         malicious_flags,
     ));
-    event_handler.start(gossip.clone());
+
+    let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(
+        node_id,
+        log.clone(),
+        &metrics_registry,
+        event_handler::ChannelConfig::from(gossip_config),
+        gossip.clone(),
+    );
+    transport.set_event_handler(BoxCloneService::new(event_handler));
     advert_broadcaster.start(gossip.clone());
 
     P2PThreadJoiner::new(log, gossip)
