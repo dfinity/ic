@@ -83,20 +83,8 @@ ci_jobs_required:
   - crash-safe-io
   # prod tests
   - generic-hourly
-  - subnet-update-workload-nightly
-  - network-reliability-test
   - rejoin-nightly
-  - maximum-capacity-xnet-slo-nightly
-  - subnet-update-workload-slo-100-1kb
-  - large-subnet-update-workload-slo-200-1kb
-  - subnet-update-workload-slo-5-100kb
-  - network-reliability-test-slo
-  - subnet-query-workload-slo-300-1kb
   - rejoin-test-slo
-  - maximum-capacity-rejoin-script
-  - maximum-capacity-xnet-script
-  - maximum-capacity-system-baseline-update
-  - maximum-capacity-system-baseline-query
   # finalize stage
   - notify-gitlab-success
   - notify-gitlab-failure
