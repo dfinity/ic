@@ -5780,6 +5780,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1-agent"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "garcon",
+ "ic-agent",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-icrc1-archive"
 version = "0.8.0"
 dependencies = [
@@ -13127,6 +13139,9 @@ dependencies = [
  "ic-fondue",
  "ic-http-utils",
  "ic-ic00-types",
+ "ic-icrc1",
+ "ic-icrc1-agent",
+ "ic-icrc1-ledger",
  "ic-interfaces",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-core",
