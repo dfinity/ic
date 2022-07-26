@@ -6,6 +6,7 @@ pub mod neuron;
 pub mod pb;
 pub mod proposal;
 mod reward;
+pub mod sns_upgrade;
 pub mod types;
 
 use std::{convert::TryInto, fmt::Debug};

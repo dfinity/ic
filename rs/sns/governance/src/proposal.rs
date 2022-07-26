@@ -7,11 +7,12 @@ use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemF
 use crate::pb::v1::{
     proposal, ExecuteGenericNervousSystemFunction, Motion, NervousSystemFunction,
     NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
-    Tally, UpgradeSnsControlledCanister, Vote,
+    Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
 use crate::types::{Environment, ONE_DAY_SECONDS};
 use crate::{validate_chars_count, validate_len, validate_required_field};
 
+use crate::pb::v1::proposal::Action;
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
@@ -150,6 +151,9 @@ pub async fn validate_and_render_action(
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
+        Action::UpgradeSnsToNextVersion(upgrade_sns) => {
+            validate_and_render_upgrade_sns_to_next_version(upgrade_sns)
+        }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
                 function_to_add,
@@ -260,6 +264,37 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 ## Canister wasm sha256: {}",
         canister_id,
         hex::encode(sha)
+    ))
+}
+
+/// Validates and renders a proposal with action UpgradeSnsToNextVersion.
+fn validate_and_render_upgrade_sns_to_next_version(
+    _upgrade_sns: &UpgradeSnsToNextVersion,
+) -> Result<String, String> {
+    let defects: Vec<String> = vec![];
+
+    // Generate final report.
+    if !defects.is_empty() {
+        return Err(format!(
+            "UpgradeSnsToNextVersion was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
+    }
+
+    let current_version = "TODO";
+    let next_version = "TODO";
+    let canister_to_be_upgraded = "TODO";
+
+    // TODO display the hashes for current version and new version
+    Ok(format!(
+        r"# Proposal to upgrade SNS to next version:
+
+## Current Version: {}
+
+## New Version: {}
+
+## Canister to be upgraded: {}",
+        current_version, next_version, canister_to_be_upgraded
     ))
 }
 

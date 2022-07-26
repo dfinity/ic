@@ -63,6 +63,9 @@ pub mod native_action_ids {
 
     /// ExecuteGenericNervousSystemFunction Action.
     pub const EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 6;
+
+    /// UpgradeSnsToNextVersion Action.
+    pub const UPGRADE_SNS_TO_NEXT_VERSION: u64 = 7;
 }
 
 impl governance::Mode {
@@ -976,6 +979,7 @@ impl From<&Action> for u64 {
             Action::UpgradeSnsControlledCanister(_) => {
                 native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER
             }
+            Action::UpgradeSnsToNextVersion(_) => native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
             Action::AddGenericNervousSystemFunction(_) => {
                 native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
@@ -1109,6 +1113,7 @@ impl From<u64> for ProposalId {
 
 pub mod test_helpers {
     use super::*;
+    use ic_crypto_sha::Sha256;
     use rand::{Rng, RngCore};
 
     /// An implementation of the Environment trait that behaves in a
@@ -1123,6 +1128,14 @@ pub mod test_helpers {
     pub struct NativeEnvironment {
         /// When Some, contains the value that the canister_id method returns.
         pub local_canister_id: Option<CanisterId>,
+
+        /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
+        #[allow(clippy::type_complexity)]
+        pub canister_calls_map: BTreeMap<[u8; 32], Result<Vec<u8>, (Option<i32>, String)>>,
+        // The default response is canister_calls_map doesn't have an entry.  Useful when you only
+        // care about specifying a single response for a given test, or alternately want to ensure
+        // that any call without a specified response returns an error.
+        pub default_canister_call_response: Result<Vec<u8>, (Option<i32>, String)>,
     }
 
     /// NativeEnvironment is "empty" by default. I.e. the canister_id method
@@ -1131,7 +1144,39 @@ pub mod test_helpers {
         fn default() -> Self {
             Self {
                 local_canister_id: None,
+                canister_calls_map: Default::default(),
+                default_canister_call_response: Ok(vec![]),
             }
+        }
+    }
+
+    fn compute_call_canister_key(
+        canister_id: CanisterId,
+        method_name: &str,
+        arg: Vec<u8>,
+    ) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.write(canister_id.get().as_slice());
+        hasher.write(method_name.as_bytes());
+        hasher.write(arg.as_slice());
+        hasher.finish()
+    }
+
+    impl NativeEnvironment {
+        /// Set the response for a given canister call.  This ensures that we only respond in
+        /// a given way if the parameters match what we expect.
+        pub fn set_call_canister_response(
+            &mut self,
+            canister_id: CanisterId,
+            method_name: &str,
+            arg: Vec<u8>,
+            response: Result<Vec<u8>, (Option<i32>, String)>,
+        ) {
+            println!("Expected call: {:?} {} {:?}", canister_id, method_name, arg);
+            self.canister_calls_map.insert(
+                compute_call_canister_key(canister_id, method_name, arg),
+                response,
+            );
         }
     }
 
@@ -1156,11 +1201,16 @@ pub mod test_helpers {
 
         async fn call_canister(
             &self,
-            _canister_id: CanisterId,
-            _method_name: &str,
-            _arg: Vec<u8>,
+            canister_id: CanisterId,
+            method_name: &str,
+            arg: Vec<u8>,
         ) -> Result<Vec<u8>, (Option<i32>, String)> {
-            unimplemented!()
+            println!("Actual call: {:?} {} {:?}", canister_id, method_name, arg);
+            let entry = compute_call_canister_key(canister_id, method_name, arg);
+            self.canister_calls_map
+                .get(&entry)
+                .unwrap_or(&self.default_canister_call_response)
+                .clone()
         }
 
         /// At least in the case of Governance (the only known user of

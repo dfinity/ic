@@ -256,6 +256,11 @@ message UpgradeSnsControlledCanister {
   bytes new_canister_wasm = 2;
 }
 
+// A proposal function to upgrade the SNS to the next version.  The versions are such that only
+// one kind of canister will update at the same time.
+// This returns an error if the canister cannot be upgraded or no upgrades are available.
+message UpgradeSnsToNextVersion {}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -324,6 +329,11 @@ message Proposal {
     //
     // Id = [1000-u64::MAX].
     ExecuteGenericNervousSystemFunction execute_generic_nervous_system_function = 10;
+
+    // Execute an upgrade to next version on the blessed SNS upgrade path.
+    //
+    // Id = 7.
+    UpgradeSnsToNextVersion upgrade_sns_to_next_version = 11;
   }
 }
 

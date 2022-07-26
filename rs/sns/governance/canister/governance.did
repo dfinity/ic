@@ -3,6 +3,7 @@ type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
   RemoveGenericNervousSystemFunction : nat64;
+  UpgradeSnsToNextVersion : record {};
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   Unspecified : record {};
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
