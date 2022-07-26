@@ -1,5 +1,5 @@
 {
-  "checksum": "40d267faefe5b21ac933512db34a49e4039746f74c7b5ea86a260a7b6546e79d",
+  "checksum": "50838a0a078df0da96517c03cd87896603308cadda582a90a5a8a1612c7f8111",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -11351,6 +11351,10 @@
             {
               "id": "serde_with 1.14.0",
               "target": "serde_with"
+            },
+            {
+              "id": "serde_yaml 0.8.26",
+              "target": "serde_yaml"
             },
             {
               "id": "serial_test 0.8.0",
@@ -43456,8 +43460,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43480,8 +43484,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

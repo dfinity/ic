@@ -702,6 +702,9 @@ def external_crates_repository(name, annotations):
             "serde_with": crate.spec(
                 version = "^1.6.2",
             ),
+            "serde_yaml": crate.spec(
+                version = "^0.8.24",
+            ),
             "serial_test": crate.spec(
                 version = "^0.8.0",
             ),
