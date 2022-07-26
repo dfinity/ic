@@ -44,12 +44,11 @@ pub struct Scalar {
 
 impl Ord for Scalar {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.ct_compare(other) {
-            -1 => std::cmp::Ordering::Less,
-            0 => std::cmp::Ordering::Equal,
-            1 => std::cmp::Ordering::Greater,
-            _ => panic!("Unexpected result from Scalar::ct_compare"),
-        }
+        // We assume ct_compare returns < 0 for less than, == 0 for equals
+        // and > 0 for greater than. This is a looser contract than what
+        // ct_compare actually does but it avoids having to include a
+        // panic or unreachable! invocation.
+        self.ct_compare(other).cmp(&0)
     }
 }
 
