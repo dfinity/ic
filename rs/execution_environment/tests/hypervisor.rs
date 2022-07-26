@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, RejectCode};
+use ic_execution_environment::CompilationCostHandling;
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -14,8 +15,9 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, universal_canister_compilation_cost,
-    wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, get_reply,
+    universal_canister_compilation_cost_correction, wasm_compilation_cost, wat_compilation_cost,
+    ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
@@ -2062,7 +2064,10 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     assert_eq!(
         test.executed_instructions(),
         match EmbeddersConfig::default().feature_flags.module_sharing {
-            FlagStatus::Enabled => wat_compilation_cost(wat),
+            FlagStatus::Enabled =>
+                wat_compilation_cost(wat)
+                    + CompilationCostHandling::CountReducedAmount
+                        .adjusted_compilation_cost(wat_compilation_cost(wat)),
             FlagStatus::Disabled => wat_compilation_cost(wat) * 2,
         }
     );
@@ -3124,7 +3129,7 @@ fn cycles_cannot_be_accepted_after_response() {
             - test.reply_fee(&c)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 
     // Canister C pays only for execution.
@@ -3134,7 +3139,7 @@ fn cycles_cannot_be_accepted_after_response() {
             - test.canister_execution_cost(c_id)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3215,7 +3220,7 @@ fn cycles_are_refunded_if_not_accepted() {
             - Cycles::new(b_to_c_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 
     // Canister C get all cycles it accepted.
@@ -3224,7 +3229,7 @@ fn cycles_are_refunded_if_not_accepted() {
         initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3288,7 +3293,7 @@ fn cycles_are_refunded_if_callee_traps() {
             - test.canister_execution_cost(b_id)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3342,7 +3347,7 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
         initial_cycles - test.canister_execution_cost(b_id) + Cycles::new(a_to_b_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3447,7 +3452,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
             - test.canister_execution_cost(b_id)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3550,7 +3555,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             - Cycles::new(b_to_c_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 
     // Canister C gets all cycles it accepted.
@@ -3559,7 +3564,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
         initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3663,7 +3668,9 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             - Cycles::new(b_to_c_accepted as u128)
             - std::ops::Mul::mul(
                 test.cycles_account_manager()
-                    .convert_instructions_to_cycles(universal_canister_compilation_cost()),
+                    .convert_instructions_to_cycles(
+                        universal_canister_compilation_cost_correction()
+                    ),
                 2u64
             )
     );
@@ -3674,7 +3681,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 
@@ -3799,7 +3806,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             + Cycles::new(a_to_b_accepted as u128)
             - test
                 .cycles_account_manager()
-                .convert_instructions_to_cycles(universal_canister_compilation_cost())
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
     );
 }
 

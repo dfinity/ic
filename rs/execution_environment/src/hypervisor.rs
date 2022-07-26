@@ -27,7 +27,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::update_round_limits;
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
-use crate::RoundInstructions;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -182,10 +181,9 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
-        round_limits.instructions -= match compilation_cost_handling {
-            CompilationCostHandling::CountReducedAmount => RoundInstructions::from(0),
-            CompilationCostHandling::CountFullAmount => as_round_instructions(compilation_cost),
-        };
+        round_limits.instructions -= as_round_instructions(
+            compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
+        );
         Ok((compilation_cost, execution_state))
     }
 

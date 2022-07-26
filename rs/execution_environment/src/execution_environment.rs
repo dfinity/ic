@@ -1896,15 +1896,33 @@ impl ExecutionEnvironment {
     }
 }
 
-/// Indicates whether the time spent compiling this canister should count
-/// against the round instruction limits or should be ignored. Canisters should
-/// always be charged for compilation costs even when they aren't counted
-/// against the round limits. Only public for testing.
+/// Indicates whether the full time spent compiling this canister or a reduced
+/// amount should count against the round instruction limits. Reduced amounts
+/// should be counted when the module was deserialized from a previous
+/// compilation instead of fully compiled. Canisters should always be charged
+/// for compilation costs even when they aren't counted against the round
+/// limits. Only public for testing.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub enum CompilationCostHandling {
     CountReducedAmount,
     CountFullAmount,
+}
+
+/// The expected speed up of deserializing a module compared to compiling it.
+const DESERIALIZATION_SPEED_UP_FACTOR: u64 = 100;
+
+impl CompilationCostHandling {
+    /// Adjusts the compilation cost based on how it should be handled. Only public for use in tests.
+    #[doc(hidden)]
+    pub fn adjusted_compilation_cost(&self, compilation_cost: NumInstructions) -> NumInstructions {
+        match self {
+            CompilationCostHandling::CountReducedAmount => {
+                compilation_cost / DESERIALIZATION_SPEED_UP_FACTOR
+            }
+            CompilationCostHandling::CountFullAmount => compilation_cost,
+        }
+    }
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).

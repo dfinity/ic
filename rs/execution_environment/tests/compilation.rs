@@ -1,9 +1,9 @@
 mod execution_tests {
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+    use ic_execution_environment::CompilationCostHandling;
     use ic_state_machine_tests::Cycles;
     use ic_test_utilities::execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
     use ic_test_utilities_metrics::fetch_histogram_stats;
-    use ic_types::NumInstructions;
 
     const WAT_EMPTY: &str = "(module)";
     const WAT_WITH_GO: &str = r#"
@@ -232,12 +232,14 @@ mod execution_tests {
             test.canister_executed_instructions(canister_id1),
             wat_compilation_cost(WAT_EMPTY)
         );
+        let compilation_cost_handling =
+            match EmbeddersConfig::default().feature_flags.module_sharing {
+                FlagStatus::Enabled => CompilationCostHandling::CountReducedAmount,
+                FlagStatus::Disabled => CompilationCostHandling::CountFullAmount,
+            };
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            match EmbeddersConfig::default().feature_flags.module_sharing {
-                FlagStatus::Enabled => NumInstructions::from(0),
-                FlagStatus::Disabled => wat_compilation_cost(WAT_EMPTY),
-            }
+            compilation_cost_handling.adjusted_compilation_cost(wat_compilation_cost(WAT_EMPTY))
         );
         // Even though we didn't need to recompile, the canister should still be
         // charged for it.
@@ -279,6 +281,7 @@ mod state_machine_tests {
     //! full scheduler so they exercise the actual checkpoint logic.
 
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+    use ic_execution_environment::CompilationCostHandling;
     use ic_state_machine_tests::StateMachine;
     use ic_test_utilities::execution_environment::wat_compilation_cost;
 
@@ -300,22 +303,31 @@ mod state_machine_tests {
     fn compilation_cost_ignored_from_install_to_install() {
         let env = StateMachine::new();
 
-        let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER).get() as f64;
+        let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER);
 
         // Installing first canister takes some instructions.
         let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions,
+            expected_compilation_instructions.get() as f64,
         );
 
         // Installing another canister with the same WASM doesn't take instructions.
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+        let compilation_cost_handling =
+            match EmbeddersConfig::default().feature_flags.module_sharing {
+                FlagStatus::Enabled => CompilationCostHandling::CountReducedAmount,
+                FlagStatus::Disabled => CompilationCostHandling::CountFullAmount,
+            };
         assert_eq!(
             env.subnet_message_instructions(),
             match EmbeddersConfig::default().feature_flags.module_sharing {
-                FlagStatus::Enabled => expected_compilation_instructions,
-                FlagStatus::Disabled => 2.0 * expected_compilation_instructions,
+                FlagStatus::Enabled =>
+                    expected_compilation_instructions.get() as f64
+                        + compilation_cost_handling
+                            .adjusted_compilation_cost(expected_compilation_instructions)
+                            .get() as f64,
+                FlagStatus::Disabled => 2.0 * (expected_compilation_instructions.get() as f64),
             }
         );
     }
