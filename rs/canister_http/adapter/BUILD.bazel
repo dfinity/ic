@@ -1,0 +1,88 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/canister_http/service",
+    "//rs/config",
+    "//rs/monitoring/adapter_metrics_server",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "@crate_index//:async-socks5",
+    "@crate_index//:async-stream",
+    "@crate_index//:byte-unit",
+    "@crate_index//:clap",
+    "@crate_index//:futures",
+    "@crate_index//:futures-core",
+    "@crate_index//:http",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-socks2",
+    "@crate_index//:hyper-tls",
+    "@crate_index//:itertools",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+    "@crate_index//:tower",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:fast-socks5",
+    "@crate_index//:uuid",
+    "@crate_index//:wiremock",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "adapter",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_canister_http_adapter",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "adapter_test",
+    aliases = ALIASES,
+    crate = ":adapter",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "adapter_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
