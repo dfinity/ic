@@ -6827,8 +6827,10 @@ name = "ic-regedit"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "base64 0.11.0",
  "clap 3.1.18",
  "ic-base-types",
+ "ic-crypto",
  "ic-crypto-sha",
  "ic-prep",
  "ic-protobuf",
@@ -6839,6 +6841,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
+ "ic-types 0.8.0",
  "prost",
  "serde",
  "serde_json",
