@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/bin/env python3
 import os
 import re
 import subprocess
@@ -48,8 +48,10 @@ def add_benchmark():
         == "y"
     )
     install_canister = input(
-        "Provide canister to install. Leave empty otherwise. Workload experiments will use the counter canister in that case"
+        "Provide canister to install. Leave empty otherwise. Workload experiments will use the counter canister in that case. "
     )
+    if len(install_canister) < 1:
+        install_canister = "counter"
 
     if is_workload_bench:
         with open("templates/workload_benchmark.py.hb") as f:
@@ -100,7 +102,8 @@ def add_benchmark():
     for _, path in output.items():
         subprocess.check_output(["git", "add", path])
 
-    print(generate_cd_job(benchmark_fname, f"{benchmark_fname}.py", is_max_capacity_run))
+    generate_cd_job(benchmark_fname, f"{benchmark_fname}.py", is_max_capacity_run)
+    print("Done!")
 
 
 if __name__ == "__main__":

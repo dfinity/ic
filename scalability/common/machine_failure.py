@@ -1,4 +1,5 @@
 import random
+import tempfile
 import threading
 import time
 
@@ -28,18 +29,25 @@ class MachineFailure(threading.Thread):
         services = MachineFailure.get_services()
         random.shuffle(services)
         for service in services:
-            print(f"💥 Killing replicas on ${machines}")
+            print(f"💥 Killing replicas on {machines}")
             ssh.run_ssh_in_parallel(
                 machines,
-                f"sudo systemctl kill --signal SIGKILL ${service}; "
-                f"sudo systemctl stop ${service}; "
-                f"sudo systemctl status ${service}",
+                f"sudo systemctl kill --signal SIGKILL {service}; "
+                f"sudo systemctl stop {service}; "
+                f"sudo systemctl status {service}",
+                f_stdout=tempfile.NamedTemporaryFile().name,
+                f_stderr=tempfile.NamedTemporaryFile().name,
             )
 
     def start_nodes(machines: [str]):
-        print(f"🔄 Restarting replicas on ${machines}")
+        print(f"🔄 Restarting replicas on {machines}")
         for service in MachineFailure.get_services():
-            ssh.run_ssh_in_parallel(machines, f"sudo systemctl start {service}; sudo systemctl status {service}")
+            ssh.run_ssh_in_parallel(
+                machines,
+                f"sudo systemctl start {service}; sudo systemctl status {service}",
+                f_stdout=tempfile.NamedTemporaryFile().name,
+                f_stderr=tempfile.NamedTemporaryFile().name,
+            )
 
     def run(self):
         """Simulate failures on the given machines."""

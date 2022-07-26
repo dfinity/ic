@@ -10,7 +10,7 @@ FLAGS = gflags.FLAGS
 {{#unless use_workload_generators}}
 gflags.DEFINE_string("echo_string", "Hello world", "String to print")
 {{/unless}}
-NUM_ITERATIONS = 2
+
 
 class {{experiment_name}}(workload_experiment.WorkloadExperiment):
     """Example for how to call an external binary from the scalability suite."""
@@ -34,7 +34,7 @@ class {{experiment_name}}(workload_experiment.WorkloadExperiment):
             self.target_nodes, # List of IC nodes running the canister that should be targeted
             config["load_total"], # Number of requests per second to execute
             canister_ids=None, # None = Target all installed canisters
-            duration=300, # How long to run the workload (in secs)
+            duration=FLAGS.iter_duration, # How long to run the workload (in secs)
             payload=None, # Payload to send to the canister
             method=None, # Update or query, None = QueryCounter
             call_method=None, # Name of the caniter's method to call, works only iff method=Update or method=Query
@@ -45,7 +45,7 @@ class {{experiment_name}}(workload_experiment.WorkloadExperiment):
         subprocess.check_output(["echo", config["string"], config["iteration"]])
         {{/if}}
 
-    {{#if is_max_capacity_run}}
+
     def run_iterations(self, datapoints=None):
         """Exercise the experiment with specified iterations."""
         for load_total in datapoints:
@@ -57,35 +57,30 @@ class {{experiment_name}}(workload_experiment.WorkloadExperiment):
             failure_rate = evaluated_summaries.failure_rate
             print(f"load {load_total}: p99 latency: {p99} - failure rate {failure_rate}")
 
-    {{/if}}
+        self.write_summary_file(
+            "{{experiment_fname}}",
+            {
+                # TODO - experiment specific output for you benchmark (arbitrary)
+                {{#if use_workload_generators}}
+                {{else}}
+                "string": FLAGS.echo_string
+                {{/if}}
+            },
+            [],     # TODO - x-axis labels on plots (e.g. the request rates)
+            "n.a."  # TODO - x-axis title on plots
+        )
+
+
 if __name__ == "__main__":
 
-    misc.parse_command_line_args()
-
     exp = {{experiment_name}}()
-    exp.init()
-    exp.init_experiment()
 
-    exp.start_experiment()
-    for i in range(NUM_ITERATIONS):
-        exp.run_experiment({
-            {{#if use_workload_generators}}
-            "load_total": (i+1)*20,  # TODO - define you load per iteration here.
-            {{else}}
-            "string": FLAGS.echo_string,
-            "iteration": i,
-            {{/if}}
-        })
-    exp.write_summary_file(
-        "{{experiment_fname}}",
-        {
-            {{#if use_workload_generators}}
-            {{else}}
-            "string": FLAGS.echo_string
-            {{/if}}
-        },
-        [],
-        "n.a."
-    )
+    exp.run_experiment({
+        {{#if use_workload_generators}}
+        "load_total": 20,
+        {{else}}
+        "string": FLAGS.echo_string,
+        "iteration": i,
+        {{/if}}
+    })
 
-    exp.end_experiment()

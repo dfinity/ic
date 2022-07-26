@@ -75,7 +75,6 @@ class Test_Experiment(TestCase):
         exp._WorkloadExperiment__kill_workload_generator = MagicMock()
 
         exp.canister_ids = {"counter": ["abc"]}
-        exp.init_experiment()
         exp.run_experiment({})
 
         exp.subnet_id = "abc"
