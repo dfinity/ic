@@ -195,7 +195,7 @@ impl DirectSnsDeployerForTests {
     fn validate_deployment(&self) {
         println!("Validating deployment...");
         self.print_nervous_system_parameters();
-        self.print_ledger_transfer_fee();
+        self.print_ledger_metadata();
         self.print_token_symbol();
         self.print_token_name();
     }
@@ -214,16 +214,16 @@ impl DirectSnsDeployerForTests {
         ]);
     }
 
-    /// Call the Ledger's `transfer_fee` method and print the result
-    fn print_ledger_transfer_fee(&self) {
-        println!("Ledger transfer_fee:");
+    /// Call the Ledger's `icrc1_metadata` method and print the result
+    fn print_ledger_metadata(&self) {
+        println!("Ledger metadata:");
         call_dfx(&[
             "canister",
             "--network",
             &self.args.network,
             "call",
             "sns_ledger",
-            "transfer_fee",
+            "icrc1_metadata",
             "(record {})",
         ]);
     }
@@ -237,7 +237,7 @@ impl DirectSnsDeployerForTests {
             &self.args.network,
             "call",
             "sns_ledger",
-            "symbol",
+            "icrc1_symbol",
             "()",
         ]);
     }
@@ -251,7 +251,7 @@ impl DirectSnsDeployerForTests {
             &self.args.network,
             "call",
             "sns_ledger",
-            "name",
+            "icrc1_name",
             "()",
         ]);
     }

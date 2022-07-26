@@ -5,6 +5,10 @@ authors = ["The Internet Computer Project Developers"]
 description = "A ledger canister implementing https://github.com/dfinity/ICRC-1 standard"
 edition = "2018"
 
+[[bin]]
+name = "ic-icrc1-ledger"
+path = "src/main.rs"
+
 [dependencies]
 async-trait = "0.1.53"
 candid = "0.7.10"
