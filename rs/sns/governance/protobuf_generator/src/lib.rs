@@ -151,6 +151,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.UpgradeSnsToNextVersion",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.Proposal",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",

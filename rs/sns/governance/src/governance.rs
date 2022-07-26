@@ -11,7 +11,6 @@ use std::string::ToString;
 use crate::account_from_proto;
 use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
-    upgrade_canister_directly,
 };
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
@@ -31,7 +30,7 @@ use crate::pb::v1::{
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron,
     NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
     ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
-    UpgradeSnsControlledCanister, Vote,
+    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
@@ -57,6 +56,7 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
+use crate::sns_upgrade::get_all_sns_canisters;
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
@@ -1700,10 +1700,15 @@ impl Governance {
                 self.perform_upgrade_sns_controlled_canister(proposal_id, params)
                     .await
             }
+            Action::UpgradeSnsToNextVersion(_) => {
+                self.perform_upgrade_to_next_sns_version(proposal_id).await
+            }
+            // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
             proposal::Action::ExecuteGenericNervousSystemFunction(call) => {
                 self.perform_execute_generic_nervous_system_function(call)
                     .await
             }
+            // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_generic_nervous_system_function(nervous_system_function)
             }
@@ -1847,9 +1852,9 @@ impl Governance {
         }
     }
 
-    /// Executes a UpgradeSnsControlledCanister proposal by either initializing the upgrade
-    /// of the SNS canister (in the case where root is upgraded) or by calling the root canister
-    /// to upgrade a SNS canister
+    /// Executes a UpgradeSnsControlledCanister proposal by calling the root canister
+    /// to upgrade an SNS controlled canister.  This does not upgrade "core" SNS canisters
+    /// (i.e. Root, Governance, Ledger, Ledger Archives, or Sale)
     async fn perform_upgrade_sns_controlled_canister(
         &mut self,
         proposal_id: u64,
@@ -1857,23 +1862,48 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
-        let target_canister_id = get_canister_id(&upgrade.canister_id)?;
+        let sns_canisters =
+            get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic()).await;
 
-        let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
-        println!(
-            "{}target_is_root: {} (target_canister_id = {})",
-            log_prefix(),
-            target_is_root,
-            target_canister_id
-        );
-        if target_is_root {
-            return upgrade_canister_directly(
-                &*self.env,
-                target_canister_id,
-                upgrade.new_canister_wasm,
-            )
-            .await;
+        let dapp_canisters: Vec<CanisterId> = sns_canisters
+            .dapps
+            .iter()
+            .map(|x| {
+                CanisterId::new(*x).unwrap_or_else(|_| {
+                    panic!("Could not decode principalId into CanisterId: {}", x)
+                })
+            })
+            .collect();
+
+        let target_canister_id = get_canister_id(&upgrade.canister_id)?;
+        // Fail if not a registered dapp canister
+        if !dapp_canisters.contains(&target_canister_id) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!(
+                    "UpgradeSnsControlledCanister can only upgrade dapp canisters that are registered \
+                    with the SNS root: see Root::register_dapp_canister. Valid targets are: {:?}",
+                    dapp_canisters
+                ),
+            ));
         }
+
+        // TODO move this commented logic to the new UpgradeSnsToNextVersion action handler
+        // let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
+        // println!(
+        //     "{}target_is_root: {} (target_canister_id = {})",
+        //     log_prefix(),
+        //     target_is_root,
+        //     target_canister_id
+        // );
+        // if target_is_root {
+        //     return upgrade_canister_directly(
+        //         &*self.env,
+        //         target_canister_id,
+        //         upgrade.new_canister_wasm,
+        //     )
+        //     .await;
+        // }
 
         // Serialize upgrade.
         let payload = {
@@ -1911,6 +1941,15 @@ impl Governance {
                     format!("Canister method call failed: {:?}", err),
                 )
             })
+    }
+
+    async fn perform_upgrade_to_next_sns_version(
+        &mut self,
+        proposal_id: u64,
+    ) -> Result<(), GovernanceError> {
+        err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
+
+        Ok(())
     }
 
     /// Returns the nervous system parameters
@@ -2029,7 +2068,11 @@ impl Governance {
             self.proto.root_canister_id_or_panic(),
             self.proto.ledger_canister_id_or_panic(),
             self.env.canister_id(),
+            // TODO add ledger archives
+            // TODO add sale (swap) canister here?
         };
+
+        // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
         self.mode().allows_proposal_action_or_err(
             action,
             &disallowed_target_canister_ids,
@@ -3468,15 +3511,17 @@ fn err_if_another_upgrade_is_in_progress(
     id_to_proposal_data: &BTreeMap</* proposal ID */ u64, ProposalData>,
     executing_proposal_id: u64,
 ) -> Result<(), GovernanceError> {
-    let upgrade_action_id: u64 =
-        (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+    let upgrade_action_ids: [u64; 2] = [
+        (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+        (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+    ];
 
     for (other_proposal_id, proposal_data) in id_to_proposal_data {
         if *other_proposal_id == executing_proposal_id {
             continue;
         }
 
-        if proposal_data.action != upgrade_action_id {
+        if !upgrade_action_ids.contains(&proposal_data.action) {
             continue;
         }
 
@@ -3548,6 +3593,9 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::UpgradeSnsControlledCanister;
+    use crate::pb::v1::UpgradeSnsToNextVersion;
+    use crate::sns_upgrade::{ListSnsCanistersRequest, ListSnsCanistersResponse};
     use crate::{
         pb::v1::{
             manage_neuron_response,
@@ -3561,6 +3609,7 @@ mod tests {
     use ic_canister_client_sender::Sender;
     use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
     use ic_sns_test_utils::itest_helpers::UserInfo;
+    use ic_test_utilities::types::ids::canister_test_id;
     use maplit::btreemap;
     use proptest::prelude::{prop_assert, proptest};
     use std::sync::Arc;
@@ -3932,16 +3981,44 @@ mod tests {
     }
 
     #[test]
-    fn test_disallow_concurrent_upgrade_execution() {
+    fn two_sns_version_upgrades_cannot_be_concurrent() {
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution((&action).into(), action);
+    }
+
+    #[test]
+    fn two_canister_upgrades_cannot_be_concurrent() {
+        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
+        test_disallow_concurrent_upgrade_execution((&action).into(), action);
+    }
+
+    #[test]
+    fn sns_upgrades_block_concurrent_canister_upgrades() {
+        let executing_action_id =
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into();
+        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    #[test]
+    fn canister_upgrades_block_concurrent_sns_upgrades() {
+        let executing_action_id =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    /// A test method to allow testing concurrent upgrades for multiple scenarios
+    fn test_disallow_concurrent_upgrade_execution(
+        proposal_in_progress_action_id: u64,
+        action_to_be_executed: Action,
+    ) {
         // Step 1: Prepare the world.
         use ProposalDecisionStatus as Status;
 
-        let upgrade_action_id: u64 =
-            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
-
         // Step 1.1: First proposal, which will block the next one.
         let execution_in_progress_proposal = ProposalData {
-            action: upgrade_action_id,
+            action: proposal_in_progress_action_id,
             id: Some(1_u64.into()),
             decided_timestamp_seconds: 123,
             latest_tally: Some(Tally {
@@ -3956,7 +4033,7 @@ mod tests {
 
         // Step 1.2: Second proposal. This one will be thwarted by the first.
         let to_be_processed_proposal = ProposalData {
-            action: upgrade_action_id,
+            action: (&action_to_be_executed).into(),
             id: Some(2_u64.into()),
             ballots: btreemap! {
                 "neuron 1".to_string() => Ballot {
@@ -3968,11 +4045,7 @@ mod tests {
             wait_for_quiet_state: Some(WaitForQuietState::default()),
             proposal: Some(Proposal {
                 title: "Doomed".to_string(),
-                action: Some(proposal::Action::UpgradeSnsControlledCanister(
-                    UpgradeSnsControlledCanister {
-                        ..Default::default()
-                    },
-                )),
+                action: Some(action_to_be_executed),
                 ..Default::default()
             }),
             ..Default::default()
@@ -4047,6 +4120,170 @@ mod tests {
              final_proposal_data: {:#?}",
             final_proposal_data,
         );
+    }
+
+    #[test]
+    fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
+        // Helper to let us create a lot of proposals to test.
+        let create_upgrade_proposal = |id: u64, canister_id: CanisterId| {
+            let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
+                canister_id: Some(canister_id.get()),
+                // small valid wasm
+                new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
+            });
+
+            // Upgrade Proposal
+            let proposal = ProposalData {
+                action: (&action).into(),
+                id: Some(id.into()),
+                ballots: btreemap! {
+                    "neuron 1".to_string() => Ballot {
+                        vote: Vote::Yes as i32,
+                        voting_power: 9001,
+                        cast_timestamp_seconds: 1,
+                    },
+                },
+                wait_for_quiet_state: Some(WaitForQuietState::default()),
+                proposal: Some(Proposal {
+                    title: "Upgrade Proposal".to_string(),
+                    action: Some(action),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            assert_eq!(proposal.status(), Status::Open);
+
+            proposal
+        };
+
+        use ProposalDecisionStatus as Status;
+
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let ledger_canister_id = canister_test_id(502);
+        let swap_canister_id = canister_test_id(503);
+        let ledger_archive_ids = vec![canister_test_id(504)];
+
+        let dapp_canisters = vec![canister_test_id(600)];
+
+        // Setup Env to return a response to our canister_call query.
+        let mut env = NativeEnvironment {
+            local_canister_id: Some(governance_canister_id),
+            ..Default::default()
+        };
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(governance_canister_id.get()),
+                ledger: Some(ledger_canister_id.get()),
+                swap: Some(swap_canister_id.get()),
+                dapps: dapp_canisters.iter().map(|id| id.get()).collect(),
+                archives: ledger_archive_ids.iter().map(|id| id.get()).collect()
+            })
+            .unwrap()),
+        );
+
+        // Make all of our proposals and initialize them in Governance
+        let dapp_proposal = create_upgrade_proposal(1, dapp_canisters[0]);
+        let root_proposal = create_upgrade_proposal(2, root_canister_id);
+        let governance_proposal = create_upgrade_proposal(3, governance_canister_id);
+        let ledger_proposal = create_upgrade_proposal(4, ledger_canister_id);
+        let swap_proposal = create_upgrade_proposal(5, swap_canister_id);
+        let ledger_archive_proposal = create_upgrade_proposal(6, ledger_archive_ids[0]);
+        let unknown_canister_upgrade_proposal = create_upgrade_proposal(7, canister_test_id(2000));
+
+        // Init Governance.
+        let mut governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 => dapp_proposal,
+                    2 => root_proposal,
+                    3 => governance_proposal,
+                    4 => ledger_proposal,
+                    5 => swap_proposal,
+                    6 => ledger_archive_proposal,
+                    7 => unknown_canister_upgrade_proposal
+                },
+                root_canister_id: Some(root_canister_id.get()),
+                ledger_canister_id: Some(ledger_canister_id.get()),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // A helper function to execute each proposal.
+        let mut execute_proposal = |proposal_id| {
+            governance.process_proposal(proposal_id);
+
+            let now = std::time::Instant::now;
+
+            let start = now();
+            // In practice, the exit condition of the following loop occurs in much
+            // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
+            // generous limit is twofold: 1. avoid flakes in CI, while at the same
+            // time 2. do not run forever if something goes wrong.
+            let give_up = || now() < start + std::time::Duration::from_secs(30);
+            let final_proposal_data = loop {
+                let result = governance
+                    .get_proposal(&GetProposal {
+                        proposal_id: Some(ProposalId { id: proposal_id }),
+                    })
+                    .result
+                    .unwrap();
+                let proposal_data = match result {
+                    get_proposal_response::Result::Proposal(p) => p,
+                    _ => panic!("get_proposal result: {:#?}", result),
+                };
+
+                if proposal_data.status().is_final() {
+                    break proposal_data;
+                }
+
+                if give_up() {
+                    panic!("Proposal took too long to terminate (in the failed state).")
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            };
+            final_proposal_data
+        };
+
+        // Helper function to assert failures.
+        let assert_proposal_failed = |data: ProposalData, proposal_name: &str| {
+            assert_eq!(
+                data.status(),
+                Status::Failed,
+                "{} proposal did not fail. final_proposal_data: {:#?}",
+                proposal_name,
+                data,
+            );
+            assert_eq!(
+                data.failure_reason.as_ref().unwrap().error_type,
+                ErrorType::InvalidCommand as i32,
+                "{} proposal failed, but failure_reason was not as expected. \
+             final_proposal_data: {:#?}",
+                proposal_name,
+                data,
+            );
+        };
+
+        // This is the only proposal that should succeed.
+        let dapp_upgrade_result = execute_proposal(1);
+        assert_eq!(dapp_upgrade_result.status(), Status::Executed);
+
+        // We assert the rest of the proposals fail.
+        assert_proposal_failed(execute_proposal(2), "Root upgrade");
+        assert_proposal_failed(execute_proposal(3), "Governance upgrade");
+        assert_proposal_failed(execute_proposal(4), "Ledger upgrade");
+        assert_proposal_failed(execute_proposal(5), "Swap upgrade");
+        assert_proposal_failed(execute_proposal(6), "Ledger Archive upgrade");
+        assert_proposal_failed(execute_proposal(7), "Unregistered canister upgrade");
     }
 
     #[test]

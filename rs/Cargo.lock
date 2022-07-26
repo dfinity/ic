@@ -7574,6 +7574,7 @@ dependencies = [
  "ic-sns-governance",
  "ic-sns-governance-protobuf-generator",
  "ic-sns-test-utils",
+ "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
  "lazy_static",

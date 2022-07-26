@@ -259,6 +259,13 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(bytes = "vec", tag = "2")]
     pub new_canister_wasm: ::prost::alloc::vec::Vec<u8>,
 }
+/// A proposal function to upgrade the SNS to the next version.  The versions are such that only
+/// one kind of canister will update at the same time.
+/// This returns an error if the canister cannot be upgraded or no upgrades are available.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeSnsToNextVersion {}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
@@ -285,7 +292,7 @@ pub struct Proposal {
     ///
     /// See `impl From<&Action> for u64` in src/types.rs for the implementation
     /// of this mapping.
-    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10")]
+    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11")]
     pub action: ::core::option::Option<proposal::Action>,
 }
 /// Nested message and enum types in `Proposal`.
@@ -349,6 +356,11 @@ pub mod proposal {
         /// Id = \[1000-u64::MAX\].
         #[prost(message, tag = "10")]
         ExecuteGenericNervousSystemFunction(super::ExecuteGenericNervousSystemFunction),
+        /// Execute an upgrade to next version on the blessed SNS upgrade path.
+        ///
+        /// Id = 7.
+        #[prost(message, tag = "11")]
+        UpgradeSnsToNextVersion(super::UpgradeSnsToNextVersion),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize)]
