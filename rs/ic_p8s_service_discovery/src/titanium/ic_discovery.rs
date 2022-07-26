@@ -299,16 +299,20 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
         Ok(prometheus_target_list
             .into_iter()
             .filter_map(|target_group| {
-                let targets: BTreeSet<_> = target_group
-                    .targets
-                    .into_iter()
-                    .filter_map(&mapping)
-                    .collect();
-                if !targets.is_empty() {
-                    return Some(PrometheusTargetGroup {
-                        targets,
-                        ..target_group
-                    });
+                // replica targets are only exposed if they are assigned to a
+                // subnet (i.e. if the subnet id is set)
+                if job_name != REPLICA_JOB_NAME || target_group.subnet_id.is_some() {
+                    let targets: BTreeSet<_> = target_group
+                        .targets
+                        .into_iter()
+                        .filter_map(&mapping)
+                        .collect();
+                    if !targets.is_empty() {
+                        return Some(PrometheusTargetGroup {
+                            targets,
+                            ..target_group
+                        });
+                    }
                 }
                 None
             })
@@ -507,6 +511,6 @@ mod tests {
 
         let subnet_count = target_groups.iter().unique_by(|g| g.subnet_id).count();
         // there are 29 subnets at version 0x6dc1, and unassigned nodes belong to `None`
-        assert_eq!(subnet_count, 30);
+        assert_eq!(subnet_count, 29);
     }
 }
