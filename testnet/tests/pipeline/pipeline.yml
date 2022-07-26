@@ -118,21 +118,7 @@ generic-hourly:
 
 # NIGHTLY TESTS
 
-# subnet_update_workload: 6 hour 1kb @ 300 update requests per second
-subnet-update-workload-nightly:
-  extends: .prod-nightly-test-group-1-reserved
-  timeout: 8 hours
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET1" ]]; then echo "Please set the TESTNET1 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 7h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 21600 300 1k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# boundary_update_workload: 1 hour 1kb @ 100 update requests per second
+# boundary_update_workload: 10min 1kb @ 100 update requests per second
 boundary-update-workload-nightly:
   extends: .prod-nightly-test-group-3
   allow_failure: true #boundary node test is not needed for release of replica
@@ -143,36 +129,7 @@ boundary-update-workload-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
 
-      $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 3600 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# icos_boundary_update_workload: 1 hour 1kb @ 100 update requests per second
-# subnet_update_workload test is run with IC-OS boundary nodes VMs
-icos-boundary-update-workload-nightly:
-  extends: .prod-nightly-test-group-3
-  allow_failure: true #boundary node test is not needed for release of replica
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 3600 100 1k normal icos_boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# network_reliability_test: 15min 1k @ 100 update requests per second
-# Add losses, bandwidth limit and drops to 1/3 of nodes and check if the whole system ran _fine_
-network-reliability-test:
-  extends: .prod-nightly-test-group-4
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 100 1k normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
+      $SHELL_WRAPPER timeout 48m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 600 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 # rejoin_test: 15min runtime, 8 canisters installed
 # Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
 rejoin-nightly:
@@ -187,31 +144,6 @@ rejoin-nightly:
 
       $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-# Maximum xnet capacity (run nightly to ensure it runs correctly, not to determine capacity)
-maximum-capacity-xnet-slo-nightly:
-  extends: .prod-nightly-test-group-2
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 47m ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 30 20 2 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# Maximum rejoin capacity (run nightly to ensure it runs correctly, not to determine capacity)
-maximum-capacity-rejoin-nightly:
-  extends: .prod-nightly-test-group-3
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET3" ]]; then echo "Please set the TESTNET3 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 72h ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 2 2 1 2 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # SCENARIO TEST subnet_recovery_nns: Milestone 4b style recovery
 subnet-recovery-nns-test-nightly:
@@ -224,83 +156,6 @@ subnet-recovery-nns-test-nightly:
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
       export GIT_REVISION
       $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/subnet_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# subnet_update_workload: 6 hours with 100 update requests per second, 1kb each
-subnet-update-workload-slo-100-1kb:
-  extends: .prod-slo-test
-  needs: []  # allow starting immediately
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 21600 100 1k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-  timeout: 7 hours
-
-# SCENARIO TEST large-subnet_update_workload: 20min 1kb @ 300 update requests per second
-large-subnet-update-workload-slo-200-1kb:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 1200 200 1k large replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST subnet_update_workload: 30min 100kb @ 5 update requests per second
-subnet-update-workload-slo-5-100kb:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 1800 5 100k normal replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-
-# SCENARIO TEST with update workload using boundary nodes: 2h 1kb @ 100 update requests per second
-boundary-update-workload-slo-2h:
-  extends: .prod-slo-test
-  allow_failure: true #boundary node test is not needed for release of replica
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST network_reliability_test: 15min 1k @ 100 update requests per second
-# Add losses, bandwidth limit and drops to 1/3 of nodes and check if the whole system ran _fine_
-network-reliability-test-slo:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 100 1k normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST subnet_query_workload: 30 min 1k @ 1000 query calls per second
-subnet-query-workload-slo-300-1kb:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/subnet_query_workload.sh "$TESTNET" 1800 1000 1k replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 
 # SCENARIO TEST rejoin: 15min runtime, 8 canisters installed
 # Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
@@ -327,7 +182,6 @@ rejoin-test-slo:
       export GIT_REVISION
 
       $SHELL_WRAPPER timeout 3h ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 280 1k 56_nns replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 280 1k 56_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
   timeout: 4 hours
 
 # 46-nns-tests-slo: run some tests on topology with 46 nodes in the NNS subents
@@ -342,7 +196,6 @@ rejoin-test-slo:
       export GIT_REVISION
 
       $SHELL_WRAPPER timeout 160m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 7200 200 1k 46_nns replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
-      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/network_reliability_test.sh "$TESTNET" 900 180 1k 46_nns "$CI_JOB_STAGE/$CI_JOB_NAME"
   timeout: 4 hours
 
 icos-continuous-upgrade-nightly:
