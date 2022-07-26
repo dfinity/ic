@@ -1,5 +1,5 @@
 {
-  "checksum": "bed559a100aa15f5231aa8d2c60250f302ddc37a5c35b8ed4e9a6b684707d75f",
+  "checksum": "3fbfd90d230343b5e915e3f48741c829b8821e587c30be86b256e3b9d8477675",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -919,7 +919,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -1884,7 +1884,7 @@
               "target": "askama_shared"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -2004,7 +2004,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -2269,7 +2269,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -2425,7 +2425,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -2491,7 +2491,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -2646,13 +2646,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.5.13": {
+    "axum 0.5.14": {
       "name": "axum",
-      "version": "0.5.13",
+      "version": "0.5.14",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.5.13/download",
-          "sha256": "6b9496f0c1d1afb7a2af4338bbe1d969cddfead41d87a9fb3aaa6d0bbc7af648"
+          "url": "https://crates.io/api/v1/crates/axum/0.5.14/download",
+          "sha256": "c943a505c17b494638a38a9af129067f760c9c06794b9f57d499266909be8e72"
         }
       },
       "targets": [
@@ -2789,7 +2789,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.13"
+        "version": "0.5.14"
       },
       "license": "MIT"
     },
@@ -3503,7 +3503,7 @@
               "target": "peeking_take_while"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -3634,7 +3634,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -4824,7 +4824,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -5406,7 +5406,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -6331,13 +6331,13 @@
       },
       "license": "MIT"
     },
-    "clap 3.2.14": {
+    "clap 3.2.15": {
       "name": "clap",
-      "version": "3.2.14",
+      "version": "3.2.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/3.2.14/download",
-          "sha256": "54635806b078b7925d6e36810b1755f2a4b5b4d57560432c1ecf60bcbe10602b"
+          "url": "https://crates.io/api/v1/crates/clap/3.2.15/download",
+          "sha256": "44bbe24bbd31a185bc2c4f7c2abe80bea13a20d57ee4e55be70ac512bdc76417"
         }
       },
       "targets": [
@@ -6425,23 +6425,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 3.2.7",
+              "id": "clap_derive 3.2.15",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "3.2.14"
+        "version": "3.2.15"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 3.2.7": {
+    "clap_derive 3.2.15": {
       "name": "clap_derive",
-      "version": "3.2.7",
+      "version": "3.2.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.7/download",
-          "sha256": "759bf187376e1afa7b85b959e6a664a3e7a95203415dba952ad19139e798f902"
+          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.15/download",
+          "sha256": "9ba52acd3b0a5c33aeada5cdaa3267cdc7c594a98731d4268cdc1532f4264cb4"
         }
       },
       "targets": [
@@ -6477,7 +6477,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -6492,7 +6492,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.2.7"
+        "version": "3.2.15"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -6819,7 +6819,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -7507,13 +7507,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cranelift-bforest 0.84.0": {
+    "cranelift-bforest 0.85.3": {
       "name": "cranelift-bforest",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-bforest/0.84.0/download",
-          "sha256": "2fa7c3188913c2d11a361e0431e135742372a2709a99b103e79758e11a0a797e"
+          "url": "https://crates.io/api/v1/crates/cranelift-bforest/0.85.3/download",
+          "sha256": "749d0d6022c9038dccf480bdde2a38d435937335bf2bb0f14e815d94517cdce8"
         }
       },
       "targets": [
@@ -7538,24 +7538,24 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen 0.84.0": {
+    "cranelift-codegen 0.85.3": {
       "name": "cranelift-codegen",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen/0.84.0/download",
-          "sha256": "29285f70fd396a8f64455a15a6e1d390322e4a5f5186de513141313211b0a23e"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen/0.85.3/download",
+          "sha256": "e94370cc7b37bf652ccd8bb8f09bd900997f7ccf97520edfc75554bb5c4abbea"
         }
       },
       "targets": [
@@ -7598,19 +7598,19 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bforest 0.84.0",
+              "id": "cranelift-bforest 0.85.3",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-codegen 0.84.0",
+              "id": "cranelift-codegen 0.85.3",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.84.0",
+              "id": "cranelift-codegen-shared 0.85.3",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             },
             {
@@ -7622,7 +7622,7 @@
               "target": "log"
             },
             {
-              "id": "regalloc2 0.1.3",
+              "id": "regalloc2 0.2.3",
               "target": "regalloc2"
             },
             {
@@ -7637,7 +7637,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -7646,8 +7646,12 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.84.0",
+              "id": "cranelift-codegen-meta 0.85.3",
               "target": "cranelift_codegen_meta"
+            },
+            {
+              "id": "cranelift-isle 0.85.3",
+              "target": "cranelift_isle"
             }
           ],
           "selects": {}
@@ -7655,13 +7659,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen-meta 0.84.0": {
+    "cranelift-codegen-meta 0.85.3": {
       "name": "cranelift-codegen-meta",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen-meta/0.84.0/download",
-          "sha256": "057eac2f202ec95aebfd8d495e88560ac085f6a415b3c6c28529dc5eb116a141"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen-meta/0.85.3/download",
+          "sha256": "e0a3cea8fdab90e44018c5b9a1dfd460d8ee265ac354337150222a354628bdb6"
         }
       },
       "targets": [
@@ -7686,24 +7690,24 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-shared 0.84.0",
+              "id": "cranelift-codegen-shared 0.85.3",
               "target": "cranelift_codegen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-codegen-shared 0.84.0": {
+    "cranelift-codegen-shared 0.85.3": {
       "name": "cranelift-codegen-shared",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-codegen-shared/0.84.0/download",
-          "sha256": "75d93869efd18874a9341cfd8ad66bcb08164e86357a694a0e939d29e87410b9"
+          "url": "https://crates.io/api/v1/crates/cranelift-codegen-shared/0.85.3/download",
+          "sha256": "5ac72f76f2698598951ab26d8c96eaa854810e693e7dd52523958b5909fde6b2"
         }
       },
       "targets": [
@@ -7726,17 +7730,17 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-entity 0.84.0": {
+    "cranelift-entity 0.85.3": {
       "name": "cranelift-entity",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-entity/0.84.0/download",
-          "sha256": "7e34bd7a1fefa902c90a921b36323f17a398b788fa56a75f07a29d83b6e28808"
+          "url": "https://crates.io/api/v1/crates/cranelift-entity/0.85.3/download",
+          "sha256": "09eaeacfcd2356fe0e66b295e8f9d59fdd1ac3ace53ba50de14d628ec902f72d"
         }
       },
       "targets": [
@@ -7772,17 +7776,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-frontend 0.84.0": {
+    "cranelift-frontend 0.85.3": {
       "name": "cranelift-frontend",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-frontend/0.84.0/download",
-          "sha256": "457018dd2d6ee300953978f63215b5edf3ae42dbdf8c7c038972f10394599f72"
+          "url": "https://crates.io/api/v1/crates/cranelift-frontend/0.85.3/download",
+          "sha256": "dba69c9980d5ffd62c18a2bde927855fcd7c8dc92f29feaf8636052662cbd99c"
         }
       },
       "targets": [
@@ -7811,7 +7815,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.84.0",
+              "id": "cranelift-codegen 0.85.3",
               "target": "cranelift_codegen"
             },
             {
@@ -7830,17 +7834,79 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-native 0.84.0": {
-      "name": "cranelift-native",
-      "version": "0.84.0",
+    "cranelift-isle 0.85.3": {
+      "name": "cranelift-isle",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-native/0.84.0/download",
-          "sha256": "bba027cc41bf1d0eee2ddf16caba2ee1be682d0214520fff0129d2c6557fda89"
+          "url": "https://crates.io/api/v1/crates/cranelift-isle/0.85.3/download",
+          "sha256": "d2920dc1e05cac40304456ed3301fde2c09bd6a9b0210bcfa2f101398d628d5b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cranelift_isle",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "cranelift_isle",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cranelift-isle 0.85.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.85.3"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
+    },
+    "cranelift-native 0.85.3": {
+      "name": "cranelift-native",
+      "version": "0.85.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/cranelift-native/0.85.3/download",
+          "sha256": "f04dfa45f9b2a6f587c564d6b63388e00cd6589d2df6ea2758cf79e1a13285e6"
         }
       },
       "targets": [
@@ -7869,7 +7935,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.84.0",
+              "id": "cranelift-codegen 0.85.3",
               "target": "cranelift_codegen"
             },
             {
@@ -7887,17 +7953,17 @@
           }
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "cranelift-wasm 0.84.0": {
+    "cranelift-wasm 0.85.3": {
       "name": "cranelift-wasm",
-      "version": "0.84.0",
+      "version": "0.85.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cranelift-wasm/0.84.0/download",
-          "sha256": "9b17639ced10b9916c9be120d38c872ea4f9888aa09248568b10056ef0559bfa"
+          "url": "https://crates.io/api/v1/crates/cranelift-wasm/0.85.3/download",
+          "sha256": "31a46513ae6f26f3f267d8d75b5373d555fbbd1e68681f348d99df43f747ec54"
         }
       },
       "targets": [
@@ -7926,15 +7992,15 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.84.0",
+              "id": "cranelift-codegen 0.85.3",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.84.0",
+              "id": "cranelift-frontend 0.85.3",
               "target": "cranelift_frontend"
             },
             {
@@ -7950,18 +8016,18 @@
               "target": "smallvec"
             },
             {
-              "id": "wasmparser 0.84.0",
+              "id": "wasmparser 0.85.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 0.37.0",
+              "id": "wasmtime-types 0.38.3",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -9426,7 +9492,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -10085,7 +10151,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -10167,7 +10233,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -10259,7 +10325,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -10610,7 +10676,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.5.13",
+              "id": "axum 0.5.14",
               "target": "axum"
             },
             {
@@ -10702,7 +10768,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 3.2.14",
+              "id": "clap 3.2.15",
               "target": "clap"
             },
             {
@@ -11123,7 +11189,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -11475,15 +11541,15 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasmtime 0.37.0",
+              "id": "wasmtime 0.38.3",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 0.37.0",
+              "id": "wasmtime-environ 0.38.3",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 0.37.0",
+              "id": "wasmtime-runtime 0.38.3",
               "target": "wasmtime_runtime"
             },
             {
@@ -11826,7 +11892,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -12268,7 +12334,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -12706,7 +12772,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -13829,7 +13895,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -14867,7 +14933,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -15619,7 +15685,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -15669,7 +15735,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -15719,7 +15785,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -17843,7 +17909,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -18282,7 +18348,7 @@
               "target": "candid"
             },
             {
-              "id": "clap 3.2.14",
+              "id": "clap 3.2.15",
               "target": "clap"
             },
             {
@@ -22014,7 +22080,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -23424,7 +23490,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -23478,7 +23544,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -23689,7 +23755,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -25489,7 +25555,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -26113,7 +26179,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -27639,7 +27705,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -27985,7 +28051,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -29107,7 +29173,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -29226,7 +29292,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -29315,7 +29381,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -29470,13 +29536,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "proc-macro2 1.0.41": {
+    "proc-macro2 1.0.42": {
       "name": "proc-macro2",
-      "version": "1.0.41",
+      "version": "1.0.42",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.41/download",
-          "sha256": "cdcc2916cde080c1876ff40292a396541241fe0072ef928cd76582e9ea5d60d2"
+          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.42/download",
+          "sha256": "c278e965f1d8cf32d6e0e96de3d3e79712178ae67986d9cf9151f51e95aac89b"
         }
       },
       "targets": [
@@ -29517,7 +29583,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "build_script_build"
             },
             {
@@ -29528,7 +29594,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.41"
+        "version": "1.0.42"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30136,7 +30202,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -30586,7 +30652,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -32278,7 +32344,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -32297,13 +32363,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "regalloc2 0.1.3": {
+    "regalloc2 0.2.3": {
       "name": "regalloc2",
-      "version": "0.1.3",
+      "version": "0.2.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/regalloc2/0.1.3/download",
-          "sha256": "904196c12c9f55d3aea578613219f493ced8e05b3d0c6a42d11cb4142d8b4879"
+          "url": "https://crates.io/api/v1/crates/regalloc2/0.2.3/download",
+          "sha256": "4a8d23b35d7177df3b9d31ed8a9ab4bf625c668be77a319d4f5efd4a5257701c"
         }
       },
       "targets": [
@@ -32351,7 +32417,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.3"
+        "version": "0.2.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -35191,7 +35257,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -35422,7 +35488,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -35586,7 +35652,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -35762,7 +35828,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -37312,7 +37378,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -38057,7 +38123,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -38120,7 +38186,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -38611,7 +38677,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -38749,7 +38815,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -39077,7 +39143,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -39647,7 +39713,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -40501,7 +40567,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -41236,7 +41302,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.5.13",
+              "id": "axum 0.5.14",
               "target": "axum"
             },
             {
@@ -41382,7 +41448,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -41822,7 +41888,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -43386,18 +43452,6 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -43412,6 +43466,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43630,7 +43696,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -43940,7 +44006,7 @@
               "target": "once_cell"
             },
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -44103,7 +44169,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -44223,13 +44289,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmparser 0.84.0": {
+    "wasmparser 0.85.0": {
       "name": "wasmparser",
-      "version": "0.84.0",
+      "version": "0.85.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmparser/0.84.0/download",
-          "sha256": "77dc97c22bb5ce49a47b745bed8812d30206eff5ef3af31424f2c1820c0974b2"
+          "url": "https://crates.io/api/v1/crates/wasmparser/0.85.0/download",
+          "sha256": "570460c58b21e9150d2df0eaaedbb7816c34bcec009ae0dcc976e40ba81463e7"
         }
       },
       "targets": [
@@ -44261,17 +44327,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.84.0"
+        "version": "0.85.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime 0.37.0": {
+    "wasmtime 0.38.3": {
       "name": "wasmtime",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime/0.37.0/download",
-          "sha256": "dfdd1101bdfa0414a19018ec0a091951a20b695d4d04f858d49f6c4cc53cd8dd"
+          "url": "https://crates.io/api/v1/crates/wasmtime/0.38.3/download",
+          "sha256": "1f50eadf868ab6a04b7b511460233377d0bfbb92e417b2f6a98b98fef2e098f5"
         }
       },
       "targets": [
@@ -44306,12 +44372,10 @@
           "**"
         ],
         "crate_features": [
-          "backtrace",
           "cranelift",
           "parallel-compilation",
           "posix-signals-on-macos",
           "rayon",
-          "wasm-backtrace",
           "wasmtime-cranelift"
         ],
         "deps": {
@@ -44377,27 +44441,27 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.84.0",
+              "id": "wasmparser 0.85.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 0.37.0",
+              "id": "wasmtime 0.38.3",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-cranelift 0.37.0",
+              "id": "wasmtime-cranelift 0.38.3",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 0.37.0",
+              "id": "wasmtime-environ 0.38.3",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit 0.37.0",
+              "id": "wasmtime-jit 0.38.3",
               "target": "wasmtime_jit"
             },
             {
-              "id": "wasmtime-runtime 0.37.0",
+              "id": "wasmtime-runtime 0.38.3",
               "target": "wasmtime_runtime"
             }
           ],
@@ -44420,7 +44484,7 @@
           ],
           "selects": {}
         },
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44429,13 +44493,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-cranelift 0.37.0": {
+    "wasmtime-cranelift 0.38.3": {
       "name": "wasmtime-cranelift",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-cranelift/0.37.0/download",
-          "sha256": "16e78edcfb0daa9a9579ac379d00e2d5a5b2a60c0d653c8c95e8412f2166acb9"
+          "url": "https://crates.io/api/v1/crates/wasmtime-cranelift/0.38.3/download",
+          "sha256": "f264ff6b4df247d15584f2f53d009fbc90032cfdc2605b52b961bffc71b6eccd"
         }
       },
       "targets": [
@@ -44464,23 +44528,23 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.84.0",
+              "id": "cranelift-codegen 0.85.3",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.84.0",
+              "id": "cranelift-frontend 0.85.3",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.84.0",
+              "id": "cranelift-native 0.85.3",
               "target": "cranelift_native"
             },
             {
-              "id": "cranelift-wasm 0.84.0",
+              "id": "cranelift-wasm 0.85.3",
               "target": "cranelift_wasm"
             },
             {
@@ -44508,28 +44572,28 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.84.0",
+              "id": "wasmparser 0.85.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 0.37.0",
+              "id": "wasmtime-environ 0.38.3",
               "target": "wasmtime_environ"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-environ 0.37.0": {
+    "wasmtime-environ 0.38.3": {
       "name": "wasmtime-environ",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-environ/0.37.0/download",
-          "sha256": "4201389132ec467981980549574b33fc70d493b40f2c045c8ce5c7b54fbad97e"
+          "url": "https://crates.io/api/v1/crates/wasmtime-environ/0.38.3/download",
+          "sha256": "839d2820e4b830f4b9e7aa08d4c0acabf4a5036105d639f6dfa1c6891c73bdc6"
         }
       },
       "targets": [
@@ -44558,7 +44622,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             },
             {
@@ -44594,28 +44658,28 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.84.0",
+              "id": "wasmparser 0.85.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 0.37.0",
+              "id": "wasmtime-types 0.38.3",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-jit 0.37.0": {
+    "wasmtime-jit 0.38.3": {
       "name": "wasmtime-jit",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-jit/0.37.0/download",
-          "sha256": "1587ca7752d00862faa540d00fd28e5ccf1ac61ba19756449193f1153cb2b127"
+          "url": "https://crates.io/api/v1/crates/wasmtime-jit/0.38.3/download",
+          "sha256": "ef0a0bcbfa18b946d890078ba0e1bc76bcc53eccfb40806c0020ec29dcd1bd49"
         }
       },
       "targets": [
@@ -44692,11 +44756,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmtime-environ 0.37.0",
+              "id": "wasmtime-environ 0.38.3",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 0.37.0",
+              "id": "wasmtime-runtime 0.38.3",
               "target": "wasmtime_runtime"
             }
           ],
@@ -44716,17 +44780,17 @@
           }
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-jit-debug 0.37.0": {
+    "wasmtime-jit-debug 0.38.3": {
       "name": "wasmtime-jit-debug",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-jit-debug/0.37.0/download",
-          "sha256": "b27233ab6c8934b23171c64f215f902ef19d18c1712b46a0674286d1ef28d5dd"
+          "url": "https://crates.io/api/v1/crates/wasmtime-jit-debug/0.38.3/download",
+          "sha256": "4f4779d976206c458edd643d1ac622b6c37e4a0800a8b1d25dfbf245ac2f2cac"
         }
       },
       "targets": [
@@ -44762,17 +44826,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-runtime 0.37.0": {
+    "wasmtime-runtime 0.38.3": {
       "name": "wasmtime-runtime",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-runtime/0.37.0/download",
-          "sha256": "47d3b0b8f13db47db59d616e498fe45295819d04a55f9921af29561827bdb816"
+          "url": "https://crates.io/api/v1/crates/wasmtime-runtime/0.38.3/download",
+          "sha256": "b7eb6ffa169eb5dcd18ac9473c817358cd57bc62c244622210566d473397954a"
         }
       },
       "targets": [
@@ -44807,9 +44871,7 @@
           "**"
         ],
         "crate_features": [
-          "backtrace",
-          "posix-signals-on-macos",
-          "wasm-backtrace"
+          "posix-signals-on-macos"
         ],
         "deps": {
           "common": [
@@ -44858,15 +44920,15 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmtime-environ 0.37.0",
+              "id": "wasmtime-environ 0.38.3",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-debug 0.37.0",
+              "id": "wasmtime-jit-debug 0.38.3",
               "target": "wasmtime_jit_debug"
             },
             {
-              "id": "wasmtime-runtime 0.37.0",
+              "id": "wasmtime-runtime 0.38.3",
               "target": "build_script_build"
             }
           ],
@@ -44892,7 +44954,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44910,13 +44972,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmtime-types 0.37.0": {
+    "wasmtime-types 0.38.3": {
       "name": "wasmtime-types",
-      "version": "0.37.0",
+      "version": "0.38.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmtime-types/0.37.0/download",
-          "sha256": "1630d9dca185299bec7f557a7e73b28742fe5590caf19df001422282a0a98ad1"
+          "url": "https://crates.io/api/v1/crates/wasmtime-types/0.38.3/download",
+          "sha256": "8d932b0ac5336f7308d869703dd225610a6a3aeaa8e968c52b43eed96cefb1c2"
         }
       },
       "targets": [
@@ -44941,7 +45003,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.84.0",
+              "id": "cranelift-entity 0.85.3",
               "target": "cranelift_entity"
             },
             {
@@ -44953,14 +45015,14 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.84.0",
+              "id": "wasmparser 0.85.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.37.0"
+        "version": "0.38.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -46646,7 +46708,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.41",
+              "id": "proc-macro2 1.0.42",
               "target": "proc_macro2"
             },
             {
@@ -46878,7 +46940,7 @@
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
     "cddl 0.9.0-beta.1",
-    "clap 3.2.14",
+    "clap 3.2.15",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
