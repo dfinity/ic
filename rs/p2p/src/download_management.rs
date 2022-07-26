@@ -1315,7 +1315,10 @@ impl DownloadManagerImpl {
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use crate::event_handler::{tests::new_test_event_handler, MAX_ADVERT_BUFFER};
+    use crate::event_handler::{
+        tests::{new_test_event_handler, TestGossip},
+        MAX_ADVERT_BUFFER,
+    };
     use crate::gossip_protocol::Percentage;
     use ic_interfaces::artifact_manager::OnArtifactError;
     use ic_logger::LoggerImpl;
@@ -1349,6 +1352,7 @@ pub mod tests {
     use std::convert::TryFrom;
     use std::ops::Range;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
     use tower::util::BoxCloneService;
 
     /// This priority function always returns Priority::FetchNow.
@@ -2207,9 +2211,8 @@ pub mod tests {
             // Transport:
             let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
-
-            // Context:
-            transport.set_event_handler(BoxCloneService::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id(0)));
+            transport.set_event_handler(BoxCloneService::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0), gossip_arc).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),
@@ -2257,8 +2260,8 @@ pub mod tests {
             let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
-            // Context
-            transport.set_event_handler(BoxCloneService::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id(0)));
+            transport.set_event_handler(BoxCloneService::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0), gossip_arc).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),

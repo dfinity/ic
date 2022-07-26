@@ -234,7 +234,7 @@ pub(crate) struct AsyncTransportEventHandlerImpl {
     /// The logger.
     log: ReplicaLogger,
     /// The peer flows.
-    gossip: Arc<RwLock<Option<GossipArc>>>,
+    gossip: GossipArc,
 
     /// The current flows of received adverts.
     advert: FlowWorker,
@@ -291,12 +291,13 @@ impl AsyncTransportEventHandlerImpl {
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         channel_config: ChannelConfig,
+        gossip: GossipArc,
     ) -> Self {
         let flow_worker_metrics = FlowWorkerMetrics::new(metrics_registry);
         Self {
             node_id,
             log,
-            gossip: Arc::new(RwLock::new(None)),
+            gossip,
 
             advert: FlowWorker::new(
                 FlowType::Advert.into(),
@@ -325,12 +326,6 @@ impl AsyncTransportEventHandlerImpl {
             ),
         }
     }
-
-    /// The method starts the event processing loop, dispatching events to the
-    /// *Gossip* component.
-    pub(crate) fn start(&self, gossip_arc: GossipArc) {
-        self.gossip.write().replace(gossip_arc);
-    }
 }
 
 impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
@@ -346,7 +341,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
     /// The method sends the given message on the flow associated with the given
     /// flow ID.
     fn call(&mut self, event: TransportEvent) -> Self::Future {
-        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
+        let c_gossip = self.gossip.clone();
         match event {
             TransportEvent::Message(raw) => {
                 let TransportMessage { payload, peer_id } = raw;
@@ -567,7 +562,7 @@ pub mod tests {
     type ItemCountCollector = Mutex<BTreeMap<NodeId, usize>>;
 
     /// The test *Gossip* struct.
-    struct TestGossip {
+    pub(crate) struct TestGossip {
         /// The node ID.
         node_id: NodeId,
         /// The advert processing delay.
@@ -587,7 +582,7 @@ pub mod tests {
 
     impl TestGossip {
         /// The function creates a TestGossip instance.
-        fn new(advert_processing_delay: Duration, node_id: NodeId) -> Self {
+        pub(crate) fn new(advert_processing_delay: Duration, node_id: NodeId) -> Self {
             TestGossip {
                 node_id,
                 advert_processing_delay,
@@ -670,6 +665,7 @@ pub mod tests {
     pub(crate) fn new_test_event_handler(
         advert_max_depth: usize,
         node_id: NodeId,
+        gossip: GossipArc,
     ) -> (AsyncTransportEventHandlerImpl, AdvertBroadcaster) {
         let mut channel_config = ChannelConfig::from(ic_types::p2p::build_default_gossip_config());
         channel_config
@@ -681,6 +677,7 @@ pub mod tests {
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
             channel_config,
+            gossip,
         );
 
         let advert_subscriber = AdvertBroadcaster::new(
@@ -728,22 +725,16 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_start_stop() {
         let node_test_id = node_test_id(0);
-        let handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id).0;
-        handler.start(Arc::new(TestGossip::new(
-            Duration::from_secs(0),
-            node_test_id,
-        )));
+        let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id));
+        let _handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc).0;
     }
 
     /// Test the dispatching of adverts to the event handler.
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_advert_dispatch() {
         let node_test_id = node_test_id(0);
-        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id).0;
-        handler.start(Arc::new(TestGossip::new(
-            Duration::from_secs(0),
-            node_test_id,
-        )));
+        let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_test_id));
+        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id, gossip_arc).0;
         send_advert(100, &mut handler, node_test_id).await;
     }
 
@@ -751,8 +742,8 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_slow_consumer() {
         let node_id = node_test_id(0);
-        let mut handler = new_test_event_handler(1, node_id).0;
-        handler.start(Arc::new(TestGossip::new(Duration::from_millis(3), node_id)));
+        let gossip_arc = Arc::new(TestGossip::new(Duration::from_millis(3), node_id));
+        let mut handler = new_test_event_handler(1, node_id, gossip_arc).0;
         // send adverts
         send_advert(10, &mut handler, node_id).await;
     }
@@ -761,8 +752,8 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_add_remove_nodes() {
         let node_id = node_test_id(0);
-        let mut handler = new_test_event_handler(1, node_id).0;
-        handler.start(Arc::new(TestGossip::new(Duration::from_secs(0), node_id)));
+        let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
+        let mut handler = new_test_event_handler(1, node_id, gossip_arc).0;
         send_advert(100, &mut handler, node_id).await;
     }
 
@@ -770,10 +761,10 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_max_channel_capacity() {
         let node_id = node_test_id(0);
-        let (mut handler, subscriber) = new_test_event_handler(MAX_ADVERT_BUFFER, node_id);
         let node_test_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
-        handler.start(gossip_arc.clone());
+        let (mut handler, subscriber) =
+            new_test_event_handler(MAX_ADVERT_BUFFER, node_id, gossip_arc.clone());
         subscriber.start(gossip_arc.clone());
 
         send_advert(MAX_ADVERT_BUFFER, &mut handler, node_test_id).await;
