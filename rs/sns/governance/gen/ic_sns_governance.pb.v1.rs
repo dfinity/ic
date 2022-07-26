@@ -807,6 +807,12 @@ pub struct Governance {
         ::prost::alloc::collections::BTreeMap<u64, NervousSystemFunction>,
     #[prost(enumeration = "governance::Mode", tag = "19")]
     pub mode: i32,
+    /// The canister ID of the swap canister.
+    ///
+    /// When this is unpopulated, mode should be Normal, and when this is
+    /// populated, mode should be PreInitializationSwap.
+    #[prost(message, optional, tag = "20")]
+    pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

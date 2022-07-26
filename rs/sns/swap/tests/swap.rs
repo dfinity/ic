@@ -12,7 +12,9 @@ use ic_nervous_system_common_test_keys::{
 use ic_sns_governance::{
     ledger::Ledger,
     pb::v1::{
-        governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+        governance, manage_neuron,
+        manage_neuron_response::{self, ClaimOrRefreshResponse},
+        ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
     },
 };
 
@@ -911,7 +913,13 @@ async fn test_finalize_swap_ok() {
         ) -> Result<ManageNeuronResponse, CanisterCallError> {
             self.calls
                 .push(SnsGovernanceClientCall::ManageNeuron(request));
-            Ok(ManageNeuronResponse::default())
+            Ok(ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                    // Even an empty value can be used here, because it is not
+                    // actually used in this scenario (yet).
+                    ClaimOrRefreshResponse::default(),
+                )),
+            })
         }
         async fn set_mode(
             &mut self,

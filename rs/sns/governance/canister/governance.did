@@ -127,6 +127,7 @@ type Governance = record {
   mode : int32;
   parameters : opt NervousSystemParameters;
   latest_reward_event : opt RewardEvent;
+  swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { text; NeuronInFlightCommand };

@@ -906,6 +906,12 @@ message Governance {
   }
 
   Mode mode = 19;
+
+  // The canister ID of the swap canister.
+  //
+  // When this is unpopulated, mode should be Normal, and when this is
+  // populated, mode should be PreInitializationSwap.
+  ic_base_types.pb.v1.PrincipalId swap_canister_id = 20;
 }
 
 // Empty message to use in oneof fields that represent empty

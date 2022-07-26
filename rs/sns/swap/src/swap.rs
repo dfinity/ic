@@ -5,6 +5,8 @@ use crate::pb::v1::{
     SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap, SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use std::time::Duration;
@@ -15,7 +17,8 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_sns_governance::{
     ledger::Ledger,
     pb::v1::{
-        governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+        governance, manage_neuron, manage_neuron_response, ManageNeuron, ManageNeuronResponse,
+        SetMode, SetModeResponse,
     },
     types::DEFAULT_TRANSFER_FEE,
 };
@@ -719,10 +722,26 @@ impl Swap {
                     },
                 )),
             };
-            match sns_governance_client.manage_neuron(request).await {
-                Ok(_response) => result.success += 1,
-                Err(_err) => result.failure += 1,
+
+            let response = sns_governance_client.manage_neuron(request).await;
+
+            if let Ok(ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::ClaimOrRefresh(claim)),
+            }) = response
+            {
+                println!(
+                    "{}INFO: Neuron successfully claimed for {}: {:#?}",
+                    LOG_PREFIX, p, claim,
+                );
+                result.success += 1;
+                continue;
             }
+
+            println!(
+                "{}ERROR: Unable to claim neuron for principal {}: {:#?}",
+                LOG_PREFIX, p, response,
+            );
+            result.failure += 1;
         }
 
         result
@@ -1159,6 +1178,7 @@ impl Init {
             && is_canister_id("SNS ledger",     &self.sns_ledger_canister_id)
 
             && !self.fallback_controller_principal_ids.is_empty()
+            && self.fallback_controller_principal_ids.iter().all(|s| PrincipalId::from_str(s).is_ok())
             && self.min_participants > 0
             && self.min_participant_icp_e8s > 0
             && self.max_participant_icp_e8s >= self.min_participant_icp_e8s
@@ -1229,7 +1249,7 @@ impl BuyerState {
             Ok(h) => {
                 self.amount_icp_e8s = 0;
                 println!(
-                    "{}INFO: transferred {} ICP from subaccount {:#?} to {} at height {}",
+                    "{}INFO: transferred {} ICP from subaccount {:?} to {} at height {}",
                     LOG_PREFIX, amount, subaccount, dst, h
                 );
                 TransferResult::Success(h)
