@@ -35,6 +35,16 @@ if err != null {
 if .@timestamp == 0 {
     .@timestamp = null
 }
+
+for_each([
+  "ic_subnet_id",
+  "ic_node_id",
+  "ic_canister_id",
+]) -> |_, k| {
+  if get!(., [k]) == "" {
+    . = set!(., [k], "N/A")
+  }
+}
 """
 
 # nginx access (elasticsearch)
