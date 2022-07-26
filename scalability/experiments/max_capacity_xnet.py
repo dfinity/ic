@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
         if exp.run_accepted(metrics, config):
             max_capacity = total_rate
-            rps_iterations += total_rate
+            rps_iterations.append(total_rate)
 
     exp.write_summary_file(
         "run_xnet_experiment",

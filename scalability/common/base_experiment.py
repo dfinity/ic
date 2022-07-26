@@ -42,6 +42,9 @@ gflags.DEFINE_string(
     "",
     "Use given canister IDs instead of installing new canisters. Given as JSON dict canister name -> canister.",
 )
+gflags.DEFINE_string(
+    "cache_path", "", "Path to a file that should be used as a cache. Only use if you know what you are doing."
+)
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
@@ -84,6 +87,23 @@ class BaseExperiment:
         # List of PIDs to wait for when terminating the benchmark
         self.pids_to_finish = []
 
+        self.base_experiment_initialized = False
+        self.cache = None
+        if self.has_cache():
+            try:
+                with open(FLAGS.cache_path) as f:
+                    print(
+                        f'♻️  Cache has been found at {FLAGS.cache_path}. Type "y" to use, if you know what you are doing.'
+                    )
+                    i = input("Use cache? ")
+                    if i == "y":
+                        self.cache = json.loads(f.read())
+                    else:
+                        self.cache = {}
+            except Exception:
+                print(f"♻️  Cache {FLAGS.cache_path} did not exist yet, creating ..")
+                self.cache = {}
+
     def get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
         sys.path.insert(1, "../ic-os/guestos/tests")
@@ -91,8 +111,38 @@ class BaseExperiment:
 
         return ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(m))
 
+    def has_cache(self):
+        return len(FLAGS.cache_path) > 0
+
+    def from_cache(self, key):
+        if self.has_cache():
+            c = self.cache.get(key, None)
+            if c is not None:
+                c_out = str(c) if len(str(c)) < 100 else str(c)[:100] + ".."
+                print(f"♻️  Using cached value: {key} <- {c_out}")
+            return c
+        return None
+
+    def persist_cache(self):
+        if self.has_cache():
+            assert len(FLAGS.cache_path) > 0
+            with open(FLAGS.cache_path, "w") as f:
+                f.write(json.dumps(self.cache))
+
+    def store_cache(self, key, value):
+        if self.has_cache():
+            previous_value = self.cache.get(key, None)
+            if value != previous_value:
+                print(f"♻️  Caching: {key} <- {value}")
+                self.cache[key] = value
+                self.persist_cache()
+
     def init(self):
         """Initialize experiment."""
+        if self.base_experiment_initialized:
+            raise Exception("Base experiment has already been initialized, aborting .. ")
+        self.base_experiment_initialized = True
+
         self.git_hash = self.get_ic_version(self.get_machine_to_instrument())
         print(f"Running against an IC with git hash: {self.git_hash}")
 
@@ -115,7 +165,7 @@ class BaseExperiment:
         When downloading, store the GIT commit hash that has been used in a text file.
         """
         f_artifacts_hash = os.path.join(self.artifacts_path, "githash")
-        if subprocess.run(["stat", f_artifacts_hash]).returncode != 0:
+        if subprocess.run(["stat", f_artifacts_hash], stdout=subprocess.DEVNULL).returncode != 0:
             print("Could not find artifacts, downloading .. ")
             # Delete old artifacts directory, if it exists
             subprocess.run(["rm", "-rf", self.artifacts_path], check=True)
@@ -260,12 +310,22 @@ class BaseExperiment:
         """
         if nns_url is None:
             nns_url = self._get_nns_url()
+
+        cache_key = f"topology_{nns_url}"
+        cached_value = self.from_cache(cache_key)
+        if cached_value is not None:
+            print(
+                f"Returning persisted topology for {nns_url} (this might lead to incorrect results if redeployed since cache has been written)."
+            )
+            return cached_value
+
         if nns_url not in self.cached_topologies:
             print(f"Getting topology from ic-admin ({nns_url})")
             res = subprocess.check_output(
                 [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
             )
             self.cached_topologies[nns_url] = json.loads(res)
+            self.store_cache(cache_key, json.loads(res))
         return self.cached_topologies[nns_url]
 
     def __get_node_info(self, nodeid, nns_url=None):
@@ -399,12 +459,6 @@ class BaseExperiment:
 
             for node_id in node_ids:
                 node_added &= node_id in self.get_subnet_members(subnet_index)
-
-    def _turn_off_replica(self, machines):
-        """Turn of replicas on the given machines."""
-        for m in machines:
-            print(f"💣 Stopping machine {m}")
-        return ssh.run_ssh_in_parallel(machines, "sudo systemctl stop ic-replica")
 
     def install_canister_nonblocking(self, target, canister=None):
         """

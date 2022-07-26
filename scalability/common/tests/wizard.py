@@ -47,10 +47,11 @@ for test_idx, test_case in enumerate(output):
     ), "Experiment template was not generated"
 
     with open(os.path.join("experiments", f"run_test_{test_idx}.py")) as f:
+        content = f.read()
         if len(install_canister) > 0:
-            assert "install_canister" in f.read()
+            assert "install_canister" in content and install_canister in content
         else:
-            assert "install_canister" not in f.read()
+            assert "install_canister" in content and "counter" in content
 
     with open(os.path.join("experiments", f"run_test_{test_idx}.py")) as f:
         if use_workload_generators == "y":

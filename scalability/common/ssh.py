@@ -69,8 +69,8 @@ def scp_in_parallel(sources, destinations):
     return rc
 
 
-def run_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
-    """Run the given command in parallel on all given machines and wait for completion."""
+def spawn_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
+    """Run the given command in parallel on all given machines and return Popen objects for further processing."""
     ps = []
     for machine in machines:
         ps.append(
@@ -84,7 +84,11 @@ def run_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
                 ),
             )
         )
+    return ps
 
+
+def run_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
+    ps = spawn_ssh_in_parallel(machines, command, f_stdout, f_stderr)
     rc = []
     for (machine, p) in ps:
         rc.append(p.wait())

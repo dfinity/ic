@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import os
 import statistics
 import sys
@@ -38,9 +39,16 @@ gflags.DEFINE_boolean("strict", False, "Fail generating reports if something is 
 
 
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
-    """Return a dictionary representing the given plot for templating.."""
+    """Return a dictionary representing the given plot for templating."""
+    plot_data = []
+    for (e_y, e_name) in plots:
+        data = [(_x, _y) for _x, _y in zip(x, e_y) if not math.isnan(float(_y))]
+        x_out = [_x for _x, _ in data]
+        y_out = [_y for _, _y in data]
+        plot_data.append({"y": y_out, "x": x_out, "name": e_name})
+
     return {
-        f"plot-{name}": [{"y": y, "x": x[: len(y)], "name": name} for (y, name) in plots],
+        f"plot-{name}": plot_data,
         f"layout-{name}": {
             "yaxis": {
                 "title": ylabel,

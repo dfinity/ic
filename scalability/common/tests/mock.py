@@ -73,7 +73,6 @@ class Test_Experiment(TestCase):
 
         exp = ExperimentMock()
         exp.canister_ids = {"foorbar": ["abc"]}
-        exp.init_experiment()
         exp.run_experiment({})
         exp._BaseExperiment__init_metrics = MagicMock()
         exp._WorkloadExperiment__kill_workload_generator = MagicMock()

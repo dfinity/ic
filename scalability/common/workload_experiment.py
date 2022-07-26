@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import subprocess
+import tempfile
 import time
 from statistics import mean
 from typing import List
@@ -64,6 +65,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         self.use_updates = FLAGS.use_updates
         if self.use_updates:
             self.request_type = "call"
+        self.experiment_initialized = False
         print(f"Update calls: {self.use_updates} {self.request_type}")
 
         print(
@@ -73,6 +75,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             )
         )
         self.init()
+        self.kill_pids = []
 
     def get_mainnet_targets(self) -> List[str]:
         """Get target if running in mainnet."""
@@ -140,26 +143,54 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def init_experiment(self):
         """Initialize the experiment."""
+        if self.experiment_initialized:
+            raise Exception("Experiment is already initialized")
+        self.experiment_initialized = True
         if not self.__check_workload_generator_installed(self.machines):
             rcs = self.__install_workload_generator(self.machines)
             if not rcs == [0 for _ in range(len(self.machines))]:
                 raise Exception(f"Failed to install workload generators, return codes are {rcs}")
         else:
             print(f"Workload generator already installed on {self.machines}")
-        self._turn_off_replica(self.machines)
         self.__kill_workload_generator(self.machines)
         super().init_experiment()
 
     def __kill_workload_generator(self, machines):
         """Kill all workload generators on the given machine."""
-        ssh.run_ssh_in_parallel(machines, "kill $(pidof ic-workload-generator) || true")
+        self.kill_pids = ssh.spawn_ssh_in_parallel(
+            machines,
+            "sudo systemctl stop ic-replica; kill $(pidof ic-workload-generator) || true",
+            f_stdout=tempfile.NamedTemporaryFile().name,
+            f_stderr=tempfile.NamedTemporaryFile().name,
+        )
+
+    def __restart_services(self, machines):
+        """Kill all workload generators on the given machine."""
+        print("Restarting services")
+        self.start_pids = ssh.spawn_ssh_in_parallel(
+            machines,
+            "sudo systemctl start ic-replica",
+            f_stdout=tempfile.NamedTemporaryFile().name,
+            f_stderr=tempfile.NamedTemporaryFile().name,
+        )
+        for _, s in self.start_pids:
+            s.wait()
+
+    def end_experiment(self):
+        self.__restart_services(self.machines)
+        super().end_experiment()
 
     def __check_workload_generator_installed(self, machines):
         """Check if the workload generator is already installed on the given machines."""
         if len(FLAGS.workload_generator_path) > 0:
             print("Reinstalling workload generators since using locally built workload generator")
             return False
-        r = ssh.run_ssh_in_parallel(machines, "stat ./ic-workload-generator")
+        r = ssh.run_ssh_in_parallel(
+            machines,
+            "stat ./ic-workload-generator",
+            f_stdout=tempfile.NamedTemporaryFile().name,
+            f_stderr=tempfile.NamedTemporaryFile().name,
+        )
         return r == [0 for _ in machines]
 
     def __install_workload_generator(self, machines):
@@ -174,9 +205,11 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __get_subnet_for_target(self):
         """Determine the subnet ID of the node we are targeting."""
-        if len(FLAGS.mainnet_target_subnet_id) > 0:
-            return FLAGS.mainnet_target_subnet_id
         target = self.target_nodes[0]
+        key = f"subnet_for_target_{target}"
+        cached = self.from_cache(key)
+        if cached is not None:
+            return cached
         res = subprocess.check_output(
             [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-subnet-list"], encoding="utf-8"
         )
@@ -185,15 +218,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             r = json.loads(self._get_subnet_info(subnet))
             for node_id in r["records"][0]["value"]["membership"]:
                 if self.get_node_ip_address(node_id) == target:
-                    print(
-                        colored(
-                            (
-                                f"Node {target} is in subnet {subnet} "
-                                f"(to speed up suite for this deployment in the future, use --mainnet_target_subnet_id={subnet})"
-                            ),
-                            "yellow",
-                        )
-                    )
+                    self.store_cache(key, subnet)
                     return subnet
         raise Exception("Could not find subnet for benchmark target")
 
@@ -264,6 +289,10 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def start_iteration(self):
         """Start a new iteration of the experiment."""
+        for (machine, p) in self.kill_pids:
+            p.wait()
+        self.kill_pids = []
+
         super().start_iteration()
         self.__wait_for_quiet()
 

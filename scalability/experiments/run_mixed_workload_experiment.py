@@ -31,9 +31,9 @@ gflags.DEFINE_integer(
 class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
     """Logic for mixed workload experiments."""
 
-    def init_experiment(self):
+    def __init__(self):
         """Install canisters."""
-        super().init_experiment()
+        super().__init__()
         self.workload_description = None
         shutil.copy(FLAGS.workload, self.out_dir)
         with open(FLAGS.workload) as f:
@@ -150,6 +150,5 @@ if __name__ == "__main__":
     exp = MixedWorkloadExperiment()
     iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
     print(f"🚀 Running with iterations: {iterations}")
-    exp.init_experiment()
     exp.run_iterations(iterations)
     exp.end_experiment()
