@@ -14,8 +14,9 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     as_num_instructions, execute_canister, util::process_stopping_canisters,
-    CanisterHeartbeatError, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
-    Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    CanisterHeartbeatError, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionResponse, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
@@ -60,8 +61,15 @@ use crate::{crypto::mock_random_number_generator, mock_time, types::messages::In
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
-pub fn universal_canister_compilation_cost() -> NumInstructions {
-    wasm_compilation_cost(UNIVERSAL_CANISTER_WASM)
+/// When a universal canister is installed, but the serialized module has been
+/// cached, the test setup thinks the canister was only charged for the reduced
+/// compilation cost amount, when it was really charged for the full amount
+/// (because it uses the change in round limits instead of what the canister was
+/// actually charged). This function returns the amount needed to correct for
+/// that difference.
+pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
+    let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
+    cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
 /// A helper for execution tests.
