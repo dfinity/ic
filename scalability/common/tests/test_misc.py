@@ -19,8 +19,10 @@ class Test_Misc(unittest.TestCase):
     def test_distribute_load_to_n(self):
         """Test querying HTTP request duration."""
         assert misc.distribute_load_to_n(1000, 4) == [250, 250, 250, 250]
-        assert misc.distribute_load_to_n(1000, 3) == [334, 333, 333]
-        assert misc.distribute_load_to_n(1000, 7) == [143, 143, 143, 143, 143, 143, 142]
+        for i, s in zip(misc.distribute_load_to_n(1000, 3), [1000 / 3.0] * 3):
+            assert abs(i - s) < 1e-2
+        for i, s in zip(misc.distribute_load_to_n(1000, 7), [1000 / 7.0] * 3):
+            assert abs(i - s) < 1e-2
 
 
 if __name__ == "__main__":
