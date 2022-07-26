@@ -18,6 +18,7 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use prost::Message;
 use std::default::Default;
 use std::env;
 
@@ -221,7 +222,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     let governance_canister_id = create_canister(
         machine,
         build_governance_wasm(),
-        Some(Encode!(&init_payloads.governance).unwrap()),
+        Some(init_payloads.governance.encode_to_vec()),
         Some(CanisterSettingsArgs {
             memory_allocation: Some(memory_allocation_of(GOVERNANCE_CANISTER_ID).into()),
             ..Default::default()
@@ -276,7 +277,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     let genesis_token_canister_id = create_canister(
         machine,
         build_genesis_token_wasm(),
-        Some(Encode!(&init_payloads.genesis_token).unwrap()),
+        Some(init_payloads.genesis_token.encode_to_vec()),
         Some(CanisterSettingsArgs {
             memory_allocation: Some(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID).into()),
             ..Default::default()

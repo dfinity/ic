@@ -29,4 +29,7 @@ mod proposals;
 mod root;
 
 #[cfg(test)]
+mod swap;
+
+#[cfg(test)]
 mod upgrade_canister;

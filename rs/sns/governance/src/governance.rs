@@ -284,6 +284,8 @@ impl GovernanceProto {
     }
 }
 
+/// This follows the following pattern:
+/// https://willcrichton.net/rust-api-type-patterns/witnesses.html
 pub struct ValidGovernanceProto(GovernanceProto);
 
 impl ValidGovernanceProto {
@@ -323,26 +325,41 @@ impl ValidGovernanceProto {
             .ok_or_else(|| format!("GovernanceProto {} field must be populated.", field_name))
     }
 
-    fn mode_is_valid_or_err(g: &GovernanceProto) -> Result<(), String> {
-        let mode = match governance::Mode::from_i32(g.mode) {
+    /// Because enum fields (such as mode) are of type i32, not FooEnum.
+    fn valid_mode_or_err(governance_proto: &GovernanceProto) -> Result<governance::Mode, String> {
+        let mode = match governance::Mode::from_i32(governance_proto.mode) {
             Some(mode) => mode,
             None => {
                 return Err(format!(
                     "Not a known governance mode code: {}\n{:#?}",
-                    g.mode, g
+                    governance_proto.mode, governance_proto
                 ));
             }
         };
 
-        if mode != governance::Mode::Unspecified {
-            return Ok(());
+        if mode == governance::Mode::Unspecified {
+            return Err(format!(
+                "The mode field must be populated (with something other \
+                 than Unspecified): {:#?}",
+                governance_proto
+            ));
         }
 
-        Err(format!(
-            "The mode field must be populated (with something other \
-             than Unspecified): {:#?}",
-            g
-        ))
+        if mode == governance::Mode::PreInitializationSwap {
+            Self::validate_required_field("swap_canister_id", &governance_proto.swap_canister_id)?;
+        }
+
+        Ok(mode)
+    }
+
+    fn validate_canister_id_field(name: &str, principal_id: PrincipalId) -> Result<(), String> {
+        match CanisterId::try_from(principal_id) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!(
+                "Unable to convert {} PrincipalId to CanisterId: {:#?}",
+                name, err,
+            )),
+        }
     }
 }
 
@@ -353,32 +370,46 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
     ///
     /// If base is not valid, then Err is returned with an explanation.
     fn try_from(base: GovernanceProto) -> Result<Self, Self::Error> {
-        Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
-        Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
-        Self::mode_is_valid_or_err(&base)?;
+        let root_canister_id =
+            *Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
+        let ledger_canister_id =
+            *Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
 
-        let parameters = Self::validate_required_field("parameters", &base.parameters)?;
-        parameters.validate()?;
-
-        validate_default_followees(&base)?;
-
-        for (id, function) in &base.id_to_nervous_system_functions {
-            // These entries ensure that ids do not get recycled (after deletion).
-            if function == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
-                continue;
-            }
-            let validated_function = ValidGenericNervousSystemFunction::try_from(function)?;
-
-            // Require that the key match the value.
-            if *id != validated_function.id {
-                return Err("At least one entry in id_to_nervous_system_functions\
-                            doesn't have a matching id to the map key."
-                    .to_string());
-            }
+        Self::validate_canister_id_field("root", root_canister_id)?;
+        Self::validate_canister_id_field("ledger", ledger_canister_id)?;
+        if let Some(swap_canister_id) = &base.swap_canister_id {
+            Self::validate_canister_id_field("swap", *swap_canister_id)?;
         }
+
+        Self::valid_mode_or_err(&base)?;
+        Self::validate_required_field("parameters", &base.parameters)?.validate()?;
+        validate_id_to_nervous_system_functions(&base.id_to_nervous_system_functions)?;
+        validate_default_followees(&base)?;
 
         Ok(Self(base))
     }
+}
+
+pub fn validate_id_to_nervous_system_functions(
+    id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<(), String> {
+    for (id, function) in id_to_nervous_system_functions {
+        // These entries ensure that ids do not get recycled (after deletion).
+        if function == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
+            continue;
+        }
+
+        let validated_function = ValidGenericNervousSystemFunction::try_from(function)?;
+
+        // Require that the key match the value.
+        if *id != validated_function.id {
+            return Err("At least one entry in id_to_nervous_system_functions\
+                 doesn't have a matching id to the map key."
+                .to_string());
+        }
+    }
+
+    Ok(())
 }
 
 /// Requires that the neurons identified in base.parameters.default_followeees
@@ -528,7 +559,7 @@ impl Governance {
         gov
     }
 
-    pub fn set_mode(&mut self, mode: i32, caller: &PrincipalId) {
+    pub fn set_mode(&mut self, mode: i32, caller: PrincipalId) {
         if !Mode::is_valid(mode) {
             panic!("Unknown mode: {}", mode);
         }
@@ -540,12 +571,8 @@ impl Governance {
         self.proto.mode = mode as i32;
     }
 
-    fn is_swap_canister(&self, _id: &PrincipalId) -> bool {
-        // TODO: How do we know the swap canister's ID? Presumably, this would
-        // be stored is some field in self.proto, but where do we get the value
-        // to store in that field? For the time being, returning false is the
-        // safest thing to do.
-        false
+    fn is_swap_canister(&self, id: PrincipalId) -> bool {
+        self.proto.swap_canister_id == Some(id)
     }
 
     /// Initializes the indices.
@@ -2999,7 +3026,7 @@ impl Governance {
             })?;
 
         self.mode()
-            .allows_manage_neuron_command_or_err(command, self.is_swap_canister(caller))?;
+            .allows_manage_neuron_command_or_err(command, self.is_swap_canister(*caller))?;
 
         // All operations on a neuron exclude each other.
         let _hold = self.lock_neuron_for_command(
@@ -3917,6 +3944,31 @@ mod tests {
             },
         );
         assert!(ValidGovernanceProto::try_from(proto).is_err());
+    }
+
+    #[test]
+    fn swap_canister_id_is_required_when_mode_is_pre_initialization_swap() {
+        let mut proto = basic_governance_proto();
+        proto.mode = governance::Mode::PreInitializationSwap as i32;
+        assert_eq!(proto.swap_canister_id, None);
+
+        let r = ValidGovernanceProto::try_from(proto.clone());
+        match r {
+            Ok(_ok) => panic!(
+                "Invalid Governance proto, but wasn't rejected: {:#?}",
+                proto
+            ),
+            Err(err) => {
+                for key_word in ["swap_canister_id", "populate"] {
+                    assert!(
+                        err.contains(key_word),
+                        "{:#?} not present in the error: {:#?}",
+                        key_word,
+                        err
+                    );
+                }
+            }
+        }
     }
 
     #[test]

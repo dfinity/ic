@@ -468,7 +468,7 @@ fn set_mode() {
 /// Internal method for calling set_mode.
 #[candid_method(update, rename = "set_mode")]
 fn set_mode_(request: SetMode) -> SetModeResponse {
-    governance_mut().set_mode(request.mode, &caller());
+    governance_mut().set_mode(request.mode, caller());
     SetModeResponse {}
 }
 
