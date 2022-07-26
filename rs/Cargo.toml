@@ -178,6 +178,7 @@ members = [
   "rosetta-api/ledger_canister_blocks_synchronizer",
   "rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
   "rosetta-api/icrc1",
+  "rosetta-api/icrc1/agent",
   "rosetta-api/icrc1/client",
   "rosetta-api/icrc1/ledger",
   "rosetta-api/icrc1/archive",

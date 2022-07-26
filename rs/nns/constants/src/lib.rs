@@ -27,9 +27,7 @@ pub const NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 8;
 pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 9;
 
 /// The names of all expected .wasm files to set up the NNS.
-pub const NNS_CANISTER_WASMS: [&str; 11] = [
-    // The lifeline is not present! Because its wasm is embedded in the source code using
-    // include_bytes, it is not provided on the path. We want to change that, though.
+pub const NNS_CANISTER_WASMS: [&str; 12] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
@@ -42,6 +40,7 @@ pub const NNS_CANISTER_WASMS: [&str; 11] = [
     "identity-canister",
     "nns-ui-canister",
     "sns-wasm-canister",
+    "ic-icrc1-ledger",
 ];
 
 lazy_static! {

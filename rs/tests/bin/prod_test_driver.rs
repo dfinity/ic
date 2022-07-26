@@ -16,8 +16,8 @@ use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    btc_integration, canister_http, consensus, execution, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    btc_integration, canister_http, consensus, execution, icrc1_agent_test, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
@@ -331,6 +331,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     message_routing::global_reboot_test::test,
                 )]),
             ),
+            icrc1_agent_test::icrc1_agent_test_pot(),
             pot(
                 "node_removal_from_registry_pot",
                 nns_tests::node_removal_from_registry::config(),

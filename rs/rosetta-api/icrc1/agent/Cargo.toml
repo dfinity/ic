@@ -1,0 +1,14 @@
+[package]
+name = "ic-icrc1-agent"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "ICRC-1 compliant agent library."
+edition = "2018"
+
+[dependencies]
+candid = "0.7.10"
+garcon = { version = "0.2", features = ["async"] }
+ic-agent = "=0.20.0"
+ic-icrc1 = { path = "../" }
+ic-ledger-core = { path = "../../ledger_core" }
+num-traits = "0.2.14"
