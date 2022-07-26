@@ -1,5 +1,5 @@
 {
-  "checksum": "3fbfd90d230343b5e915e3f48741c829b8821e587c30be86b256e3b9d8477675",
+  "checksum": "40d267faefe5b21ac933512db34a49e4039746f74c7b5ea86a260a7b6546e79d",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -10880,6 +10880,10 @@
               "target": "futures"
             },
             {
+              "id": "futures-core 0.3.21",
+              "target": "futures_core"
+            },
+            {
               "id": "futures-util 0.3.21",
               "target": "futures_util"
             },
@@ -18734,13 +18738,13 @@
       },
       "license": "MIT"
     },
-    "inferno 0.11.6": {
+    "inferno 0.11.7": {
       "name": "inferno",
-      "version": "0.11.6",
+      "version": "0.11.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/inferno/0.11.6/download",
-          "sha256": "9a262875c8e10820b9366e991ed6710cd80dc93578375e5d499fcbd408985937"
+          "url": "https://crates.io/api/v1/crates/inferno/0.11.7/download",
+          "sha256": "9709543bd6c25fdc748da2bed0f6855b07b7e93a203ae31332ac2101ab2f4782"
         }
       },
       "targets": [
@@ -18908,7 +18912,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.6"
+        "version": "0.11.7"
       },
       "license": "CDDL-1.0"
     },
@@ -28474,7 +28478,7 @@
               "target": "findshlibs"
             },
             {
-              "id": "inferno 0.11.6",
+              "id": "inferno 0.11.7",
               "target": "inferno"
             },
             {
@@ -43452,6 +43456,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -43466,18 +43482,6 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -46945,7 +46949,7 @@
     "difference 2.0.0",
     "escargot 0.5.7",
     "ic-wasm 0.1.3",
-    "inferno 0.11.6",
+    "inferno 0.11.7",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
     "miracl_core_bls12381 4.1.2",

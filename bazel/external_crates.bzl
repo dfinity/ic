@@ -249,6 +249,9 @@ def external_crates_repository(name, annotations):
             "futures-util": crate.spec(
                 version = "^0.3.8",
             ),
+            "futures-core": crate.spec(
+                version = "^0.3.21",
+            ),
             "garcon": crate.spec(
                 version = "^0.2.3",
             ),
