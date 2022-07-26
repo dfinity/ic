@@ -201,9 +201,6 @@ def evaluate_stop_latency_failure_iter(latency, latency_threshold, failure, fail
     )
 
 
-def distribute_load_to_n(load: int, n: int):
+def distribute_load_to_n(load: float, n: int):
     """Distribute the given load to n entities."""
-    per_entity = [int(math.floor(load / n))] * n
-    remainder = load % n
-    add_per_machine = [1 if x < remainder else 0 for x in range(n)]
-    return [x + y for x, y in zip(per_entity, add_per_machine)]
+    return [math.floor(100 * load / n) / 100] * n
