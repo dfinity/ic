@@ -5,8 +5,10 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.31"
+base64 = "0.11"
 clap = { version = "3.1.6", features = ["derive"] }
-ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-crypto = { path = "../../crypto" }
+ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }
@@ -14,6 +16,7 @@ ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-local-store = { path = "../local_store" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-subnet-type = { path = "../subnet_type" }
+ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 prost = "0.10.4"
 serde = { version = "1.0.115", features = ["derive"] }

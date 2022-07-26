@@ -12,12 +12,22 @@ pub type Changelog = (Vec<RegistryTransportRecord>, RegistryVersion);
 pub fn get_changelog(source_spec: SourceSpec) -> Result<Changelog> {
     let data_provider = source_to_dataprovider(tokio::runtime::Handle::current(), source_spec);
 
-    let records = data_provider.get_updates_since(ZERO_REGISTRY_VERSION)?;
-    let version = records
-        .iter()
-        .max_by_key(|r| r.version)
-        .map(|r| r.version)
-        .unwrap_or(ZERO_REGISTRY_VERSION);
+    let mut version = ZERO_REGISTRY_VERSION;
+    let mut records = vec![];
+
+    loop {
+        let mut batch = data_provider.get_updates_since(version)?;
+        if batch.is_empty() {
+            break;
+        }
+        version = batch
+            .iter()
+            .max_by_key(|r| r.version)
+            .map(|r| r.version)
+            .unwrap_or(ZERO_REGISTRY_VERSION);
+        records.append(&mut batch);
+    }
+
     Ok((records, version))
 }
 
@@ -27,6 +37,6 @@ fn source_to_dataprovider(
 ) -> Arc<dyn RegistryDataProvider> {
     match source_spec {
         SourceSpec::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)) as Arc<_>,
-        SourceSpec::Canister(url) => create_nns_data_provider(rt_handle, vec![url], None),
+        SourceSpec::Canister(url, nns_pk) => create_nns_data_provider(rt_handle, vec![url], nns_pk),
     }
 }
