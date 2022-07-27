@@ -205,6 +205,7 @@ impl StateMachine {
             0,
             GENESIS,
             None,
+            false,
         )
     }
 
@@ -215,6 +216,7 @@ impl StateMachine {
             0,
             GENESIS,
             Some(config),
+            false,
         )
     }
 
@@ -225,6 +227,7 @@ impl StateMachine {
         nonce: u64,
         time: Time,
         subnet_config: Option<SubnetConfig>,
+        checkpoints_enabled: bool,
     ) -> Self {
         use slog::Drain;
 
@@ -339,7 +342,7 @@ impl StateMachine {
             state_dir,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
-            checkpoints_enabled: std::cell::Cell::new(false),
+            checkpoints_enabled: std::cell::Cell::new(checkpoints_enabled),
             nonce: std::cell::Cell::new(nonce),
             time: std::cell::Cell::new(time),
         }
@@ -347,7 +350,13 @@ impl StateMachine {
 
     /// Emulates a node restart, including checkpoint recovery.
     pub fn restart_node(self) -> Self {
-        Self::setup_from_dir(self.state_dir, self.nonce.get(), self.time.get(), None)
+        Self::setup_from_dir(
+            self.state_dir,
+            self.nonce.get(),
+            self.time.get(),
+            None,
+            self.checkpoints_enabled.get(),
+        )
     }
 
     /// Same as [restart_node], but the subnet will have the specified `config`
@@ -358,6 +367,7 @@ impl StateMachine {
             self.nonce.get(),
             self.time.get(),
             Some(config),
+            self.checkpoints_enabled.get(),
         )
     }
 
@@ -961,6 +971,15 @@ impl StateMachine {
         self.execute_ingress(
             CanisterId::ic_00(),
             "stop_canister",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+    }
+
+    /// Deletes the canister with the specified ID.
+    pub fn delete_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "delete_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
         )
     }

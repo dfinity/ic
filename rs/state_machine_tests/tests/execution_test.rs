@@ -175,6 +175,45 @@ fn test_canister_upgrade_restart() {
     assert_eq!(to_int(val), 0);
 }
 
+/// Tests that if you delete a canister, it stays deleted after a restart
+#[test]
+fn test_canister_delete_restart() {
+    let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 1);
+
+    let env = env.restart_node();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 2);
+
+    let env = env.restart_node();
+
+    env.stop_canister(canister_id).unwrap();
+    env.delete_canister(canister_id).unwrap();
+
+    assert_eq!(
+        env.execute_ingress(canister_id, "inc", vec![])
+            .unwrap_err()
+            .code(),
+        ErrorCode::CanisterNotFound
+    );
+
+    let env = env.restart_node();
+
+    assert_eq!(
+        env.execute_ingress(canister_id, "inc", vec![])
+            .unwrap_err()
+            .code(),
+        ErrorCode::CanisterNotFound
+    );
+}
+
 /// The test checks that the canister stable memory is discarded on code
 /// re-install, and that the stable memory stays discarded after a checkpoint
 /// recovery. It's a common bug in execution to reset a page map in memory, but
