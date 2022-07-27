@@ -1,0 +1,24 @@
+[package]
+name = "denylist-updater"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.58"
+async-trait = "0.1.56"
+axum = "0.5.9"
+clap = { version = "3.2.6", features = ["derive"] }
+futures = "0.3.21"
+humantime = "2.1.0"
+mockall = "0.11.1"
+nix = { version = "0.24.2", features = ["signal"] }
+opentelemetry = "0.17.0"
+opentelemetry-prometheus = "0.10.0"
+prometheus = "0.13.1"
+reqwest = { version = "0.11.11", features = ["json"] }
+serde = { version = "1.0.139", features = ["serde_derive"] }
+serde_json = "1.0.82"
+tempfile = "3.3.0"
+tokio = { version = "1.19.2", features = ["full"] }
+tracing = "0.1.35"
+tracing-subscriber = { version = "0.3.11", features = ["json"] }

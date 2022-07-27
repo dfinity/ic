@@ -17,6 +17,7 @@ members = [
   "bitcoin/types/internal",
   "bitcoin/types/public",
   "boundary_node/control_plane",
+  "boundary_node/denylist_updater",
   "boundary_node/ic_balance_exporter",
   "boundary_node/prober",
   "canister_client",
