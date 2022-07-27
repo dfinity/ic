@@ -14,9 +14,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
 use std::net::IpAddr;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use strum::AsRefStr;
-use tokio::{runtime::Handle, task::JoinHandle, time::Duration};
+use tokio::{
+    runtime::Handle,
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+    time::Duration,
+};
 
 /// A tag for the server port
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -79,9 +84,9 @@ pub(crate) struct TransportImpl {
     pub config: TransportConfig,
 
     /// Ports used to accept connections for this transport-client
-    pub accept_ports: RwLock<HashMap<FlowTag, ServerPortState>>,
+    pub accept_ports: Mutex<HashMap<FlowTag, ServerPortState>>,
     /// Mapping of peers to their corresponding state
-    pub peer_map: tokio::sync::RwLock<HashMap<NodeId, PeerState>>,
+    pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
     /// Event handler to report back to the transport client
     pub event_handler: Mutex<Option<TransportEventHandler>>,
 
@@ -105,7 +110,7 @@ pub(crate) struct TransportImpl {
     /// Logger
     pub log: ReplicaLogger,
     /// Guarded self weak-reference
-    pub weak_self: RwLock<Weak<TransportImpl>>,
+    pub weak_self: std::sync::RwLock<Weak<TransportImpl>>,
 }
 
 /// Our role in a connection
