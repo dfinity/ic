@@ -1,9 +1,10 @@
 //! Defines types used for threshold ECDSA key generation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use strum_macros::EnumIter;
 
@@ -30,6 +31,7 @@ use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
+use phantom_newtype::Id;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -626,20 +628,196 @@ pub enum EcdsaMessage {
     EcdsaOpening(EcdsaOpening),
 }
 
+/// EcdsaArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
+/// hash of the message itself:
+/// EcdsaArtifactId = <EcdsaPrefix, CryptoHash<Message>>
+/// EcdsaPrefix     = <8 byte group tag, 8 byte meta info hash>
+///
+/// Two kinds of look up are possible with this:
+/// 1. Look up by full key of <prefix + crypto hash>, which would return the matching
+/// artifact if present.
+/// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
+/// the same prefix. The caller is expected to filter the returned entries as needed. The look up
+/// by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+/// issued a support for a <transcript Id, dealer Id>, we could iterate through all the
+/// entries in the support pool looking for a matching artifact. Instead, we could issue a
+/// single prefix query for prefix = <transcript Id, dealer Id, support signer Id>.
+///
+/// - The group tag creates an ordering of the messages
+/// We previously identified the messages only by CryptoHash. This loses any ordering
+/// info (e.g) if we want to iterate/process the messages related to older transcripts ahead of
+/// the newer ones, this is not possible with CryptoHash. The group tag automatically
+/// creates an ordering/grouping (e.g) this is set to transcript Id for dealings and support
+/// shares.
+///
+/// - The meta info hash maps variable length meta info fields into a fixed length
+/// hash, which simplifies the design and easy to work with LMDB keys. Ideally, we would like to
+/// look up by a list of relevant fields (e.g) dealings by <transcript Id, dealer Id>,
+/// support shares by <transcript Id, dealer Id, support signer Id>, complaints by
+/// <transcript Id, dealer Id, complainer Id>, etc. But this requires different way of
+/// indexing for the different sub pools. Instead, mapping these fields to the hash creates an
+/// uniform indexing mechanism for all the sub pools.
+///
+/// On the down side, more than one artifact may map to the same hash value. So the caller
+/// would need to do an exact match to filter as needed. But the collisions are expected to
+/// be rare, and the prefix lookup should usually return a single entry.
+///
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub enum EcdsaMessageHash {
-    EcdsaSignedDealing(CryptoHashOf<SignedIDkgDealing>),
-    EcdsaDealingSupport(CryptoHashOf<IDkgDealingSupport>),
-    EcdsaSigShare(CryptoHashOf<EcdsaSigShare>),
-    EcdsaComplaint(CryptoHashOf<EcdsaComplaint>),
-    EcdsaOpening(CryptoHashOf<EcdsaOpening>),
+pub struct EcdsaPrefix {
+    group_tag: u64,
+    meta_hash: u64,
 }
 
-impl EcdsaMessageHash {
+impl EcdsaPrefix {
+    pub fn new(group_tag: u64, meta_hash: u64) -> Self {
+        Self {
+            group_tag,
+            meta_hash,
+        }
+    }
+
+    pub fn group_tag(&self) -> u64 {
+        self.group_tag
+    }
+
+    pub fn meta_hash(&self) -> u64 {
+        self.meta_hash
+    }
+}
+
+pub type EcdsaPrefixOf<T> = Id<T, EcdsaPrefix>;
+
+pub fn dealing_prefix(
+    transcript_id: &IDkgTranscriptId,
+    dealer_id: &NodeId,
+) -> EcdsaPrefixOf<SignedIDkgDealing> {
+    // Group_tag: transcript Id, Meta info: <dealer_id>
+    let mut hasher = DefaultHasher::new();
+    dealer_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+}
+
+pub fn dealing_support_prefix(
+    transcript_id: &IDkgTranscriptId,
+    dealer_id: &NodeId,
+    support_node_id: &NodeId,
+) -> EcdsaPrefixOf<IDkgDealingSupport> {
+    // Group_tag: transcript Id, Meta info: <dealer_id + support sender>
+    let mut hasher = DefaultHasher::new();
+    dealer_id.hash(&mut hasher);
+    support_node_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+}
+
+pub fn sig_share_prefix(
+    request_id: &RequestId,
+    sig_share_node_id: &NodeId,
+) -> EcdsaPrefixOf<EcdsaSigShare> {
+    // Group_tag: quadruple Id, Meta info: <sig share sender>
+    let mut hasher = DefaultHasher::new();
+    sig_share_node_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(request_id.quadruple_id.0, hasher.finish()))
+}
+
+pub fn complaint_prefix(
+    transcript_id: &IDkgTranscriptId,
+    dealer_id: &NodeId,
+    complainer_id: &NodeId,
+) -> EcdsaPrefixOf<EcdsaComplaint> {
+    // Group_tag: transcript Id, Meta info: <dealer_id + complainer_id>
+    let mut hasher = DefaultHasher::new();
+    dealer_id.hash(&mut hasher);
+    complainer_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+}
+
+pub fn opening_prefix(
+    transcript_id: &IDkgTranscriptId,
+    dealer_id: &NodeId,
+    complainer_id: &NodeId,
+    opener_id: &NodeId,
+) -> EcdsaPrefixOf<EcdsaOpening> {
+    // Group_tag: transcript Id, Meta info: <dealer_id + complainer_id + opener_id>
+    let mut hasher = DefaultHasher::new();
+    dealer_id.hash(&mut hasher);
+    complainer_id.hash(&mut hasher);
+    opener_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+}
+
+/// The identifier for artifacts/messages.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub enum EcdsaArtifactId {
+    Dealing(
+        EcdsaPrefixOf<SignedIDkgDealing>,
+        CryptoHashOf<SignedIDkgDealing>,
+    ),
+    DealingSupport(
+        EcdsaPrefixOf<IDkgDealingSupport>,
+        CryptoHashOf<IDkgDealingSupport>,
+    ),
+    SigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    Complaint(EcdsaPrefixOf<EcdsaComplaint>, CryptoHashOf<EcdsaComplaint>),
+    Opening(EcdsaPrefixOf<EcdsaOpening>, CryptoHashOf<EcdsaOpening>),
+}
+
+impl EcdsaArtifactId {
+    pub fn prefix(&self) -> EcdsaPrefix {
+        match self {
+            EcdsaArtifactId::Dealing(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::SigShare(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
+        }
+    }
+
+    pub fn hash(&self) -> CryptoHash {
+        match self {
+            EcdsaArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::SigShare(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::Opening(_, hash) => hash.as_ref().clone(),
+        }
+    }
+
     pub fn dealing_hash(&self) -> Option<CryptoHashOf<SignedIDkgDealing>> {
         match self {
-            Self::EcdsaSignedDealing(hash) => Some(hash.clone()),
+            Self::Dealing(_, hash) => Some(hash.clone()),
             _ => None,
+        }
+    }
+}
+
+impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
+    fn from(
+        (message_type, prefix, crypto_hash): (EcdsaMessageType, EcdsaPrefix, CryptoHash),
+    ) -> EcdsaArtifactId {
+        match message_type {
+            EcdsaMessageType::Dealing => {
+                EcdsaArtifactId::Dealing(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
+            }
+            EcdsaMessageType::DealingSupport => EcdsaArtifactId::DealingSupport(
+                EcdsaPrefixOf::new(prefix),
+                CryptoHashOf::new(crypto_hash),
+            ),
+            EcdsaMessageType::SigShare => EcdsaArtifactId::SigShare(
+                EcdsaPrefixOf::new(prefix),
+                CryptoHashOf::new(crypto_hash),
+            ),
+            EcdsaMessageType::Complaint => EcdsaArtifactId::Complaint(
+                EcdsaPrefixOf::new(prefix),
+                CryptoHashOf::new(crypto_hash),
+            ),
+            EcdsaMessageType::Opening => {
+                EcdsaArtifactId::Opening(EcdsaPrefixOf::new(prefix), CryptoHashOf::new(crypto_hash))
+            }
         }
     }
 }
@@ -667,37 +845,14 @@ impl From<&EcdsaMessage> for EcdsaMessageType {
     }
 }
 
-impl From<&EcdsaMessageHash> for EcdsaMessageType {
-    fn from(hash: &EcdsaMessageHash) -> EcdsaMessageType {
-        match hash {
-            EcdsaMessageHash::EcdsaSignedDealing(_) => EcdsaMessageType::Dealing,
-            EcdsaMessageHash::EcdsaDealingSupport(_) => EcdsaMessageType::DealingSupport,
-            EcdsaMessageHash::EcdsaSigShare(_) => EcdsaMessageType::SigShare,
-            EcdsaMessageHash::EcdsaComplaint(_) => EcdsaMessageType::Complaint,
-            EcdsaMessageHash::EcdsaOpening(_) => EcdsaMessageType::Opening,
-        }
-    }
-}
-
-impl From<(EcdsaMessageType, Vec<u8>)> for EcdsaMessageHash {
-    fn from((message_type, bytes): (EcdsaMessageType, Vec<u8>)) -> EcdsaMessageHash {
-        let crypto_hash = CryptoHash(bytes);
-        match message_type {
-            EcdsaMessageType::Dealing => {
-                EcdsaMessageHash::EcdsaSignedDealing(CryptoHashOf::from(crypto_hash))
-            }
-            EcdsaMessageType::DealingSupport => {
-                EcdsaMessageHash::EcdsaDealingSupport(CryptoHashOf::from(crypto_hash))
-            }
-            EcdsaMessageType::SigShare => {
-                EcdsaMessageHash::EcdsaSigShare(CryptoHashOf::from(crypto_hash))
-            }
-            EcdsaMessageType::Complaint => {
-                EcdsaMessageHash::EcdsaComplaint(CryptoHashOf::from(crypto_hash))
-            }
-            EcdsaMessageType::Opening => {
-                EcdsaMessageHash::EcdsaOpening(CryptoHashOf::from(crypto_hash))
-            }
+impl From<&EcdsaArtifactId> for EcdsaMessageType {
+    fn from(id: &EcdsaArtifactId) -> EcdsaMessageType {
+        match id {
+            EcdsaArtifactId::Dealing(..) => EcdsaMessageType::Dealing,
+            EcdsaArtifactId::DealingSupport(..) => EcdsaMessageType::DealingSupport,
+            EcdsaArtifactId::SigShare(..) => EcdsaMessageType::SigShare,
+            EcdsaArtifactId::Complaint(..) => EcdsaMessageType::Complaint,
+            EcdsaArtifactId::Opening(..) => EcdsaMessageType::Opening,
         }
     }
 }

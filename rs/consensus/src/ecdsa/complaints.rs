@@ -14,8 +14,8 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaMessage, EcdsaOpening,
-    EcdsaOpeningContent,
+    complaint_prefix, opening_prefix, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
+    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -625,9 +625,14 @@ impl EcdsaComplaintHandlerImpl {
         idkg_complaint: &IDkgComplaint,
         complainer_id: &NodeId,
     ) -> bool {
+        let prefix = complaint_prefix(
+            &idkg_complaint.transcript_id,
+            &idkg_complaint.dealer_id,
+            complainer_id,
+        );
         ecdsa_pool
             .validated()
-            .complaints()
+            .complaints_by_prefix(prefix)
             .any(|(_, signed_complaint)| {
                 let complaint = signed_complaint.get();
                 signed_complaint.signature.signer == *complainer_id
@@ -665,9 +670,10 @@ impl EcdsaComplaintHandlerImpl {
         complainer_id: &NodeId,
         opener_id: &NodeId,
     ) -> bool {
+        let prefix = opening_prefix(transcript_id, dealer_id, complainer_id, opener_id);
         ecdsa_pool
             .validated()
-            .openings()
+            .openings_by_prefix(prefix)
             .any(|(_, signed_opening)| {
                 let opening = signed_opening.get();
                 opening.complainer_id == *complainer_id
@@ -1012,7 +1018,7 @@ mod tests {
 
                 // Complaint for a transcript not currently active (dropped)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                let msg_id_2 = complaint.message_hash();
+                let msg_id_2 = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1021,7 +1027,7 @@ mod tests {
 
                 // Complaint for a transcript currently active (accepted)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let msg_id_3 = complaint.message_hash();
+                let msg_id_3 = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1054,7 +1060,7 @@ mod tests {
                 // Set up the ECDSA pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                let msg_id = complaint.message_hash();
+                let msg_id = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint.clone()),
                     peer_id: NODE_3,
@@ -1093,7 +1099,7 @@ mod tests {
                 // Set up the ECDSA pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
-                let msg_id_1 = complaint.message_hash();
+                let msg_id_1 = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1102,7 +1108,7 @@ mod tests {
 
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
-                let msg_id_2 = complaint.message_hash();
+                let msg_id_2 = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1205,7 +1211,7 @@ mod tests {
 
                 // Opening for a transcript not currently active(dropped)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                let msg_id_1 = opening.message_hash();
+                let msg_id_1 = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1215,7 +1221,7 @@ mod tests {
                 // Opening for a transcript currently active,
                 // with a matching complaint (accepted)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                let msg_id_2 = opening.message_hash();
+                let msg_id_2 = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1265,7 +1271,7 @@ mod tests {
                 // Set up the ECDSA pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                let msg_id = opening.message_hash();
+                let msg_id = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening.clone()),
                     peer_id: NODE_4,
@@ -1303,7 +1309,7 @@ mod tests {
                 // Set up the ECDSA pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
-                let msg_id_1 = opening.message_hash();
+                let msg_id_1 = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1312,7 +1318,7 @@ mod tests {
 
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
-                let msg_id_2 = opening.message_hash();
+                let msg_id_2 = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1355,7 +1361,7 @@ mod tests {
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                let msg_id = complaint.message_hash();
+                let msg_id = complaint.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1404,7 +1410,7 @@ mod tests {
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                let msg_id = complaint.message_hash();
+                let msg_id = complaint.message_id();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
@@ -1453,7 +1459,7 @@ mod tests {
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                let msg_id = opening.message_hash();
+                let msg_id = opening.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1502,7 +1508,7 @@ mod tests {
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                let msg_id = opening.message_hash();
+                let msg_id = opening.message_id();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];

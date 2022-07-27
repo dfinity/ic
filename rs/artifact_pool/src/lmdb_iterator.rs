@@ -6,7 +6,7 @@
 // In order to store these parent/child/sibling/cousin relationships under
 // the same struct it's necessary to use unsafe operation as the borrow checker
 // won't allow it.
-use crate::lmdb_pool::HeightKey;
+use crate::lmdb_pool::{HeightKey, IdKey};
 use ic_logger::{error, ReplicaLogger};
 use lmdb::{Cursor, Database, Environment, Iter, RoCursor, RoTransaction, Transaction};
 use std::sync::Arc;
@@ -107,11 +107,20 @@ pub(crate) struct LMDBEcdsaIterator<'a, F> {
 }
 
 impl<'a, F> LMDBEcdsaIterator<'a, F> {
-    pub fn new(db_env: Arc<Environment>, db: Database, deserialize: F, log: ReplicaLogger) -> Self {
+    pub fn new(
+        db_env: Arc<Environment>,
+        db: Database,
+        deserialize: F,
+        start_pos: Option<IdKey>,
+        log: ReplicaLogger,
+    ) -> Self {
         let tx: RoTransaction<'_> = unsafe { std::mem::transmute(db_env.begin_ro_txn().unwrap()) };
         let mut cursor: RoCursor<'_> =
             unsafe { std::mem::transmute(tx.open_ro_cursor(db).unwrap()) };
-        let iter: Iter<'_> = unsafe { std::mem::transmute(cursor.iter_start()) };
+        let iter: Iter<'_> = match start_pos {
+            Some(id_key) => unsafe { std::mem::transmute(cursor.iter_from(id_key)) },
+            None => unsafe { std::mem::transmute(cursor.iter_start()) },
+        };
         Self {
             log,
             _db_env: db_env,
