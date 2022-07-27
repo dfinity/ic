@@ -10,7 +10,7 @@ use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::KeyId;
+use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
 use openssl::pkey::PKey;
@@ -78,7 +78,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
                 Ok(CspSignature::Ed25519(signature_bytes))
             }
             _ => Err(CspTlsSignError::WrongSecretKeyType {
-                algorithm: secret_key.algorithm_id(),
+                algorithm: AlgorithmId::Tls,
+                secret_key_variant: secret_key.enum_variant().to_string(),
             }),
         };
         self.metrics.observe_csp_local_duration_seconds(

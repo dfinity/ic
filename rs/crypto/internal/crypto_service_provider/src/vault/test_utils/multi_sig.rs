@@ -106,7 +106,8 @@ pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Ar
     assert_eq!(
         result.unwrap_err(),
         CspMultiSignatureError::WrongSecretKeyType {
-            algorithm: AlgorithmId::Ed25519
+            algorithm: AlgorithmId::MultiBls12_381,
+            secret_key_variant: "Ed25519".to_string()
         }
     );
 }

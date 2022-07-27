@@ -35,6 +35,7 @@ pub enum CspBasicSignatureError {
     },
     WrongSecretKeyType {
         algorithm: AlgorithmId,
+        secret_key_variant: String,
     },
     MalformedSecretKey {
         algorithm: AlgorithmId,
@@ -61,6 +62,7 @@ pub enum CspMultiSignatureError {
     },
     WrongSecretKeyType {
         algorithm: AlgorithmId,
+        secret_key_variant: String,
     },
     InternalError {
         internal_error: String,
@@ -102,11 +104,22 @@ pub enum CspTlsKeygenError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsSignError {
-    SecretKeyNotFound { key_id: KeyId },
-    WrongSecretKeyType { algorithm: AlgorithmId },
-    MalformedSecretKey { error: String },
-    SigningFailed { error: String },
-    InternalError { internal_error: String },
+    SecretKeyNotFound {
+        key_id: KeyId,
+    },
+    WrongSecretKeyType {
+        algorithm: AlgorithmId,
+        secret_key_variant: String,
+    },
+    MalformedSecretKey {
+        error: String,
+    },
+    SigningFailed {
+        error: String,
+    },
+    InternalError {
+        internal_error: String,
+    },
 }
 
 /// `CspVault` offers a selection of operations that involve

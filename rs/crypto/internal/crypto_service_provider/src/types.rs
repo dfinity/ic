@@ -18,12 +18,12 @@ use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpeningBytes, EccScalarBytes, MEGaKeySetK256Bytes,
-};
+#[cfg(test)]
+use ic_crypto_internal_threshold_sig_ecdsa::EccScalarBytes;
+use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
-use strum_macros::IntoStaticStr;
+use strum_macros::{EnumCount, IntoStaticStr};
 use zeroize::Zeroize;
 
 pub mod conversions;
@@ -56,7 +56,7 @@ pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspP
 /// The secret part of a public/private key pair.
 ///
 /// This enum can be persisted in a `SecretKeyStore`.
-#[derive(Clone, Eq, IntoStaticStr, PartialEq, Zeroize, Serialize, Deserialize)]
+#[derive(Clone, Eq, IntoStaticStr, PartialEq, Zeroize, Serialize, Deserialize, EnumCount)]
 #[zeroize(drop)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum CspSecretKey {
@@ -79,24 +79,10 @@ pub enum CspSecretKey {
 }
 
 impl CspSecretKey {
-    /// Return the algorithm identifier of this secret key
-    pub fn algorithm_id(&self) -> AlgorithmId {
-        match self {
-            Self::Ed25519(_) => AlgorithmId::Ed25519,
-            Self::MultiBls12_381(_) => AlgorithmId::MultiBls12_381,
-            Self::ThresBls12_381(_) => AlgorithmId::ThresBls12_381,
-            Self::Secp256k1WithPublicKey(_) => AlgorithmId::Secp256k1,
-            Self::TlsEd25519(_) => AlgorithmId::Ed25519,
-            Self::FsEncryption(_) => AlgorithmId::NiDkg_Groth20_Bls12_381,
-            Self::MEGaEncryptionK256(_) => AlgorithmId::ThresholdEcdsaSecp256k1,
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(EccScalarBytes::K256(
-                _,
-            ))) => AlgorithmId::ThresholdEcdsaSecp256k1,
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(
-                EccScalarBytes::K256(_),
-                EccScalarBytes::K256(_),
-            )) => AlgorithmId::ThresholdEcdsaSecp256k1,
-        }
+    /// Returns the enum name of this `CspSecretKey` instance as `&'static str`
+    /// e.g. `CspSecretKey::Ed25519` returns "Ed25519"
+    pub fn enum_variant(&self) -> &'static str {
+        self.into()
     }
 }
 

@@ -42,7 +42,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
                     Ok(CspSignature::Ed25519(sig_bytes))
                 }
                 _ => Err(CspBasicSignatureError::WrongSecretKeyType {
-                    algorithm: secret_key.algorithm_id(),
+                    algorithm: algorithm_id,
+                    secret_key_variant: secret_key.enum_variant().to_string(),
                 }),
             },
             _ => Err(CspBasicSignatureError::UnsupportedAlgorithm {

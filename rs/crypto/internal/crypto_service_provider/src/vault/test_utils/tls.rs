@@ -193,7 +193,8 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<
     assert_eq!(
         result.unwrap_err(),
         CspTlsSignError::WrongSecretKeyType {
-            algorithm: AlgorithmId::Ed25519
+            algorithm: AlgorithmId::Tls,
+            secret_key_variant: "Ed25519".to_string()
         }
     );
 }
