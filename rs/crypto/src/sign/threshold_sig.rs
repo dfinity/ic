@@ -276,7 +276,7 @@ impl ThresholdSigVerifierInternal {
                 &shares_to_vector(&transcript_data, shares, dkg_id)?,
                 public_coefficients,
             )
-            .map_err(map_csp_combine_sigs_error_or_panic)?;
+            .map_err(map_csp_combine_sigs_error)?;
         combined_threshold_sig_or_panic(csp_signature)
     }
 }
@@ -341,16 +341,12 @@ fn combined_threshold_sig_or_panic<H: Signable>(
     ))
 }
 
-// TODO (DFN-1505): improve the error handling by introducing more specific
-// errors on CSP level.
-fn map_csp_combine_sigs_error_or_panic(error: CryptoError) -> CryptoError {
+fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
     match error {
-        // TODO (DFN-1505): InvalidArgument is returned in these cases:
-        // - threshold too high -> Error must be forwarded to the caller (as is the case now)
-        // - error reading coeffs / unknown algorithm -> should lead to a panic (illegal state).
-        //   This is not the case now!
         CryptoError::MalformedSignature { .. } | CryptoError::InvalidArgument { .. } => error,
-        _ => panic!("Illegal state: unexpected error from the CSP: {}", error),
+        _ => CryptoError::InternalError {
+            internal_error: format!("Unexpected error from the CSP: {}", error),
+        },
     }
 }
 
@@ -380,24 +376,21 @@ impl ThresholdSigVerifierInternal {
                 csp_signature,
                 pub_coeffs,
             )
-            .map_err(map_verify_combined_error_or_panic)
+            .map_err(map_verify_combined_error)
     }
 }
 
 // TODO (DFN-1186): improve the error handling by introducing more specific
 // errors on CSP level.
-fn map_verify_combined_error_or_panic(error: CryptoError) -> CryptoError {
+fn map_verify_combined_error(error: CryptoError) -> CryptoError {
     match error {
-        CryptoError::SignatureVerification { .. } | CryptoError::MalformedSignature { .. } => error,
-        CryptoError::InvalidArgument { .. } => {
-            panic!("Illegal state: unsupported algorithm: {}", error)
-        }
-        CryptoError::MalformedPublicKey { .. } => panic!(
-            "Illegal state: the public key computed from the public coefficients \
-                is malformed: {}",
-            error
-        ),
-        _ => panic!("Illegal state: unexpected error from the CSP: {}", error),
+        CryptoError::SignatureVerification { .. }
+        | CryptoError::MalformedSignature { .. }
+        | CryptoError::InvalidArgument { .. }
+        | CryptoError::MalformedPublicKey { .. } => error,
+        _ => CryptoError::InternalError {
+            internal_error: format!("Unexpected error from the CSP: {}", error),
+        },
     }
 }
 
@@ -429,7 +422,7 @@ impl ThresholdSigVerifierInternal {
                 csp_signature,
                 csp_pub_coeffs,
             )
-            .map_err(map_verify_combined_error_or_panic)
+            .map_err(map_verify_combined_error)
     }
 }
 
