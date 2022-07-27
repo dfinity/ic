@@ -81,7 +81,7 @@ RUN \
 # Download and verify vector
 RUN \
     curl -L -O https://packages.timber.io/vector/0.23.0/vector_0.23.0-1_amd64.deb && \
-    echo "bd713a9e739cca53f9aa1e49e4abf0f0a3ba68a1c5f5f42106ed9b98282f2f06f009e0779c24368aea9d4e829af7614043ae9625dcc849717931c20a6812ede7  vector_0.23.0-1_amd64.deb" | shasum -c
+    echo "e29180e5575781f299e0ff7b89afe2e582060797e1653e90bb5582404cf6eec3e6b3fa462064f00b9917339847476560fa00f6d8fc83dce171f0ea9be968bd0a  vector_0.23.0-1_amd64.deb" | shasum -c
 
 # Download and verify node_exporter
 RUN \
