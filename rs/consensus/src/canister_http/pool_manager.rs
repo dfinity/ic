@@ -3,7 +3,7 @@
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
 use crate::consensus::utils::registry_version_at_height;
-use crate::consensus::ConsensusCrypto;
+use crate::consensus::{ConsensusCrypto, Membership};
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
 };
@@ -15,7 +15,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig,
+    replica_config::ReplicaConfig, Height,
 };
 use prometheus::{HistogramVec, IntCounter, IntGauge};
 use std::collections::BTreeSet;
@@ -80,6 +80,7 @@ pub struct CanisterHttpPoolManagerImpl {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
     crypto: Arc<dyn ConsensusCrypto>,
+    membership: Arc<Membership>,
     replica_config: ReplicaConfig,
     requested_id_cache: BTreeSet<CallbackId>,
     metrics: CanisterHttpPoolManagerMetrics,
@@ -92,6 +93,7 @@ impl CanisterHttpPoolManagerImpl {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
         crypto: Arc<dyn ConsensusCrypto>,
+        membership: Arc<Membership>,
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
         metrics_registry: MetricsRegistry,
@@ -102,6 +104,7 @@ impl CanisterHttpPoolManagerImpl {
             http_adapter_shim,
             crypto,
             replica_config,
+            membership,
             registry_client,
             metrics: CanisterHttpPoolManagerMetrics::new(&metrics_registry),
             log,
@@ -246,6 +249,7 @@ impl CanisterHttpPoolManagerImpl {
     fn create_shares_from_responses(
         &mut self,
         consensus_cache: &dyn ConsensusPoolCache,
+        finalized_height: Height,
     ) -> CanisterHttpChangeSet {
         let _time = self
             .metrics
@@ -253,7 +257,7 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["create_shares_from_responses"])
             .start_timer();
         let registry_version = if let Some(registry_version) =
-            registry_version_at_height(consensus_cache, consensus_cache.finalized_block().height())
+            registry_version_at_height(consensus_cache, finalized_height)
         {
             registry_version
         } else {
@@ -305,6 +309,7 @@ impl CanisterHttpPoolManagerImpl {
         &self,
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
+        finalized_height: Height,
     ) -> CanisterHttpChangeSet {
         let _time = self
             .metrics
@@ -312,7 +317,7 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["validate_shares"])
             .start_timer();
         let registry_version = if let Some(registry_version) =
-            registry_version_at_height(consensus_cache, consensus_cache.finalized_block().height())
+            registry_version_at_height(consensus_cache, finalized_height)
         {
             registry_version
         } else {
@@ -325,18 +330,44 @@ impl CanisterHttpPoolManagerImpl {
 
         canister_http_pool
             .get_unvalidated_shares()
-            .map(|share| {
+            .filter_map(|share| {
+                let node_is_in_committee = self
+                    .membership
+                    .node_belongs_to_canister_http_committee(
+                        finalized_height,
+                        share.signature.signer,
+                    )
+                    .map_err(|e| {
+                        warn!(
+                            self.log,
+                            "Unabled to check membership for share at height {}, {:?}",
+                            finalized_height,
+                            e
+                        );
+                        e
+                    })
+                    .ok()?;
+                if !node_is_in_committee {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        ic_crypto::crypto_hash(share),
+                        "Share signed by node that is not a member of the canister http committee"
+                            .to_string(),
+                    ));
+                }
                 // TODO: more precise error handling
                 if let Err(err) = self.crypto.verify(share, registry_version) {
                     error!(self.log, "Unable to verify signature of share, {}", err);
+
                     self.metrics.shares_marked_invalid.inc();
-                    CanisterHttpChangeAction::HandleInvalid(
+                    Some(CanisterHttpChangeAction::HandleInvalid(
                         ic_crypto::crypto_hash(share),
                         format!("Unable to verify signature of share, {}", err),
-                    )
+                    ))
                 } else {
                     self.metrics.shares_validated.inc();
-                    CanisterHttpChangeAction::MoveToValidated(ic_crypto::crypto_hash(share))
+                    Some(CanisterHttpChangeAction::MoveToValidated(
+                        ic_crypto::crypto_hash(share),
+                    ))
                 }
             })
             .collect()
@@ -352,18 +383,31 @@ impl CanisterHttpPoolManagerImpl {
             .op_duration
             .with_label_values(&["generate_change_set"])
             .start_timer();
-        // Make any requests that need to be made
-        self.make_new_requests(canister_http_pool);
+        let mut change_set = Vec::new();
+        let finalized_height = consensus_cache.finalized_block().height();
 
-        // Create shares from any responses that are now available
-        let mut change_set = self.create_shares_from_responses(consensus_cache);
+        if self
+            .membership
+            .node_belongs_to_canister_http_committee(finalized_height, self.replica_config.node_id)
+            .unwrap_or(false)
+        {
+            // Make any requests that need to be made
+            self.make_new_requests(canister_http_pool);
+
+            // Create shares from any responses that are now available
+            change_set.extend(self.create_shares_from_responses(consensus_cache, finalized_height));
+        }
+
+        // Attempt to validate unvalidated shares
+        change_set.extend(self.validate_shares(
+            consensus_cache,
+            canister_http_pool,
+            finalized_height,
+        ));
 
         // Purge items in the pool that are no longer needed
         change_set
             .extend(self.purge_shares_of_processed_requests(consensus_cache, canister_http_pool));
-
-        // Attempt to validate unvalidated shares
-        change_set.extend(self.validate_shares(consensus_cache, canister_http_pool));
 
         self.metrics
             .in_client_requests
@@ -466,8 +510,9 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
+                    membership,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = dependencies(pool_config.clone(), 5);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 shim_mock
                     .expect_try_receive()
@@ -528,6 +573,7 @@ pub mod test {
                     state_manager,
                     shim,
                     crypto,
+                    membership,
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -553,6 +599,7 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
+                    membership,
                     ..
                 } = dependencies(pool_config.clone(), 4);
 
@@ -589,6 +636,7 @@ pub mod test {
                     state_manager,
                     shim,
                     crypto,
+                    membership,
                     replica_config,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -611,6 +659,7 @@ pub mod test {
                     crypto,
                     state_manager,
                     registry,
+                    membership,
                     ..
                 } = dependencies(pool_config.clone(), 4);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
@@ -660,6 +709,7 @@ pub mod test {
                     state_manager,
                     shim,
                     crypto.clone(),
+                    membership,
                     replica_config.clone(),
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),

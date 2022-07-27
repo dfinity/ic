@@ -173,6 +173,37 @@ impl Membership {
         })
     }
 
+    /// Return true if the given node ID is part of the canister http committee
+    /// at the given height
+    pub fn node_belongs_to_canister_http_committee(
+        &self,
+        height: Height,
+        node_id: NodeId,
+    ) -> Result<bool, MembershipError> {
+        if !self
+            .consensus_cache
+            .summary_block()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .current_interval_includes(height)
+        {
+            return Err(MembershipError::UnableToRetrieveDkgSummary(height));
+        }
+
+        let node_ids = self.get_nodes(height)?;
+        let size = get_committee_size(node_ids.len());
+
+        Ok(
+            if let Some(i) = node_ids.iter().position(|id| *id == node_id) {
+                i < size
+            } else {
+                false
+            },
+        )
+    }
+
     /// Return true if the given node ID is in the low threshold committee at
     /// the given height
     fn node_belongs_to_low_threshold_committee(

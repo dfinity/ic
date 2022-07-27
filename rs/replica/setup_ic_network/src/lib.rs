@@ -452,6 +452,7 @@ fn setup_artifact_manager(
                         Arc::clone(&state_manager) as Arc<_>,
                         Arc::new(Mutex::new(canister_http_adapter_client)),
                         Arc::clone(&consensus_crypto),
+                        Arc::clone(&membership),
                         ReplicaConfig { subnet_id, node_id },
                         Arc::clone(&registry_client),
                         metrics_registry.clone(),
