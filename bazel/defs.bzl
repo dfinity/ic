@@ -2,24 +2,21 @@
 Utilities for building IC replica and canisters.
 """
 
-def _pigz_compress(ctx):
-    """GZip-compresses source files."""
-    output_file = ctx.actions.declare_file(ctx.label.name)
-    input_files = " ".join([f.path for f in ctx.files.srcs])
-    ctx.actions.run_shell(
-        mnemonic = "GZip",
-        command = "/usr/bin/pigz %s --stdout > %s" % (input_files, output_file.path),
-        inputs = ctx.files.srcs,
-        outputs = [output_file],
-    )
-    return [DefaultInfo(files = depset([output_file]))]
+def gzip_compress(name, srcs):
+    """GZip-compresses source files.
 
-gzip_compress = rule(
-    implementation = _pigz_compress,
-    attrs = {
-        "srcs": attr.label_list(allow_files = True),
-    },
-)
+    Args:
+      name: name of the compressed file.
+      srcs: list of input labels.
+    """
+    native.genrule(
+        name = "_compress_" + name,
+        exec_tools = ["@pigz"],
+        srcs = srcs,
+        outs = [name],
+        message = "Compressing into %s" % name,
+        cmd_bash = "$(location @pigz) $(SRCS) --stdout > $@",
+    )
 
 def cargo_build(name, srcs, binaries, cargo_flags, profile = "release", target = None, env_paths = {}, deps = []):
     """ Builds cargo binaries.
