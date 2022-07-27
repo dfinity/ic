@@ -445,14 +445,10 @@ impl TransportImpl {
             return Err(TransportErrorCode::FlowConnectionUp);
         }
 
-        let mut event_handler = self
-            .event_handler
-            .lock()
-            .unwrap()
-            .as_ref()
-            .ok_or(TransportErrorCode::TransportClientNotFound)?
-            .clone();
-
+        let mut event_handler = match self.event_handler.lock().await.as_ref() {
+            Some(event_handler) => event_handler.clone(),
+            None => return Err(TransportErrorCode::TransportClientNotFound),
+        };
         let connected_state = self.create_connected_state(
             peer_id,
             flow_tag,

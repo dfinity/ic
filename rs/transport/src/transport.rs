@@ -81,8 +81,11 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock, Weak};
-use tokio::runtime::Handle;
+use std::sync::{Arc, Weak};
+use tokio::{
+    runtime::Handle,
+    sync::{Mutex, RwLock},
+};
 
 impl TransportImpl {
     /// Creates a new Transport instance
@@ -111,9 +114,9 @@ impl TransportImpl {
             log,
 
             peer_map: tokio::sync::RwLock::new(HashMap::new()),
-            accept_ports: RwLock::new(HashMap::new()),
+            accept_ports: Mutex::new(HashMap::new()),
             event_handler: Mutex::new(None),
-            weak_self: RwLock::new(Weak::new()),
+            weak_self: std::sync::RwLock::new(Weak::new()),
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);
         arc

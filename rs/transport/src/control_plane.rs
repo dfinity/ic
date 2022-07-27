@@ -53,7 +53,7 @@ const TRANSITION_FROM_ACCEPT_TASK_NAME: &str = "transition_from_accept";
 impl TransportImpl {
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
-        self.allowed_clients.write().unwrap().remove(peer_id);
+        self.allowed_clients.blocking_write().remove(peer_id);
         self.peer_map.blocking_write().remove(peer_id);
     }
 
@@ -68,9 +68,9 @@ impl TransportImpl {
         let role = Self::connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
-            self.allowed_clients.write().unwrap().insert(*peer_id);
+            self.allowed_clients.blocking_write().insert(*peer_id);
         }
-        *self.registry_version.write().unwrap() = registry_version;
+        *self.registry_version.blocking_write() = registry_version;
         let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
@@ -468,8 +468,8 @@ impl TransportImpl {
         &self,
         stream: TcpStream,
     ) -> Result<(NodeId, TlsStream), TransportTlsHandshakeError> {
-        let registry_version = *self.registry_version.read().unwrap();
-        let current_allowed_clients = self.allowed_clients.read().unwrap().clone();
+        let registry_version = *self.registry_version.read().await;
+        let current_allowed_clients = self.allowed_clients.read().await.clone();
         let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
             .map_err(|_| TransportTlsHandshakeError::InvalidArgument)?;
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
@@ -498,7 +498,7 @@ impl TransportImpl {
         peer_id: NodeId,
         stream: TcpStream,
     ) -> Result<TlsStream, TransportTlsHandshakeError> {
-        let registry_version = *self.registry_version.read().unwrap();
+        let registry_version = *self.registry_version.read().await;
         match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
@@ -562,8 +562,8 @@ impl TransportImpl {
             let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
             accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
-        *self.accept_ports.write().unwrap() = accept_ports;
-        *self.event_handler.lock().unwrap() = Some(event_handler);
+        *self.accept_ports.blocking_lock() = accept_ports;
+        *self.event_handler.blocking_lock() = Some(event_handler);
     }
 }
 
