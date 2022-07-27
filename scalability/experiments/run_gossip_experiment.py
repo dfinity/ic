@@ -38,6 +38,9 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
         """Initiate the Gossip experiment."""
         super().__init__(num_workload_gen=1)
         self.install_canister(self.target_nodes[0])
+        # When adding more nodes, we get more HTTP requests (probably to the registry) and the
+        # default request rate in __wait_for_quiet will never be reached.
+        self.quiet_rate_rps = 5
 
     def run_experiment_internal(self, config):
         """Run a bit of a workload with the new subnet size."""

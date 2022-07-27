@@ -51,6 +51,10 @@ ALLOWABLE_FAILURE_RATE = 0.2
 # When median latency is below this level, we consider the experiment successful.
 ALLOWABLE_LATENCY = 5000
 
+# Default rate to use in wait_for_queit to determine if the IC has recovered from stressing.
+# The suite will wait between two benchmarking iterations until the HTTP request rate is below this value.
+DEFAULT_QUIET_RATE_RPS = 2
+
 
 class WorkloadExperiment(base_experiment.BaseExperiment):
     """Wrapper class around experiments that generates query/update load."""
@@ -62,6 +66,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         super().__init__(request_type)
 
         self.wg_testnet = FLAGS.wg_testnet
+        self.quiet_rate_rps = DEFAULT_QUIET_RATE_RPS
         self.use_updates = FLAGS.use_updates
         if self.use_updates:
             self.request_type = "call"
@@ -242,11 +247,11 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         else:
             return [node_ips[FLAGS.query_target_node_idx]]
 
-    def __wait_for_quiet(self, max_num_iterations: int = 60, quiet_rate_rps: int = 2, sleep_per_iteration_s: int = 10):
+    def __wait_for_quiet(self, max_num_iterations: int = 60, sleep_per_iteration_s: int = 10):
         """
-        Wait until target subnetwork recovered.
+        Wait until target subnetwork recovered by observing the HTTP request rate.
 
-        Wait until the HTTP request rate reported by replicas is below quiet_rate_rps.
+        Wait until the HTTP request rate reported by replicas is below self.quiet_rate_rps.
         Sleep sleep_per_iteration_s seconds after each check. Check at most
         max_num_iterations times and return unconditionally once reached.
         """
@@ -267,11 +272,11 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 print(
                     (
                         f"{curr_i}/{max_num_iterations} Current mean HTTP rate of {self.testnet} "
-                        f"{rate_rps} (want < {quiet_rate_rps})"
+                        f"{rate_rps} (want < {self.quiet_rate_rps})"
                     )
                 )
 
-                if rate_rps <= quiet_rate_rps:
+                if rate_rps <= self.quiet_rate_rps:
                     recovered = True
 
             except Exception as ex:

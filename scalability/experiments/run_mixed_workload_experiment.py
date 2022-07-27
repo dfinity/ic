@@ -116,10 +116,22 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
     def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""
         results = []
+        rps_max = 0
         for d in iterations:
             print(f"🚀 Running with total load {d}")
             config = {"load_total": d}
+
             res, aggregated = self.run_experiment(config)
+
+            duration = max([wl.start_delay + wl.duration for wl in self.workload_description])
+            avg_succ_rate = aggregated.get_avg_success_rate(duration)
+            latency = aggregated.percentiles[95] if aggregated.num_success > 0 else sys.float_info.max
+            if (
+                aggregated.failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE
+                and latency < workload_experiment.ALLOWABLE_LATENCY
+            ):
+                if avg_succ_rate > rps_max:
+                    rps_max = avg_succ_rate
             results.append((config, res, aggregated))
         data = [workloads for _, workloads, _ in results]
         num_workloads = len(self.workload_description)
@@ -130,6 +142,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 "rps_base": [rate for rate, _, _ in results],
                 "failure_rate": [[d[i].failure_rate for d in data] for i in range(num_workloads)],
                 "latency": [[d[i].percentiles[95] for d in data] for i in range(num_workloads)],
+                "rps_max": rps_max,
                 "labels": [
                     f"{d.get('canister', '')} - "
                     f"{d.get('rps_ratio', '')}% rps with "

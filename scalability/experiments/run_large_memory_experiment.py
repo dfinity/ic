@@ -80,7 +80,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         )
         self.last_duration = int(time.time()) - t_start
 
-        t_median = max(r.t_median)
+        t_median = max(r.t_median) if len(r.t_median) > 0 else None
         print(f"🚀  ... failure rate for {load} rps was {r.failure_rate} median latency is {t_median}")
         return r
 
