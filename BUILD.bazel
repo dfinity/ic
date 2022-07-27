@@ -62,6 +62,11 @@ opt_stripped_binary(
     binary = "//rs/canister_http/adapter",
 )
 
+opt_stripped_binary(
+    name = "state-tool",
+    binary = "//rs/state_tool",
+)
+
 cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
@@ -70,7 +75,6 @@ cargo_build(
         "ic-regedit",
         "ic-recovery",
         "orchestrator",
-        "state-tool",
         "vsock_agent",
     ],
     cargo_flags = [
