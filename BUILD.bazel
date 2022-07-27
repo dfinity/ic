@@ -1,5 +1,6 @@
 load("//bazel:defs.bzl", "cargo_build", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
+load("//bazel:transitions.bzl", "opt_stripped_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("//bazel:buildifier.bzl", "buildifier_test")
 
@@ -46,17 +47,29 @@ alias(
     actual = "//rs/bazelifier",
 )
 
+opt_stripped_binary(
+    name = "replica",
+    binary = "//rs/replica",
+)
+
+opt_stripped_binary(
+    name = "sandbox_launcher",
+    binary = "//rs/canister_sandbox/sandbox_launcher",
+)
+
+opt_stripped_binary(
+    name = "ic-canister-http-adapter",
+    binary = "//rs/canister_http/adapter",
+)
+
 cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
     binaries = [
-        "ic-canister-http-adapter",
         "ic-crypto-csp",
         "ic-regedit",
         "ic-recovery",
         "orchestrator",
-        "replica",
-        "sandbox_launcher",
         "state-tool",
         "vsock_agent",
     ],
