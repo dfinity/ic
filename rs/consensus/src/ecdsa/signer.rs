@@ -14,7 +14,7 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
+    sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
 };
 use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
@@ -314,9 +314,10 @@ impl EcdsaSignerImpl {
         signer_id: &NodeId,
         request_id: &RequestId,
     ) -> bool {
+        let prefix = sig_share_prefix(request_id, signer_id);
         ecdsa_pool
             .validated()
-            .signature_shares()
+            .signature_shares_by_prefix(prefix)
             .any(|(_, share)| share.request_id == *request_id && share.signer_id == *signer_id)
     }
 
@@ -830,7 +831,7 @@ mod tests {
 
                 // A share for a request in the finalized block (accepted)
                 let share = create_signature_share(NODE_2, id_2);
-                let msg_id_2 = share.message_hash();
+                let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -839,7 +840,7 @@ mod tests {
 
                 // A share for a request in the finalized block (accepted)
                 let share = create_signature_share(NODE_2, id_3);
-                let msg_id_3 = share.message_hash();
+                let msg_id_3 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -848,7 +849,7 @@ mod tests {
 
                 // A share for a request not in the finalized block (dropped)
                 let share = create_signature_share(NODE_2, id_4);
-                let msg_id_4 = share.message_hash();
+                let msg_id_4 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -885,7 +886,7 @@ mod tests {
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let share = create_signature_share(NODE_2, id_2);
-                let msg_id_2 = share.message_hash();
+                let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -917,7 +918,7 @@ mod tests {
 
                 // Unvalidated pool has: {signature share 1, signer = NODE_2}
                 let share = create_signature_share_with_nonce(NODE_2, id_1, 0);
-                let msg_id_1 = share.message_hash();
+                let msg_id_1 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -926,7 +927,7 @@ mod tests {
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2}
                 let share = create_signature_share_with_nonce(NODE_2, id_1, 1);
-                let msg_id_2 = share.message_hash();
+                let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -935,7 +936,7 @@ mod tests {
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_3}
                 let share = create_signature_share_with_nonce(NODE_3, id_1, 2);
-                let msg_id_3 = share.message_hash();
+                let msg_id_3 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_3,
@@ -987,7 +988,7 @@ mod tests {
 
                 // Share 2: height <= current_height, !in_progress (purged)
                 let share = create_signature_share(NODE_2, id_2);
-                let msg_id_2 = share.message_hash();
+                let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
                     peer_id: NODE_2,
@@ -1038,7 +1039,7 @@ mod tests {
 
                 // Share 2: height <= current_height, !in_progress (purged)
                 let share = create_signature_share(NODE_2, id_2);
-                let msg_id_2 = share.message_hash();
+                let msg_id_2 = share.message_id();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];

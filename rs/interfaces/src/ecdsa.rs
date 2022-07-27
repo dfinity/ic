@@ -3,7 +3,7 @@
 use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
 use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaSigShare, EcdsaStats,
+    EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
@@ -19,6 +19,31 @@ pub enum EcdsaChangeAction {
 
 pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;
 
+#[derive(Debug, Clone)]
+pub enum EcdsaPoolSectionOp {
+    Insert(EcdsaMessage),
+    Remove(EcdsaMessageId),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct EcdsaPoolSectionOps {
+    pub ops: Vec<EcdsaPoolSectionOp>,
+}
+
+impl EcdsaPoolSectionOps {
+    pub fn new() -> Self {
+        Self { ops: Vec::new() }
+    }
+
+    pub fn insert(&mut self, message: EcdsaMessage) {
+        self.ops.push(EcdsaPoolSectionOp::Insert(message));
+    }
+
+    pub fn remove(&mut self, id: EcdsaMessageId) {
+        self.ops.push(EcdsaPoolSectionOp::Remove(id));
+    }
+}
+
 /// The validated/unvalidated parts of the artifact pool.
 pub trait EcdsaPoolSection: Send + Sync {
     /// Checks if the artifact present in the pool.
@@ -31,29 +56,65 @@ pub trait EcdsaPoolSection: Send + Sync {
     fn signed_dealings(&self)
         -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_>;
 
+    /// Iterator for signed dealing objects matching the prefix.
+    fn signed_dealings_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<SignedIDkgDealing>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
+        unimplemented!()
+    }
+
     /// Iterator for dealing support objects.
     fn dealing_support(
         &self,
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_>;
 
+    /// Iterator for dealing support objects matching the prefix.
+    fn dealing_support_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<IDkgDealingSupport>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
+        unimplemented!()
+    }
+
     /// Iterator for signature share objects.
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;
+
+    /// Iterator for signature share objects matching the prefix.
+    fn signature_shares_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<EcdsaSigShare>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
+        unimplemented!()
+    }
 
     /// Iterator for complaint objects.
     fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_>;
 
+    /// Iterator for complaint objects matching the prefix.
+    fn complaints_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<EcdsaComplaint>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {
+        unimplemented!()
+    }
+
     /// Iterator for opening objects.
     fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_>;
+
+    /// Iterator for opening objects matching the prefix.
+    fn openings_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<EcdsaOpening>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_> {
+        unimplemented!()
+    }
 }
 
 /// The mutable interface for validated/unvalidated parts of the artifact pool.
 pub trait MutableEcdsaPoolSection: Send + Sync {
-    /// Adds the message to the pool.
-    fn insert(&mut self, message: EcdsaMessage);
-
-    /// Looks up and removes the specified message from the pool.
-    /// Returns true if the message was found.
-    fn remove(&mut self, id: &EcdsaMessageId) -> bool;
+    /// Applies the changes to the pool.
+    fn mutate(&mut self, ops: EcdsaPoolSectionOps);
 
     /// Get the immutable handle.
     fn as_pool_section(&self) -> &dyn EcdsaPoolSection;

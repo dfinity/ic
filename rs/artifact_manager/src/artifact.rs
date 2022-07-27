@@ -1,7 +1,7 @@
 //! The module contains implementations for different artifact kinds.
 
 use ic_consensus_message::ConsensusMessageHashable;
-use ic_ecdsa_object::ecdsa_msg_hash;
+use ic_ecdsa_object::ecdsa_msg_id;
 use ic_types::{
     artifact::*, canister_http::CanisterHttpResponseAttribute,
     canister_http::CanisterHttpResponseShare, consensus::certification::CertificationMessageHash,
@@ -158,7 +158,7 @@ impl ArtifactKind for EcdsaArtifact {
         // TODO: use serialize_len() in all the clients
         let size = bincode::serialize(msg).unwrap().len();
         Advert {
-            id: ecdsa_msg_hash(msg),
+            id: ecdsa_msg_id(msg),
             attribute: EcdsaMessageAttribute::from(msg),
             size,
             integrity_hash: ic_crypto_hash::crypto_hash(msg).get(),

@@ -33,7 +33,7 @@ pub use crate::{
     consensus::{
         certification::CertificationMessage,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageAttribute, EcdsaMessageHash},
+        ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute,
     },
     messages::SignedIngress,
@@ -477,7 +477,7 @@ pub struct DkgMessageAttribute {
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
-pub type EcdsaMessageId = EcdsaMessageHash;
+pub type EcdsaMessageId = EcdsaArtifactId;
 
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts

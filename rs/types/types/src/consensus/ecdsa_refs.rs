@@ -70,7 +70,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
 #[derive(
     Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
-pub struct QuadrupleId(pub(crate) u64);
+pub struct QuadrupleId(pub u64);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct TranscriptRef {
