@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::ed25519::{
     TESTVEC_ED25519_STABILITY_1_SIG, TESTVEC_RFC8032_ED25519_1_SIG, TESTVEC_RFC8032_ED25519_2_SIG,
     TESTVEC_RFC8032_ED25519_SHA_ABC_PK, TESTVEC_RFC8032_ED25519_SHA_ABC_SIG,
@@ -14,6 +15,9 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types:
     BTENode, FsEncryptionKeySet, FsEncryptionSecretKey,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    EccCurveType, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPok, FsEncryptionPublicKey,
@@ -24,6 +28,7 @@ use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use std::convert::TryFrom;
+use strum::EnumCount;
 
 fn sk_ed25519_bytes(key: &CspSecretKey) -> Option<&[u8; 32]> {
     match key {
@@ -135,24 +140,24 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
 }
 
 #[test]
-fn should_return_correct_algorithm_id() {
+fn should_return_correct_enum_variant() {
     // Ed25519
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
         SecretArray::new_and_dont_zeroize_argument(&[0; ed25519_types::SecretKeyBytes::SIZE]),
     ));
-    assert_eq!(key.algorithm_id(), AlgorithmId::Ed25519);
+    assert_eq!(key.enum_variant(), "Ed25519");
 
     // MultiBls12_381
     let key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
         [0; multi_types::SecretKeyBytes::SIZE],
     ));
-    assert_eq!(key.algorithm_id(), AlgorithmId::MultiBls12_381);
+    assert_eq!(key.enum_variant(), "MultiBls12_381");
 
     // ThresBls12_381
     let key = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes(
         [0; threshold_types::SecretKeyBytes::SIZE],
     ));
-    assert_eq!(key.algorithm_id(), AlgorithmId::ThresBls12_381);
+    assert_eq!(key.enum_variant(), "ThresBls12_381");
 
     // Secp256k1WithPublicKey
     let key = CspSecretKey::Secp256k1WithPublicKey(EphemeralKeySetBytes {
@@ -160,11 +165,11 @@ fn should_return_correct_algorithm_id() {
         public_key_bytes: EphemeralPublicKeyBytes([0; EphemeralPublicKeyBytes::SIZE]),
         pop_bytes: EphemeralPopBytes([0; EphemeralPopBytes::SIZE]),
     });
-    assert_eq!(key.algorithm_id(), AlgorithmId::Secp256k1);
+    assert_eq!(key.enum_variant(), "Secp256k1WithPublicKey");
 
     // TlsEd25519
     let key = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes { bytes: vec![] });
-    assert_eq!(key.algorithm_id(), AlgorithmId::Ed25519);
+    assert_eq!(key.enum_variant(), "TlsEd25519");
 
     // FsEncryption
     let key = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
@@ -177,7 +182,26 @@ fn should_return_correct_algorithm_id() {
             },
         },
     ));
-    assert_eq!(key.algorithm_id(), AlgorithmId::NiDkg_Groth20_Bls12_381);
+    assert_eq!(key.enum_variant(), "FsEncryption");
+
+    let mut rng = Seed::from_bytes(&[0u8; 32]).into_rng();
+    let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, &mut rng).unwrap();
+    let mega_private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&mega_private_key).unwrap();
+    let mega_public_key = mega_private_key.public_key().unwrap();
+    let mega_public_key_bytes = MEGaPublicKeyK256Bytes::try_from(&mega_public_key).unwrap();
+    let key = CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
+        public_key: mega_public_key_bytes,
+        private_key: mega_private_key_bytes,
+    });
+    assert_eq!(key.enum_variant(), "MEGaEncryptionK256");
+
+    let key = CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(
+        EccScalarBytes::K256([0u8; 32]),
+    ));
+    assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
+
+    // plase add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count
+    assert_eq!(CspSecretKey::COUNT, 8);
 }
 
 #[test]

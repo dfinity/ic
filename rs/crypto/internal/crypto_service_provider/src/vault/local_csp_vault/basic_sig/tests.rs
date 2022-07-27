@@ -94,7 +94,8 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     assert_eq!(
         result.unwrap_err(),
         CspBasicSignatureError::WrongSecretKeyType {
-            algorithm: AlgorithmId::ThresBls12_381
+            algorithm: AlgorithmId::Ed25519,
+            secret_key_variant: "ThresBls12_381".to_string()
         }
     );
 }

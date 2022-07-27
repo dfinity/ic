@@ -88,11 +88,14 @@ impl From<CspBasicSignatureError> for CryptoError {
                     reason: "Unsupported algorithm".to_string(),
                 }
             }
-            CspBasicSignatureError::WrongSecretKeyType { algorithm } => {
-                CryptoError::InvalidArgument {
-                    message: format!("Wrong secret key type: {:?}", algorithm),
-                }
-            }
+            CspBasicSignatureError::WrongSecretKeyType {
+                algorithm,
+                secret_key_variant,
+            } => CryptoError::InvalidArgument {
+                message: format!(
+                    "Wrong secret key type: {secret_key_variant} incompatible with {algorithm:?}"
+                ),
+            },
             CspBasicSignatureError::MalformedSecretKey { algorithm } => {
                 CryptoError::MalformedSecretKey {
                     algorithm,
@@ -139,11 +142,14 @@ impl From<CspMultiSignatureError> for CryptoError {
                     reason: "Unsupported algorithm".to_string(),
                 }
             }
-            CspMultiSignatureError::WrongSecretKeyType { algorithm } => {
-                CryptoError::InvalidArgument {
-                    message: format!("Wrong secret key type: {:?}", algorithm),
-                }
-            }
+            CspMultiSignatureError::WrongSecretKeyType {
+                algorithm,
+                secret_key_variant,
+            } => CryptoError::InvalidArgument {
+                message: format!(
+                    "Wrong secret key type: expected {algorithm:?} but found {secret_key_variant}"
+                ),
+            },
             CspMultiSignatureError::InternalError { internal_error } => {
                 CryptoError::InvalidArgument {
                     message: internal_error,
