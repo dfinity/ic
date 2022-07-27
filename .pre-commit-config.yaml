@@ -101,6 +101,15 @@ repos:
   - id: flake8
     args: ["--config=gitlab-ci/src/setup.cfg"]
 
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: 'v0.961'
+  hooks:
+  - id: mypy
+    entry: "gitlab-ci/tools/run_mypy"
+    additional_dependencies: ['types-PyYAML==6.0.11']
+    # Print the number of files as a sanity-check
+    verbose: true
+
 - repo: https://github.com/pycqa/pydocstyle
   rev: 5.1.1
   hooks:
