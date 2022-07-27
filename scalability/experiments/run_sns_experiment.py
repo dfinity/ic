@@ -24,8 +24,8 @@ gflags.DEFINE_boolean("deploy", True, "Should the NNS be deployed")
 
 TMPDIR = "/tmp"
 DFX_VERSION = "0.11.0"
-SNS_BRANCH = "775ddc2bf996f733b7bfa5bad54c3e66457103ba"
-IC_COMMIT = "e0dad8ab4da84f841014b16852017b39da2f3172"  # empty to use latest on public github
+SNS_REF = "origin/main"
+IC_COMMIT = ""  # empty to use latest on public github
 
 
 class SnsExperiment(base_experiment.BaseExperiment):
@@ -39,8 +39,8 @@ class SnsExperiment(base_experiment.BaseExperiment):
         self.testnet = FLAGS.testnet
         self.ic_commit = SnsExperiment.find_latest_commit_in_public_repo()
         self.ic_download = self.ic_commit
-        self.nd_commit = SNS_BRANCH
-        self.nd_dir = os.path.join(TMPDIR, "nns-dapp")
+        self.nd_commit = SNS_REF
+        self.nns_dapp_dir = os.path.join(TMPDIR, "nns-dapp")
 
     def find_latest_commit_in_public_repo():
         if len(IC_COMMIT) > 0:
@@ -50,22 +50,20 @@ class SnsExperiment(base_experiment.BaseExperiment):
             cwd=TMPDIR,
         )
         subprocess.check_output(["git", "fetch"], cwd=os.path.join(TMPDIR, "public_ic"))
-        subprocess.check_output(["git", "reset", "--hard", "origin/master"], cwd=os.path.join(TMPDIR, "public_ic"))
-        output = (
-            subprocess.check_output(
-                ["git", "log", "--pretty=oneline"],
-                cwd=os.path.join(TMPDIR, "public_ic"),
-            )
-            .decode()
-            .split("\n")
+
+        # Find the latest commit on that repo
+        output = subprocess.check_output(["git", "rev-parse", "origin/master"], cwd=os.path.join(TMPDIR, "public_ic"))
+        commit = output.decode().replace("\n", "")
+
+        # Search for a commit with IC OS and artifacts from there backwards
+        output = subprocess.check_output(
+            ["./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh", commit], cwd=os.path.join(TMPDIR, "public_ic")
         )
-        print(output[0].split())
-        commit = output[0].split()[0]
-        print(f"Using commit: {commit}")
+        commit = output.decode().replace("\n", "")
         return commit
 
     def get_canister_ids(self):
-        with open(os.path.join(self.nd_dir, "canister_ids.json")) as f:
+        with open(os.path.join(self.nns_dapp_dir, "canister_ids.json")) as f:
             return {key: value[FLAGS.testnet] for key, value in json.loads(f.read()).items()}
 
     def ensure_install_dfx(self):
@@ -89,15 +87,15 @@ class SnsExperiment(base_experiment.BaseExperiment):
             )
 
     def ensure_checkout_nns_dapp(self):
-        if not os.path.exists(self.nd_dir):
+        if not os.path.exists(self.nns_dapp_dir):
             print("NNS dapp not checked out yet, checking out")
             subprocess.check_output(
-                ["git", "clone", "https://github.com/dfinity/nns-dapp/", self.nd_dir],
+                ["git", "clone", "https://github.com/dfinity/nns-dapp/", self.nns_dapp_dir],
                 cwd=TMPDIR,
             )
             subprocess.check_output(
-                ["git", "reset", "--hard", SNS_BRANCH],
-                cwd=self.nd_dir,
+                ["git", "reset", "--hard", SNS_REF],
+                cwd=self.nns_dapp_dir,
             )
 
     def __run_in_sns_dir(self, cmd):
@@ -113,17 +111,17 @@ class SnsExperiment(base_experiment.BaseExperiment):
         )
         # gitlab docker images might have the cargo target redirected. Make sure this isn't the case.
         del sns_env["CARGO_TARGET_DIR"]
-        subprocess.check_output(shlex.split(cmd), cwd=self.nd_dir, env=sns_env)
+        subprocess.check_output(shlex.split(cmd), cwd=self.nns_dapp_dir, env=sns_env)
 
     def cleanup(self):
         print(colored("Remove canister IDs for that testnet from canister_ids.json", "blue"))
-        subprocess.check_output(["./deploy.sh", "--delete", self.dfx_network], cwd=self.nd_dir)
+        subprocess.check_output(["./deploy.sh", "--delete", self.dfx_network], cwd=self.nns_dapp_dir)
 
     def deploy_ii(self):
         print(colored("Deploying II", "blue"))
         self.__run_in_sns_dir(f"git reset --hard {self.nd_commit}")
         self.generate_dfx_json(self.dfx_network, self._get_nns_url())
-        subprocess.check_output(["./deploy.sh", "--ii", self.dfx_network], cwd=self.nd_dir)
+        subprocess.check_output(["./deploy.sh", "--ii", self.dfx_network], cwd=self.nns_dapp_dir)
 
     def deploy_sns(self):
         print(colored("Deploying SNS", "blue"))
@@ -167,7 +165,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
 
     def generate_dfx_json(self, testnet, nns_url):
 
-        dfx_json_file = os.path.join(self.nd_dir, "dfx.json")
+        dfx_json_file = os.path.join(self.nns_dapp_dir, "dfx.json")
         print(f"Reading existing dfx.json file from {dfx_json_file}")
 
         old_dfx_json = {}
@@ -195,7 +193,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
             print("Wrote new content for dfx.json file")
 
         # Sanity check
-        print(subprocess.check_output(["git", "diff"], cwd=self.nd_dir).decode())
+        print(subprocess.check_output(["git", "diff"], cwd=self.nns_dapp_dir).decode())
 
         if FLAGS.interactive:
             input("Confirm content of dfx json file .. ")
@@ -203,7 +201,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
 
     def add_canister_id(self, testnet, canister_name, canister_id):
 
-        canister_ids_json_file = os.path.join(self.nd_dir, "canister_ids.json")
+        canister_ids_json_file = os.path.join(self.nns_dapp_dir, "canister_ids.json")
         print(f"Reading existing dfx.json file from {canister_ids_json_file}")
 
         old_canister_ids_json = {}
@@ -257,7 +255,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
             "( record { } )",
         ]
         print("Calling", cmd)
-        out = subprocess.check_output(cmd, cwd=self.nd_dir).decode()
+        out = subprocess.check_output(cmd, cwd=self.nns_dapp_dir).decode()
         print("Result", out, " - looking for", canisters["sns_root"])
         return canisters["sns_root"] in out
 
