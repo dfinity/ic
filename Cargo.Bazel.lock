@@ -1,5 +1,5 @@
 {
-  "checksum": "50838a0a078df0da96517c03cd87896603308cadda582a90a5a8a1612c7f8111",
+  "checksum": "009f3b5c0495a89a5d46feb88d913a7a173e0c83103bb39ff59829f3cf506a47",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -2219,11 +2219,11 @@
         "deps": {
           "common": [
             {
-              "id": "concurrent-queue 1.2.2",
+              "id": "concurrent-queue 1.2.4",
               "target": "concurrent_queue"
             },
             {
-              "id": "event-listener 2.5.2",
+              "id": "event-listener 2.5.3",
               "target": "event_listener"
             },
             {
@@ -6838,13 +6838,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "concurrent-queue 1.2.2": {
+    "concurrent-queue 1.2.4": {
       "name": "concurrent-queue",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/concurrent-queue/1.2.2/download",
-          "sha256": "30ed07550be01594c6026cff2a1d7fe9c8f683caa798e12b68694ac9e88286a3"
+          "url": "https://crates.io/api/v1/crates/concurrent-queue/1.2.4/download",
+          "sha256": "af4780a44ab5696ea9e28294517f1fffb421a83a25af521333c838635509db9c"
         }
       },
       "targets": [
@@ -6876,7 +6876,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.2.2"
+        "version": "1.2.4"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -6967,13 +6967,13 @@
       },
       "license": "MIT"
     },
-    "console 0.15.0": {
+    "console 0.15.1": {
       "name": "console",
-      "version": "0.15.0",
+      "version": "0.15.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/console/0.15.0/download",
-          "sha256": "a28b32d32ca44b70c3e4acd7db1babf555fa026e385fb95f18028f88848b3c31"
+          "url": "https://crates.io/api/v1/crates/console/0.15.1/download",
+          "sha256": "89eab4d20ce20cea182308bca13088fecea9c05f6776cf287205d41a0ed3c847"
         }
       },
       "targets": [
@@ -6998,7 +6998,6 @@
         "crate_features": [
           "ansi-parsing",
           "default",
-          "regex",
           "unicode-width"
         ],
         "deps": {
@@ -7010,10 +7009,6 @@
             {
               "id": "once_cell 1.13.0",
               "target": "once_cell"
-            },
-            {
-              "id": "regex 1.6.0",
-              "target": "regex"
             },
             {
               "id": "terminal_size 0.1.17",
@@ -7038,7 +7033,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.15.0"
+        "version": "0.15.1"
       },
       "license": "MIT"
     },
@@ -10980,7 +10975,7 @@
               "target": "indicatif"
             },
             {
-              "id": "insta 1.16.0",
+              "id": "insta 1.17.0",
               "target": "insta"
             },
             {
@@ -13149,13 +13144,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "event-listener 2.5.2": {
+    "event-listener 2.5.3": {
       "name": "event-listener",
-      "version": "2.5.2",
+      "version": "2.5.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/event-listener/2.5.2/download",
-          "sha256": "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
+          "url": "https://crates.io/api/v1/crates/event-listener/2.5.3/download",
+          "sha256": "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
         }
       },
       "targets": [
@@ -13178,7 +13173,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "2.5.2"
+        "version": "2.5.3"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -13681,7 +13676,7 @@
           "selects": {
             "cfg(target_os = \"redox\")": [
               {
-                "id": "redox_syscall 0.2.15",
+                "id": "redox_syscall 0.2.16",
                 "target": "syscall"
               }
             ],
@@ -18645,7 +18640,7 @@
         "deps": {
           "common": [
             {
-              "id": "console 0.15.0",
+              "id": "console 0.15.1",
               "target": "console"
             },
             {
@@ -19012,13 +19007,13 @@
       },
       "license": "ISC"
     },
-    "insta 1.16.0": {
+    "insta 1.17.0": {
       "name": "insta",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/insta/1.16.0/download",
-          "sha256": "36fb7ec420af04ce7d1a422945cd19c52bf01772ead45934cee77f056dca1081"
+          "url": "https://crates.io/api/v1/crates/insta/1.17.0/download",
+          "sha256": "1e21173d5699a654cf191b0c05b0a937bb4f7cf07ee2e32da2af07a963e31577"
         }
       },
       "targets": [
@@ -19048,7 +19043,7 @@
         "deps": {
           "common": [
             {
-              "id": "console 0.15.0",
+              "id": "console 0.15.1",
               "target": "console"
             },
             {
@@ -19075,7 +19070,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.16.0"
+        "version": "1.17.0"
       },
       "license": "Apache-2.0"
     },
@@ -20943,13 +20938,8 @@
           "**"
         ],
         "crate_features": [
-          "bzip2",
           "default",
-          "lz4",
-          "snappy",
-          "static",
-          "zlib",
-          "zstd"
+          "static"
         ],
         "deps": {
           "common": [
@@ -27028,7 +27018,7 @@
           "selects": {
             "cfg(target_os = \"redox\")": [
               {
-                "id": "redox_syscall 0.2.15",
+                "id": "redox_syscall 0.2.16",
                 "target": "syscall"
               }
             ],
@@ -27114,7 +27104,7 @@
           "selects": {
             "cfg(target_os = \"redox\")": [
               {
-                "id": "redox_syscall 0.2.15",
+                "id": "redox_syscall 0.2.16",
                 "target": "syscall"
               }
             ],
@@ -32161,13 +32151,13 @@
       },
       "license": "ISC"
     },
-    "redox_syscall 0.2.15": {
+    "redox_syscall 0.2.16": {
       "name": "redox_syscall",
-      "version": "0.2.15",
+      "version": "0.2.16",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/redox_syscall/0.2.15/download",
-          "sha256": "534cfe58d6a18cc17120fbf4635d53d14691c1fe4d951064df9bd326178d7d5a"
+          "url": "https://crates.io/api/v1/crates/redox_syscall/0.2.16/download",
+          "sha256": "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a"
         }
       },
       "targets": [
@@ -32199,7 +32189,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.15"
+        "version": "0.2.16"
       },
       "license": "MIT"
     },
@@ -32238,7 +32228,7 @@
               "target": "getrandom"
             },
             {
-              "id": "redox_syscall 0.2.15",
+              "id": "redox_syscall 0.2.16",
               "target": "syscall"
             },
             {
@@ -33243,14 +33233,6 @@
       "common_attrs": {
         "compile_data_glob": [
           "**"
-        ],
-        "crate_features": [
-          "bzip2",
-          "default",
-          "lz4",
-          "snappy",
-          "zlib",
-          "zstd"
         ],
         "deps": {
           "common": [
@@ -39222,7 +39204,7 @@
             ],
             "cfg(target_os = \"redox\")": [
               {
-                "id": "redox_syscall 0.2.15",
+                "id": "redox_syscall 0.2.16",
                 "target": "syscall"
               }
             ],
@@ -39773,7 +39755,7 @@
           "selects": {
             "cfg(target_os = \"redox\")": [
               {
-                "id": "redox_syscall 0.2.15",
+                "id": "redox_syscall 0.2.16",
                 "target": "syscall"
               }
             ],
@@ -43460,8 +43442,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43484,8 +43466,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
