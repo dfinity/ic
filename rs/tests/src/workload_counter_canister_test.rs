@@ -144,6 +144,10 @@ fn test(
             .expect("Workload execution has failed.");
         info!(
             ctx.logger,
+            "Results of the workload execution {:?}", metrics
+        );
+        info!(
+            ctx.logger,
             "Step 3: Assert expected number of failed query calls on each canister.."
         );
         let requests_count = rps * duration.as_secs() as usize;
