@@ -1,0 +1,31 @@
+data_centers:
+  !IPv6Network '2001:4d78:40d::/48': !set
+  - !IPv6Address '2001:4d78:40d:0:5062:37ff:fec4:47f4'
+  - !IPv6Address '2001:4d78:40d:0:50a2:5eff:fe33:e1d3'
+  - !IPv6Address '2001:4d78:40d:0:5042:56ff:fe97:9a6c'
+host_addr_to_node_id_mapping:
+  !IPv6Address '2001:4d78:40d:0:5062:37ff:fec4:47f4': ol726-xqd7q-hmhxx-3bfll-v234e-23ycp-ejfdn-6tn7r-sonbv-z32lg-yqe
+  !IPv6Address '2001:4d78:40d:0:50a2:5eff:fe33:e1d3': 26yzh-pgxb5-pefhw-pev56-wiazp-of2hp-wnb3c-xaaw4-5uenk-ivave-rae
+  !IPv6Address '2001:4d78:40d:0:5042:56ff:fe97:9a6c': ym4gi-em3k5-cnxaf-7domc-l7rku-ylnpi-bfn7z-e3ior-oxjkg-cihqr-3ae
+original_subnet_membership:
+  ol726-xqd7q-hmhxx-3bfll-v234e-23ycp-ejfdn-6tn7r-sonbv-z32lg-yqe: hvxmq-swaju-3ud2z-hxwru-4v6jm-oftnq-qljl7-ddxbk-rwmho-42pkm-6ae
+  26yzh-pgxb5-pefhw-pev56-wiazp-of2hp-wnb3c-xaaw4-5uenk-ivave-rae: scldw-6hvmm-pqikv-veu24-esrmq-vyx5e-2u7za-7durg-xoc54-ojey2-cae
+  ym4gi-em3k5-cnxaf-7domc-l7rku-ylnpi-bfn7z-e3ior-oxjkg-cihqr-3ae: scldw-6hvmm-pqikv-veu24-esrmq-vyx5e-2u7za-7durg-xoc54-ojey2-cae
+original_subnet_types:
+  hvxmq-swaju-3ud2z-hxwru-4v6jm-oftnq-qljl7-ddxbk-rwmho-42pkm-6ae: System
+  scldw-6hvmm-pqikv-veu24-esrmq-vyx5e-2u7za-7durg-xoc54-ojey2-cae: Application
+subnets:
+  hvxmq-swaju-3ud2z-hxwru-4v6jm-oftnq-qljl7-ddxbk-rwmho-42pkm-6ae:
+  - !!python/tuple
+    - 1658405288011
+    - ol726-xqd7q-hmhxx-3bfll-v234e-23ycp-ejfdn-6tn7r-sonbv-z32lg-yqe
+  - !!python/tuple
+    - 1658405288014
+    - ym4gi-em3k5-cnxaf-7domc-l7rku-ylnpi-bfn7z-e3ior-oxjkg-cihqr-3ae
+  scldw-6hvmm-pqikv-veu24-esrmq-vyx5e-2u7za-7durg-xoc54-ojey2-cae:
+  - !!python/tuple
+    - 1658405288012
+    - 26yzh-pgxb5-pefhw-pev56-wiazp-of2hp-wnb3c-xaaw4-5uenk-ivave-rae
+  - !!python/tuple
+    - 1658405288013
+    - ym4gi-em3k5-cnxaf-7domc-l7rku-ylnpi-bfn7z-e3ior-oxjkg-cihqr-3ae

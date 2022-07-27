@@ -284,7 +284,7 @@ class Pipeline:
     def infer_global_infra(self, group: Group) -> GlobalInfra:
         eprint("Inferring global infra ...")
         orch_docs = [ReplicaDoc(doc.repr) for doc in group.logs if doc.is_replica()]
-        infra = GlobalInfra(replica_docs=orch_docs)
+        infra = GlobalInfra.fromReplicaLogs(replica_docs=orch_docs)
         self.stat[group.gid]["global_infra"] = infra.to_dict()
         eprint("Inferring global infra done.")
         return infra
