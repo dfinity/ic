@@ -119,4 +119,8 @@ pub struct Ingress {
     pub message_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "6")]
     pub expiry_time_nanos: u64,
+    /// It may be present for a subnet message.
+    /// Represents the id of the canister that the message is targeting.
+    #[prost(message, optional, tag = "7")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }

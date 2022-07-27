@@ -7,14 +7,13 @@ use crate::{
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
 };
-use candid::Decode;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
-    InstallCodeArgs, Method as Ic00Method, SetControllerArgs, UpdateSettingsArgs,
+    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs,
+    Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter,
@@ -29,13 +28,14 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_system_api::ExecutionParameters;
+use ic_types::messages::SignedIngressContent;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
     CanisterId, ComputeAllocation, Cycles, Height, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time, UserId,
+    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
@@ -280,51 +280,15 @@ impl CanisterManager {
         &self,
         state: Arc<ReplicatedState>,
         provisional_whitelist: &ProvisionalWhitelist,
-        sender: UserId,
-        method_name: &str,
-        payload: &[u8],
+        ingress: &SignedIngressContent,
+        effective_canister_id: Option<CanisterId>,
     ) -> Result<(), UserError> {
-        let is_sender_controller = |canister_id: CanisterId| -> Result<(), UserError> {
-            match state.canister_state(&canister_id) {
-                Some(canister) => {
-                    if !canister.controllers().contains(&sender.get()) {
-                        Err(UserError::new(
-                            ErrorCode::CanisterInvalidController,
-                            format!(
-                                "Only controllers of canister {} can call ic00 method {}",
-                                canister_id, method_name,
-                            ),
-                        ))
-                    } else {
-                        Ok(())
-                    }
-                }
-                None => Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found", canister_id),
-                )),
-            }
-        };
-
-        let failed_to_decode = |e: &dyn std::error::Error| {
-            Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!(
-                    "Failed to decode payload for ic00 method {}: {}",
-                    method_name, e
-                ),
-            ))
-        };
-        let only_canisters_allowed = || {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!("Only canisters can call ic00 method {}", method_name),
-            ))
-        };
+        let method_name = ingress.method_name();
+        let sender = ingress.sender();
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
-        match Ic00Method::from_str(method_name) {
+        match Ic00Method::from_str(ingress.method_name()) {
             // The method is either invalid or it is of a type that users
             // are not allowed to send.
             Err(_)
@@ -336,7 +300,18 @@ impl CanisterManager {
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
-            | Ok(Ic00Method::HttpRequest) => only_canisters_allowed(),
+            | Ok(Ic00Method::HttpRequest)
+            // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
+            | Ok(Ic00Method::RawRand)
+            // Bitcoin messages require cycles, so we reject all ingress messages.
+            | Ok(Ic00Method::BitcoinGetBalance)
+            | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinSendTransaction)
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Only canisters can call ic00 method {}", method_name),
+            )),
+
 
             // These methods are only valid if they are sent by the controller
             // of the canister. We assume that the canister always wants to
@@ -345,31 +320,33 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister) => match Decode!(payload, CanisterIdRecord) {
-                Err(e) => failed_to_decode(&e),
-                Ok(args) => is_sender_controller(args.get_canister_id()),
+            | Ok(Ic00Method::DeleteCanister) |
+            Ok(Ic00Method::UpdateSettings)|
+            Ok(Ic00Method::InstallCode) |
+            Ok(Ic00Method::SetController) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {} not found", canister_id),
+                        ))?;
+                        match canister.controllers().contains(&sender.get()) {
+                            true => Ok(()),
+                            false => Err(UserError::new(
+                                ErrorCode::CanisterInvalidController,
+                                format!(
+                                    "Only controllers of canister {} can call ic00 method {}",
+                                    canister_id, method_name,
+                                ),
+                            )),
+                        }
+                    },
+                    None =>  Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                    )),
+                }
             },
-            Ok(Ic00Method::UpdateSettings) => match Decode!(payload, UpdateSettingsArgs) {
-                Err(e) => failed_to_decode(&e),
-                Ok(args) => is_sender_controller(args.get_canister_id()),
-            },
-            Ok(Ic00Method::InstallCode) => match Decode!(payload, InstallCodeArgs) {
-                Err(e) => failed_to_decode(&e),
-                Ok(args) => is_sender_controller(args.get_canister_id()),
-            },
-            Ok(Ic00Method::SetController) => match Decode!(payload, SetControllerArgs) {
-                Err(e) => failed_to_decode(&e),
-                Ok(args) => is_sender_controller(args.get_canister_id()),
-            },
-
-            // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
-            Ok(Ic00Method::RawRand) => only_canisters_allowed(),
-
-            // Bitcoin messages require cycles, so we reject all ingress messages.
-            Ok(Ic00Method::BitcoinGetBalance)
-                | Ok(Ic00Method::BitcoinGetUtxos)
-                | Ok(Ic00Method::BitcoinSendTransaction)
-                | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => only_canisters_allowed(),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {

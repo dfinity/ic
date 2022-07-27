@@ -73,4 +73,7 @@ message Ingress {
     bytes method_payload = 4;
     bytes message_id = 5;
     uint64 expiry_time_nanos = 6;
+    // It may be present for a subnet message.
+    // Represents the id of the canister that the message is targeting.
+    types.v1.CanisterId effective_canister_id = 7;
 }

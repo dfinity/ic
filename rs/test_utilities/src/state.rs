@@ -619,10 +619,13 @@ pub fn get_initial_state_with_balance(
 
         for i in 0..message_num_per_canister {
             canister_state_builder = canister_state_builder.with_ingress(
-                SignedIngressBuilder::new()
-                    .canister_id(canister_test_id(canister_id))
-                    .nonce(i)
-                    .build()
+                (
+                    SignedIngressBuilder::new()
+                        .canister_id(canister_test_id(canister_id))
+                        .nonce(i)
+                        .build(),
+                    None,
+                )
                     .into(),
             );
         }

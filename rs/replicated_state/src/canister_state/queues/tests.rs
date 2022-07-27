@@ -163,6 +163,7 @@ fn test_message_picking_ingress_only() {
         queues.push_ingress(Ingress {
             source: user_test_id(77),
             receiver: this,
+            effective_canister_id: None,
             method_name: String::from("test"),
             method_payload: vec![i as u8],
             message_id: message_test_id(555),
@@ -285,6 +286,7 @@ fn test_message_picking_round_robin() {
     queues.push_ingress(Ingress {
         source: user_test_id(77),
         receiver: this,
+        effective_canister_id: None,
         method_name: String::from("test"),
         method_payload: Vec::new(),
         message_id: message_test_id(555),

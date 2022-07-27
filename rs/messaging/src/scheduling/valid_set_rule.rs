@@ -4,9 +4,7 @@
 #![allow(clippy::ptr_arg)]
 
 use ic_base_types::NumBytes;
-use ic_cycles_account_manager::{
-    CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
-};
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
@@ -22,7 +20,10 @@ use ic_replicated_state::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus},
-    messages::{is_subnet_message, HttpRequestContent, SignedIngressContent},
+    messages::{
+        extract_effective_canister_id, HttpRequestContent, Ingress, ParseIngressError,
+        SignedIngressContent,
+    },
     time::current_time_and_expiry_time,
     SubnetId, Time,
 };
@@ -251,27 +252,33 @@ impl ValidSetRuleImpl {
         state: &mut ReplicatedState,
         msg: SignedIngressContent,
     ) -> Result<(), StateError> {
-        // Compute the cost of induction.
-        let induction_cost = match self.cycles_account_manager.ingress_induction_cost(&msg) {
-            Ok(induction_cost) => induction_cost,
-            Err(
-                IngressInductionCostError::UnknownSubnetMethod
-                | IngressInductionCostError::SubnetMethodNotAllowed,
-            ) => {
-                return Err(StateError::UnknownSubnetMethod(
-                    msg.method_name().to_string(),
-                ))
-            }
-            Err(IngressInductionCostError::InvalidSubnetPayload(_)) => {
-                return Err(StateError::InvalidSubnetPayload)
-            }
-        };
+        let effective_canister_id =
+            match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
+                Ok(effective_canister_id) => effective_canister_id,
+                Err(
+                    ParseIngressError::UnknownSubnetMethod
+                    | ParseIngressError::SubnetMethodNotAllowed,
+                ) => {
+                    return Err(StateError::UnknownSubnetMethod(
+                        msg.method_name().to_string(),
+                    ))
+                }
+                Err(ParseIngressError::InvalidSubnetPayload(_)) => {
+                    return Err(StateError::InvalidSubnetPayload)
+                }
+            };
 
+        // Compute the cost of induction.
+        let induction_cost = self
+            .cycles_account_manager
+            .ingress_induction_cost(&msg, effective_canister_id);
+
+        let ingress = Ingress::from((msg, effective_canister_id));
         match induction_cost {
             IngressInductionCost::Free => {
                 // Only subnet methods can be free. These are enqueued directly.
-                assert!(is_subnet_message(&msg, self.own_subnet_id));
-                state.push_ingress(msg)
+                assert!(ingress.is_addressed_to_subnet(self.own_subnet_id));
+                state.push_ingress(ingress)
             }
 
             IngressInductionCost::Fee { payer, cost } => {
@@ -282,7 +289,7 @@ impl ValidSetRuleImpl {
                 };
 
                 // Ensure the canister is running if the message isn't to a subnet.
-                if !is_subnet_message(&msg, self.own_subnet_id) {
+                if !ingress.is_addressed_to_subnet(self.own_subnet_id) {
                     match canister.status() {
                         CanisterStatusType::Running => {}
                         CanisterStatusType::Stopping => {
@@ -306,7 +313,7 @@ impl ValidSetRuleImpl {
                     return Err(StateError::CanisterOutOfCycles(err));
                 }
 
-                state.push_ingress(msg)
+                state.push_ingress(ingress)
             }
         }
     }

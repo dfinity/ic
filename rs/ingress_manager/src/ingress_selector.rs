@@ -23,7 +23,7 @@ use ic_types::{
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::{IngressSets, IngressStatus},
-    messages::{MessageId, SignedIngress},
+    messages::{extract_effective_canister_id, MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
 use ic_validator::{validate_request, RequestValidationError};
@@ -330,11 +330,18 @@ impl IngressManager {
 
         // Skip the message if there aren't enough cycles to induct the message.
         let msg = signed_ingress.content();
-        match self.cycles_account_manager.ingress_induction_cost(msg) {
-            Ok(IngressInductionCost::Fee {
+        let effective_canister_id =
+            extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
+                ValidationError::Permanent(IngressPermanentError::InvalidManagementMessage)
+            })?;
+        match self
+            .cycles_account_manager
+            .ingress_induction_cost(msg, effective_canister_id)
+        {
+            IngressInductionCost::Fee {
                 payer,
                 cost: ingress_cost,
-            }) => match state.canister_state(&payer) {
+            } => match state.canister_state(&payer) {
                 Some(canister) => {
                     let cumulative_ingress_cost =
                         cycles_needed.entry(payer).or_insert_with(|| Cycles::zero());
@@ -356,13 +363,8 @@ impl IngressManager {
                     ));
                 }
             },
-            Ok(IngressInductionCost::Free) => {
+            IngressInductionCost::Free => {
                 // Do nothing.
-            }
-            Err(_) => {
-                return Err(ValidationError::Permanent(
-                    IngressPermanentError::InvalidManagementMessage,
-                ));
             }
         };
 
@@ -1372,8 +1374,7 @@ mod tests {
                             // Enough cycles to induct only m1
                             .with_cycles(
                                 cycles_account_manager
-                                    .ingress_induction_cost(m1.content())
-                                    .unwrap()
+                                    .ingress_induction_cost(m1.content(), None)
                                     .cost(),
                             )
                             .build(),

@@ -21,7 +21,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
-pub use ingress_messages::{is_subnet_message, Ingress, SignedIngress, SignedIngressContent};
+pub use ingress_messages::{
+    extract_effective_canister_id, Ingress, ParseIngressError, SignedIngress, SignedIngressContent,
+};
 pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
 };
