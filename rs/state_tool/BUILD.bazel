@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_binary(
+    name = "state_tool",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_state_tool",
+    edition = "2018",
+    deps = [
+        "//rs/config",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/state_layout",
+        "//rs/state_manager",
+        "//rs/sys",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:clap",
+        "@crate_index//:hex",
+        "@crate_index//:prost",
+        "@crate_index//:scoped_threadpool",
+    ],
+)
