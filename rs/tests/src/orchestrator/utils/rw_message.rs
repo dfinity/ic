@@ -1,4 +1,4 @@
-use crate::util::{assert_create_agent, block_on, create_agent, UniversalCanister};
+use crate::util::{assert_create_agent, block_on, create_agent, create_delay, UniversalCanister};
 use candid::Principal;
 use reqwest::Url;
 use slog::{debug, info, Logger};
@@ -11,6 +11,26 @@ pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
         // send an update call to it
         ucan.store_to_stable(0, bytes).await;
         ucan.canister_id()
+    })
+}
+
+pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+    let bytes = msg.as_bytes();
+    block_on(async {
+        match create_agent(url.as_str()).await {
+            Ok(agent) => {
+                debug!(log, "Try to get canister reference");
+                let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
+                debug!(log, "Success, will try to write next");
+                ucan.try_store_to_stable(0, bytes, create_delay(500, 30))
+                    .await
+                    .is_ok()
+            }
+            Err(e) => {
+                debug!(log, "Could not create agent: {:?}", e,);
+                false
+            }
+        }
     })
 }
 
