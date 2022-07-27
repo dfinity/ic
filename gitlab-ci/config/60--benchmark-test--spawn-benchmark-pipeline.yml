@@ -689,7 +689,10 @@ sns-deployment-test-nightly:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
-      $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh medium09 --git-revision "$GIT_REVISION" --hosts-ini sns_hosts.ini
+      # For the SNS deployment, we need to make sure we boot the testnet with some test accounts
+      echo '{"init_ledger_accounts":["5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087"]}' > test-accounts.json
+      $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh medium09 --git-revision "$GIT_REVISION" --hosts-ini sns_hosts.ini --ansible-args "-e @$PWD/test-accounts.json"
+
       cd ./scalability
 
       $SHELL_WRAPPER pipenv --python 3
