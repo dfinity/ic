@@ -68,7 +68,7 @@ pub fn with_endpoint(
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
         .arg("--endpoint")
-        .arg(endpoint.url.clone().into_string())
+        .arg(endpoint.url.as_str())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
