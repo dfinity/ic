@@ -23,7 +23,7 @@ use crate::driver::driver_setup::{
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
+use crate::orchestrator::utils::rw_message::{can_read_msg, can_store_msg, store_message};
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
@@ -163,7 +163,13 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
     );
-    assert!(!can_install_canister(&upload_node.get_public_url()));
+    let failed_msg = "this shouldn't be stored!";
+    assert!(!can_store_msg(
+        &logger,
+        &upload_node.get_public_url(),
+        app_can_id,
+        failed_msg
+    ));
 
     let up_node_metrics = get_node_metrics(&logger, &upload_node.get_ip_addr())
         .expect("Missing metrics for upload node");
