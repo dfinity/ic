@@ -286,7 +286,7 @@ class ReplicaDoc(EsDoc):
         le = self._log_entry()
         return le["node_id"]
 
-    def get_ipv6_prefixes(self) -> Optional[List[ipaddress.IPv6Network]]:
+    def _get_ipv6_prefixes(self) -> Optional[List[ipaddress.IPv6Network]]:
         m = re.match(r".*ipv6_prefixes: \[(.*?)\].*", self.get_message())
         if not m or len(m.groups()) < 1:
             return None

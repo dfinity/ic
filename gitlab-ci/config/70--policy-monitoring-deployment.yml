@@ -3,6 +3,7 @@
   MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
   trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.global_infra_io
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
 
 deploy-monpoly-docker:

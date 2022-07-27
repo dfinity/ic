@@ -7,6 +7,7 @@ from typing import Iterable
 from typing import Optional
 
 from util.print import eprint
+from util.yaml import yaml
 
 from .backend.group import Group
 
@@ -78,18 +79,7 @@ class ArtifactManager:
             pp.pprint(obj)
 
     @staticmethod
-    def _save_yaml(obj: Dict[str, Any], output_file: Path) -> None:
-        from datetime import timedelta
-        from ipaddress import IPv6Network, IPv6Address
-        import yaml
-
-        yaml.add_representer(IPv6Network, lambda dumper, data: dumper.represent_scalar("!IPv6Network", str(data)))
-        yaml.add_representer(IPv6Address, lambda dumper, data: dumper.represent_scalar("!IPv6Address", str(data)))
-        yaml.add_representer(set, lambda dumper, data: dumper.represent_sequence("!set", list(data)))
-        yaml.add_representer(
-            timedelta,
-            lambda dumper, data: dumper.represent_scalar("!timedelta", "%ds %dus" % (data.seconds, data.microseconds)),
-        )
+    def save_yaml(obj: Dict[str, Any], output_file: Path) -> None:
         with open(output_file, "w") as fout:
             yaml.dump(obj, stream=fout)
 
@@ -106,7 +96,7 @@ class ArtifactManager:
             output_files.append(python_file)
         if yaml_format:
             yaml_file = out_file_builder("yaml")
-            ArtifactManager._save_yaml(obj, yaml_file)
+            ArtifactManager.save_yaml(obj, yaml_file)
             output_files.append(yaml_file)
 
         eprint(f"Statistics written into {', '.join(map(lambda p: str(p), output_files))}\n")

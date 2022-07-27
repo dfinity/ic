@@ -12,6 +12,7 @@ from pipeline.backend import file_io
 from pipeline.backend.ci import Ci
 from pipeline.backend.es import Es
 from pipeline.backend.group import Group
+from pipeline.global_infra import GlobalInfra
 from pipeline.mode import Mode
 from pipeline.pipeline import Pipeline
 from pipeline.pre_processor import UniversalPreProcessor
@@ -137,6 +138,12 @@ def main():
         help="Directory in which the pipeline artifacts should be stored",
     )
     parser.add_argument(
+        "--global_infra",
+        "-gi",
+        type=str,
+        help="YAML file containing a Global Infra snapshot",
+    )
+    parser.add_argument(
         "--git_revision",
         "-gr",
         type=str,
@@ -246,6 +253,12 @@ def main():
     #  within a Docker instance.
     with_docker = not args.without_docker
 
+    if args.global_infra:
+        # Load global infra from file
+        global_infra = GlobalInfra.fromYamlFile(Path(args.global_infra))
+    else:
+        global_infra = None
+
     try:
         artifact_manager = ArtifactManager(project_root, Path(artifacts_location), signature)
         monpoly_pipeline = Pipeline(
@@ -259,6 +272,7 @@ def main():
             git_revision=git_revision,
             formulas=set(args.policy) if args.policy else None,
             fail=args.fail,
+            global_infra=global_infra,
         )
 
         # Obtains logs for each group
