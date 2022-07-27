@@ -12,7 +12,6 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 TMP_DIR="$(mktemp -d)"
-echo $TMP_DIR
 trap "rm -rf ${TMP_DIR}" EXIT
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
 BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base")

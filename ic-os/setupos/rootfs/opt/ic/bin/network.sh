@@ -24,7 +24,7 @@ function get_network_settings() {
     # Full IPv6 address
     retry=0
 
-    ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
+    ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! / fe80| ::1/) { print $2 }')
     log_and_reboot_on_error "${?}" "Unable to get full system's IPv6 address."
 
     while [ -z "${ipv6_address_system_full}" ]; do

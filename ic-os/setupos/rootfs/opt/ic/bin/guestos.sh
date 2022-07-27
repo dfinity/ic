@@ -9,7 +9,7 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 LV="/dev/mapper/hostlvm-guestos"
 
 function install_guestos() {
-    echo "* Installing GuestOS disk-image to ${LV} (can take up to 3 minutes)..."
+    echo "* Installing GuestOS disk-image (can take up to 3 minutes)..."
 
     vgchange -ay hostlvm
     log_and_reboot_on_error "${?}" "Unable to activate HostOS volume group."
