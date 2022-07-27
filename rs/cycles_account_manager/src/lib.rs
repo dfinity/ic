@@ -15,9 +15,7 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_ic00_types::{
-    CanisterIdRecord, InstallCodeArgs, Method, Payload, SetControllerArgs, UpdateSettingsArgs,
-};
+use ic_ic00_types::Method;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -25,10 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use ic_types::{
-    messages::{
-        is_subnet_message, Request, Response, SignedIngressContent,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-    },
+    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
 };
@@ -356,78 +351,22 @@ impl CyclesAccountManager {
     pub fn ingress_induction_cost(
         &self,
         ingress: &SignedIngressContent,
-    ) -> Result<IngressInductionCost, IngressInductionCostError> {
-        let paying_canister = if is_subnet_message(ingress, self.own_subnet_id) {
-            // If a subnet message, inspect the payload to figure out who should pay for the
-            // message.
-            match Method::from_str(ingress.method_name()) {
-                Ok(Method::ProvisionalCreateCanisterWithCycles)
-                | Ok(Method::ProvisionalTopUpCanister) => {
-                    // Provisional methods are free.
+        effective_canister_id: Option<CanisterId>,
+    ) -> IngressInductionCost {
+        let paying_canister = match ingress.is_addressed_to_subnet(self.own_subnet_id) {
+            // If a subnet message, get effective canister id who will pay for the message.
+            true => {
+                if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
+                    // The fee for `UpdateSettings` is charged after applying the settings
+                    // to allow users to unfreeze canisters after accidentally setting
+                    // the freezing threshold too high.
                     None
-                }
-                Ok(Method::StartCanister)
-                | Ok(Method::CanisterStatus)
-                | Ok(Method::DeleteCanister)
-                | Ok(Method::UninstallCode)
-                | Ok(Method::StopCanister) => match CanisterIdRecord::decode(ingress.arg()) {
-                    Ok(record) => Some(record.get_canister_id()),
-                    Err(err) => {
-                        return Err(IngressInductionCostError::InvalidSubnetPayload(
-                            err.to_string(),
-                        ))
-                    }
-                },
-                Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(ingress.arg()) {
-                    Ok(_) => {
-                        // The fee for `UpdateSettings` is charged after applying the settings
-                        // to allow users to unfreeze canisters after accidentally setting
-                        // the freezing threshold too high.
-                        None
-                    }
-                    Err(err) => {
-                        return Err(IngressInductionCostError::InvalidSubnetPayload(
-                            err.to_string(),
-                        ))
-                    }
-                },
-                Ok(Method::SetController) => match SetControllerArgs::decode(ingress.arg()) {
-                    Ok(record) => Some(record.get_canister_id()),
-                    Err(err) => {
-                        return Err(IngressInductionCostError::InvalidSubnetPayload(
-                            err.to_string(),
-                        ))
-                    }
-                },
-                Ok(Method::InstallCode) => match InstallCodeArgs::decode(ingress.arg()) {
-                    Ok(record) => Some(record.get_canister_id()),
-                    Err(err) => {
-                        return Err(IngressInductionCostError::InvalidSubnetPayload(
-                            err.to_string(),
-                        ))
-                    }
-                },
-                Ok(Method::CreateCanister)
-                | Ok(Method::SetupInitialDKG)
-                | Ok(Method::DepositCycles)
-                | Ok(Method::HttpRequest)
-                | Ok(Method::RawRand)
-                | Ok(Method::ECDSAPublicKey)
-                | Ok(Method::SignWithECDSA)
-                | Ok(Method::ComputeInitialEcdsaDealings)
-                | Ok(Method::BitcoinGetBalance)
-                | Ok(Method::BitcoinGetUtxos)
-                | Ok(Method::BitcoinSendTransaction)
-                | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
-                    return Err(IngressInductionCostError::SubnetMethodNotAllowed);
-                }
-                Err(_) => {
-                    return Err(IngressInductionCostError::UnknownSubnetMethod);
+                } else {
+                    effective_canister_id
                 }
             }
-        } else {
             // A message to a canister is always paid for by the receiving canister.
-            Some(ingress.canister_id())
+            false => Some(ingress.canister_id()),
         };
 
         match paying_canister {
@@ -437,12 +376,12 @@ impl CyclesAccountManager {
                     + ingress.nonce().map(|n| n.len()).unwrap_or(0);
                 let cost =
                     self.ingress_induction_cost_from_bytes(NumBytes::from(bytes_to_charge as u64));
-                Ok(IngressInductionCost::Fee {
+                IngressInductionCost::Fee {
                     payer: paying_canister,
                     cost,
-                })
+                }
             }
-            None => Ok(IngressInductionCost::Free),
+            None => IngressInductionCost::Free,
         }
     }
 

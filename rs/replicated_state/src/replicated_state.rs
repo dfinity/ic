@@ -17,11 +17,10 @@ use ic_interfaces::{
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::messages::Ingress;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{
-        is_subnet_message, CallbackId, MessageId, RequestOrResponse, Response, SignedIngressContent,
-    },
+    messages::{CallbackId, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
@@ -665,16 +664,16 @@ impl ReplicatedState {
 
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
-    pub fn push_ingress(&mut self, msg: SignedIngressContent) -> Result<(), StateError> {
-        if is_subnet_message(&msg, self.metadata.own_subnet_id) {
-            self.subnet_queues.push_ingress(msg.into());
+    pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
+        if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
+            self.subnet_queues.push_ingress(msg);
         } else {
-            let canister_id = msg.canister_id();
+            let canister_id = msg.receiver;
             let canister = match self.canister_states.get_mut(&canister_id) {
                 Some(canister) => canister,
                 None => return Err(StateError::CanisterNotFound(canister_id)),
             };
-            canister.push_ingress(msg.into());
+            canister.push_ingress(msg);
         }
         Ok(())
     }

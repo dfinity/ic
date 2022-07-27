@@ -48,6 +48,7 @@ rust_test(
     deps = [
         "//rs/test_utilities",
         "//rs/test_utilities/metrics",
+        "@crate_index//:candid",
         "@crate_index//:lazy_static",
         "@crate_index//:maplit",
         "@crate_index//:mockall_0_7_2",

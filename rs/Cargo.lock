@@ -6100,6 +6100,7 @@ dependencies = [
 name = "ic-messaging"
 version = "0.8.0"
 dependencies = [
+ "candid",
  "ic-base-types",
  "ic-certification-version",
  "ic-config",

@@ -1,14 +1,13 @@
 use crate::canister_manager::{CanisterManagerError, DtsInstallCodeResult};
-use crate::execution::{
-    heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
-    response::execute_response,
-};
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
-    execution::{call::execute_call, inspect_message},
+    execution::{
+        call::execute_call, heartbeat::execute_heartbeat, inspect_message,
+        nonreplicated_query::execute_non_replicated_query, response::execute_response,
+    },
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
@@ -19,9 +18,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto::derive_tecdsa_public_key;
-use ic_cycles_account_manager::{
-    CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
-};
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
@@ -59,7 +56,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        is_subnet_message, AnonymousQuery, Payload, RejectContext, Request, Response,
+        extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
@@ -1236,6 +1233,9 @@ impl ExecutionEnvironment {
                 )),
             }
         };
+        let effective_canister_id =
+            extract_effective_canister_id(ingress, state.metadata.own_subnet_id)
+                .map_err(|err| err.into_user_error(ingress.method_name()))?;
 
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -1243,31 +1243,7 @@ impl ExecutionEnvironment {
         {
             let induction_cost = self
                 .cycles_account_manager
-                .ingress_induction_cost(ingress)
-                .map_err(|e| match e {
-                    IngressInductionCostError::UnknownSubnetMethod => UserError::new(
-                        ErrorCode::CanisterMethodNotFound,
-                        format!(
-                            "ic00 interface does not expose method {}",
-                            ingress.method_name()
-                        ),
-                    ),
-                    IngressInductionCostError::SubnetMethodNotAllowed => UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        format!(
-                            "ic00 method {} can be called only by a canister",
-                            ingress.method_name()
-                        ),
-                    ),
-                    IngressInductionCostError::InvalidSubnetPayload(err) => UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!(
-                            "Failed to parse payload for ic00 method {}: {}",
-                            ingress.method_name(),
-                            err
-                        ),
-                    ),
-                })?;
+                .ingress_induction_cost(ingress, effective_canister_id);
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
                 let paying_canister = canister(payer)?;
@@ -1285,43 +1261,43 @@ impl ExecutionEnvironment {
             }
         }
 
-        if is_subnet_message(ingress, self.own_subnet_id) {
+        if ingress.is_addressed_to_subnet(self.own_subnet_id) {
             return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
-                ingress.sender(),
-                ingress.method_name(),
-                ingress.arg(),
-            );
-        } else {
-            let canister = canister(ingress.canister_id())?;
-
-            // Letting the canister grow arbitrarily when executing the
-            // query is fine as we do not persist state modifications.
-            let subnet_available_memory = subnet_memory_capacity(&self.config);
-
-            // An inspect message is expected to finish quickly, so DTS is not
-            // supported for it.
-            let instruction_limits = InstructionLimits::new(
-                FlagStatus::Disabled,
-                self.config.max_instructions_for_message_acceptance_calls,
-                self.config.max_instructions_for_message_acceptance_calls,
-            );
-            let execution_parameters =
-                self.execution_parameters(canister, instruction_limits, execution_mode);
-            inspect_message::execute_inspect_message(
-                state.time(),
-                canister.clone(),
                 ingress,
-                self.own_subnet_type,
-                execution_parameters,
-                subnet_available_memory,
-                &self.hypervisor,
-                &state.metadata.network_topology,
-                &self.log,
-            )
-            .1
+                effective_canister_id,
+            );
         }
+
+        let canister_state = canister(ingress.canister_id())?;
+
+        // An inspect message is expected to finish quickly, so DTS is not
+        // supported for it.
+        let instruction_limits = InstructionLimits::new(
+            FlagStatus::Disabled,
+            self.config.max_instructions_for_message_acceptance_calls,
+            self.config.max_instructions_for_message_acceptance_calls,
+        );
+        let execution_parameters =
+            self.execution_parameters(canister_state, instruction_limits, execution_mode);
+
+        // Letting the canister grow arbitrarily when executing the
+        // query is fine as we do not persist state modifications.
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
+
+        inspect_message::execute_inspect_message(
+            state.time(),
+            canister_state.clone(),
+            ingress,
+            self.own_subnet_type,
+            execution_parameters,
+            subnet_available_memory,
+            &self.hypervisor,
+            &state.metadata.network_topology,
+            &self.log,
+        )
+        .1
     }
 
     /// Execute a query call that has no caller provided.

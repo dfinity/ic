@@ -1,7 +1,7 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::{IngressInductionCost, IngressInductionCostError};
+use ic_cycles_account_manager::IngressInductionCost;
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_subnet_type::SubnetType;
@@ -16,8 +16,9 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    messages::SignedIngressContent, nominal_cycles::NominalCycles, CanisterId, ComputeAllocation,
-    Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    messages::{extract_effective_canister_id, SignedIngressContent},
+    nominal_cycles::NominalCycles,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use std::{convert::TryFrom, time::Duration};
 
@@ -320,52 +321,9 @@ fn canister_charge_for_memory_until_zero_works() {
 }
 
 #[test]
-fn ingress_induction_cost_subnet_message_with_invalid_payload() {
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-
-    for receiver in [IC_00, CanisterId::from(subnet_test_id(0))].iter() {
-        let result = cycles_account_manager.ingress_induction_cost(
-            SignedIngressBuilder::new()
-                .sender(user_test_id(0))
-                .canister_id(*receiver)
-                .method_name("start_canister")
-                .method_payload(vec![]) // an invalid payload
-                .build()
-                .content(),
-        );
-        assert!(
-            matches!(
-                result,
-                Err(IngressInductionCostError::InvalidSubnetPayload(_))
-            ),
-            "Expected InvalidSubnetPayload error, got: {:?}",
-            result
-        );
-    }
-}
-
-#[test]
-fn ingress_induction_cost_subnet_message_with_unknown_method() {
-    for receiver in [IC_00, CanisterId::from(subnet_test_id(0))].iter() {
-        assert_eq!(
-            CyclesAccountManagerBuilder::new()
-                .build()
-                .ingress_induction_cost(
-                    SignedIngressBuilder::new()
-                        .sender(user_test_id(0))
-                        .canister_id(*receiver)
-                        .method_name("unknown_method")
-                        .build()
-                        .content(),
-                ),
-            Err(IngressInductionCostError::UnknownSubnetMethod)
-        );
-    }
-}
-
-#[test]
 fn ingress_induction_cost_valid_subnet_message() {
-    for receiver in [IC_00, CanisterId::from(subnet_test_id(0))].iter() {
+    let subnet_id = subnet_test_id(0);
+    for receiver in [IC_00, CanisterId::from(subnet_id)].iter() {
         let msg: SignedIngressContent = SignedIngressBuilder::new()
             .sender(user_test_id(0))
             .canister_id(*receiver)
@@ -373,17 +331,17 @@ fn ingress_induction_cost_valid_subnet_message() {
             .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
             .build()
             .into();
-
+        let effective_canister_id = extract_effective_canister_id(&msg, subnet_id).unwrap();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let num_bytes = msg.arg().len() + msg.method_name().len();
 
         assert_eq!(
-            cycles_account_manager.ingress_induction_cost(&msg,),
-            Ok(IngressInductionCost::Fee {
+            cycles_account_manager.ingress_induction_cost(&msg, effective_canister_id),
+            IngressInductionCost::Fee {
                 payer: canister_test_id(0),
                 cost: cycles_account_manager.ingress_message_received_fee()
                     + cycles_account_manager.ingress_byte_received_fee() * num_bytes
-            })
+            }
         );
     }
 }

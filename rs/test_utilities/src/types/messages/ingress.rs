@@ -25,6 +25,7 @@ impl Default for IngressBuilder {
             ingress: Ingress {
                 source: user_test_id(2),
                 receiver: canister_test_id(0),
+                effective_canister_id: Some(canister_test_id(0)),
                 method_name: "".to_string(),
                 method_payload: Vec::new(),
                 message_id: MessageId::from([0; 32]),

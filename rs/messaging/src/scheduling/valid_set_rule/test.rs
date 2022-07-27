@@ -1,5 +1,7 @@
 use super::*;
-use ic_ic00_types::IC_00;
+
+use candid::Nat;
+use ic_ic00_types::{CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
@@ -481,6 +483,7 @@ fn dont_induct_duplicate_messages() {
 #[test]
 fn canister_on_application_subnet_charges_for_ingress() {
     let own_subnet_type = SubnetType::Application;
+    let own_subnet_id = subnet_test_id(0);
     let mut state = ReplicatedStateBuilder::new()
         .with_subnet_type(own_subnet_type)
         .with_canister(
@@ -493,15 +496,15 @@ fn canister_on_application_subnet_charges_for_ingress() {
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
             .with_subnet_type(own_subnet_type)
+            .with_subnet_id(own_subnet_id)
             .build(),
     );
-    let msg = SignedIngressBuilder::new()
+    let msg: SignedIngressContent = SignedIngressBuilder::new()
         .canister_id(canister_test_id(0))
         .build()
         .into();
     let cost_of_ingress = cycles_account_manager
-        .ingress_induction_cost(&msg)
-        .unwrap()
+        .ingress_induction_cost(&msg, None)
         .cost();
 
     let ingress_history_writer = NoopIngressHistoryWriter;
@@ -680,10 +683,10 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
+        let effective_canister_id = None;
         let cost = CyclesAccountManagerBuilder::new()
             .build()
-            .ingress_induction_cost(&ingress)
-            .unwrap()
+            .ingress_induction_cost(&ingress, effective_canister_id)
             .cost();
         valid_set_rule.induct_message(&mut state, ingress);
 
@@ -798,4 +801,52 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         valid_set_rule.enqueue(&mut state, ingress),
         Err(StateError::InvalidSubnetPayload)
     );
+}
+
+#[test]
+fn management_message_update_setting_is_inducted_but_not_charged() {
+    let ingress_history_writer = MockIngressHistory::new();
+    let metrics_registry = MetricsRegistry::new();
+    let subnet_id = subnet_test_id(1);
+    let valid_set_rule = ValidSetRuleImpl::new(
+        Arc::new(ingress_history_writer),
+        Arc::new(
+            CyclesAccountManagerBuilder::new()
+                .with_subnet_id(subnet_id)
+                .build(),
+        ),
+        &metrics_registry,
+        subnet_id,
+        no_op_logger(),
+    );
+
+    let mut state = ReplicatedStateBuilder::new().build();
+    let canister_id = canister_test_id(0);
+    let canister = get_running_canister(canister_id);
+    let balance_before = canister.system_state.balance();
+    state.put_canister_state(canister);
+
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            freezing_threshold: Some(Nat::from(1 << 20)),
+            ..Default::default()
+        },
+    }
+    .encode();
+    let ingress = SignedIngressBuilder::new()
+        .canister_id(IC_00)
+        .method_name("update_settings")
+        .method_payload(payload)
+        .build()
+        .into();
+    assert!(valid_set_rule.enqueue(&mut state, ingress).is_ok());
+
+    let balance_after = state
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .balance();
+
+    assert_eq!(balance_after, balance_before);
 }

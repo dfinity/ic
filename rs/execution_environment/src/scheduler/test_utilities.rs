@@ -1049,12 +1049,15 @@ impl TestWasmExecutorCore {
         let ingress_id = self.next_message_id();
         self.messages.insert(ingress_id, message);
         canister.push_ingress(
-            SignedIngressBuilder::new()
-                .canister_id(canister_id)
-                .method_name("update")
-                .method_payload(encode_message_id_as_payload(ingress_id))
-                .expiry_time(expiry_time)
-                .build()
+            (
+                SignedIngressBuilder::new()
+                    .canister_id(canister_id)
+                    .method_name("update")
+                    .method_payload(encode_message_id_as_payload(ingress_id))
+                    .expiry_time(expiry_time)
+                    .build(),
+                None,
+            )
                 .into(),
         );
     }
