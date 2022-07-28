@@ -148,6 +148,7 @@
 /rs/registry/helpers/src/subnet.rs                    @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/src/unassigned_nodes.rs          @dfinity-lab/teams/consensus-owners
 /rs/registry/nns_data_provider/         @dfinity-lab/teams/nns-team
+/rs/registry/regedit/                                 @dfinity-lab/teams/ic-testing-verification
 /rs/registry/transport/                 @dfinity-lab/teams/nns-team
 /rs/replay/                             @dfinity-lab/teams/orchestrator-owners
 /rs/replica/                            @dfinity-lab/teams/networking-team
