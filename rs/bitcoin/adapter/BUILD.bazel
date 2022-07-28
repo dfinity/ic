@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -46,6 +46,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
+]
+
 ALIASES = {}
 
 rust_library(
@@ -74,4 +78,10 @@ rust_binary(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":adapter"],
+)
+
+rust_test(
+    name = "adapter_test",
+    crate = ":adapter",
+    deps = DEV_DEPENDENCIES,
 )
