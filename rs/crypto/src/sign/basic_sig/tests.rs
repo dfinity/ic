@@ -6,11 +6,11 @@ use crate::sign::tests::*;
 use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
 use ic_interfaces::crypto::SignableMock;
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
-use ic_test_utilities::types::arbitrary as arbitrary_types;
-use ic_test_utilities::types::ids::NODE_1;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
+use ic_types_test_utils::arbitrary as arbitrary_types;
+use ic_types_test_utils::ids::NODE_1;
 
 mod test_basic_sign {
     use super::*;
@@ -93,7 +93,7 @@ mod test_basic_sig_verification {
     mod verify_common {
         use super::*;
         use crate::sign::tests::REG_V2;
-        use ic_test_utilities::types::ids::NODE_1;
+        use ic_types_test_utils::ids::NODE_1;
 
         #[test]
         fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
@@ -126,7 +126,7 @@ mod test_basic_sig_verification {
     mod verify {
         use super::*;
         use crate::sign::tests::{node_signing_record_with, registry_with, KEY_ID, REG_V2};
-        use ic_test_utilities::types::ids::NODE_1;
+        use ic_types_test_utils::ids::NODE_1;
 
         // Here we only test with a single test vector: an extensive test with the
         // entire test vector suite is done at the crypto lib level.

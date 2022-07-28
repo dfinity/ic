@@ -74,12 +74,13 @@ ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/bas
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
+ic-registry-client = { path = "../registry/client" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.8.3"

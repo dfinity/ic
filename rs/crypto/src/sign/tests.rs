@@ -14,12 +14,12 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::{NODE_1, SUBNET_27};
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::crypto::{AlgorithmId, KeyId, KeyPurpose};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
+use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
 use openssl::sha::sha256;
 use rand::thread_rng;
 

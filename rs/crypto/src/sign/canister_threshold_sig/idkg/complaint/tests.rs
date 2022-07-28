@@ -10,7 +10,6 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_42};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
     SignedIDkgDealing,
@@ -18,6 +17,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{registry::RegistryClientError, Height, RegistryVersion};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_42};
 use rand::thread_rng;
 use std::collections::BTreeSet;
 

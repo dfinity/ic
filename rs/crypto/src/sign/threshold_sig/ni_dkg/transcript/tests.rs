@@ -14,14 +14,13 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_test_utilities::crypto::basic_utilities::set_of;
-use ic_test_utilities::crypto::empty_ni_csp_dkg_transcript;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
+use ic_crypto_test_utils::set_of;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfigData, NiDkgThreshold};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 use ic_types::{NodeId, NumberOfNodes};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
 use std::collections::BTreeMap;
 
 const PK_BYTES_1: PublicKeyBytes = PublicKeyBytes([42; PublicKeyBytes::SIZE]);
@@ -756,5 +755,14 @@ fn receivers(nodes: &[NodeId]) -> NiDkgReceivers {
 fn insufficient_dealings_error(message: &str) -> DkgCreateTranscriptError {
     DkgCreateTranscriptError::InsufficientDealings(InvalidArgumentError {
         message: message.to_string(),
+    })
+}
+
+fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
+    CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
+        public_coefficients: PublicCoefficientsBytes {
+            coefficients: vec![],
+        },
+        receiver_data: Default::default(),
     })
 }

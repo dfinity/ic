@@ -6,7 +6,7 @@ use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_tlscert;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::types::ids::NODE_1;
+use ic_types_test_utils::ids::NODE_1;
 use rand::rngs::OsRng;
 use std::sync::Arc;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;

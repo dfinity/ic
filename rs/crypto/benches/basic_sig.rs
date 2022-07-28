@@ -10,10 +10,10 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2};
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, UserPublicKey};
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
+use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
 use openssl::bn::BigNumContext;
 use openssl::ec::{EcGroup, EcKey};

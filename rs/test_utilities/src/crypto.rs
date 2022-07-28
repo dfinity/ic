@@ -5,10 +5,7 @@ pub use ic_crypto_test_utils::files as temp_dir;
 
 use crate::types::ids::node_test_id;
 use ic_crypto::utils::TempCryptoComponent;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
-};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type, set_of_nodes,
 };
@@ -21,7 +18,6 @@ use ic_interfaces::crypto::{
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::*;
@@ -33,7 +29,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTranscript,
+    config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTranscript,
 };
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
@@ -53,118 +49,21 @@ pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
     )))
 }
 
-pub fn temp_crypto_components_for(nodes: &[NodeId]) -> BTreeMap<NodeId, TempCryptoComponent> {
-    let registry = RegistryClientImpl::new(Arc::new(ProtoRegistryDataProvider::new()), None);
-    TempCryptoComponent::multiple_new(nodes, Arc::new(registry))
-}
-
 pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
     TempCryptoComponent::new(empty_fake_registry(), node_id)
 }
 
-pub fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T {
-    crypto_components
-        .get(&node_id)
-        .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
+fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
+    ic_crypto_test_utils::dkg::ni_dkg_csp_dealing(0)
 }
 
-pub fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ni_dkg_csp_dealing(0)
-}
-
-pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
-    use ni_dkg_groth20_bls12_381 as scheme;
-    fn fr(seed: u8) -> scheme::Fr {
-        scheme::Fr([seed; scheme::Fr::SIZE])
-    }
-    fn g1(seed: u8) -> scheme::G1 {
-        scheme::G1([seed; scheme::G1::SIZE])
-    }
-    fn g2(seed: u8) -> scheme::G2 {
-        scheme::G2([seed; scheme::G2::SIZE])
-    }
-    const NUM_RECEIVERS: usize = 1;
-    CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
-        public_coefficients: scheme::PublicCoefficientsBytes {
-            coefficients: Vec::new(),
-        },
-        ciphertexts: scheme::EncryptedShares {
-            rand_r: [g1(seed); scheme::NUM_CHUNKS],
-            rand_s: [g1(seed); scheme::NUM_CHUNKS],
-            rand_z: [g2(seed); scheme::NUM_CHUNKS],
-            ciphertext_chunks: (0..NUM_RECEIVERS)
-                .map(|i| [g1(seed ^ (i as u8)); scheme::NUM_CHUNKS])
-                .collect(),
-        },
-        zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
-            // TODO(CRP-530): Populate this when it has been defined in the spec.
-            first_move_y0: g1(seed),
-            first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
-            first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],
-            second_move_d: (0..NUM_RECEIVERS + 1)
-                .map(|i| g1(seed ^ (i as u8)))
-                .collect(),
-            second_move_y: g1(seed),
-            response_z_r: (0..NUM_RECEIVERS).map(|i| fr(seed | (i as u8))).collect(),
-            response_z_s: [fr(seed); scheme::NUM_ZK_REPETITIONS],
-            response_z_b: fr(seed),
-        },
-        zk_proof_correct_sharing: ni_dkg_groth20_bls12_381::ZKProofShare {
-            first_move_f: g1(seed),
-            first_move_a: g2(seed),
-            first_move_y: g1(seed),
-            response_z_r: fr(seed),
-            response_z_a: fr(seed),
-        },
-    })
-}
-
-pub fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
-    CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
-        public_coefficients: PublicCoefficientsBytes {
-            coefficients: vec![],
-        },
-        receiver_data: Default::default(),
-    })
-}
-
-pub fn empty_ni_dkg_dealing() -> NiDkgDealing {
+fn empty_ni_dkg_dealing() -> NiDkgDealing {
     NiDkgDealing {
         internal_dealing: empty_ni_dkg_csp_dealing(),
     }
 }
 
-pub fn empty_ni_dkg_transcripts_with_committee(
-    committee: Vec<NodeId>,
-    registry_version: u64,
-) -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
-    vec![
-        (
-            NiDkgTag::LowThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
-                committee.clone(),
-                NiDkgTag::LowThreshold,
-                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
-                registry_version,
-            ),
-        ),
-        (
-            NiDkgTag::HighThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
-                committee.clone(),
-                NiDkgTag::HighThreshold,
-                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
-                registry_version,
-            ),
-        ),
-    ]
-    .into_iter()
-    .collect()
-}
-
-pub fn empty_ni_dkg_transcripts() -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
-    empty_ni_dkg_transcripts_with_committee(vec![node_test_id(0)], 0)
-}
+pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
 
 pub fn dummy_idkg_transcript_id_for_tests(id: u64) -> IDkgTranscriptId {
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));

@@ -5,9 +5,9 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, RegistryVersion};
+use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 pub struct TestKeygenCryptoBuilder {

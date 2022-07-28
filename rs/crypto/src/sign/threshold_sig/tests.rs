@@ -11,8 +11,8 @@ use ic_crypto_internal_threshold_sig_bls12381::types::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts;
 use ic_interfaces::crypto::SignableMock;
-use ic_test_utilities::types::ids::{NODE_1, SUBNET_0, SUBNET_1};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
@@ -20,6 +20,7 @@ use ic_types::crypto::ThresholdSigShare;
 use ic_types::crypto::{CombinedThresholdSig, KeyId};
 use ic_types::Height;
 use ic_types::SubnetId;
+use ic_types_test_utils::ids::{NODE_1, SUBNET_0, SUBNET_1};
 
 pub const NODE_ID: NodeId = NODE_1;
 
@@ -673,7 +674,7 @@ mod verify_threshold_sig_share {
 
 mod combine_threshold_sig_shares {
     use super::*;
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 
     #[test]
     fn should_call_csp_with_correct_algorithm_id_and_pub_coeffs() {
@@ -1203,11 +1204,11 @@ mod verify_combined_threshold_sig_by_public_key {
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
         ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
     };
+    use ic_crypto_test_utils::set_of;
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::{basic_utilities::set_of, empty_ni_dkg_transcripts};
     use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
     use ic_types::NumberOfNodes;

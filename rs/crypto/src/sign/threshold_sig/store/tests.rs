@@ -5,9 +5,9 @@ use crate::sign::threshold_sig::tests::{NI_DKG_ID_1, NI_DKG_ID_2};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_test_utilities::types::ids::{node_test_id, SUBNET_1};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::Height;
+use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
 
 const NODE_1: u64 = 1;
 const NODE_2: u64 = 2;

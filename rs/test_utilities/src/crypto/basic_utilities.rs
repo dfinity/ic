@@ -1,23 +1,3 @@
-use proptest::std_facade::BTreeMap;
-use std::collections::BTreeSet;
-
-/// returns a `BTreeSet` of the items provided as array.
-pub fn set_of<T: Ord + Clone>(items: &[T]) -> BTreeSet<T> {
-    let mut set = BTreeSet::new();
-    for item in items {
-        assert!(set.insert(item.clone()));
-    }
-    set
-}
-
-pub fn map_of<K: Ord, V>(entries: Vec<(K, V)>) -> BTreeMap<K, V> {
-    let mut map = BTreeMap::new();
-    for (key, value) in entries {
-        assert!(map.insert(key, value).is_none());
-    }
-    map
-}
-
 /// This is a minimal implementation of DER-encoding for Ed25519, as the keys
 /// are constant-length. The format is an ASN.1 SubjectPublicKeyInfo, whose
 /// header contains the OID for Ed25519, as specified in RFC 8410:

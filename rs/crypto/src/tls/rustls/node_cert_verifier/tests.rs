@@ -4,7 +4,7 @@ use ic_base_types::NodeId;
 use ic_crypto_test_utils::tls::registry::{TlsRegistry, REG_V1};
 use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use maplit::btreeset;
 use tokio_rustls::rustls::{Certificate, ClientCertVerifier, TLSError};
 use tokio_rustls::rustls::{RootCertStore, ServerCertVerifier};

@@ -17,8 +17,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateD
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, Epoch,
 };
-use ic_test_utilities::crypto::basic_utilities::set_of;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_42};
+use ic_crypto_test_utils::set_of;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfigData;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
@@ -26,6 +25,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_42};
 
 const PK_VALUE_1: u8 = 42;
 const PK_VALUE_2: u8 = 43;

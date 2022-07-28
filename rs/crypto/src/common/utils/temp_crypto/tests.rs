@@ -2,8 +2,8 @@
 
 use super::*;
 
-use ic_test_utilities::crypto::empty_fake_registry;
-use ic_test_utilities::types::ids::node_test_id;
+use ic_crypto_test_utils::empty_fake_registry;
+use ic_types_test_utils::ids::node_test_id;
 
 const NODE_ID: u64 = 42;
 

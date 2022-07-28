@@ -1,6 +1,5 @@
 use super::*;
 use ic_interfaces::crypto::CryptoHashDomain;
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_types::consensus::{RandomBeaconContent, RandomTapeContent};
 use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
@@ -10,6 +9,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     Height,
 };
+use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 use strum::{EnumCount, IntoEnumIterator};

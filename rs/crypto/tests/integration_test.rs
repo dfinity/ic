@@ -11,6 +11,7 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
@@ -22,10 +23,9 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::crypto::temp_dir::temp_dir;
-use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
 use ic_types::RegistryVersion;
+use ic_types_test_utils::ids::node_test_id;
 use openssl::asn1::Asn1Time;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;

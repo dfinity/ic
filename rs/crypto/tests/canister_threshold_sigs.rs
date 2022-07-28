@@ -5,6 +5,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     test_utils::corrupt_dealing_for_all_recipients, EccScalar, IDkgDealingInternal, MEGaCiphertext,
     Seed,
 };
+use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
     create_and_verify_signed_dealing, create_signed_dealings, generate_key_transcript,
@@ -14,10 +15,8 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
-use ic_test_utilities::crypto::{
-    crypto_for, dummy_idkg_transcript_id_for_tests, temp_crypto_components_for,
-};
-use ic_test_utilities::types::ids::NODE_1;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyComplaintError, IDkgVerifyOpeningError, ThresholdEcdsaCombineSigSharesError,
@@ -34,6 +33,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError};
 use ic_types::{NodeId, NodeIndex, Randomness, RegistryVersion};
+use ic_types_test_utils::ids::NODE_1;
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -1933,4 +1933,9 @@ fn environment_with_transcript_and_complaint() -> (
     );
     let complaint = &result.expect("Missing complaint")[0];
     (env, transcript, complaint.clone(), complainer_id)
+}
+
+fn temp_crypto_components_for(nodes: &[NodeId]) -> BTreeMap<NodeId, TempCryptoComponent> {
+    let registry = RegistryClientImpl::new(Arc::new(ProtoRegistryDataProvider::new()), None);
+    TempCryptoComponent::multiple_new(nodes, Arc::new(registry))
 }
