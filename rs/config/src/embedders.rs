@@ -21,8 +21,8 @@ pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 
 /// In terms of execution time, compiling 1 WASM instructions takes as much time
 /// as actually executing 3_000 instructions. Only public for use in tests.
-#[doc(hidden)]
-const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions = NumInstructions::new(3_000);
+pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
+    NumInstructions::new(3_000);
 
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;

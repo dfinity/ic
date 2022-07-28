@@ -247,34 +247,34 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
     let layout = canister_layout(&canister_layout_path, &canister_id);
-    let (instructions_from_compilation, execution_state) =
-        match round.hypervisor.create_execution_state(
-            context.wasm_module,
-            layout.raw_path(),
-            canister_id,
-            round_limits,
-            compilation_cost_handling,
-        ) {
-            Err(err) => {
-                return InstallCodeRoutineResult::Finished {
-                    instructions_left,
-                    result: Err((canister_id, err).into()),
-                };
-            }
-            Ok((instructions_from_compilation, mut execution_state)) => {
-                let stable_memory = match new_canister.execution_state {
-                    Some(es) => es.stable_memory,
-                    None => Memory::default(),
-                };
-                execution_state.stable_memory = stable_memory;
-                (instructions_from_compilation, execution_state)
-            }
-        };
-    new_canister.execution_state = Some(execution_state);
-
+    let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
+        context.wasm_module,
+        layout.raw_path(),
+        canister_id,
+        round_limits,
+        compilation_cost_handling,
+    );
     execution_parameters
         .instruction_limits
         .reduce_by(instructions_from_compilation);
+    let execution_state = match result {
+        Err(err) => {
+            return InstallCodeRoutineResult::Finished {
+                instructions_left: execution_parameters.instruction_limits.message(),
+                result: Err((canister_id, err).into()),
+            };
+        }
+        Ok(mut execution_state) => {
+            execution_state.stable_memory = match new_canister.execution_state {
+                Some(es) => es.stable_memory,
+                None => Memory::default(),
+            };
+            execution_state
+        }
+    };
+
+    new_canister.execution_state = Some(execution_state);
+
     let instructions_left = execution_parameters.instruction_limits.message();
 
     // Update allocations.  This must happen after we have created the new

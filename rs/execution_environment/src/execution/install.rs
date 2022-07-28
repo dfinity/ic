@@ -69,26 +69,26 @@ pub(crate) fn execute_install(
     let canister_id = context.canister_id;
     let layout = canister_layout(&canister_layout_path, &canister_id);
 
-    let (instructions_from_compilation, execution_state) =
-        match round.hypervisor.create_execution_state(
-            context.wasm_module,
-            layout.raw_path(),
-            canister_id,
-            round_limits,
-            compilation_cost_handling,
-        ) {
-            Ok(result) => result,
-            Err(err) => {
-                return InstallCodeRoutineResult::Finished {
-                    instructions_left: execution_parameters.instruction_limits.message(),
-                    result: Err((canister_id, err).into()),
-                };
-            }
-        };
-
+    let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
+        context.wasm_module,
+        layout.raw_path(),
+        canister_id,
+        round_limits,
+        compilation_cost_handling,
+    );
     execution_parameters
         .instruction_limits
         .reduce_by(instructions_from_compilation);
+
+    let execution_state = match result {
+        Ok(result) => result,
+        Err(err) => {
+            return InstallCodeRoutineResult::Finished {
+                instructions_left: execution_parameters.instruction_limits.message(),
+                result: Err((canister_id, err).into()),
+            };
+        }
+    };
 
     let system_state = old_canister.system_state.clone();
     let scheduler_state = old_canister.scheduler_state.clone();

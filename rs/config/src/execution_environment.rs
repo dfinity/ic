@@ -1,5 +1,6 @@
 use crate::{
-    embedders::QUERY_EXECUTION_THREADS, flag_status::FlagStatus,
+    embedders::{self, QUERY_EXECUTION_THREADS},
+    flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
@@ -113,6 +114,10 @@ pub struct Config {
 
     /// Sharing of serialized modules between canisters.
     pub module_sharing: FlagStatus,
+
+    /// Compiling a single WASM instruction should cost as much as executing
+    /// this many instructions.
+    pub cost_to_compile_wasm_instruction: NumInstructions,
 }
 
 impl Default for Config {
@@ -141,6 +146,7 @@ impl Default for Config {
             allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Disabled,
             module_sharing: FlagStatus::Enabled,
+            cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
         }
     }
 }

@@ -68,7 +68,7 @@ where
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
     };
-    let (_, execution_state) = hypervisor
+    let execution_state = hypervisor
         .create_execution_state(
             CanisterModule::new(
                 wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
@@ -78,6 +78,7 @@ where
             &mut round_limits,
             CompilationCostHandling::CountFullAmount,
         )
+        .1
         .expect("Failed to create execution state");
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
