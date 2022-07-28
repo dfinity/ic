@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -67,6 +67,15 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-canister-http-adapter",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":adapter"],
 )
 
 rust_test(
