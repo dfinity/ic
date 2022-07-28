@@ -63,6 +63,11 @@ opt_stripped_binary(
 )
 
 opt_stripped_binary(
+    name = "ic-crypto-csp",
+    binary = "//rs/crypto:ic-crypto-csp",
+)
+
+opt_stripped_binary(
     name = "state-tool",
     binary = "//rs/state_tool",
 )
@@ -71,7 +76,6 @@ cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
     binaries = [
-        "ic-crypto-csp",
         "ic-regedit",
         "ic-recovery",
         "orchestrator",
