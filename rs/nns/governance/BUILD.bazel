@@ -1,0 +1,101 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/sha",
+    "//rs/monitoring/metrics_encoder",
+    "//rs/nervous_system/common",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/protobuf",
+    "//rs/registry/canister",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/sns/swap",
+    "//rs/types/base_types",
+    "@crate_index//:build-info",
+    "@crate_index//:candid",
+    "@crate_index//:comparable",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_core",
+    "@crate_index//:serde",
+    "@crate_index//:strum",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "@crate_index//:csv",
+        "//rs/nervous_system/common/test_keys",
+    ],
+})
+
+MACRO_DEPENDENCIES = [
+    "//rs/nervous_system/common/build_metadata",
+    "@crate_index//:async-trait",
+    "@crate_index//:strum_macros",
+]
+
+BUILD_DEPENDENCIES = [
+    "@crate_index//:build-info-build",
+]
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    build_script_env = {
+        "CARGO_PKG_VERSION": "0.8.0",
+    },
+    edition = "2018",
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_library(
+    name = "governance",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_name = "ic_nns_governance",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_canister(
+    name = "governance-canister",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":governance",
+        ":build_script",
+    ],
+)
