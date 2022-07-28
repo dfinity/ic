@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,4 +38,53 @@ rust_library(
     ],
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "system_api_test",
+    crate = ":system_api",
+    deps = [
+        "//rs/test_utilities",
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+    ],
+)
+
+INTEGRATION_TEST_DEPS = [
+    ":system_api",
+    "//rs/config",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/types",
+    "//rs/nns/constants",
+    "//rs/cycles_account_manager",
+    "//rs/registry/routing_table",
+    "@crate_index//:maplit",
+]
+
+rust_test(
+    name = "system_api_integration_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/system_api.rs",
+    ],
+    crate_root = "tests/system_api.rs",
+    edition = "2018",
+    deps = INTEGRATION_TEST_DEPS,
+)
+
+rust_test(
+    name = "sandbox_safe_system_state_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/sandbox_safe_system_state.rs",
+    ],
+    crate_root = "tests/sandbox_safe_system_state.rs",
+    edition = "2018",
+    deps = INTEGRATION_TEST_DEPS + [
+        "@crate_index//:prometheus",
+    ],
+)
