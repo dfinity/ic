@@ -453,7 +453,7 @@ impl StateMachine {
 
     fn await_height(&self, h: Height) {
         const SLEEP_TIME: Duration = Duration::from_millis(100);
-        const MAX_WAIT_TIME: Duration = Duration::from_secs(60);
+        const MAX_WAIT_TIME: Duration = Duration::from_secs(180);
 
         let started_at = Instant::now();
 
