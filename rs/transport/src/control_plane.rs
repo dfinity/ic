@@ -26,6 +26,7 @@ use std::{
 use strum::AsRefStr;
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream},
+    sync::RwLock,
     task::JoinHandle,
     time::sleep,
 };
@@ -99,7 +100,9 @@ impl TransportImpl {
                     self.send_queue_metrics.clone(),
                     self.control_plane_metrics.clone(),
                 );
-                peer_state.flow_map.insert(flow_tag, flow_state);
+                peer_state
+                    .flow_map
+                    .insert(flow_tag, RwLock::new(flow_state));
             }
         }
         if role == ConnectionRole::Server {
@@ -158,7 +161,7 @@ impl TransportImpl {
             );
             peer_state
                 .flow_map
-                .insert(flow_endpoint.flow_tag.into(), flow_state);
+                .insert(flow_endpoint.flow_tag.into(), RwLock::new(flow_state));
         }
 
         peer_map.insert(*peer_id, peer_state);

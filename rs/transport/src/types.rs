@@ -139,7 +139,7 @@ impl Drop for ServerPortState {
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
     /// State of the flows with the peer
-    pub flow_map: HashMap<FlowTag, FlowState>,
+    pub flow_map: HashMap<FlowTag, RwLock<FlowState>>,
 }
 
 /// Per-flow state, specific to a transport-client and a peer.

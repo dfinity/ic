@@ -350,16 +350,16 @@ impl TransportImpl {
         flow_tag: FlowTag,
         mut event_handler: TransportEventHandler,
     ) {
-        let mut peer_map = self.peer_map.write().await;
-        let peer_state = match peer_map.get_mut(&peer_id) {
+        let peer_map = self.peer_map.read().await;
+        let peer_state = match peer_map.get(&peer_id) {
             Some(peer_state) => peer_state,
             None => return,
         };
-        let flow_state = match peer_state.flow_map.get_mut(&flow_tag) {
+        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
             Some(flow_state) => flow_state,
             None => return,
         };
-
+        let mut flow_state = flow_state_mu.write().await;
         let connected = match flow_state.get_connected() {
             Some(connected) => connected,
             // Flow is already disconnected/reconnecting, skip reconnect processing
@@ -430,16 +430,16 @@ impl TransportImpl {
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
-        let mut peer_map = self.peer_map.write().await;
-        let peer_state = match peer_map.get_mut(&peer_id) {
+        let peer_map = self.peer_map.read().await;
+        let peer_state = match peer_map.get(&peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
-        let flow_state = match peer_state.flow_map.get_mut(&flow_tag) {
+        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
             Some(flow_state) => flow_state,
             None => return Err(TransportErrorCode::FlowNotFound),
         };
-
+        let mut flow_state = flow_state_mu.write().await;
         if flow_state.get_connected().is_some() {
             // TODO: P2P-516
             return Err(TransportErrorCode::FlowConnectionUp);
