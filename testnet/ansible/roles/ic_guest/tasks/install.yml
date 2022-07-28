@@ -36,6 +36,27 @@
   run_once: true
   become: no
 
+- name: Get Custom NNS canisters
+  shell: |
+    set -exuo pipefail
+      echo "Media path: {{ ic_media_path }}"
+      echo "Adding canisters from '{{ custom_canister_dir }}'"
+      cp "{{ custom_canister_dir }}"/*.wasm "{{ ic_media_path }}/canisters/"
+      sha256sum "{{ ic_media_path }}"/canisters/*.wasm
+  register: nns_canisters
+  delegate_to: localhost
+  run_once: true
+  register: nns_canisters
+  changed_when: "script_res.stdout | default('')"
+  become: false
+  args:
+    executable: /bin/bash
+  tags: [ "ic_guest" ]
+  when: custom_canister_dir is defined
+
+- debug: var=nns_canisters.stdout_lines
+  when: custom_canister_dir is defined
+
 - name: Install NNS canisters
   shell: |
     set -exuo pipefail
