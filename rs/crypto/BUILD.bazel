@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -50,7 +50,6 @@ rust_library(
         "//rs/utils",
         "@crate_index//:arrayvec",
         "@crate_index//:base64",
-        "@crate_index//:clap",
         "@crate_index//:ed25519-consensus",
         "@crate_index//:hex",
         "@crate_index//:lazy_static",
@@ -74,5 +73,23 @@ rust_library(
         "@crate_index//:tokio-openssl",
         "@crate_index//:tokio-rustls",
         "@crate_index//:zeroize",
+    ],
+)
+
+rust_binary(
+    name = "ic-crypto-csp",
+    srcs = ["src/bin/ic-crypto-csp.rs"],
+    crate_name = "ic_crypto_csp",
+    edition = "2018",
+    deps = [
+        "//rs/config",
+        "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/logmon",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "@crate_index//:clap",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
