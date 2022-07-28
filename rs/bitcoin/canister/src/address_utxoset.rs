@@ -61,24 +61,28 @@ impl<'a> AddressUtxoSet<'a> {
             .collect();
 
         for input in &tx.input {
-            if let Some(height) = outpoint_to_height.get(&input.previous_output) {
-                // Remove a UTXO that was previously added.
-                self.added_utxos
-                    .remove(&(*height, input.previous_output).to_bytes());
-                return;
+            match outpoint_to_height.get(&input.previous_output) {
+                Some(height) => {
+                    // Remove a UTXO that was previously added.
+                    self.added_utxos
+                        .remove(&(*height, input.previous_output).to_bytes());
+                }
+                None => {
+                    let (txout, height) = self
+                        .full_utxo_set
+                        .utxos
+                        .get(&input.previous_output)
+                        .unwrap_or_else(|| {
+                            panic!("Cannot find outpoint: {}", &input.previous_output)
+                        });
+
+                    // Remove it.
+                    let old_value = self
+                        .removed_utxos
+                        .insert(input.previous_output, (txout.clone(), height));
+                    assert_eq!(old_value, None, "Cannot remove an output twice");
+                }
             }
-
-            let (txout, height) = self
-                .full_utxo_set
-                .utxos
-                .get(&input.previous_output)
-                .unwrap_or_else(|| panic!("Cannot find outpoint: {}", &input.previous_output));
-
-            // Remove it.
-            let old_value = self
-                .removed_utxos
-                .insert(input.previous_output, (txout.clone(), height));
-            assert_eq!(old_value, None, "Cannot remove an output twice");
         }
     }
 
@@ -173,7 +177,7 @@ mod test {
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey};
-    use ic_btc_test_utils::TransactionBuilder;
+    use ic_btc_test_utils::{random_p2pkh_address, TransactionBuilder};
     use ic_btc_types::OutPoint as PublicOutPoint;
 
     #[test]
@@ -291,5 +295,66 @@ mod test {
 
         // This should panic, as we already inserted that tx.
         address_utxo_set.insert_tx(&coinbase_tx, 0);
+    }
+
+    #[test]
+    fn spending_multiple_inputs() {
+        let network = Network::Bitcoin;
+
+        // Create some BTC addresses.
+        let address_1 = random_p2pkh_address(network);
+        let address_2 = random_p2pkh_address(network);
+
+        // Create a genesis block where 2000 satoshis are given to address 1
+        // in two different outputs.
+        let coinbase_tx = TransactionBuilder::coinbase()
+            .with_output(&address_1, 1000)
+            .with_output(&address_1, 1000)
+            .build();
+
+        // Address 1 spends both outputs in a single transaction.
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 1))
+            .with_output(&address_2, 1500)
+            .with_output(&address_1, 400)
+            .build();
+
+        // Process the blocks.
+        let utxo_set = UtxoSet::new(network);
+        let mut address_1_utxo_set = AddressUtxoSet::new(address_1.to_string(), &utxo_set);
+        address_1_utxo_set.insert_tx(&coinbase_tx, 0);
+        address_1_utxo_set.insert_tx(&tx, 1);
+
+        let mut address_2_utxo_set = AddressUtxoSet::new(address_2.to_string(), &utxo_set);
+        address_2_utxo_set.insert_tx(&coinbase_tx, 0);
+        address_2_utxo_set.insert_tx(&tx, 1);
+
+        // Address 1 should have one UTXO corresponding to the remaining amount
+        // it gave back to itself.
+        assert_eq!(
+            address_1_utxo_set.into_vec(None),
+            vec![Utxo {
+                outpoint: PublicOutPoint {
+                    txid: tx.txid().to_vec(),
+                    vout: 1
+                },
+                value: 400,
+                height: 1
+            }]
+        );
+
+        // Address 2 should receive 1500 Satoshi
+        assert_eq!(
+            address_2_utxo_set.into_vec(None),
+            vec![Utxo {
+                outpoint: PublicOutPoint {
+                    txid: tx.txid().to_vec(),
+                    vout: 0
+                },
+                value: 1500,
+                height: 1
+            }]
+        );
     }
 }
