@@ -643,6 +643,9 @@ impl Engine {
             fs::write(f, bytes).unwrap();
         }
 
+        if call_response.status == "rejected" {
+            eprintln!("Reject message is: {:?}", call_response.reject_message);
+        }
         let counter_value = call_response
             .reply
             .as_ref()

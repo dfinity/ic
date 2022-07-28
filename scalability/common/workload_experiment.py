@@ -357,6 +357,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             arguments,
             0,
             1.0,
+            -1,
         )
         load = workload.Workload(
             machines,
