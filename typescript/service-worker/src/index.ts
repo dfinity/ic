@@ -28,7 +28,11 @@ window.addEventListener('load', async () => {
     // note: if the service worker was already installed, when the browser requested <domain>/, it would have
     // proxied the response from <domain>/<canister-id>/, so this bootstrap file would have never been
     // retrieved from the boundary nodes
-    await navigator.serviceWorker.register('sw.js');
+    try {
+      await navigator.serviceWorker.register('sw.js');
+    } catch (e) {
+      await navigator.serviceWorker.register('/sw.js');
+    }
 
     const registration = await navigator.serviceWorker.getRegistration();
     if (registration.active && !navigator.serviceWorker.controller) {
