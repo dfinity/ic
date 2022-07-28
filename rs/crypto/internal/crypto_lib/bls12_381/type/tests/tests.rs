@@ -1,6 +1,6 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
 
@@ -665,6 +665,87 @@ fn test_g2_test_vectors() {
     for (i, expected) in test_vectors::g2::POWERS_OF_2.iter().enumerate() {
         let s = Scalar::from_u64(1 << i);
         g2_test_encoding((g * s).into(), expected);
+    }
+}
+
+fn biased_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
+    let coin = rng.gen::<u8>();
+
+    if coin < 10 {
+        Scalar::zero()
+    } else if coin < 20 {
+        Scalar::one()
+    } else if coin < 30 {
+        Scalar::one().neg()
+    } else {
+        Scalar::random(rng)
+    }
+}
+
+fn biased_g1<R: RngCore + CryptoRng>(rng: &mut R) -> G1Projective {
+    let coin = rng.gen::<u8>();
+
+    if coin < 10 {
+        G1Projective::identity()
+    } else if coin < 20 {
+        G1Projective::generator()
+    } else if coin < 30 {
+        G1Projective::generator().neg()
+    } else {
+        G1Projective::hash(b"random-g1-for-testing", &rng.gen::<[u8; 32]>())
+    }
+}
+
+#[test]
+fn test_g1_mul2() {
+    let mut rng = seeded_rng();
+
+    let g = G1Projective::generator();
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert_eq!(
+        G1Projective::mul2(&g, &zero, &g, &zero),
+        G1Projective::identity()
+    );
+    assert_eq!(G1Projective::mul2(&g, &one, &g, &zero), g);
+    assert_eq!(G1Projective::mul2(&g, &zero, &g, &one), g);
+
+    for _ in 0..1000 {
+        let s1 = biased_scalar(&mut rng);
+        let s2 = biased_scalar(&mut rng);
+
+        let p1 = biased_g1(&mut rng);
+        let p2 = biased_g1(&mut rng);
+
+        let reference = p1 * s1 + p2 * s2;
+
+        assert_eq!(G1Projective::mul2(&p1, &s1, &p2, &s2), reference);
+        assert_eq!(G1Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+}
+
+#[test]
+fn test_g1_muln() {
+    let mut rng = seeded_rng();
+
+    assert_eq!(G1Projective::muln_vartime(&[]), G1Projective::identity());
+
+    for t in 1..100 {
+        let mut terms = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            terms.push((biased_g1(&mut rng), biased_scalar(&mut rng)));
+        }
+
+        let mut reference_val = G1Projective::identity();
+        for (p, s) in &terms {
+            reference_val += *p * *s;
+        }
+
+        let computed = G1Projective::muln_vartime(&terms);
+
+        assert_eq!(computed, reference_val);
     }
 }
 

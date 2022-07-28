@@ -25,6 +25,22 @@ fn random_scalar() -> Scalar {
     Scalar::random(&mut rng)
 }
 
+fn g1_muln_instance(terms: usize) -> Vec<(G1Projective, Scalar)> {
+    let mut r = Vec::with_capacity(terms);
+    for _ in 0..terms {
+        r.push((random_g1(), random_scalar()));
+    }
+    r
+}
+
+fn g1_multiexp_naive(terms: &[(G1Projective, Scalar)]) -> G1Projective {
+    let mut accum = G1Projective::identity();
+    for (pt, s) in terms {
+        accum += *pt * s;
+    }
+    accum
+}
+
 fn bls12_381_g1_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g1");
 
@@ -94,6 +110,53 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || G1Affine::from(random_g1()).to_miracl(),
             |pt| G1Affine::from_miracl(pt),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiexp_naive2", |b| {
+        b.iter_batched_ref(
+            || g1_muln_instance(2),
+            |terms| g1_multiexp_naive(terms),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiexp_naive8", |b| {
+        b.iter_batched_ref(
+            || g1_muln_instance(8),
+            |terms| g1_multiexp_naive(terms),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiexp_naive32", |b| {
+        b.iter_batched_ref(
+            || g1_muln_instance(32),
+            |terms| g1_multiexp_naive(terms),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiexp_mul2", |b| {
+        b.iter_batched_ref(
+            || (random_g1(), random_scalar(), random_g1(), random_scalar()),
+            |(p1, s1, p2, s2)| G1Projective::mul2(p1, s1, p2, s2),
+            BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("multiexp_muln_8", |b| {
+        b.iter_batched_ref(
+            || g1_muln_instance(8),
+            |terms| G1Projective::muln_vartime(terms),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiexp_muln_32", |b| {
+        b.iter_batched_ref(
+            || g1_muln_instance(32),
+            |terms| G1Projective::muln_vartime(terms),
             BatchSize::SmallInput,
         )
     });
