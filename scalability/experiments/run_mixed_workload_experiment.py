@@ -63,6 +63,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
             rps = int(config["load_total"] * wl.rps_ratio)
             if wl.rps < 0:
                 wl = wl._replace(rps=rps)
+            if isinstance(wl.raw_payload, list):
+                raw_payload = wl.raw_payload[config["iteration"] % len(wl.raw_payload)]
+                wl = wl._replace(raw_payload=raw_payload)
             load_generators = []
             if len(self.machines) < 1:
                 raise Exception("No machines for load generation, aborting")
@@ -117,10 +120,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         """Exercise the experiment with specified iterations."""
         results = []
         rps_max = 0
-        for d in iterations:
+        for i, d in enumerate(iterations):
             print(f"🚀 Running with total load {d}")
-            config = {"load_total": d}
-
+            config = {"load_total": d, "iteration": i}
             res, aggregated = self.run_experiment(config)
 
             duration = max([wl.start_delay + wl.duration for wl in self.workload_description])

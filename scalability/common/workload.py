@@ -22,6 +22,7 @@ class WorkloadDescription(NamedTuple):
     arguments: list
     start_delay: int
     rps_ratio: float
+    subnet: int
 
 
 def workload_description_from_dict(values: list, canister_ids: dict):
@@ -42,6 +43,7 @@ def workload_description_from_dict(values: list, canister_ids: dict):
             arguments=value.get("arguments", []),
             start_delay=int(value.get("start_delay", 0)),
             rps_ratio=float(value.get("rps_ratio", 1)),
+            subnet=int(value.get("subnet", -1)),
         )
         for value in values["workload"]
     ]
