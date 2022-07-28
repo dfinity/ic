@@ -5,7 +5,7 @@ use crate::{
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_ic00_types::{CanisterStatusType, EcdsaKeyId};
+use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
@@ -65,7 +65,6 @@ const STATUS_SUCCESS: &str = "success";
 
 const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
-const PHASE_REMOVE_CANISTERS: &str = "remove_canisters_not_in_rt";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
@@ -378,62 +377,6 @@ impl BatchProcessorImpl {
         provisional_whitelist.unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()))
     }
 
-    /// Removes stopped canisters that are missing from the routing table.
-    fn remove_canisters_not_in_routing_table(&self, state: &mut ReplicatedState) {
-        let _timer = self
-            .metrics
-            .process_batch_phase_duration
-            .with_label_values(&[PHASE_REMOVE_CANISTERS])
-            .start_timer();
-
-        let own_subnet_id = state.metadata.own_subnet_id;
-
-        let ids_to_remove =
-            ic_replicated_state::routing::find_canisters_not_in_routing_table(state, own_subnet_id);
-
-        if ids_to_remove.is_empty() {
-            return;
-        }
-
-        for canister_id in ids_to_remove.iter() {
-            use ic_state_layout::{CheckpointLayout, RwPolicy};
-
-            if let Some(canister_state) = state.canister_state(canister_id) {
-                if canister_state.status() != CanisterStatusType::Stopped {
-                    warn!(
-                        self.log,
-                        "Skipped removing canister {} in state {} that is not in the routing table",
-                        canister_id,
-                        canister_state.status()
-                    );
-                    continue;
-                }
-            }
-
-            warn!(
-                self.log,
-                "Removing canister {} that is not in the routing table", canister_id
-            );
-
-            let state_layout = CheckpointLayout::<RwPolicy>::new(
-                state.path().to_path_buf(),
-                ic_types::Height::from(0),
-            )
-            .and_then(|layout| layout.canister(canister_id))
-            .expect("failed to obtain canister layout");
-
-            state_layout.mark_deleted().unwrap_or_else(|e| {
-                fatal!(
-                    self.log,
-                    "Failed to mark canister {} as deleted: {}",
-                    canister_id,
-                    e
-                )
-            });
-            state.canister_states.remove(canister_id);
-        }
-    }
-
     // Populates a `NetworkTopology` from the registry at a specific version.
     //
     // # Warning
@@ -687,7 +630,7 @@ impl BatchProcessor for BatchProcessorImpl {
         let timer = Timer::start();
 
         // Fetch the mutable tip from StateManager
-        let mut state = match self
+        let state = match self
             .state_manager
             .take_tip_at(batch.batch_number.decrement())
         {
@@ -730,8 +673,6 @@ impl BatchProcessor for BatchProcessorImpl {
             self.get_max_number_of_canisters(state.metadata.own_subnet_id, registry_version);
         let max_ecdsa_queue_size =
             self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, registry_version);
-
-        self.remove_canisters_not_in_routing_table(&mut state);
 
         let subnet_size = network_topology
             .subnets

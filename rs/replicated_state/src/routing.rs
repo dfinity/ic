@@ -1,9 +1,10 @@
 use crate::ReplicatedState;
 use ic_base_types::{CanisterId, SubnetId};
+use ic_logger::{warn, ReplicaLogger};
 
 /// Returns ids of canisters that do not belong to this subnet state according
 /// to the subnet routing table.
-pub fn find_canisters_not_in_routing_table(
+fn find_canisters_not_in_routing_table(
     state: &ReplicatedState,
     own_subnet_id: SubnetId,
 ) -> Vec<CanisterId> {
@@ -79,6 +80,38 @@ pub fn find_canisters_not_in_routing_table(
         assert_eq!(expected_canisters, canister_ids);
     }
 
+    canister_ids
+}
+
+/// Returns ids of canisters that do not belong to this subnet state according
+/// to the subnet routing table and are not in the canister migration trace.
+pub fn find_canisters_to_remove(
+    log: &ReplicaLogger,
+    state: &ReplicatedState,
+    own_subnet_id: SubnetId,
+) -> Vec<CanisterId> {
+    let mut canister_ids = Vec::new();
+    let ids_not_in_routing_table = find_canisters_not_in_routing_table(state, own_subnet_id);
+
+    let canister_migrations = &state.metadata.network_topology.canister_migrations;
+
+    // Since we should have few canisters that are not in the routing table in most cases,
+    // it is affordable to traverse these canisters to check whether they are in migration trace.
+    for id in ids_not_in_routing_table {
+        if let Some(trace) = canister_migrations.lookup(id) {
+            if !trace.contains(&own_subnet_id) {
+                warn!(
+                    log,
+                    "The canister migration trace {:?} for canister {} does not contain the own subnet id {}",
+                    trace,
+                    id,
+                    own_subnet_id,
+                );
+            }
+        } else {
+            canister_ids.push(id);
+        }
+    }
     canister_ids
 }
 
