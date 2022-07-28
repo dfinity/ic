@@ -87,6 +87,11 @@ const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 /// cover the cost of the subnet.
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
+/// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
+///
+/// All initial costs were calculated with the assumption that a subnet had 13 replicas.
+const DEFAULT_REFERENCE_SUBNET_SIZE: u128 = 13;
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -227,6 +232,10 @@ impl SchedulerConfig {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CyclesAccountManagerConfig {
+    /// Reference value of a subnet size that all the fees below are calculated for.
+    /// Fees for a real subnet are calculated proportionally to this reference value.
+    pub reference_subnet_size: u128,
+
     /// Fee for creating canisters on a subnet
     pub canister_creation_fee: Cycles,
 
@@ -280,6 +289,7 @@ impl CyclesAccountManagerConfig {
 
     pub fn verified_application_subnet() -> Self {
         Self {
+            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(100_000),
 
@@ -304,6 +314,7 @@ impl CyclesAccountManagerConfig {
     /// All processing is free on system subnets
     pub fn system_subnet() -> Self {
         Self {
+            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(0),
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),

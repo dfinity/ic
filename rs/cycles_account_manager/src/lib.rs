@@ -34,6 +34,9 @@ use std::{str::FromStr, time::Duration};
 pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
     "cycles_account_manager_response_cycles_refund_error";
 
+/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
+const USE_COST_SCALING_FLAG: bool = false;
+
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CyclesAccountManagerError {
@@ -71,6 +74,9 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
+
+    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
+    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -87,6 +93,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
+            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
     }
 
@@ -98,6 +105,16 @@ impl CyclesAccountManager {
     /// Returns the Subnet Id of this [`CyclesAccountManager`].
     pub fn get_subnet_id(&self) -> SubnetId {
         self.own_subnet_id
+    }
+
+    // Scale cycles cost according to a subnet size.
+    fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
+        match self.use_cost_scaling_flag {
+            false => cycles,
+            true => Cycles::from(
+                (cycles.get() * (subnet_size as u128)) / self.config.reference_subnet_size,
+            ),
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -330,17 +347,7 @@ impl CyclesAccountManager {
         let cycles = self.config.compute_percent_allocated_per_second_fee
             * duration.as_secs()
             * compute_allocation.as_percent();
-        self.scale_compute_allocation_cost(cycles, subnet_size)
-    }
-
-    // Scale compute allocation cost according to subnet type and size.
-    fn scale_compute_allocation_cost(&self, cycles: Cycles, _subnet_size: usize) -> Cycles {
-        match self.own_subnet_type {
-            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
-                // TODO(EXC-1170): implement scaling function.
-                cycles
-            }
-        }
+        self.scale_cost(cycles, subnet_size)
     }
 
     /// Computes the cost of inducting an ingress message.
@@ -441,17 +448,7 @@ impl CyclesAccountManager {
                 * duration.as_secs() as u128)
                 / one_gib,
         );
-        self.scale_memory_cost(cycles, subnet_size)
-    }
-
-    // Scale memory cost according to subnet type and size.
-    fn scale_memory_cost(&self, cycles: Cycles, _subnet_size: usize) -> Cycles {
-        match self.own_subnet_type {
-            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
-                // TODO(EXC-1170): implement scaling function.
-                cycles
-            }
-        }
+        self.scale_cost(cycles, subnet_size)
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -782,4 +779,37 @@ pub enum IngressInductionCostError {
     InvalidSubnetPayload(String),
     /// The subnet method can be called only by a canister.
     SubnetMethodNotAllowed,
+}
+
+// TODO(EXC-1168): cleanup, move unit tests from lib.rs into dedicated src/module_name/tests.rs.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_test_utilities::types::ids::subnet_test_id;
+
+    fn create_cycles_account_manager(reference_subnet_size: u128) -> CyclesAccountManager {
+        let mut config = CyclesAccountManagerConfig::application_subnet();
+        config.reference_subnet_size = reference_subnet_size;
+
+        CyclesAccountManager {
+            max_num_instructions: NumInstructions::from(1_000_000_000),
+            own_subnet_type: SubnetType::Application,
+            own_subnet_id: subnet_test_id(0),
+            config,
+            use_cost_scaling_flag: true,
+        }
+    }
+
+    #[test]
+    fn test_scale_cost() {
+        let reference_subnet_size = 13;
+        let cam = create_cycles_account_manager(reference_subnet_size);
+
+        let cost = Cycles::new(13_000);
+        assert_eq!(cam.scale_cost(cost, 0), Cycles::new(0));
+        assert_eq!(cam.scale_cost(cost, 1), Cycles::new(1_000));
+        assert_eq!(cam.scale_cost(cost, 6), Cycles::new(6_000));
+        assert_eq!(cam.scale_cost(cost, 13), Cycles::new(13_000));
+        assert_eq!(cam.scale_cost(cost, 26), Cycles::new(26_000));
+    }
 }
