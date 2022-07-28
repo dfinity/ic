@@ -446,6 +446,16 @@ impl HasTopologySnapshot for TestEnv {
     }
 }
 
+pub trait HasRegistryLocalStore {
+    fn registry_local_store_path(&self, name: &str) -> Option<PathBuf>;
+}
+
+impl HasRegistryLocalStore for TestEnv {
+    fn registry_local_store_path(&self, name: &str) -> Option<PathBuf> {
+        self.prep_dir(name).map(|d| d.registry_local_store_path())
+    }
+}
+
 /// Construct `IcHandle` for backwards compatibility with the older test API.
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;

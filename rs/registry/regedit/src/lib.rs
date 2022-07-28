@@ -9,12 +9,13 @@ mod source;
 mod tests;
 
 use anyhow::Result;
-use args::{Command, RegistrySpec, SourceSpec, VersionSpec};
+use args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;
+use std::path::PathBuf;
 
 fn registry_spec_to_snapshot(registry_spec: RegistrySpec) -> Result<Snapshot> {
     let cl = source::get_changelog(registry_spec.source)?;
@@ -68,4 +69,14 @@ pub fn execute_command(cmd: Command) -> Result<Value> {
         }
     };
     Ok(res)
+}
+
+pub fn load_registry_local_store(local_store_path: PathBuf) -> Result<Value> {
+    execute_command(args::Command::Snapshot {
+        registry_spec: args::RegistrySpec {
+            version: None.into(),
+            source: SourceSpec::LocalStore(local_store_path),
+        },
+        projection: universal_projection(),
+    })
 }

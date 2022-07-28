@@ -15,6 +15,12 @@ IC_REGEDIT_SNAPSHOT = GLOBINFRA_DIR.joinpath("reg-snap.json")
 IC_REGEDIT_SNAPSHOT_REPRO = GLOBINFRA_DIR.joinpath("reg-snap-repro.yaml")
 
 
+def cleanup():
+    FIRST_GLOBINFRA_FILE.unlink(missing_ok=True)
+    SECOND_GLOBINFRA_FILE.unlink(missing_ok=True)
+    IC_REGEDIT_SNAPSHOT_REPRO.unlink(missing_ok=True)
+
+
 def load_global_infra_yaml(fin: Path):
     return GlobalInfra.fromYamlFile(input_file=fin)
 
@@ -95,3 +101,5 @@ assert_subset(nodes_from_memberships, nodes_from_node_records)
 assert_subset(set(ginfra_4.original_subnet_membership.keys()), ginfra_4.host_addr_to_node_id_map.values())
 
 print("Global Infra from ic-regedit test passed.")
+
+cleanup()
