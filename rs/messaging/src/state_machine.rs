@@ -1,9 +1,10 @@
 use crate::message_routing::MessageRoutingMetrics;
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{fatal, warn, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
@@ -16,6 +17,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
+const PHASE_REMOVE_CANISTERS: &str = "remove_canisters_not_in_rt";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -60,6 +62,62 @@ impl StateMachineImpl {
             .with_label_values(&[phase])
             .observe(timer.elapsed());
     }
+
+    /// Removes stopped canisters that are missing from the routing table.
+    fn remove_canisters_not_in_routing_table(&self, state: &mut ReplicatedState) {
+        let _timer = self
+            .metrics
+            .process_batch_phase_duration
+            .with_label_values(&[PHASE_REMOVE_CANISTERS])
+            .start_timer();
+
+        let own_subnet_id = state.metadata.own_subnet_id;
+
+        let ids_to_remove =
+            ic_replicated_state::routing::find_canisters_to_remove(&self.log, state, own_subnet_id);
+
+        if ids_to_remove.is_empty() {
+            return;
+        }
+
+        for canister_id in ids_to_remove.iter() {
+            use ic_state_layout::{CheckpointLayout, RwPolicy};
+
+            if let Some(canister_state) = state.canister_state(canister_id) {
+                if canister_state.status() != CanisterStatusType::Stopped {
+                    warn!(
+                        self.log,
+                        "Skipped removing canister {} in state {} that is not in the routing table",
+                        canister_id,
+                        canister_state.status()
+                    );
+                    continue;
+                }
+            }
+
+            warn!(
+                self.log,
+                "Removing canister {} that is not in the routing table", canister_id
+            );
+
+            let state_layout = CheckpointLayout::<RwPolicy>::new(
+                state.path().to_path_buf(),
+                ic_types::Height::from(0),
+            )
+            .and_then(|layout| layout.canister(canister_id))
+            .expect("failed to obtain canister layout");
+
+            state_layout.mark_deleted().unwrap_or_else(|e| {
+                fatal!(
+                    self.log,
+                    "Failed to mark canister {} as deleted: {}",
+                    canister_id,
+                    e
+                )
+            });
+            state.canister_states.remove(canister_id);
+        }
+    }
 }
 
 impl StateMachine for StateMachineImpl {
@@ -78,6 +136,8 @@ impl StateMachine for StateMachineImpl {
         metadata.network_topology = network_topology;
         metadata.own_subnet_features = subnet_features;
         state.set_system_metadata(metadata);
+
+        self.remove_canisters_not_in_routing_table(&mut state);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let mut state_with_messages = self.demux.process_payload(state, batch.payload);

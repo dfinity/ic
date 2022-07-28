@@ -25,6 +25,7 @@ use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
+    routing_table::v1::CanisterMigrations as PbCanisterMigrations,
     routing_table::v1::RoutingTable as PbRoutingTable,
 };
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
@@ -32,7 +33,8 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::subnet::SubnetListRegistry;
 use ic_registry_keys::{
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_provisional_whitelist_record_key,
+    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1018,6 +1020,93 @@ impl StateMachine {
                 &make_routing_table_record_key(),
                 next_version,
                 Some(PbRoutingTable::from(routing_table)),
+            )
+            .unwrap();
+        self.registry_client.update_to_latest_version();
+
+        assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    /// Returns the subnet id of this state machine.
+    pub fn get_subnet_id(&self) -> SubnetId {
+        self.subnet_id
+    }
+
+    /// Marks canisters in the specified range as being migrated to another subnet.
+    pub fn prepare_canister_migrations(
+        &self,
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+        source: SubnetId,
+        destination: SubnetId,
+    ) {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        let mut canister_migrations = self
+            .registry_client
+            .get_canister_migrations(last_version)
+            .expect("malformed canister migrations")
+            .unwrap_or_default();
+
+        canister_migrations
+            .insert_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *canister_range.start(),
+                    end: *canister_range.end(),
+                }])
+                .unwrap(),
+                source,
+                destination,
+            )
+            .expect("ranges are not well formed");
+
+        self.registry_data_provider
+            .add(
+                &make_canister_migrations_record_key(),
+                next_version,
+                Some(PbCanisterMigrations::from(canister_migrations)),
+            )
+            .unwrap();
+        self.registry_client.update_to_latest_version();
+
+        assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    /// Marks canisters in the specified range as successfully migrated to another subnet.
+    pub fn complete_canister_migrations(
+        &self,
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+        migration_trace: Vec<SubnetId>,
+    ) {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        let mut canister_migrations = self
+            .registry_client
+            .get_canister_migrations(last_version)
+            .expect("malformed canister migrations")
+            .unwrap_or_default();
+
+        canister_migrations
+            .remove_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *canister_range.start(),
+                    end: *canister_range.end(),
+                }])
+                .unwrap(),
+                migration_trace,
+            )
+            .expect("ranges are not well formed");
+
+        self.registry_data_provider
+            .add(
+                &make_canister_migrations_record_key(),
+                next_version,
+                Some(PbCanisterMigrations::from(canister_migrations)),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();
