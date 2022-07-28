@@ -37,13 +37,13 @@ if .@timestamp == 0 {
 }
 
 for_each([
-  "ic_subnet_id",
-  "ic_node_id",
-  "ic_canister_id",
+    "ic_subnet_id",
+    "ic_node_id",
+    "ic_canister_id",
 ]) -> |_, k| {
-  if get!(., [k]) == "" {
-    . = set!(., [k], "N/A")
-  }
+    if get!(., [k]) == "" {
+        . = set!(., [k], "N/A")
+    }
 }
 """
 
@@ -55,7 +55,6 @@ inputs = ["nginx_access_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
-tls.enabled = true
 tls.verify_certificate = false
 
 # nginx access (metrics)
@@ -129,7 +128,6 @@ inputs = ["nginx_error_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-nginx-error-%Y.%m.%d"
-tls.enabled = true
 tls.verify_certificate = false
 
 # nginx error (metrics)
@@ -177,5 +175,4 @@ inputs = ["prober_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-prober-%Y.%m.%d"
-tls.enabled = true
 tls.verify_certificate = false
