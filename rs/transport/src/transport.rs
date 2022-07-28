@@ -183,10 +183,11 @@ impl Transport for TransportImpl {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
-        let flow_state = match peer_state.flow_map.get(&flow_tag) {
+        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
             Some(flow_state) => flow_state,
             None => return Err(TransportErrorCode::FlowNotFound),
         };
+        let flow_state = flow_state_mu.blocking_read();
         match flow_state.send_queue.enqueue(message) {
             Some(unsent) => Err(TransportErrorCode::TransportBusy(unsent)),
             None => Ok(()),
@@ -202,7 +203,7 @@ impl Transport for TransportImpl {
             .flow_map
             .iter_mut()
             .for_each(|(_flow_id, flow_state)| {
-                flow_state.send_queue.clear();
+                flow_state.blocking_write().send_queue.clear();
             });
     }
 }
