@@ -142,6 +142,7 @@ class Es:
             if not self._is_index_relevant(index, dates):
                 continue
 
+            response = None
             try:
                 response = self.es.count(index=index, body=body)
             except exceptions.TransportError as e:
@@ -157,6 +158,7 @@ class Es:
                     text=msg,
                     short_text="ES COUNT query failed for a MAINNET index",
                 )
+            assert response, f"Elasticsearch index {index} is not available from endpoint {self.es_url}"
             size = int(response["count"])
             if size > 0:
                 eprint(f"Found MAINNET index {index} with {size} documents")

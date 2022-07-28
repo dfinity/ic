@@ -4,11 +4,14 @@ use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::driver_setup::IcSetup;
 use crate::driver::farm::Farm;
+use crate::driver::test_env_api::HasRegistryLocalStore;
 use crate::driver::test_setup::PotSetup;
 use anyhow::Result;
 use ic_fondue::ic_instance::node_software_version::NodeSoftwareVersion;
 use ic_prep_lib::node::NodeSecretKeyStore;
+use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_regedit;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::build_default_gossip_config;
@@ -146,7 +149,6 @@ impl InternetComputer {
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
-
         let logger = env.logger();
         let ic_setup = IcSetup::read_attribute(env);
         let pot_setup = PotSetup::read_attribute(env);
@@ -156,6 +158,21 @@ impl InternetComputer {
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(self, env, &logger)?;
+
+        // save initial registry snapshot for this pot
+        let local_store_path = env
+            .registry_local_store_path(&self.name)
+            .expect("corrupted ic-prep directory structure");
+        let reg_snapshot = ic_regedit::load_registry_local_store(local_store_path)?;
+        let reg_snapshot_serialized =
+            serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
+        IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
+        std::fs::write(
+            &init_ic.target_dir.join("initial_registry_snapshot.json"),
+            reg_snapshot_serialized,
+        )
+        .unwrap();
+
         setup_and_start_vms(&init_ic, &self.name, env, &farm, &group_name)?;
         Ok(())
     }

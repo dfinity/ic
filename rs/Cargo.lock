@@ -13201,6 +13201,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-recovery",
+ "ic-regedit",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",

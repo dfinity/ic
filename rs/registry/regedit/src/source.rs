@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub type Changelog = (Vec<RegistryTransportRecord>, RegistryVersion);
 
 pub fn get_changelog(source_spec: SourceSpec) -> Result<Changelog> {
-    let data_provider = source_to_dataprovider(tokio::runtime::Handle::current(), source_spec);
+    let data_provider = source_to_dataprovider(source_spec);
 
     let mut version = ZERO_REGISTRY_VERSION;
     let mut records = vec![];
@@ -31,12 +31,11 @@ pub fn get_changelog(source_spec: SourceSpec) -> Result<Changelog> {
     Ok((records, version))
 }
 
-fn source_to_dataprovider(
-    rt_handle: tokio::runtime::Handle,
-    source_spec: SourceSpec,
-) -> Arc<dyn RegistryDataProvider> {
+fn source_to_dataprovider(source_spec: SourceSpec) -> Arc<dyn RegistryDataProvider> {
     match source_spec {
         SourceSpec::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)) as Arc<_>,
-        SourceSpec::Canister(url, nns_pk) => create_nns_data_provider(rt_handle, vec![url], nns_pk),
+        SourceSpec::Canister(url, nns_pk) => {
+            create_nns_data_provider(tokio::runtime::Handle::current(), vec![url], nns_pk)
+        }
     }
 }
