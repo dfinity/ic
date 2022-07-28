@@ -531,6 +531,9 @@ if __name__ == "__main__":
     if is_local_run and not in_nix_shell:
         exit_with_log("This script must be run from the nix-shell.")
     runner_args = sys.argv[1:]
+    # on CI, we don't want to polute the job log with all the noisy test logs
+    if not is_local_run:
+        runner_args.append("--no-propagate-test-logs")
     logging.debug(f"Input arguments are: {runner_args}")
     if any([i in runner_args for i in ["-h", "--help"]]):
         run_help_command(SHELL_WRAPPER_DEFAULT)
