@@ -5,6 +5,7 @@ After=setup-icx-proxy.service
 [Service]
 User=root
 Group=root
+LimitNOFILE=524288
 WorkingDirectory=/etc/nginx/ic
 EnvironmentFile=/etc/default/icx-proxy
 ExecStart=/usr/bin/icx-proxy $OPTIONS
