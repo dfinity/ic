@@ -14,7 +14,9 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
-    wasm_executor::{SliceExecutionOutput, WasmExecutionResult, WasmExecutor},
+    wasm_executor::{
+        CanisterStateChanges, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
@@ -707,13 +709,10 @@ impl WasmExecutor for TestWasmExecutor {
     fn execute(
         self: Arc<Self>,
         input: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    ) {
+        execution_state: &ExecutionState,
+    ) -> (Option<CompilationResult>, WasmExecutionResult) {
         let mut guard = self.core.lock().unwrap();
-        guard.execute(input)
+        guard.execute(input, execution_state)
     }
 
     fn create_execution_state(
@@ -767,11 +766,8 @@ impl TestWasmExecutorCore {
     fn execute(
         &mut self,
         input: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    ) {
+        execution_state: &ExecutionState,
+    ) -> (Option<CompilationResult>, WasmExecutionResult) {
         let thread_id = thread::current().id();
         let canister_id = input.sandbox_safe_system_state.canister_id();
         let (_message_id, message, call_context_id) = self.take_message(&input);
@@ -792,14 +788,9 @@ impl TestWasmExecutorCore {
                     dirty_pages: 0,
                 },
             };
-            let system_state_changes = SystemStateChanges::default();
             self.schedule
                 .push((thread_id, self.round, canister_id, instruction_limit));
-            return (
-                None,
-                input.execution_state,
-                WasmExecutionResult::Finished(slice, output, system_state_changes),
-            );
+            return (None, WasmExecutionResult::Finished(slice, output, None));
         }
         let instructions_left = instruction_limit - message.instructions;
 
@@ -811,6 +802,13 @@ impl TestWasmExecutorCore {
             input.canister_current_memory_usage,
             input.execution_parameters.compute_allocation,
         );
+
+        let canister_state_changes = CanisterStateChanges {
+            globals: execution_state.exported_globals.clone(),
+            wasm_memory: execution_state.wasm_memory.clone(),
+            stable_memory: execution_state.stable_memory.clone(),
+            system_state_changes,
+        };
 
         let instance_stats = InstanceStats {
             accessed_pages: message.dirty_pages,
@@ -830,8 +828,7 @@ impl TestWasmExecutorCore {
             .push((thread_id, self.round, canister_id, message.instructions));
         (
             None,
-            input.execution_state,
-            WasmExecutionResult::Finished(slice, output, system_state_changes),
+            WasmExecutionResult::Finished(slice, output, Some(canister_state_changes)),
         )
     }
 

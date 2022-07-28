@@ -7,8 +7,8 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
-    WasmExecutor,
+    get_wasm_reserved_pages, CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput,
+    WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
 use ic_interfaces::execution_environment::{
@@ -21,7 +21,6 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
@@ -398,10 +397,7 @@ impl std::fmt::Debug for PausedSandboxExecution {
 }
 
 impl PausedWasmExecution for PausedSandboxExecution {
-    fn resume(
-        self: Box<Self>,
-        execution_state: ExecutionState,
-    ) -> (ExecutionState, WasmExecutionResult) {
+    fn resume(self: Box<Self>, execution_state: &ExecutionState) -> WasmExecutionResult {
         // Create channel through which we will receive the execution
         // output from closure (running by IPC thread at end of
         // execution).
@@ -476,14 +472,10 @@ impl WasmExecutor for SandboxedExecutionController {
             execution_parameters,
             subnet_available_memory,
             func_ref,
-            execution_state,
             compilation_cache,
         }: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    ) {
+        execution_state: &ExecutionState,
+    ) -> (Option<CompilationResult>, WasmExecutionResult) {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
         let slice_instruction_limit = execution_parameters.instruction_limits.slice();
         let api_type_label = api_type.as_str();
@@ -512,7 +504,6 @@ impl WasmExecutor for SandboxedExecutionController {
             Err(err) => {
                 return (
                     None,
-                    execution_state,
                     WasmExecutionResult::Finished(
                         // TODO(RUN-269): The `num_instructions_left` should be set to
                         // the limit, not zero here.
@@ -529,7 +520,7 @@ impl WasmExecutor for SandboxedExecutionController {
                                 dirty_pages: 0,
                             },
                         },
-                        SystemStateChanges::default(),
+                        None,
                     ),
                 );
             }
@@ -587,7 +578,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     next_wasm_memory_id,
                     next_stable_memory_id,
                     sandox_safe_system_state: sandbox_safe_system_state,
-                    wasm_reserved_pages: get_wasm_reserved_pages(&execution_state),
+                    wasm_reserved_pages: get_wasm_reserved_pages(execution_state),
                 },
             })
             .on_completion(|_| {});
@@ -606,7 +597,7 @@ impl WasmExecutor for SandboxedExecutionController {
             .sandboxed_execution_replica_execute_finish_duration
             .with_label_values(&[api_type_label])
             .start_timer();
-        let (execution_state, execution_result) = Self::process_completion(
+        let execution_result = Self::process_completion(
             self,
             exec_id,
             canister_id,
@@ -618,7 +609,7 @@ impl WasmExecutor for SandboxedExecutionController {
             api_type_label,
             sandbox_process,
         );
-        (compilation_result, execution_state, execution_result)
+        (compilation_result, execution_result)
     }
 
     fn create_execution_state(
@@ -952,14 +943,14 @@ impl SandboxedExecutionController {
         self: Arc<Self>,
         exec_id: ExecId,
         canister_id: CanisterId,
-        mut execution_state: ExecutionState,
+        execution_state: &ExecutionState,
         result: CompletionResult,
         next_wasm_memory_id: MemoryId,
         next_stable_memory_id: MemoryId,
         message_instruction_limit: NumInstructions,
         api_type_label: &'static str,
         sandbox_process: Arc<SandboxProcess>,
-    ) -> (ExecutionState, WasmExecutionResult) {
+    ) -> WasmExecutionResult {
         let mut exec_output = match result {
             CompletionResult::Paused(slice) => {
                 let paused = Box::new(PausedSandboxExecution {
@@ -972,7 +963,7 @@ impl SandboxedExecutionController {
                     api_type_label,
                     controller: self,
                 });
-                return (execution_state, WasmExecutionResult::Paused(slice, paused));
+                return WasmExecutionResult::Paused(slice, paused);
             }
             CompletionResult::Finished(exec_output) => exec_output,
         };
@@ -983,9 +974,9 @@ impl SandboxedExecutionController {
             error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
         }
 
-        let system_state_changes = self.update_execution_state(
+        let canister_state_changes = self.update_execution_state(
             &mut exec_output,
-            &mut execution_state,
+            execution_state,
             next_wasm_memory_id,
             next_stable_memory_id,
             canister_id,
@@ -1001,14 +992,7 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
 
-        (
-            execution_state,
-            WasmExecutionResult::Finished(
-                exec_output.slice,
-                exec_output.wasm,
-                system_state_changes,
-            ),
-        )
+        WasmExecutionResult::Finished(exec_output.slice, exec_output.wasm, canister_state_changes)
     }
 
     // Unless execution trapped, commit state (applying execution state
@@ -1017,34 +1001,32 @@ impl SandboxedExecutionController {
     fn update_execution_state(
         &self,
         exec_output: &mut SandboxExecOutput,
-        execution_state: &mut ExecutionState,
+        execution_state: &ExecutionState,
         next_wasm_memory_id: MemoryId,
         next_stable_memory_id: MemoryId,
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
-    ) -> SystemStateChanges {
+    ) -> Option<CanisterStateChanges> {
         // If the execution has failed, then we don't apply any changes.
         if exec_output.wasm.wasm_result.is_err() {
-            return SystemStateChanges::default();
+            return None;
         }
         match exec_output.state.take() {
-            None => {
-                // Nothing to apply.
-                SystemStateChanges::default()
-            }
+            None => None,
             Some(state_modifications) => {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
-                execution_state
-                    .wasm_memory
+                let mut wasm_memory = execution_state.wasm_memory.clone();
+                wasm_memory
                     .page_map
                     .deserialize_delta(state_modifications.wasm_memory.page_delta);
-                execution_state.wasm_memory.size = state_modifications.wasm_memory.size;
-                execution_state.wasm_memory.sandbox_memory = SandboxMemory::synced(
-                    wrap_remote_memory(&sandbox_process, next_wasm_memory_id),
-                );
-                if let Err(err) = execution_state.wasm_memory.verify_size() {
+                wasm_memory.size = state_modifications.wasm_memory.size;
+                wasm_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
+                    &sandbox_process,
+                    next_wasm_memory_id,
+                ));
+                if let Err(err) = wasm_memory.verify_size() {
                     error!(
                         self.logger,
                         "{}: Canister {} has invalid wasm memory size: {}",
@@ -1056,15 +1038,16 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-                execution_state
-                    .stable_memory
+                let mut stable_memory = execution_state.stable_memory.clone();
+                stable_memory
                     .page_map
                     .deserialize_delta(state_modifications.stable_memory.page_delta);
-                execution_state.stable_memory.size = state_modifications.stable_memory.size;
-                execution_state.stable_memory.sandbox_memory = SandboxMemory::synced(
-                    wrap_remote_memory(&sandbox_process, next_stable_memory_id),
-                );
-                if let Err(err) = execution_state.stable_memory.verify_size() {
+                stable_memory.size = state_modifications.stable_memory.size;
+                stable_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
+                    &sandbox_process,
+                    next_stable_memory_id,
+                ));
+                if let Err(err) = stable_memory.verify_size() {
                     error!(
                         self.logger,
                         "{}: Canister {} has invalid stable memory size: {}",
@@ -1076,8 +1059,12 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-                execution_state.exported_globals = state_modifications.globals;
-                state_modifications.system_state_changes
+                Some(CanisterStateChanges {
+                    globals: state_modifications.globals,
+                    wasm_memory,
+                    stable_memory,
+                    system_state_changes: state_modifications.system_state_changes,
+                })
             }
         }
     }

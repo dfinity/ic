@@ -27,7 +27,7 @@ use ic_types::{
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::methods::{FuncRef, WasmMethod};
 
-use super::common::update_round_limits;
+use super::common::{apply_canister_state_changes, update_round_limits};
 
 fn early_error_to_result(
     user_error: UserError,
@@ -185,17 +185,16 @@ fn execute_update_method(
         call_context_id,
     );
 
-    let (output_execution_state, result) = round.hypervisor.execute_dts(
+    let result = round.hypervisor.execute_dts(
         api_type,
+        canister.execution_state.as_ref().unwrap(),
         &canister.system_state,
         memory_usage,
         execution_parameters.clone(),
         FuncRef::Method(method),
-        canister.execution_state.take().unwrap(),
         round_limits,
         round.network_topology,
     );
-    canister.execution_state = Some(output_execution_state);
     let original = OriginalContext {
         call_context_id,
         call_origin,
@@ -225,23 +224,20 @@ fn process_update_result(
                 paused_execution,
             }
         }
-        WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, mut output, canister_state_changes) => {
             update_round_limits(round_limits, &slice);
+            apply_canister_state_changes(
+                canister_state_changes,
+                canister.execution_state.as_mut().unwrap(),
+                &mut canister.system_state,
+                &mut output,
+                round_limits,
+                round.time,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
             let heap_delta = if output.wasm_result.is_ok() {
-                // TODO(RUN-265): Replace `unwrap` with a proper execution error
-                // here because subnet available memory may have changed since
-                // the start of execution.
-                round_limits
-                    .subnet_available_memory
-                    .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                    .unwrap();
-                system_state_changes.apply_changes(
-                    round.time,
-                    &mut canister.system_state,
-                    round.network_topology,
-                    round.hypervisor.subnet_id(),
-                    round.log,
-                );
                 NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
             } else {
                 NumBytes::from(0)
@@ -294,13 +290,12 @@ struct PausedCallExecution {
 impl PausedExecution for PausedCallExecution {
     fn resume(
         self: Box<Self>,
-        mut canister: CanisterState,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
-        let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
-        canister.execution_state = Some(execution_state);
+        let execution_state = canister.execution_state.as_ref().unwrap();
+        let result = self.paused_wasm_execution.resume(execution_state);
         process_update_result(canister, result, self.original, round, round_limits)
     }
 

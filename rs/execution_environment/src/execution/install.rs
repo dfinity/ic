@@ -2,16 +2,15 @@
 // `install`/`reinstall` is executed.
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 use crate::canister_manager::{canister_layout, CanisterManagerError, InstallCodeContext};
-use crate::execution::common::update_round_limits;
+use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCodeRoutine};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
-use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{MemoryAllocation, NumInstructions, Time};
@@ -129,7 +128,7 @@ pub(crate) fn execute_install(
     let canister_id = new_canister.canister_id();
 
     // The execution state is present because we just put it there.
-    let execution_state = new_canister.execution_state.take().unwrap();
+    let execution_state = new_canister.execution_state.as_ref().unwrap();
 
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
@@ -142,7 +141,6 @@ pub(crate) fn execute_install(
             execution_parameters.instruction_limits.message() - instructions_left,
             instructions_left
         );
-        new_canister.execution_state = Some(execution_state);
         install_stage_2b_continue_install_after_start(
             context.sender,
             context.arg,
@@ -155,22 +153,22 @@ pub(crate) fn execute_install(
             round_limits,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
+        let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(),
+            execution_state,
             &SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
-            execution_state,
             round_limits,
             round.network_topology,
         );
-        new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 install_stage_2a_process_start_result(
+                    canister_state_changes,
                     output,
                     context.sender,
                     context.arg,
@@ -201,16 +199,28 @@ pub(crate) fn execute_install(
 
 #[allow(clippy::too_many_arguments)]
 fn install_stage_2a_process_start_result(
-    output: WasmExecutionOutput,
+    canister_state_changes: Option<CanisterStateChanges>,
+    mut output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
-    new_canister: CanisterState,
+    mut new_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> InstallCodeRoutineResult {
+    apply_canister_state_changes(
+        canister_state_changes,
+        new_canister.execution_state.as_mut().unwrap(),
+        &mut new_canister.system_state,
+        &mut output,
+        round_limits,
+        time,
+        round.network_topology,
+        round.hypervisor.subnet_id(),
+        round.log,
+    );
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -218,13 +228,6 @@ fn install_stage_2a_process_start_result(
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
-            // TODO(RUN-265): Replace `unwrap` with a proper execution error
-            // here because subnet available memory may have changed since
-            // the start of execution.
-            round_limits
-                .subnet_available_memory
-                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                .unwrap();
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
         }
@@ -253,7 +256,7 @@ fn install_stage_2a_process_start_result(
 fn install_stage_2b_continue_install_after_start(
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
-    mut new_canister: CanisterState,
+    new_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
@@ -299,24 +302,23 @@ fn install_stage_2b_continue_install_after_start(
     }
 
     let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
-    let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
+    let wasm_execution_result = round.hypervisor.execute_dts(
         ApiType::init(time, context_arg, context_sender),
+        new_canister.execution_state.as_ref().unwrap(),
         &new_canister.system_state,
         memory_usage,
         execution_parameters.clone(),
         FuncRef::Method(method),
-        new_canister.execution_state.unwrap(),
         round_limits,
         round.network_topology,
     );
-    new_canister.execution_state = Some(output_execution_state);
     match wasm_execution_result {
-        WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
             update_round_limits(round_limits, &slice);
             install_stage_3_process_init_result(
+                canister_state_changes,
                 new_canister,
                 output,
-                system_state_changes,
                 execution_parameters,
                 total_heap_delta,
                 round,
@@ -338,9 +340,9 @@ fn install_stage_2b_continue_install_after_start(
 
 #[allow(clippy::too_many_arguments)]
 fn install_stage_3_process_init_result(
+    canister_state_changes: Option<CanisterStateChanges>,
     mut new_canister: CanisterState,
-    output: WasmExecutionOutput,
-    system_state_changes: SystemStateChanges,
+    mut output: WasmExecutionOutput,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
@@ -355,25 +357,22 @@ fn install_stage_3_process_init_result(
         output.num_instructions_left
     );
 
+    apply_canister_state_changes(
+        canister_state_changes,
+        new_canister.execution_state.as_mut().unwrap(),
+        &mut new_canister.system_state,
+        &mut output,
+        round_limits,
+        round.time,
+        round.network_topology,
+        round.hypervisor.subnet_id(),
+        round.log,
+    );
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
-            // TODO(RUN-265): Replace `unwrap` with a proper execution error
-            // here because subnet available memory may have changed since
-            // the start of execution.
-            round_limits
-                .subnet_available_memory
-                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                .unwrap();
-            system_state_changes.apply_changes(
-                round.time,
-                &mut new_canister.system_state,
-                round.network_topology,
-                round.hypervisor.subnet_id(),
-                round.log,
-            );
 
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
@@ -406,18 +405,15 @@ impl PausedInstallCodeRoutine for PausedInitExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> InstallCodeRoutineResult {
-        let mut new_canister = self.new_canister;
-        let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) =
-            self.paused_wasm_execution.resume(execution_state);
-        new_canister.execution_state = Some(execution_state);
+        let execution_state = self.new_canister.execution_state.as_ref().unwrap();
+        let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 install_stage_3_process_init_result(
-                    new_canister,
+                    canister_state_changes,
+                    self.new_canister,
                     output,
-                    system_state_changes,
                     self.execution_parameters,
                     self.total_heap_delta,
                     round,
@@ -427,7 +423,6 @@ impl PausedInstallCodeRoutine for PausedInitExecution {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
-                    new_canister,
                     paused_wasm_execution,
                     ..*self
                 });
@@ -460,19 +455,17 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> InstallCodeRoutineResult {
-        let mut new_canister = self.new_canister;
-        let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) =
-            self.paused_wasm_execution.resume(execution_state);
-        new_canister.execution_state = Some(execution_state);
+        let execution_state = self.new_canister.execution_state.as_ref().unwrap();
+        let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 install_stage_2a_process_start_result(
+                    canister_state_changes,
                     output,
                     self.context_sender,
                     self.context_arg,
-                    new_canister,
+                    self.new_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
                     self.time,
@@ -483,7 +476,6 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
-                    new_canister,
                     paused_wasm_execution,
                     ..*self
                 });

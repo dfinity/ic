@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 pub use compilation_cache::CompilationCache;
 use ic_interfaces::execution_environment::AvailableMemory;
-use ic_replicated_state::{ExecutionState, Global, NumWasmPages, PageIndex};
+use ic_replicated_state::{Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
@@ -26,7 +26,6 @@ pub struct WasmExecutionInput {
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: AvailableMemory,
     pub func_ref: FuncRef,
-    pub execution_state: ExecutionState,
     pub compilation_cache: Arc<CompilationCache>,
 }
 

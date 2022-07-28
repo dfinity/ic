@@ -46,11 +46,8 @@ pub trait WasmExecutor: Send + Sync {
     fn execute(
         self: Arc<Self>,
         input: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    );
+        execution_state: &ExecutionState,
+    ) -> (Option<CompilationResult>, WasmExecutionResult);
 
     fn create_execution_state(
         &self,
@@ -123,18 +120,27 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
     /// Resumes the paused execution.
     /// It takes the execution state before this execution has started and
     /// the current subnet available memory.
-    /// If the execution finishes, then it returns the new execution state and
-    /// the result of the execution.
-    /// Otherwise, it returns the original execution state and an opaque object
-    /// representing the paused exectiuon.
-    fn resume(
-        self: Box<Self>,
-        execution_state: ExecutionState,
-    ) -> (ExecutionState, WasmExecutionResult);
+    /// If the execution finishes, then returns the result and the state changes
+    /// of the execution.
+    /// Otherwise, returns an opaque object representing the paused execution.
+    fn resume(self: Box<Self>, execution_state: &ExecutionState) -> WasmExecutionResult;
 
     /// Aborts the paused execution.
-    /// TODO(RUN-75): Add parameters and the return type.
     fn abort(self: Box<Self>);
+}
+
+/// Changes in the canister state after a successul Wasm execution.
+pub struct CanisterStateChanges {
+    /// The state of the global variables after execution.
+    pub globals: Vec<Global>,
+
+    /// The state of the Wasm memory after execution.
+    pub wasm_memory: Memory,
+
+    /// The state of the stable memory after execution.
+    pub stable_memory: Memory,
+
+    pub system_state_changes: SystemStateChanges,
 }
 
 /// The result of WebAssembly execution with deterministic time slicing.
@@ -146,7 +152,7 @@ pub enum WasmExecutionResult {
     Finished(
         SliceExecutionOutput,
         WasmExecutionOutput,
-        SystemStateChanges,
+        Option<CanisterStateChanges>,
     ),
     Paused(SliceExecutionOutput, Box<dyn PausedWasmExecution>),
 }
@@ -171,14 +177,10 @@ impl WasmExecutor for WasmExecutorImpl {
             execution_parameters,
             subnet_available_memory,
             func_ref,
-            mut execution_state,
             compilation_cache,
         }: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    ) {
+        execution_state: &ExecutionState,
+    ) -> (Option<CompilationResult>, WasmExecutionResult) {
         // This function is called when canister sandboxing is disabled.
         // Since deterministic time slicing works only with sandboxing,
         // it must also be disabled and the execution limits must match.
@@ -199,7 +201,6 @@ impl WasmExecutor for WasmExecutorImpl {
                 // the limit, not zero here.
                 return (
                     None,
-                    execution_state,
                     WasmExecutionResult::Finished(
                         SliceExecutionOutput {
                             executed_instructions: execution_parameters.instruction_limits.slice(),
@@ -214,13 +215,15 @@ impl WasmExecutor for WasmExecutorImpl {
                                 dirty_pages: 0,
                             },
                         },
-                        sandbox_safe_system_state.changes(),
+                        None,
                     ),
                 );
             }
         };
 
-        let wasm_reserved_pages = get_wasm_reserved_pages(&execution_state);
+        let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
+        let mut wasm_memory = execution_state.wasm_memory.clone();
+        let mut stable_memory = execution_state.stable_memory.clone();
 
         let (
             slice_execution_output,
@@ -236,8 +239,8 @@ impl WasmExecutor for WasmExecutorImpl {
             sandbox_safe_system_state,
             &embedder_cache,
             &self.wasm_embedder,
-            &mut execution_state.wasm_memory,
-            &mut execution_state.stable_memory,
+            &mut wasm_memory,
+            &mut stable_memory,
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
@@ -249,23 +252,29 @@ impl WasmExecutor for WasmExecutorImpl {
             self.emit_state_hashes_for_debugging(&wasm_state_changes, &wasm_execution_output);
         }
 
-        if let Some(wasm_state_changes) = wasm_state_changes {
-            execution_state.exported_globals = wasm_state_changes.globals;
-        }
-
-        let system_api = match instance_or_system_api {
-            Ok(instance) => instance.into_store_data().system_api,
-            Err(system_api) => system_api,
+        let canister_state_changes = match wasm_state_changes {
+            Some(wasm_state_changes) => {
+                let system_api = match instance_or_system_api {
+                    Ok(instance) => instance.into_store_data().system_api,
+                    Err(system_api) => system_api,
+                };
+                let system_state_changes = system_api.into_system_state_changes();
+                Some(CanisterStateChanges {
+                    globals: wasm_state_changes.globals,
+                    wasm_memory,
+                    stable_memory,
+                    system_state_changes,
+                })
+            }
+            None => None,
         };
-        let system_state_changes = system_api.into_system_state_changes();
 
         (
             compilation_result,
-            execution_state,
             WasmExecutionResult::Finished(
                 slice_execution_output,
                 wasm_execution_output,
-                system_state_changes,
+                canister_state_changes,
             ),
         )
     }

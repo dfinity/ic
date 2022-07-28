@@ -3,16 +3,15 @@
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 // and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 use crate::canister_manager::{canister_layout, CanisterManagerError, InstallCodeContext};
-use crate::execution::common::update_round_limits;
+use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCodeRoutine};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
-use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, Memory, SystemState};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{MemoryAllocation, NumInstructions, Time};
@@ -76,7 +75,7 @@ pub(crate) fn execute_upgrade(
     compilation_cost_handling: CompilationCostHandling,
 ) -> InstallCodeRoutineResult {
     let canister_id = context.canister_id;
-    let mut new_canister = old_canister.clone();
+    let new_canister = old_canister.clone();
     let total_heap_delta = NumBytes::from(0);
 
     // Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
@@ -85,7 +84,7 @@ pub(crate) fn execute_upgrade(
     let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
 
     // Validate that the Wasm module is present.
-    let execution_state = match new_canister.execution_state.take() {
+    let execution_state = match new_canister.execution_state.as_ref() {
         None => {
             return InstallCodeRoutineResult::Finished {
                 instructions_left: execution_parameters.instruction_limits.message(),
@@ -98,7 +97,6 @@ pub(crate) fn execute_upgrade(
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
-        new_canister.execution_state = Some(execution_state);
         let instructions_left = execution_parameters.instruction_limits.message();
         upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             context,
@@ -113,24 +111,23 @@ pub(crate) fn execute_upgrade(
             compilation_cost_handling,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
+        let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::pre_upgrade(time, context.sender),
+            execution_state,
             &new_canister.system_state,
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
-            execution_state,
             round_limits,
             round.network_topology,
         );
-        new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_1_process_pre_upgrade_result(
+                    canister_state_changes,
                     output,
-                    system_state_changes,
                     context,
                     new_canister,
                     canister_layout_path,
@@ -162,8 +159,8 @@ pub(crate) fn execute_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_1_process_pre_upgrade_result(
-    output: WasmExecutionOutput,
-    system_state_changes: SystemStateChanges,
+    canister_state_changes: Option<CanisterStateChanges>,
+    mut output: WasmExecutionOutput,
     context: InstallCodeContext,
     mut new_canister: CanisterState,
     canister_layout_path: PathBuf,
@@ -175,26 +172,23 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     compilation_cost_handling: CompilationCostHandling,
 ) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
+    apply_canister_state_changes(
+        canister_state_changes,
+        new_canister.execution_state.as_mut().unwrap(),
+        &mut new_canister.system_state,
+        &mut output,
+        round_limits,
+        time,
+        round.network_topology,
+        round.hypervisor.subnet_id(),
+        round.log,
+    );
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
-            // TODO(RUN-265): Replace `unwrap` with a proper execution error
-            // here because subnet available memory may have changed since
-            // the start of execution.
-            round_limits
-                .subnet_available_memory
-                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                .unwrap();
-            system_state_changes.apply_changes(
-                time,
-                &mut new_canister.system_state,
-                round.network_topology,
-                round.hypervisor.subnet_id(),
-                round.log,
-            );
             let bytes = NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             total_heap_delta += bytes;
             upgrade_stage_2_and_3a_create_execution_state_and_call_start(
@@ -310,12 +304,11 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let canister_id = new_canister.canister_id();
 
     // The execution state is present because we just put it there.
-    let execution_state = new_canister.execution_state.take().unwrap();
+    let execution_state = new_canister.execution_state.as_ref().unwrap();
 
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
-        new_canister.execution_state = Some(execution_state);
         upgrade_stage_4a_call_post_upgrade(
             context.sender,
             context.arg,
@@ -328,22 +321,22 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             round_limits,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
+        let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(),
+            execution_state,
             &SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
-            execution_state,
             round_limits,
             round.network_topology,
         );
-        new_canister.execution_state = Some(output_execution_state);
 
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_3b_process_start_result(
+                    canister_state_changes,
                     output,
                     context.sender,
                     context.arg,
@@ -374,31 +367,36 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_3b_process_start_result(
-    output: WasmExecutionOutput,
+    canister_state_changes: Option<CanisterStateChanges>,
+    mut output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
-    new_canister: CanisterState,
+    mut new_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> InstallCodeRoutineResult {
+    apply_canister_state_changes(
+        canister_state_changes,
+        new_canister.execution_state.as_mut().unwrap(),
+        &mut new_canister.system_state,
+        &mut output,
+        round_limits,
+        time,
+        round.network_topology,
+        round.hypervisor.subnet_id(),
+        round.log,
+    );
+
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
-
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
-            // TODO(RUN-265): Replace `unwrap` with a proper execution error
-            // here because subnet available memory may have changed since
-            // the start of execution.
-            round_limits
-                .subnet_available_memory
-                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                .unwrap();
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             upgrade_stage_4a_call_post_upgrade(
@@ -424,7 +422,7 @@ fn upgrade_stage_3b_process_start_result(
 fn upgrade_stage_4a_call_post_upgrade(
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
-    mut new_canister: CanisterState,
+    new_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
@@ -453,12 +451,11 @@ fn upgrade_stage_4a_call_post_upgrade(
 
     // The execution state is guaranteed to be present because this function is
     // called after creating a new execution state.
-    let execution_state = new_canister.execution_state.unwrap();
+    let execution_state = new_canister.execution_state.as_ref().unwrap();
 
     // If the Wasm module does not export the method, then this execution
     // succeeds as a no-op.
     if !execution_state.exports_method(&method) {
-        new_canister.execution_state = Some(execution_state);
         upgrade_stage_4c_finish_upgrade(
             new_canister,
             execution_parameters,
@@ -467,23 +464,22 @@ fn upgrade_stage_4a_call_post_upgrade(
             round,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
+        let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::init(time, context_arg, context_sender),
+            execution_state,
             &new_canister.system_state,
             memory_usage,
             execution_parameters.clone(),
             FuncRef::Method(method),
-            execution_state,
             round_limits,
             round.network_topology,
         );
-        new_canister.execution_state = Some(output_execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_4b_process_post_upgrade_result(
+                    canister_state_changes,
                     output,
-                    system_state_changes,
                     new_canister,
                     execution_parameters,
                     total_heap_delta,
@@ -507,14 +503,25 @@ fn upgrade_stage_4a_call_post_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_4b_process_post_upgrade_result(
-    output: WasmExecutionOutput,
-    system_state_changes: SystemStateChanges,
+    canister_state_changes: Option<CanisterStateChanges>,
+    mut output: WasmExecutionOutput,
     mut new_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> InstallCodeRoutineResult {
+    apply_canister_state_changes(
+        canister_state_changes,
+        new_canister.execution_state.as_mut().unwrap(),
+        &mut new_canister.system_state,
+        &mut output,
+        round_limits,
+        round.time,
+        round.network_topology,
+        round.hypervisor.subnet_id(),
+        round.log,
+    );
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -522,20 +529,6 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
-            // TODO(RUN-265): Replace `unwrap` with a proper execution error
-            // here because subnet available memory may have changed since
-            // the start of execution.
-            round_limits
-                .subnet_available_memory
-                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-                .unwrap();
-            system_state_changes.apply_changes(
-                round.time,
-                &mut new_canister.system_state,
-                round.network_topology,
-                round.hypervisor.subnet_id(),
-                round.log,
-            );
             let bytes = NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             total_heap_delta += bytes;
             upgrade_stage_4c_finish_upgrade(
@@ -597,19 +590,16 @@ impl PausedInstallCodeRoutine for PausedPreUpgradeExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> InstallCodeRoutineResult {
-        let mut new_canister = self.new_canister;
-        let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) =
-            self.paused_wasm_execution.resume(execution_state);
-        new_canister.execution_state = Some(execution_state);
+        let execution_state = self.new_canister.execution_state.as_ref().unwrap();
+        let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_1_process_pre_upgrade_result(
+                    canister_state_changes,
                     output,
-                    system_state_changes,
                     self.context,
-                    new_canister,
+                    self.new_canister,
                     self.canister_layout_path,
                     self.execution_parameters,
                     self.total_heap_delta,
@@ -622,7 +612,6 @@ impl PausedInstallCodeRoutine for PausedPreUpgradeExecution {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPreUpgradeExecution {
-                    new_canister,
                     paused_wasm_execution,
                     ..*self
                 });
@@ -656,19 +645,17 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringUpgrade {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> InstallCodeRoutineResult {
-        let mut new_canister = self.new_canister;
-        let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) =
-            self.paused_wasm_execution.resume(execution_state);
-        new_canister.execution_state = Some(execution_state);
+        let execution_state = self.new_canister.execution_state.as_ref().unwrap();
+        let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, _system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_3b_process_start_result(
+                    canister_state_changes,
                     output,
                     self.context_sender,
                     self.context_arg,
-                    new_canister,
+                    self.new_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
                     self.time,
@@ -679,7 +666,6 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringUpgrade {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
-                    new_canister,
                     paused_wasm_execution,
                     ..*self
                 });
@@ -710,18 +696,15 @@ impl PausedInstallCodeRoutine for PausedPostUpgradeExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> InstallCodeRoutineResult {
-        let mut new_canister = self.new_canister;
-        let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) =
-            self.paused_wasm_execution.resume(execution_state);
-        new_canister.execution_state = Some(execution_state);
+        let execution_state = self.new_canister.execution_state.as_ref().unwrap();
+        let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
                 update_round_limits(round_limits, &slice);
                 upgrade_stage_4b_process_post_upgrade_result(
+                    canister_state_changes,
                     output,
-                    system_state_changes,
-                    new_canister,
+                    self.new_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
                     round,
@@ -731,7 +714,6 @@ impl PausedInstallCodeRoutine for PausedPostUpgradeExecution {
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedPostUpgradeExecution {
-                    new_canister,
                     paused_wasm_execution,
                     ..*self
                 });
