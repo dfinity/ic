@@ -25,7 +25,7 @@ use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
-use crate::execution::common::update_round_limits;
+use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 
 #[doc(hidden)] // pub for usage in tests
@@ -274,7 +274,7 @@ impl Hypervisor {
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
-        execution_state: ExecutionState,
+        mut execution_state: ExecutionState,
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
@@ -282,17 +282,17 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
-        let (execution_state, execution_result) = self.execute_dts(
+        let execution_result = self.execute_dts(
             api_type,
+            &execution_state,
             &system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
-            execution_state,
             round_limits,
             network_topology,
         );
-        let (slice, output, system_state_changes) = match execution_result {
+        let (slice, mut output, canister_state_changes) = match execution_result {
             WasmExecutionResult::Finished(slice, output, system_state_changes) => {
                 (slice, output, system_state_changes)
             }
@@ -300,17 +300,14 @@ impl Hypervisor {
                 unreachable!("DTS is not supported");
             }
         };
-        // The unwrap is guaranteed to succeed because without DTS the subnet
-        // available memory did not change since the start of execution and the
-        // Wasm executor must have done all checks.
-        round_limits
-            .subnet_available_memory
-            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-            .unwrap();
         update_round_limits(round_limits, &slice);
-        system_state_changes.apply_changes(
-            time,
+        apply_canister_state_changes(
+            canister_state_changes,
+            &mut execution_state,
             &mut system_state,
+            &mut output,
+            round_limits,
+            time,
             network_topology,
             self.own_subnet_id,
             &self.log,
@@ -325,14 +322,14 @@ impl Hypervisor {
     pub fn execute_dts(
         &self,
         api_type: ApiType,
+        execution_state: &ExecutionState,
         system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
-        execution_state: ExecutionState,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
-    ) -> (ExecutionState, WasmExecutionResult) {
+    ) -> WasmExecutionResult {
         match self.deterministic_time_slicing {
             FlagStatus::Enabled => assert!(
                 execution_parameters.instruction_limits.message()
@@ -349,24 +346,25 @@ impl Hypervisor {
             *self.cycles_account_manager,
             network_topology,
         );
-        let (compilation_result, execution_state, execution_result) =
-            Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
+        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
+            WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
                 subnet_available_memory: round_limits.subnet_available_memory.get(),
                 func_ref,
-                execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),
-            });
+            },
+            execution_state,
+        );
 
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
         self.metrics.observe(api_type_str, &execution_result);
-        (execution_state, execution_result)
+        execution_result
     }
 
     #[doc(hidden)]

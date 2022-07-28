@@ -1,13 +1,16 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
-use ic_base_types::CanisterId;
-use ic_embedders::wasm_executor::SliceExecutionOutput;
+use ic_base_types::{CanisterId, SubnetId};
+use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
-use ic_replicated_state::{CallContext, CallContextAction, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
+    SystemState,
+};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::{Callback, WasmMethod};
@@ -346,4 +349,44 @@ pub fn get_call_context_and_callback(
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
     round_limits.instructions -= as_round_instructions(slice.executed_instructions);
+}
+
+/// Applies canister state change after Wasm execution if possible.
+/// Otherwise, the function sets the corresponding error in
+/// `output.wasm_result`.
+/// Potential causes of failure:
+/// - Changes in the environment such as subnet available memory while the
+///   long-execution with deterministic time slicing was in progress.
+/// - A mismatch between checks dones by the Wasm executor and checks done when
+///   applying the changes due to a bug.
+/// - An escape from the Wasm sandbox that corrupts the execution output.
+pub fn apply_canister_state_changes(
+    canister_state_changes: Option<CanisterStateChanges>,
+    execution_state: &mut ExecutionState,
+    system_state: &mut SystemState,
+    output: &mut WasmExecutionOutput,
+    round_limits: &mut RoundLimits,
+    time: Time,
+    network_topology: &NetworkTopology,
+    subnet_id: SubnetId,
+    log: &ReplicaLogger,
+) {
+    if let Some(CanisterStateChanges {
+        globals,
+        wasm_memory,
+        stable_memory,
+        system_state_changes,
+    }) = canister_state_changes
+    {
+        // TODO(RUN-285): Change `unwrap()` to a proper execution error and
+        // support failing when applying the system state changes.
+        round_limits
+            .subnet_available_memory
+            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+            .unwrap();
+        system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log);
+        execution_state.wasm_memory = wasm_memory;
+        execution_state.stable_memory = stable_memory;
+        execution_state.exported_globals = globals;
+    }
 }

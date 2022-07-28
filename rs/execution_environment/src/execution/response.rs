@@ -11,7 +11,9 @@ use ic_types::messages::{CallContextId, Payload, Response};
 use ic_types::{NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
-use crate::execution::common::action_to_response;
+use crate::execution::common::{
+    action_to_response, apply_canister_state_changes, update_round_limits,
+};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::error;
 use ic_sys::PAGE_SIZE;
@@ -19,8 +21,6 @@ use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use prometheus::IntCounter;
 use std::sync::Arc;
-
-use super::common::update_round_limits;
 
 /// Context variables that remain the same throughput the entire deterministic
 /// time slicing execution of a response.
@@ -46,13 +46,12 @@ struct PausedResponseExecution {
 impl PausedExecution for PausedResponseExecution {
     fn resume(
         self: Box<Self>,
-        mut canister: CanisterState,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
-        let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
-        canister.execution_state = Some(execution_state);
+        let execution_state = canister.execution_state.as_ref().unwrap();
+        let result = self.paused_wasm_execution.resume(execution_state);
         process_response_result(
             result,
             canister,
@@ -81,13 +80,12 @@ struct PausedCleanupExecution {
 impl PausedExecution for PausedCleanupExecution {
     fn resume(
         self: Box<Self>,
-        mut canister: CanisterState,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
-        let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
-        canister.execution_state = Some(execution_state);
+        let execution_state = canister.execution_state.as_ref().unwrap();
+        let result = self.paused_wasm_execution.resume(execution_state);
         process_cleanup_result(
             result,
             canister,
@@ -254,18 +252,16 @@ pub fn execute_response(
         ),
     };
 
-    let (output_execution_state, result) = round.hypervisor.execute_dts(
+    let result = round.hypervisor.execute_dts(
         api_type,
+        canister.execution_state.as_ref().unwrap(),
         &canister.system_state,
         canister.memory_usage(round.hypervisor.subnet_type()),
         execution_parameters.clone(),
         func_ref,
-        canister.execution_state.take().unwrap(),
         round_limits,
         round.network_topology,
     );
-
-    canister.execution_state = Some(output_execution_state);
 
     let original = OriginalContext {
         callback,
@@ -291,7 +287,7 @@ pub fn execute_response(
 // Returns `ExecuteMessageResult`.
 #[allow(clippy::too_many_arguments)]
 fn execute_response_cleanup(
-    mut canister: CanisterState,
+    canister: CanisterState,
     cleanup_closure: WasmClosure,
     callback_err: HypervisorError,
     instructions_left: NumInstructions,
@@ -312,19 +308,18 @@ fn execute_response_cleanup(
         }
     };
     let own_subnet_type = round.hypervisor.subnet_type();
-    let (output_execution_state, result) = round.hypervisor.execute_dts(
+    let result = round.hypervisor.execute_dts(
         ApiType::Cleanup {
             time: original.time,
         },
+        canister.execution_state.as_ref().unwrap(),
         &canister.system_state,
         canister.memory_usage(own_subnet_type),
         execution_parameters,
         func_ref,
-        canister.execution_state.take().unwrap(),
         round_limits,
         round.network_topology,
     );
-    canister.execution_state = Some(output_execution_state);
     process_cleanup_result(
         result,
         canister,
@@ -359,28 +354,22 @@ fn process_response_result(
                 paused_execution,
             }
         }
-        WasmExecutionResult::Finished(slice, response_output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, mut response_output, canister_state_changes) => {
             update_round_limits(round_limits, &slice);
+            apply_canister_state_changes(
+                canister_state_changes,
+                canister.execution_state.as_mut().unwrap(),
+                &mut canister.system_state,
+                &mut response_output,
+                round_limits,
+                round.time,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
+            // Executing the reply/reject closure succeeded.
             let (num_instructions_left, heap_delta, result) = match response_output.wasm_result {
                 Ok(_) => {
-                    // TODO(RUN-265): Replace `unwrap` with a proper execution error
-                    // here because subnet available memory may have changed since
-                    // the start of execution.
-                    round_limits
-                        .subnet_available_memory
-                        .try_decrement(
-                            response_output.allocated_bytes,
-                            response_output.allocated_message_bytes,
-                        )
-                        .unwrap();
-                    // Executing the reply/reject closure succeeded.
-                    system_state_changes.apply_changes(
-                        round.time,
-                        &mut canister.system_state,
-                        round.network_topology,
-                        round.hypervisor.subnet_id(),
-                        round.log,
-                    );
                     let heap_delta = NumBytes::from(
                         (response_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
                     );
@@ -467,28 +456,22 @@ fn process_cleanup_result(
                 paused_execution,
             }
         }
-        WasmExecutionResult::Finished(slice, cleanup_output, system_state_changes) => {
+        WasmExecutionResult::Finished(slice, mut cleanup_output, canister_state_changes) => {
             update_round_limits(round_limits, &slice);
+            apply_canister_state_changes(
+                canister_state_changes,
+                canister.execution_state.as_mut().unwrap(),
+                &mut canister.system_state,
+                &mut cleanup_output,
+                round_limits,
+                round.time,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
+            );
+
             let (num_instructions_left, heap_delta, result) = match cleanup_output.wasm_result {
                 Ok(_) => {
-                    // TODO(RUN-265): Replace `unwrap` with a proper execution error
-                    // here because subnet available memory may have changed since
-                    // the start of execution.
-                    round_limits
-                        .subnet_available_memory
-                        .try_decrement(
-                            cleanup_output.allocated_bytes,
-                            cleanup_output.allocated_message_bytes,
-                        )
-                        .unwrap();
-                    // Executing the cleanup callback has succeeded.
-                    system_state_changes.apply_changes(
-                        round.time,
-                        &mut canister.system_state,
-                        round.network_topology,
-                        round.hypervisor.subnet_id(),
-                        round.log,
-                    );
                     let heap_delta = NumBytes::from(
                         (cleanup_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
                     );
