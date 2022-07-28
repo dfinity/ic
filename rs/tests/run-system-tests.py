@@ -50,6 +50,7 @@ RUN_TESTS_SUBCOMMAND = "run-tests"
 PROCESS_TEST_RESULTS_SUBCOMMAND = "process-test-results"
 TEST_RESULT_FILE = "test-results.json"
 POT_SETUP_FILE = "pot_setup.json"
+POT_SETUP_RESULT_FILE = "pot_setup_result.json"
 SLACK_FAILURE_ALERTS_FILE = "slack_alerts.json"
 SHELL_WRAPPER_DEFAULT = "/usr/bin/time"
 
@@ -340,6 +341,7 @@ def main(
         f"--test_results={RESULT_FILE}",
         f"--working_dir={working_dir}",
         f"--pot_setup_file={POT_SETUP_FILE}",
+        f"--pot_setup_result_file={POT_SETUP_RESULT_FILE}",
     ]
 
     if is_local_run:
