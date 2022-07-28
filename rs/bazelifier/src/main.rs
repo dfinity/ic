@@ -84,9 +84,17 @@ struct BinSection {
     path: String,
 }
 
+#[derive(Debug)]
+struct BinSectionOut {
+    name: String,
+    path: String,
+    canister: bool,
+}
+
 #[derive(Deserialize, Debug)]
 struct Package {
     name: String,
+    version: String,
     edition: String,
 }
 
@@ -103,16 +111,33 @@ struct BuildFile<'a> {
     target_name: Cow<'a, str>,
     edition: &'a str,
     crate_name: String,
-    bins: Vec<BinSection>,
+    crate_version: &'a str,
+    bins: Vec<BinSectionOut>,
     gen_tests: bool,
     has_testsuite: bool,
+    has_canister: bool,
     build_script: bool,
+    protobufs: Option<ProtogenConfig>,
+}
+
+struct ProtogenConfig {
+    manifest_dir: String,
+    generator_name: &'static str,
+}
+
+#[derive(Template)]
+#[template(path = "protogen.template", escape = "none")]
+struct ProtogenFile<'a> {
+    crate_name: String,
+    generator_name: &'a str,
+    manifest_dir: std::path::Display<'a>,
 }
 
 static MACRO_CRATES: &[&str] = &[
     "async-trait",
     "debug_stub_derive",
     "derive_more",
+    "dfn_macro",
     "fe-derive",
     "hex-literal",
     "ic-nervous-system-common-build-metadata",
@@ -125,6 +150,7 @@ static MACRO_CRATES: &[&str] = &[
 struct Bazelifier {
     opts: Options,
     rs_dir: PathBuf,
+    manifest_dir_abs: PathBuf,
     manifest_dir: PathBuf,
     pkg: Crate,
 }
@@ -147,10 +173,12 @@ impl Bazelifier {
         let rs_dir = Path::new(&git_dir).join("rs");
         let contents = std::fs::read_to_string(&abs)?;
         let pkg = toml::from_str::<Crate>(&contents)?;
+        let manifest_dir_relative = pathdiff::diff_paths(manifest_dir, &rs_dir).unwrap();
 
         Ok(Self {
             opts,
-            manifest_dir: manifest_dir.into(),
+            manifest_dir_abs: manifest_dir.into(),
+            manifest_dir: manifest_dir_relative,
             rs_dir,
             pkg,
         })
@@ -186,7 +214,7 @@ impl Bazelifier {
                 Dep::Local(LocalDep { path }) => format!(
                     "//rs/{}",
                     pathdiff::diff_paths(
-                        self.manifest_dir.join(path).canonicalize()?,
+                        self.manifest_dir_abs.join(path).canonicalize()?,
                         &self.rs_dir
                     )
                     .unwrap()
@@ -205,7 +233,7 @@ impl Bazelifier {
     }
 
     fn generate_tests(&self, bf: &mut BuildFile) -> eyre::Result<()> {
-        bf.has_testsuite = self.manifest_dir.join("tests").is_dir();
+        bf.has_testsuite = self.manifest_dir_abs.join("tests").is_dir();
 
         self.process_deps(
             self.pkg.dev_dependencies.iter(),
@@ -224,8 +252,38 @@ impl Bazelifier {
         Ok(())
     }
 
+    fn gen_proto_gen(&mut self, generator_name: &str) -> eyre::Result<()> {
+        let dir = self.manifest_dir_abs.join(generator_name);
+
+        let protogen_pkg_contents = std::fs::read_to_string(dir.join("Cargo.toml"))?;
+        let protogen_pkg = toml::from_str::<Crate>(&protogen_pkg_contents)?;
+
+        let crate_name = protogen_pkg.package.name.replace('-', "_");
+        let manifest_dir = self.manifest_dir.join(generator_name);
+
+        let protogen_build_file = ProtogenFile {
+            crate_name,
+            generator_name,
+            manifest_dir: manifest_dir.display(),
+        };
+
+        let protogen_build_path = dir.join("BUILD.bazel");
+
+        if self.opts.dry_run {
+            println!("Additional BUILD.bazel generated for {}:", dir.display());
+            std::io::stdout().write_all(protogen_build_file.render()?.as_bytes())?;
+            println!();
+        } else {
+            std::fs::File::create(&protogen_build_path)?
+                .write_all(protogen_build_file.render()?.as_bytes())?;
+            println!("Created {}", protogen_build_path.display());
+        }
+
+        Ok(())
+    }
+
     fn run(mut self) -> eyre::Result<()> {
-        let buildfile_path = self.manifest_dir.join("BUILD.bazel");
+        let buildfile_path = self.manifest_dir_abs.join("BUILD.bazel");
         if !self.opts.dry_run && !self.opts.force && buildfile_path.exists() {
             eprintln!(
                 "{} already exists, refusing to overwrite it",
@@ -238,15 +296,41 @@ impl Bazelifier {
             eprintln!("WARNING: Cargo.toml has a target-specific dependencies section. Please add those dependencies manually to BUILD.bazel.");
         }
 
+        let mut protobufs = None;
+
+        for protogen in ["proto_generator", "protobuf_generator"] {
+            let pdir = self.manifest_dir_abs.join(protogen);
+            if pdir.is_dir() {
+                protobufs = Some(ProtogenConfig {
+                    manifest_dir: self.manifest_dir.display().to_string(),
+                    generator_name: protogen,
+                });
+                self.gen_proto_gen(protogen)?;
+                break;
+            }
+        }
+
         let lib_build_type = if self.pkg.lib.as_ref().map_or(false, |x| x.proc_macro) {
             BuildType::ProcMacro
         } else {
             BuildType::Lib
         };
+        let mut bins = vec![];
+        let mut has_canister = false;
+        for b in self.pkg.bin.drain(..) {
+            let bout = BinSectionOut {
+                canister: b.name.ends_with("canister"),
+                name: b.name,
+                path: b.path,
+            };
+            has_canister = has_canister || bout.canister;
+            bins.push(bout);
+        }
         let mut bf = BuildFile {
             edition: &self.pkg.package.edition,
+            crate_version: &self.pkg.package.version,
             build_type: lib_build_type,
-            target_name: self.manifest_dir.file_name().unwrap().to_string_lossy(),
+            target_name: self.manifest_dir_abs.file_name().unwrap().to_string_lossy(),
             crate_name: self
                 .pkg
                 .lib
@@ -254,7 +338,9 @@ impl Bazelifier {
                 .and_then(|x| x.name_override.as_ref())
                 .map_or_else(|| self.pkg.package.name.replace('-', "_"), |x| x.clone()),
             gen_tests: self.opts.gen_tests,
-            bins: std::mem::take(&mut self.pkg.bin),
+            bins,
+            has_canister,
+            protobufs,
             ..Default::default()
         };
 
@@ -276,7 +362,7 @@ impl Bazelifier {
             self.generate_tests(&mut bf)?;
         }
 
-        bf.build_script = self.manifest_dir.join("build.rs").is_file();
+        bf.build_script = self.manifest_dir_abs.join("build.rs").is_file();
 
         if self.opts.dry_run {
             std::io::stdout().write_all(bf.render()?.as_bytes())?;

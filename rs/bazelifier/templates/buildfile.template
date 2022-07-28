@@ -8,6 +8,12 @@ load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 {% else -%}
 {% let build_script_extra = "" -%}
 {% endif %}
+{% if has_canister %}
+load("//bazel:canisters.bzl", "rust_canister")
+{% endif %}
+{% if protobufs.is_some() %}
+load("//bazel:prost.bzl", "generated_files_check")
+{% endif %}
 
 package(default_visibility = ["//visibility:public"])
 
@@ -24,6 +30,13 @@ filegroup(
     )],
     visibility = ["//visibility:public"],
 )
+
+{% if protobufs.is_some() %}
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+{% endif %}
 
 DEPENDENCIES = {{ deps|json }}
 
@@ -47,6 +60,7 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     edition = "2018",
+    version = "{{ crate_version }}",
     deps = BUILD_DEPENDENCIES,
     aliases = ALIASES,
     data = [], # build script data (e.g. template files) goes here
@@ -55,7 +69,7 @@ cargo_build_script(
 
 {{ build_type }}(
     name = "{{ target_name }}",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**"{% if protobufs.is_some() %}, "gen/**"{% endif %}]),
     crate_name = "{{ crate_name }}",
     edition = "{{ edition }}",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -64,7 +78,7 @@ cargo_build_script(
 )
 
 {% for bin in bins -%}
-rust_binary(
+{% if bin.canister %}rust_canister{% else %}rust_binary{% endif %}(
     name = "{{ bin.name }}",
     srcs = ["{{ bin.path }}"],
     edition = "{{ edition }}",
@@ -95,3 +109,19 @@ rust_test_suite(
 )
 {%- endif %}
 {%- endif %}
+
+{% match protobufs %}
+{% when Some with (p) %}
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob(["gen/**"]) + [":protos"],
+    manifest_dir = "rs/{{ p.manifest_dir }}",
+    deps = [
+        "//rs/{{ p.manifest_dir }}/{{ p.generator_name }}:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)
+{% when None %}
+{% endmatch %}
