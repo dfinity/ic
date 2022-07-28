@@ -190,9 +190,13 @@ impl WasmtimeEmbedder {
         modification_tracking: ModificationTracking,
         system_api: S,
     ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
-        let module = cache
-            .downcast::<wasmtime::Module>()
-            .expect("incompatible embedder cache, expected BinaryEncodedWasm");
+        let module = match cache
+            .downcast::<HypervisorResult<wasmtime::Module>>()
+            .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::Module>")
+        {
+            Ok(module) => module,
+            Err(err) => return Err((err.clone(), system_api)),
+        };
 
         let mut store = Store::new(
             module.engine(),

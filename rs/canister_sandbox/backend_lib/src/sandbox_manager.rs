@@ -299,7 +299,9 @@ impl SandboxManager {
             wasm_id,
         );
         let wasm = decode_wasm(Arc::new(wasm_src))?;
-        let (cache, compilation_result, serialized_module) = compile(&self.embedder, &wasm)?;
+        let (cache, result) = compile(&self.embedder, &wasm);
+        let embedder_cache = Arc::new(cache);
+        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
         // Return as much memory as possible because compiling seems to use up
         // some extra memory that can be returned.
         //
@@ -308,8 +310,7 @@ impl SandboxManager {
         unsafe {
             libc::malloc_trim(0);
         }
-        let embedder_cache = Arc::new(cache);
-        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
+        let (compilation_result, serialized_module) = result?;
         Ok((embedder_cache, compilation_result, serialized_module))
     }
 
@@ -325,13 +326,14 @@ impl SandboxManager {
             wasm_id,
         );
         let deserialization_timer = Instant::now();
-        let cache = Arc::new(EmbedderCache::new(
-            self.embedder.deserialize_module(serialized_module)?,
-        ));
+        let module = self.embedder.deserialize_module(serialized_module);
+        let cache = Arc::new(EmbedderCache::new(module.clone()));
         let deserialization_time = deserialization_timer.elapsed();
-
         guard.caches.insert(wasm_id, Arc::clone(&cache));
-        Ok((cache, deserialization_time))
+        match module {
+            Ok(_) => Ok((cache, deserialization_time)),
+            Err(err) => Err(err),
+        }
     }
 
     /// Closes previously opened wasm instance, by id.

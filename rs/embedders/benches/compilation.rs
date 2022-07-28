@@ -76,7 +76,9 @@ fn wasm_compilation(c: &mut Criterion) {
             &(embedder, wasm),
             |b, (embedder, wasm)| {
                 b.iter_with_large_drop(|| {
-                    compile(embedder, wasm).expect("Failed to compile canister wasm")
+                    let (c, r) = compile(embedder, wasm);
+                    let r = r.expect("Failed to compile canister wasm");
+                    (c, r)
                 })
             },
         );
@@ -99,8 +101,9 @@ fn wasm_deserialization(c: &mut Criterion) {
         let mut config = EmbeddersConfig::default();
         config.feature_flags.module_sharing = FlagStatus::Enabled;
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-        let (_, _, serialized_module) =
-            compile(&embedder, &wasm).expect("Failed to compile canister wasm");
+        let (_, serialized_module) = compile(&embedder, &wasm)
+            .1
+            .expect("Failed to compile canister wasm");
         let serialized_module_bytes = serialized_module.bytes;
 
         group.bench_with_input(

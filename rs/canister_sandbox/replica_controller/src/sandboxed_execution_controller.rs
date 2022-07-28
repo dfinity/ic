@@ -11,7 +11,9 @@ use ic_embedders::wasm_executor::{
     WasmExecutor,
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
-use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, InstanceStats, WasmExecutionOutput,
+};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -22,7 +24,7 @@ use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memo
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
@@ -42,6 +44,15 @@ const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_s
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
+
+// Metric labels for the different outcomes of a wasm cache lookup. Stored in
+// the metric
+// [`SandboxedExecutionMetrics::sandboxed_execution_replica_cache_lookups`].
+const EMBEDDER_CACHE_HIT_SUCCESS: &str = "embedder_cache_hit_success";
+const EMBEDDER_CACHE_HIT_SANDBOX_EVICTED: &str = "embedder_cache_hit_sandbox_evicted";
+const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilation_error";
+const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
+const CACHE_MISS: &str = "cache_miss";
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -65,6 +76,7 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_create_exe_state_finish_duration: Histogram,
     sandboxed_execution_sandbox_create_exe_state_deserialize_duration: Histogram,
     sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: Histogram,
+    sandboxed_execution_replica_cache_lookups: IntCounterVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -176,8 +188,18 @@ impl SandboxedExecutionMetrics {
                 "sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration_seconds",
                 "Total time spent in the sandbox when creating an execution state from a serialized module",
                 decimal_buckets_with_zero(-4, 1),
-            )
+            ),
+            sandboxed_execution_replica_cache_lookups: metrics_registry.int_counter_vec(
+                "sandboxed_execution_replica_cache_lookups", 
+                "Results from looking up a wasm module in the embedder cache or compilation cache", 
+                &["lookup_result"])
         }
+    }
+
+    fn inc_cache_lookup(&self, label: &str) {
+        self.sandboxed_execution_replica_cache_lookups
+            .with_label_values(&[label])
+            .inc();
     }
 }
 
@@ -484,6 +506,7 @@ impl WasmExecutor for SandboxedExecutionController {
             &sandbox_process,
             &*execution_state.wasm_binary,
             compilation_cache,
+            &self.metrics,
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
             Err(err) => {
@@ -620,6 +643,7 @@ impl WasmExecutor for SandboxedExecutionController {
         let (memory_modifications, exported_globals, serialized_module, compilation_result) =
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
+                    self.metrics.inc_cache_lookup(CACHE_MISS);
                     let _compilation_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_compile_duration
@@ -650,6 +674,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     )
                 }
                 Some(serialized_module) => {
+                    self.metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
                     let _deserialization_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
@@ -1058,15 +1083,23 @@ impl SandboxedExecutionController {
     }
 }
 
-// Cache the sandbox process and wasm id of the opened wasm in the embedder
-// cache.
+/// Cache the sandbox process and wasm id of the opened wasm in the embedder
+/// cache.
 fn cache_opened_wasm(
     embedder_cache: &mut Option<EmbedderCache>,
     sandbox_process: &Arc<SandboxProcess>,
     wasm_id: WasmId,
 ) {
-    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id);
+    let opened_wasm: HypervisorResult<OpenedWasm> =
+        Ok(OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id));
     *embedder_cache = Some(EmbedderCache::new(opened_wasm));
+}
+
+/// Cache an error from compilation so that we don't try to recompile just to
+/// get the same error.
+fn cache_errored_wasm(embedder_cache: &mut Option<EmbedderCache>, err: HypervisorError) {
+    let cache: HypervisorResult<OpenedWasm> = Err(err);
+    *embedder_cache = Some(EmbedderCache::new(cache));
 }
 
 // Get compiled wasm object in sandbox. Ask cache first, upload + compile if
@@ -1075,23 +1108,37 @@ fn open_wasm(
     sandbox_process: &Arc<SandboxProcess>,
     wasm_binary: &WasmBinary,
     compilation_cache: Arc<CompilationCache>,
+    metrics: &SandboxedExecutionMetrics,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
     if let Some(cache) = embedder_cache.as_ref() {
-        if let Some(opened_wasm) = cache.downcast::<OpenedWasm>() {
-            if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
-                assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
-                return Ok((opened_wasm.wasm_id, None));
+        if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
+            match opened_wasm {
+                Ok(opened_wasm) => {
+                    if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
+                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
+                        assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
+                        return Ok((opened_wasm.wasm_id, None));
+                    } else {
+                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
+                    }
+                }
+                Err(err) => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
+                    return Err(err.clone());
+                }
             }
         }
     }
+
     let wasm_id = WasmId::new();
     match compilation_cache.get(&wasm_binary.binary) {
         None => {
+            metrics.inc_cache_lookup(CACHE_MISS);
             sandbox_process
                 .history
                 .record(format!("OpenWasm(wasm_id={})", wasm_id));
-            let (compilation_result, serialized_module) = sandbox_process
+            match sandbox_process
                 .sandbox_service
                 .open_wasm(protocol::sbxsvc::OpenWasmRequest {
                     wasm_id,
@@ -1099,12 +1146,21 @@ fn open_wasm(
                 })
                 .sync()
                 .unwrap()
-                .0?;
-            cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
-            compilation_cache.insert(&wasm_binary.binary, Arc::new(serialized_module));
-            Ok((wasm_id, Some(compilation_result)))
+                .0
+            {
+                Ok((compilation_result, serialized_module)) => {
+                    cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
+                    compilation_cache.insert(&wasm_binary.binary, Arc::new(serialized_module));
+                    Ok((wasm_id, Some(compilation_result)))
+                }
+                Err(err) => {
+                    cache_errored_wasm(&mut *embedder_cache, err.clone());
+                    Err(err)
+                }
+            }
         }
         Some(serialized_module) => {
+            metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
             sandbox_process
                 .history
                 .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
