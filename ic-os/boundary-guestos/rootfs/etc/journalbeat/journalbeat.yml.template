@@ -125,6 +125,8 @@ output.elasticsearch:
   hosts: [{{ journalbeat_hosts }}]
   index: "journalbeat-guestos-journal-%{[agent.version]}-%{+yyyy.MM.dd}"
 
+  bulk_max_size: 0
+
   # Optional protocol and basic auth credentials.
   protocol: "https"
   #username: "elastic"
