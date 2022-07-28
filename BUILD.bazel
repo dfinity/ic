@@ -59,7 +59,7 @@ opt_stripped_binary(
 
 opt_stripped_binary(
     name = "ic-canister-http-adapter",
-    binary = "//rs/canister_http/adapter",
+    binary = "//rs/canister_http/adapter:ic-canister-http-adapter",
 )
 
 opt_stripped_binary(
