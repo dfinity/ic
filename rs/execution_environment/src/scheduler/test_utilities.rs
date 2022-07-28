@@ -530,6 +530,7 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
             config.deterministic_time_slicing,
+            config.cost_to_compile_wasm_instruction,
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =

@@ -998,6 +998,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
         // Use an invalid wasm code (import memory from an invalid module).
         let wasm =
             wabt::wat2wasm(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
+        let wasm_len = wasm.len();
 
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
@@ -1027,7 +1028,8 @@ fn install_puts_canister_back_after_invalid_wasm() {
         assert_eq!(
             (res.0, res.1),
             (
-                MAX_NUM_INSTRUCTIONS,
+                MAX_NUM_INSTRUCTIONS
+                    - Config::default().cost_to_compile_wasm_instruction * wasm_len as u64,
                 Err(CanisterManagerError::Hypervisor(
                     canister_id,
                     HypervisorError::InvalidWasm(WasmValidationError::InvalidImportSection(

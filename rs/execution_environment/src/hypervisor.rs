@@ -119,6 +119,7 @@ pub struct Hypervisor {
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
     deterministic_time_slicing: FlagStatus,
+    cost_to_compile_wasm_instruction: NumInstructions,
 }
 
 impl Hypervisor {
@@ -169,22 +170,33 @@ impl Hypervisor {
         canister_id: CanisterId,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
-    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
-        let (execution_state, compilation_cost, compilation_result) =
-            self.wasm_executor.create_execution_state(
-                canister_module,
-                canister_root,
-                canister_id,
-                Arc::clone(&self.compilation_cache),
-            )?;
-        if let Some(compilation_result) = compilation_result {
-            self.metrics
-                .observe_compilation_metrics(&compilation_result);
-        }
-        round_limits.instructions -= as_round_instructions(
-            compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
+    ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
+        // If a wasm instruction has no arguments then it can be represented as
+        // a single byte. So taking the length of the wasm source is a
+        // conservative estimate of the number of instructions.
+        let compilation_cost = self.cost_to_compile_wasm_instruction * canister_module.len() as u64;
+        let creation_result = self.wasm_executor.create_execution_state(
+            canister_module,
+            canister_root,
+            canister_id,
+            Arc::clone(&self.compilation_cache),
         );
-        Ok((compilation_cost, execution_state))
+        match creation_result {
+            Ok((execution_state, compilation_cost, compilation_result)) => {
+                if let Some(compilation_result) = compilation_result {
+                    self.metrics
+                        .observe_compilation_metrics(&compilation_result);
+                }
+                round_limits.instructions -= as_round_instructions(
+                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
+                );
+                (compilation_cost, Ok(execution_state))
+            }
+            Err(err) => {
+                round_limits.instructions -= as_round_instructions(compilation_cost);
+                (compilation_cost, Err(err))
+            }
+        }
     }
 
     pub fn new(
@@ -200,6 +212,7 @@ impl Hypervisor {
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
         embedder_config.feature_flags.module_sharing = config.module_sharing;
+        embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -230,6 +243,7 @@ impl Hypervisor {
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(config.module_sharing)),
             deterministic_time_slicing: config.deterministic_time_slicing,
+            cost_to_compile_wasm_instruction: config.cost_to_compile_wasm_instruction,
         }
     }
 
@@ -242,6 +256,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
         deterministic_time_slicing: FlagStatus,
+        cost_to_compile_wasm_instruction: NumInstructions,
     ) -> Self {
         Self {
             wasm_executor,
@@ -254,6 +269,7 @@ impl Hypervisor {
                 FeatureFlags::default().module_sharing,
             )),
             deterministic_time_slicing,
+            cost_to_compile_wasm_instruction,
         }
     }
 
