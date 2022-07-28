@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+NODE_OPTIONS=--openssl-legacy-provider
+export NODE_OPTIONS
+webpack --version >/dev/null 2>/dev/null || unset NODE_OPTIONS
+webpack "${@}"

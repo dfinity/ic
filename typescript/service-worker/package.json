@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/service-worker",
   "description": "Service worker to check certification when loading assets from the Internet Computer.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "license": "Apache-2.0",
   "files": [
     "dist-dev",
@@ -52,8 +52,8 @@
   },
   "scripts": {
     "clean": "rm -fr dist dist-dev dist-prod coverage",
-    "build": "rm -fr dist dist-prod && NODE_OPTIONS=--openssl-legacy-provider webpack && mv dist dist-prod",
-    "build-dev": "rm -fr dist dist-dev && NODE_OPTIONS=--openssl-legacy-provider FORCE_FETCH_ROOT_KEY=1 webpack --mode development && mv dist dist-dev",
+    "build": "rm -fr dist dist-prod && ./bin/portable-webpack && mv dist dist-prod",
+    "build-dev": "rm -fr dist dist-dev && FORCE_FETCH_ROOT_KEY=1 ./bin/portable-webpack --mode development && mv dist dist-dev",
     "start": "npm run build-dev && http-server dist-dev --proxy https://ic0.app/",
     "start-testnet": "npm run build-dev && http-server dist-dev --proxy https://identity.dfinity.network/",
     "lint": "npx eslint src",
