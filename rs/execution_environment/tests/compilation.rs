@@ -1,9 +1,19 @@
 mod execution_tests {
+    use std::path::PathBuf;
+
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+    use ic_error_types::ErrorCode;
     use ic_execution_environment::CompilationCostHandling;
+    use ic_replicated_state::{
+        canister_state::execution_state::{WasmBinary, WasmMetadata},
+        ExecutionState, ExportedFunctions, Memory,
+    };
     use ic_state_machine_tests::Cycles;
     use ic_test_utilities::execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
-    use ic_test_utilities_metrics::fetch_histogram_stats;
+    use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
+    use ic_types::methods::WasmMethod;
+    use ic_wasm_types::CanisterModule;
+    use maplit::btreemap;
 
     const WAT_EMPTY: &str = "(module)";
     const WAT_WITH_GO: &str = r#"
@@ -271,6 +281,59 @@ mod execution_tests {
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
             wat_compilation_cost(WAT_EMPTY)
+        );
+    }
+
+    /// Check that compilation errors are stored in the EmbedderCache so that we
+    /// don't keep trying to recompile bad WASMS.
+    #[test]
+    fn compilation_error_cached() {
+        let mut test = ExecutionTestBuilder::new().build();
+
+        // Create a canister with invalid wasm. This can't be done through the
+        // normal install because the install would be rejected.
+        let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+        let canister_state = test.canister_state_mut(canister_id);
+        assert!(canister_state.execution_state.is_none());
+        canister_state.execution_state = Some(ExecutionState::new(
+            PathBuf::new(),
+            WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            ExportedFunctions::new(
+                vec![WasmMethod::Update("go".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            Memory::default(),
+            Memory::default(),
+            Vec::new(),
+            WasmMetadata::default(),
+        ));
+
+        // Call the same method on the canister twice.
+        assert_eq!(
+            test.ingress(canister_id, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+        assert_eq!(
+            test.ingress(canister_id, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Only the first update should trigger a compilation.
+        let cache_lookup_metric = fetch_int_counter_vec(
+            test.metrics_registry(),
+            "sandboxed_execution_replica_cache_lookups",
+        );
+        assert_eq!(
+            cache_lookup_metric,
+            btreemap! {
+                btreemap!{
+                    "lookup_result".to_string() => "cache_miss".to_string(),
+                } => 1,
+                btreemap!{
+                    "lookup_result".to_string() => "embedder_cache_hit_compilation_error".to_string(),
+                } => 1,
+            }
         );
     }
 }

@@ -203,7 +203,8 @@ mod tests {
 
             let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log);
-            let embedder_cache = compile(&embedder, &wasm).unwrap().0;
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
 
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
@@ -361,7 +362,8 @@ mod tests {
 
             let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
-            let cache = compile(&embedder, &wasm).unwrap().0;
+            let (cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
 
             let api = test_api_for_update(
                 log,
@@ -588,7 +590,8 @@ mod tests {
 
         let config = Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
-        let cache = compile(&embedder, &wasm).unwrap().0;
+        let (cache, result) = compile(&embedder, &wasm);
+        result.unwrap();
         let api = test_api_for_update(log, None, payload, subnet_type, max_num_instructions);
         let instruction_limit = api.slice_instruction_limit();
         let mut inst = embedder

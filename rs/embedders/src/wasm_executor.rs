@@ -380,26 +380,29 @@ impl WasmExecutorImpl {
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
                 Some(serialized_module) => {
-                    let cache = self
+                    let module = self
                         .wasm_embedder
-                        .deserialize_module(&serialized_module.bytes)
-                        .map(EmbedderCache::new)?;
+                        .deserialize_module(&serialized_module.bytes);
+                    let cache = EmbedderCache::new(module.clone());
                     *guard = Some(cache.clone());
-                    Ok(CacheLookup {
-                        cache,
-                        serialized_module: Some(serialized_module),
-                        compilation_result: None,
-                    })
+                    match module {
+                        Ok(_) => Ok(CacheLookup {
+                            cache,
+                            serialized_module: Some(serialized_module),
+                            compilation_result: None,
+                        }),
+                        Err(err) => Err(err),
+                    }
                 }
                 None => {
                     use std::borrow::Cow;
                     let decoded_wasm: Cow<'_, BinaryEncodedWasm> =
                         Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?);
-                    let (cache, compilation_result, serialized_module) =
-                        compile(&self.wasm_embedder, decoded_wasm.as_ref())?;
+                    let (cache, result) = compile(&self.wasm_embedder, decoded_wasm.as_ref());
+                    *guard = Some(cache.clone());
+                    let (compilation_result, serialized_module) = result?;
                     let serialized_module = Arc::new(serialized_module);
                     compilation_cache.insert(&wasm_binary.binary, Arc::clone(&serialized_module));
-                    *guard = Some(cache.clone());
                     Ok(CacheLookup {
                         cache,
                         serialized_module: Some(serialized_module),

@@ -4,6 +4,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::EmbedderCache;
 use ic_wasm_types::BinaryEncodedWasm;
+use wasmtime::Module;
 
 use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 
@@ -37,10 +38,10 @@ pub fn validate_and_instrument_for_testing(
     validate_and_instrument(wasm, embedder.config())
 }
 
-pub fn compile(
+fn compile_inner(
     embedder: &WasmtimeEmbedder,
     wasm: &BinaryEncodedWasm,
-) -> HypervisorResult<(EmbedderCache, CompilationResult, SerializedModule)> {
+) -> HypervisorResult<(Module, CompilationResult, SerializedModule)> {
     let timer = Instant::now();
     let (wasm_validation_details, instrumentation_output) =
         validate_and_instrument(wasm, embedder.config())?;
@@ -54,11 +55,25 @@ pub fn compile(
         wasm_validation_details,
     )?;
     Ok((
-        EmbedderCache::new(module),
+        module,
         CompilationResult {
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
         },
         serialized_module,
     ))
+}
+
+pub fn compile(
+    embedder: &WasmtimeEmbedder,
+    wasm: &BinaryEncodedWasm,
+) -> (
+    EmbedderCache,
+    HypervisorResult<(CompilationResult, SerializedModule)>,
+) {
+    let (cache, result) = match compile_inner(embedder, wasm) {
+        Ok((module, result, serialized)) => (Ok(module), Ok((result, serialized))),
+        Err(err) => (Err(err.clone()), Err(err)),
+    };
+    (EmbedderCache::new(cache), result)
 }

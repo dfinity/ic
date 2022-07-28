@@ -1499,15 +1499,17 @@ fn get_canister_id_if_install_code(message: CanisterInputMessage) -> Option<Cani
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wabt::wat2wasm(wat).unwrap());
     let config = EmbeddersConfig::default();
-    let (_, _, serialized_module) =
-        compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
+    let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
+        .1
+        .unwrap();
     serialized_module.compilation_cost
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wasm.to_vec());
     let config = EmbeddersConfig::default();
-    let (_, _, serialized_module) =
-        compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
+    let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
+        .1
+        .unwrap();
     serialized_module.compilation_cost
 }

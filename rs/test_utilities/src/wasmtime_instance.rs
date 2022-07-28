@@ -85,9 +85,8 @@ impl WasmtimeInstanceBuilder {
 
         let config = ic_config::embedders::Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
-        let compiled = compile(&embedder, &BinaryEncodedWasm::new(wasm))
-            .expect("Failed to compile wat in WasmtimeInstance")
-            .0;
+        let (compiled, result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
+        result.expect("Failed to compile wat in WasmtimeInstance");
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
