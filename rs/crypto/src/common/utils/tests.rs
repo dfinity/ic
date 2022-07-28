@@ -3,9 +3,9 @@
 use super::*;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
+use ic_crypto_test_utils::empty_fake_registry;
 use ic_crypto_test_utils::files::temp_dir;
-use ic_test_utilities::crypto::empty_fake_registry;
-use ic_test_utilities::types::ids::node_test_id;
+use ic_types_test_utils::ids::node_test_id;
 
 fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
     public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
@@ -513,7 +513,7 @@ fn should_succeed_check_keys_locally_if_all_keys_except_idkg_dealing_enc_key_are
 mod tls {
     use super::super::generate_tls_keys;
     use crate::utils::local_csp_in_temp_dir;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_types_test_utils::ids::node_test_id;
     use openssl::x509::X509VerifyResult;
     use openssl::{asn1::Asn1Time, nid::Nid, x509::X509NameEntryRef, x509::X509};
 

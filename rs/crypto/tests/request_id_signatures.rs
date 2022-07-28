@@ -9,9 +9,9 @@ use ic_interfaces::crypto::{BasicSigVerifierByPublicKey, SignableMock, DOMAIN_IC
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use ic_types::messages::MessageId;
+use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 use crate::ed25519_utils::ed25519_signature_and_public_key;

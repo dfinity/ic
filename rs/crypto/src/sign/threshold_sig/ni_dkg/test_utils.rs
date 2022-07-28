@@ -9,9 +9,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     ni_dkg_groth20_bls12_381, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript,
 };
-use ic_test_utilities::crypto::basic_utilities::set_of;
-use ic_test_utilities::crypto::ni_dkg_csp_dealing;
-use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1};
+use ic_crypto_test_utils::{dkg::ni_dkg_csp_dealing, set_of};
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{
     NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
@@ -20,6 +18,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
 };
 use ic_types::{Height, NodeId, NumberOfNodes, RegistryVersion};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1};
 use std::collections::{BTreeMap, BTreeSet};
 
 // We use threshold 1 in these tests to get a valid DkgConfig in a simple way.

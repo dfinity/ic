@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_threshold_sigs::non_interactive::{
     create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
     RandomNiDkgConfig,
@@ -8,7 +9,6 @@ use ic_interfaces::crypto::{
     LoadTranscriptResult, NiDkgAlgorithm, Signable, SignableMock, ThresholdSigVerifier,
     ThresholdSigner,
 };
-use ic_test_utilities::crypto::crypto_for;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
