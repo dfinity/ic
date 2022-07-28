@@ -50,6 +50,13 @@ pub struct RunTestsArgs {
     )]
     log_level: Option<String>,
 
+    #[clap(
+        long = "no-propagate-test-logs",
+        help = r#"If set, logs of tests will only be strored in the test.log
+file of the respective test environment (and not be propagated to stdout, e.g.)."#
+    )]
+    no_propagate_test_logs: bool,
+
     #[clap(long = "rand-seed", help = "A 64-bit wide random seed.")]
     rand_seed: Option<u64>,
 
@@ -262,6 +269,7 @@ impl RunTestsArgs {
 
         Ok(ValidatedCliRunTestsArgs {
             log_level,
+            propagate_test_logs: !self.no_propagate_test_logs,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
             initial_replica_version,
@@ -309,6 +317,7 @@ pub struct ValidatedCliProcessTestsArgs {
 #[derive(Clone, Debug)]
 pub struct ValidatedCliRunTestsArgs {
     pub log_level: slog::Level,
+    pub propagate_test_logs: bool,
     pub rand_seed: u64,
     pub job_id: Option<String>,
     pub initial_replica_version: ReplicaVersion,

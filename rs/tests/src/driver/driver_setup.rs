@@ -126,6 +126,7 @@ pub fn create_driver_context_from_cli(
 
     DriverContext {
         logger: logger.clone(),
+        propagate_test_logs: cli_args.propagate_test_logs,
         rng,
         created_at,
         job_id,
@@ -150,6 +151,10 @@ pub fn mk_logger() -> Logger {
 pub struct DriverContext {
     /// logger
     pub logger: Logger,
+    /// if set, test logs will be propagated to the parent logger, otherwise
+    /// they will only be stored in the test.log file of the respective test
+    /// environment
+    pub propagate_test_logs: bool,
     pub rng: ChaCha8Rng,
     /// The instance at which the context was created.
     pub created_at: SystemTime,

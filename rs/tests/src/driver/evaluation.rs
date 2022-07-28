@@ -204,6 +204,7 @@ fn evaluate_pot_with_group(
     pot_path: TestPath,
     pot_env: &TestEnv,
 ) -> Result<()> {
+    use slog::Drain;
     let (no_threads, all_tests) = match pot.testset {
         TestSet::Sequence(tests) => (1, tests),
         TestSet::Parallel(tests) => (config::N_THREADS_PER_POT, tests),
@@ -220,8 +221,15 @@ fn evaluate_pot_with_group(
             let t_path = pot_path.clone();
             let t_pot_env = pot_env.clone();
             let t_ctx = ctx.clone();
+
             move || {
+                let discard_drain = slog::Discard;
                 for t in chunk {
+                    let logger = if t_ctx.propagate_test_logs {
+                        t_ctx.logger()
+                    } else {
+                        slog::Logger::root(discard_drain.fuse(), slog::o!())
+                    };
                     // the pot env is in <pot>/setup. Hence, we take the parent,
                     // to create the path <pot>/tests/<test>
                     let t_env_dir = t_pot_env
@@ -232,7 +240,7 @@ fn evaluate_pot_with_group(
                         .join(config::TESTS_DIR)
                         .join(&t.name);
                     let test_env = t_pot_env
-                        .fork(t_ctx.logger.clone(), t_env_dir)
+                        .fork(logger, t_env_dir)
                         .expect("Could not create test env.");
                     evaluate_test(&t_ctx, test_env, t, t_path.clone());
                 }
