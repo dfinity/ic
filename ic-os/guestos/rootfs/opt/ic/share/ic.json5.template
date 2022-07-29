@@ -223,6 +223,7 @@ table ip6 filter {\n\
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2607:fb58:9005::/48, 2607:f6f0:3004::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
   }\n\
 }\n",
         ipv4_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",

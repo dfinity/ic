@@ -11,12 +11,16 @@ type ic_replica_exec_t;
 type ic_canister_sandbox_t;
 type ic_canister_sandbox_exec_t;
 
+type ic_http_adapter_t;
+type ic_http_adapter_exec_t;
+
 # On-disk state types.
 type ic_crypto_store_t;
 type ic_data_t;
 
 permissive ic_orchestrator_t;
 permissive ic_replica_t;
+permissive ic_http_adapter_t;
 
 ###############################################################################
 # System integration bits
@@ -357,3 +361,8 @@ dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
 
 # Forbid the sandbox from checking certs
 dontaudit ic_canister_sandbox_t cert_t : file { read };
+
+###############################################################################
+# ic-canister-http-adapter
+
+application_domain(ic_http_adapter_t, ic_http_adapter_exec_t)

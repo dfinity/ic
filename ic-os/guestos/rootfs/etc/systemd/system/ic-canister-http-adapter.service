@@ -8,7 +8,7 @@ Requires=ic-canister-http-adapter.socket
 StartLimitIntervalSec=0
 
 [Service]
-User=ic-replica
+User=ic-http-adapter
 Environment=RUST_BACKTRACE=1
 ExecStartPre=+/opt/ic/bin/generate-canister-http-adapter-config.sh -o /run/ic-node/config/ic-canister-http-adapter.json
 ExecStart=/opt/ic/bin/ic-canister-http-adapter /run/ic-node/config/ic-canister-http-adapter.json

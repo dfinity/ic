@@ -8,8 +8,8 @@ Description=Socket for IC Canister HTTP Provider
 # https://www.freedesktop.org/software/systemd/man/systemd.socket.html
 ListenStream=/run/ic-node/canister-http-adapter/socket
 ListenStream=/run/ic-node/canister-http-adapter/metrics
-SocketUser=ic-replica
-SocketGroup=ic-replica
+SocketUser=ic-http-adapter
+SocketGroup=ic-http-adapter
 SocketMode=0660
 
 [Install]
