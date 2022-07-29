@@ -174,18 +174,6 @@ impl Recovery {
         }
     }
 
-    /// Grabs metrics from all nodes and greps for the certification and finalization heights.
-    pub fn get_node_heights_from_metrics(
-        &self,
-        subnet_id: SubnetId,
-    ) -> RecoveryResult<Vec<NodeMetrics>> {
-        Ok(self
-            .get_member_ips(subnet_id)?
-            .iter()
-            .filter_map(|ip| get_node_metrics(&self.logger, ip))
-            .collect())
-    }
-
     /// Executes the given SSH command.
     pub fn execute_ssh_command(
         &self,
@@ -222,52 +210,6 @@ impl Recovery {
             info!(logger, "{}", res);
         }
         Ok(())
-    }
-
-    /// Lookup IP addresses of all members of the given subnet
-    pub fn get_member_ips(&self, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
-        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-        let result = rt
-            .block_on(async {
-                let nns_data_provider = create_nns_data_provider(
-                    tokio::runtime::Handle::current(),
-                    vec![self.admin_helper.nns_url.clone()],
-                    None,
-                );
-                let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-                if let Err(err) = registry_client.poll_once() {
-                    return Err(format!("couldn't poll the registry: {:?}", err));
-                };
-                let version = registry_client.get_latest_version();
-                match registry_client.get_node_ids_on_subnet(subnet_id, version) {
-                    Ok(Some(node_ids)) => Ok(node_ids
-                        .into_iter()
-                        .filter_map(|node_id| {
-                            registry_client
-                                .get_transport_info(node_id, version)
-                                .unwrap_or_default()
-                        })
-                        .collect::<Vec<_>>()),
-                    other => Err(format!(
-                        "no node ids found in the registry for subnet_id={}: {:?}",
-                        subnet_id, other
-                    )),
-                }
-            })
-            .map_err(|err| RecoveryError::UnexpectedError(err))?;
-        result
-            .into_iter()
-            .filter_map(|node_record| {
-                node_record.http.map(|http| {
-                    http.ip_addr.parse().map_err(|err| {
-                        RecoveryError::UnexpectedError(format!(
-                            "couldn't parse ip address from the registry: {:?}",
-                            err
-                        ))
-                    })
-                })
-            })
-            .collect()
     }
 
     /// Return a [DownloadIcStateStep] downloading the ic_state of the given
@@ -387,12 +329,25 @@ impl Recovery {
     }
 
     pub fn get_validate_replay_step(&self, subnet_id: SubnetId, extra_batches: u64) -> impl Step {
+        self.get_validate_replay_step_with_nns(
+            subnet_id,
+            self.admin_helper.nns_url.clone(),
+            extra_batches,
+        )
+    }
+
+    pub fn get_validate_replay_step_with_nns(
+        &self,
+        subnet_id: SubnetId,
+        validate_nns_url: Url,
+        extra_batches: u64,
+    ) -> impl Step {
         ValidateReplayStep {
             logger: self.logger.clone(),
             subnet_id,
+            validate_nns_url,
             work_dir: self.work_dir.clone(),
             extra_batches,
-            recovery: self.clone(),
         }
     }
 
@@ -758,8 +713,8 @@ impl Recovery {
     /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
     pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
         UploadCUPAndTar {
-            recovery: self.clone(),
             logger: self.logger.clone(),
+            nns_url: self.admin_helper.nns_url.clone(),
             subnet_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
@@ -797,7 +752,6 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
-            recovery: self.clone(),
         }
     }
 
@@ -854,4 +808,59 @@ pub fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
         }
     }
     Some(node_heights)
+}
+
+/// Grabs metrics from all nodes and greps for the certification and finalization heights.
+pub fn get_node_heights_from_metrics(
+    logger: &Logger,
+    nns_url: Url,
+    subnet_id: SubnetId,
+) -> RecoveryResult<Vec<NodeMetrics>> {
+    Ok(get_member_ips(nns_url, subnet_id)?
+        .iter()
+        .filter_map(|ip| get_node_metrics(logger, ip))
+        .collect())
+}
+
+/// Lookup IP addresses of all members of the given subnet
+pub fn get_member_ips(nns_url: Url, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
+    let result = rt
+        .block_on(async {
+            let nns_data_provider =
+                create_nns_data_provider(tokio::runtime::Handle::current(), vec![nns_url], None);
+            let registry_client = RegistryClientImpl::new(nns_data_provider, None);
+            if let Err(err) = registry_client.poll_once() {
+                return Err(format!("couldn't poll the registry: {:?}", err));
+            };
+            let version = registry_client.get_latest_version();
+            match registry_client.get_node_ids_on_subnet(subnet_id, version) {
+                Ok(Some(node_ids)) => Ok(node_ids
+                    .into_iter()
+                    .filter_map(|node_id| {
+                        registry_client
+                            .get_transport_info(node_id, version)
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()),
+                other => Err(format!(
+                    "no node ids found in the registry for subnet_id={}: {:?}",
+                    subnet_id, other
+                )),
+            }
+        })
+        .map_err(|err| RecoveryError::UnexpectedError(err))?;
+    result
+        .into_iter()
+        .filter_map(|node_record| {
+            node_record.http.map(|http| {
+                http.ip_addr.parse().map_err(|err| {
+                    RecoveryError::UnexpectedError(format!(
+                        "couldn't parse ip address from the registry: {:?}",
+                        err
+                    ))
+                })
+            })
+        })
+        .collect()
 }

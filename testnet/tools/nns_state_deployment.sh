@@ -72,6 +72,7 @@ chmod +x $TMP_DIR/driver.sh
 # Recover the NNS subnet.
 $TMP_DIR/driver.sh | $TMP_DIR/ic-recovery --dir $TMP_DIR -r $NNS_URL --replica-version $VERSION --test nns-recovery-failover-nodes \
     --subnet-id $ORIGINAL_NNS_ID \
+    --validate-nns-url $NNS_URL \
     --aux-ip $AUX_IP --aux-user admin \
     --parent-nns-host-ip $NNS_IP \
     --replica-version $VERSION \
