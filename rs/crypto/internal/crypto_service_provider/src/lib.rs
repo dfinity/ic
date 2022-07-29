@@ -9,7 +9,6 @@ pub mod canister_threshold;
 pub mod imported_test_utils;
 pub mod imported_utilities;
 pub mod public_key_store;
-mod remaining_conversions;
 pub mod secret_key_store;
 pub mod threshold;
 pub mod tls;
