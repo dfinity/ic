@@ -193,6 +193,7 @@ members = [
   "rust_canisters/dfn_json",
   "rust_canisters/dfn_macro",
   "rust_canisters/dfn_protobuf",
+  "rust_canisters/ecdsa",
   "rust_canisters/memory_test",
   "rust_canisters/proxy_canister",
   "rust_canisters/on_wire",

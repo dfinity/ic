@@ -2590,6 +2590,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ecdsa-canister"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_core",
+ "ic-cdk 0.5.2",
+ "ic-cdk-macros",
+ "ic-ic00-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ed25519"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
