@@ -40,7 +40,7 @@
 
 - name: copy file media.img for boundary node VMs
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) | join(' ') }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) | join(' ') }}"
   shell: |
     set -eExuo pipefail
 
@@ -57,7 +57,7 @@
 
 - name: copy file disk.img for boundary nodes
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) | join(' ') }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) | join(' ') }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
   shell: |
     set -eExuo pipefail
