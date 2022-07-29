@@ -15,10 +15,12 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{
-        CanisterStateChanges, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+        CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
+        WasmExecutor,
     },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
+use ic_error_types::UserError;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
@@ -38,7 +40,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
-    ApiType,
+    ApiType, ExecutionParameters,
 };
 use ic_test_utilities::{
     execution_environment::test_registry_settings,
@@ -49,7 +51,8 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
-    messages::{CallContextId, Request, RequestOrResponse, Response},
+    ingress::{IngressState, IngressStatus},
+    messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions, Randomness, Time,
     UserId,
@@ -204,17 +207,35 @@ impl SchedulerTest {
         canister_id
     }
 
-    pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) {
+    pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        wasm_executor.push_ingress(
+        let message_id = wasm_executor.push_ingress(
             canister_id,
             canister,
             message,
             Time::from_nanos_since_unix_epoch(u64::MAX / 2),
         );
         self.state = Some(state);
+        message_id
+    }
+
+    pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+        self.state.as_ref().unwrap().get_ingress_status(message_id)
+    }
+
+    pub fn ingress_error(&self, message_id: &MessageId) -> UserError {
+        match self.ingress_status(message_id) {
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Failed(error) => error,
+                IngressState::Received
+                | IngressState::Completed(_)
+                | IngressState::Processing
+                | IngressState::Done => unreachable!("Unexpected ingress state: {:?}", state),
+            },
+            IngressStatus::Unknown => unreachable!("Expected message to finish."),
+        }
     }
 
     /// Injects a call from `self.xnet_canister_id()` to the management
@@ -389,6 +410,7 @@ pub(crate) struct SchedulerTestBuilder {
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
     rate_limiting_of_heap_delta: bool,
+    deterministic_time_slicing: bool,
     log: ReplicaLogger,
 }
 
@@ -413,6 +435,7 @@ impl Default for SchedulerTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
+            deterministic_time_slicing: false,
             log: no_op_logger(),
         }
     }
@@ -476,6 +499,13 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_deterministic_time_slicing(self) -> Self {
+        Self {
+            deterministic_time_slicing: true,
+            ..self
+        }
+    }
+
     pub fn build(self) -> SchedulerTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let first_xnet_canister = u64::MAX / 2;
@@ -514,6 +544,11 @@ impl SchedulerTestBuilder {
         } else {
             FlagStatus::Disabled
         };
+        let deterministic_time_slicing = if self.deterministic_time_slicing {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
@@ -521,6 +556,7 @@ impl SchedulerTestBuilder {
             max_canister_memory_size: NumBytes::from(self.max_canister_memory_size),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
+            deterministic_time_slicing,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new());
@@ -531,7 +567,7 @@ impl SchedulerTestBuilder {
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
-            config.deterministic_time_slicing,
+            deterministic_time_slicing,
             config.cost_to_compile_wasm_instruction,
         );
         let hypervisor = Arc::new(hypervisor);
@@ -539,7 +575,6 @@ impl SchedulerTestBuilder {
             IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
-        let deterministic_time_slicing = config.deterministic_time_slicing;
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
@@ -706,13 +741,30 @@ impl TestWasmExecutor {
 }
 
 impl WasmExecutor for TestWasmExecutor {
+    // The entry point of the Wasm executor.
+    //
+    // It finds the test message corresponding to the given input and "executes"
+    // it by interpreting its description.
     fn execute(
         self: Arc<Self>,
         input: WasmExecutionInput,
         execution_state: &ExecutionState,
     ) -> (Option<CompilationResult>, WasmExecutionResult) {
-        let mut guard = self.core.lock().unwrap();
-        guard.execute(input, execution_state)
+        let (_message_id, message, call_context_id) = {
+            let mut guard = self.core.lock().unwrap();
+            guard.take_message(&input)
+        };
+        let execution = TestPausedWasmExecution {
+            message,
+            sandbox_safe_system_state: input.sandbox_safe_system_state,
+            execution_parameters: input.execution_parameters,
+            canister_current_memory_usage: input.canister_current_memory_usage,
+            call_context_id,
+            instructions_executed: NumInstructions::from(0),
+            executor: Arc::clone(&self),
+        };
+        let result = Box::new(execution).resume(execution_state);
+        (None, result)
     }
 
     fn create_execution_state(
@@ -759,24 +811,36 @@ impl TestWasmExecutorCore {
         }
     }
 
-    // The entry point of the Wasm executor.
-    //
-    // It finds the test message corresponding to the given input and "executes"
-    // it by interpreting its description.
-    fn execute(
+    // Advances progress of the given paused execution by executing one slice.
+    fn execute_slice(
         &mut self,
-        input: WasmExecutionInput,
+        mut paused: Box<TestPausedWasmExecution>,
         execution_state: &ExecutionState,
-    ) -> (Option<CompilationResult>, WasmExecutionResult) {
+    ) -> WasmExecutionResult {
         let thread_id = thread::current().id();
-        let canister_id = input.sandbox_safe_system_state.canister_id();
-        let (_message_id, message, call_context_id) = self.take_message(&input);
+        let canister_id = paused.sandbox_safe_system_state.canister_id();
 
-        // TODO(RUN-124): Use `slice_instruction_limit` and support DTS here.
-        let instruction_limit = input.execution_parameters.instruction_limits.message();
-        if message.instructions > instruction_limit {
+        let message_limit = paused.execution_parameters.instruction_limits.message();
+        let slice_limit = paused.execution_parameters.instruction_limits.slice();
+        let instructions_to_execute =
+            paused.message.instructions.min(message_limit) - paused.instructions_executed;
+
+        let is_last_slice = instructions_to_execute <= slice_limit;
+        if !is_last_slice {
+            paused.instructions_executed += slice_limit;
             let slice = SliceExecutionOutput {
-                executed_instructions: input.execution_parameters.instruction_limits.slice(),
+                executed_instructions: slice_limit,
+            };
+            self.schedule
+                .push((thread_id, self.round, canister_id, slice_limit));
+            return WasmExecutionResult::Paused(slice, paused);
+        }
+
+        paused.instructions_executed += instructions_to_execute;
+
+        if paused.message.instructions > message_limit {
+            let slice = SliceExecutionOutput {
+                executed_instructions: instructions_to_execute,
             };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
@@ -789,18 +853,20 @@ impl TestWasmExecutorCore {
                 },
             };
             self.schedule
-                .push((thread_id, self.round, canister_id, instruction_limit));
-            return (None, WasmExecutionResult::Finished(slice, output, None));
+                .push((thread_id, self.round, canister_id, instructions_to_execute));
+            return WasmExecutionResult::Finished(slice, output, None);
         }
-        let instructions_left = instruction_limit - message.instructions;
+
+        let message = paused.message;
+        let instructions_left = message_limit - paused.instructions_executed;
 
         // Generate all the outgoing calls.
         let system_state_changes = self.perform_calls(
-            input.sandbox_safe_system_state,
+            paused.sandbox_safe_system_state,
             message.calls,
-            call_context_id,
-            input.canister_current_memory_usage,
-            input.execution_parameters.compute_allocation,
+            paused.call_context_id,
+            paused.canister_current_memory_usage,
+            paused.execution_parameters.compute_allocation,
         );
 
         let canister_state_changes = CanisterStateChanges {
@@ -815,7 +881,7 @@ impl TestWasmExecutorCore {
             dirty_pages: message.dirty_pages,
         };
         let slice = SliceExecutionOutput {
-            executed_instructions: message.instructions,
+            executed_instructions: instructions_to_execute,
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
@@ -825,11 +891,8 @@ impl TestWasmExecutorCore {
             instance_stats,
         };
         self.schedule
-            .push((thread_id, self.round, canister_id, message.instructions));
-        (
-            None,
-            WasmExecutionResult::Finished(slice, output, Some(canister_state_changes)),
-        )
+            .push((thread_id, self.round, canister_id, instructions_to_execute));
+        WasmExecutionResult::Finished(slice, output, Some(canister_state_changes))
     }
 
     fn create_execution_state(
@@ -1043,21 +1106,22 @@ impl TestWasmExecutorCore {
         canister: &mut CanisterState,
         message: TestMessage,
         expiry_time: Time,
-    ) {
+    ) -> MessageId {
         let ingress_id = self.next_message_id();
         self.messages.insert(ingress_id, message);
-        canister.push_ingress(
-            (
-                SignedIngressBuilder::new()
-                    .canister_id(canister_id)
-                    .method_name("update")
-                    .method_payload(encode_message_id_as_payload(ingress_id))
-                    .expiry_time(expiry_time)
-                    .build(),
-                None,
-            )
-                .into(),
-        );
+        let ingress: Ingress = (
+            SignedIngressBuilder::new()
+                .canister_id(canister_id)
+                .method_name("update")
+                .method_payload(encode_message_id_as_payload(ingress_id))
+                .expiry_time(expiry_time)
+                .build(),
+            None,
+        )
+            .into();
+        let message_id = ingress.message_id.clone();
+        canister.push_ingress(ingress);
+        message_id
     }
 
     fn push_install_code(&mut self, canister_id: CanisterId, install_code: TestInstallCode) {
@@ -1078,6 +1142,38 @@ impl TestWasmExecutorCore {
         let result = self.next_message_id;
         self.next_message_id += 1;
         result
+    }
+}
+
+/// Represent fake Wasm execution that can be paused and resumed.
+struct TestPausedWasmExecution {
+    message: TestMessage,
+    sandbox_safe_system_state: SandboxSafeSystemState,
+    execution_parameters: ExecutionParameters,
+    canister_current_memory_usage: NumBytes,
+    call_context_id: Option<CallContextId>,
+    instructions_executed: NumInstructions,
+    executor: Arc<TestWasmExecutor>,
+}
+
+impl std::fmt::Debug for TestPausedWasmExecution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestPausedWasmExecution")
+            .field("message", &self.message)
+            .field("instructions_executed", &self.instructions_executed)
+            .finish()
+    }
+}
+
+impl PausedWasmExecution for TestPausedWasmExecution {
+    fn resume(self: Box<Self>, execution_state: &ExecutionState) -> WasmExecutionResult {
+        let executor = Arc::clone(&self.executor);
+        let mut guard = executor.core.lock().unwrap();
+        guard.execute_slice(self, execution_state)
+    }
+
+    fn abort(self: Box<Self>) {
+        // Nothing to do.
     }
 }
 

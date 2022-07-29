@@ -2335,3 +2335,55 @@ fn rate_limiting_of_install_code() {
         Payload::Data(EmptyBlob::encode())
     );
 }
+
+#[test]
+fn dts_long_execution_completes() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 1,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let message_id = test.send_ingress(canister, ingress(1000));
+    for _ in 0..10 {
+        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterDidNotReply,
+    );
+}
+
+#[test]
+fn dts_long_execution_runs_out_of_instructions() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 1,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let message_id = test.send_ingress(canister, ingress(1001));
+    for _ in 0..10 {
+        assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::CanisterInstructionLimitExceeded,
+    );
+}
