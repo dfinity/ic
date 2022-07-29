@@ -26,8 +26,8 @@ ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
 ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
 # Service worker version and sha256
-ARG sw_version=1.2.1
-ARG sw_sha256=61dff21d42360c009c868ee867b07f746b03eed436d3e52978959a6c14f806b1
+ARG sw_version=1.2.2
+ARG sw_sha256=a64e4b24346b0364baafc666a5ef1b02fd6eac4091343e02740fc94465b49e0b
 
 #
 # First build stage: download software, build and verify it (such that it
