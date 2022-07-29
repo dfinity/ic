@@ -7,6 +7,7 @@ load("//bazel:buildifier.bzl", "buildifier_test")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    ".rclone.conf",
     "clippy.toml",
     "rustfmt.toml",
 ])

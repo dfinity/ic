@@ -1,7 +1,9 @@
 exports_files(
     [
+        "artifacts_uploader.bash.template",
         "buildifier_test.bash.template",
         "prost_generator.sh",
+        "urls_test.sh",
     ],
     visibility = ["//visibility:public"],
 )

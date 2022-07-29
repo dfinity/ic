@@ -22,6 +22,8 @@ bazel-test-all:
   script:
     - set -euo pipefail
     - bazel version
+    - mkdir -p "${HOME}/.aws"
+    - ln -s "${AWS_SHARED_CREDENTIALS_FILE}" "${HOME}/.aws/credentials"
     - >
       bazel
       --output_base "/cache/bazel-output/${CI_CONCURRENT_ID}"

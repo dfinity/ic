@@ -1,0 +1,6 @@
+package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "rclone_upload",
+    srcs = ["rclone_upload.py"],
+)
