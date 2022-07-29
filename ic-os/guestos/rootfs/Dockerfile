@@ -104,12 +104,19 @@ RUN addgroup --system nonconfidential && \
     addgroup --system vsock && \
     addgroup --system ic-registry-local-store
 
+# The "ic-http-adapter" account. Used to run `ic-canister-http-adapter` binary
+# to allow nodes to make HTTP calls.
+RUN addgroup ic-http-adapter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Canister HTTP Adapter" ic-http-adapter && \
+    adduser ic-http-adapter ic-http-adapter
+
 # User which will run the replica service.
 RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home ic-replica && \
     adduser ic-replica backup && \
     adduser ic-replica nonconfidential && \
     adduser ic-replica confidential && \
     adduser ic-replica ic-registry-local-store && \
+    adduser ic-replica ic-http-adapter && \
     adduser ic-replica vsock
 
 # Accounts to allow remote access to state bits

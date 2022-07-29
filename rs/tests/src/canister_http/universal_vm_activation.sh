@@ -36,7 +36,7 @@ echo "IPv4 is $ipv4"
 docker run \
     --rm \
     -d \
-    -p 80:80 \
+    -p 20080:80 \
     --name httpbin \
     kennethreitz/httpbin
 
@@ -63,7 +63,7 @@ docker run \
     -d \
     --name ssl-proxy \
     --link httpbin \
-    -p 443:443 \
+    -p 20443:443 \
     -v "$(pwd)/ipv6":/etc/nginx/certs \
     -e TARGET_HOST="httpbin" \
     -e TARGET_PORT="80" \
