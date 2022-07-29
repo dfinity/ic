@@ -221,6 +221,17 @@ pub fn cycles_restrictions_pot() -> Pot {
     )
 }
 
+pub fn max_number_of_canisters_pot() -> Pot {
+    pot(
+        "max_number_of_canisters_pot",
+        execution::config_max_number_of_canisters(),
+        par(vec![t(
+            "creating_canisters_fails_if_limit_of_allowed_canisters_is_reached",
+            execution::canister_lifecycle::creating_canisters_fails_if_limit_of_allowed_canisters_is_reached,
+        )]),
+    )
+}
+
 pub fn inter_canister_queries() -> Pot {
     pot(
         "inter_canister_queries",

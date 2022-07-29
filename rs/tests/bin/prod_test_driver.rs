@@ -339,6 +339,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             execution::upgraded_pots::cycles_restrictions_pot(),
             execution::upgraded_pots::inter_canister_queries(),
             execution::upgraded_pots::compute_allocation_pot(),
+            execution::upgraded_pots::max_number_of_canisters_pot(),
             pot(
                 "global_reboot_pot",
                 message_routing::global_reboot_test::config(),

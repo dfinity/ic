@@ -1508,14 +1508,6 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::p
     })
 }
 
-// A special configuration for testing the maximum number of canisters on a
-// subnet. The value is set to 3 for the tests.
-pub fn config_max_number_of_canisters() -> LegacyInternetComputer {
-    LegacyInternetComputer::new().add_subnet(
-        LegacySubnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3),
-    )
-}
-
 /// This test assumes it's being executed using
 /// `config_max_number_of_canisters`, which limits the allowed canisters on the
 /// subnet to be 3.

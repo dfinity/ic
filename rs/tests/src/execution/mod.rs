@@ -75,3 +75,10 @@ pub fn legacy_config_memory_capacity() -> LegacyInternetComputer {
             .with_memory_capacity(20 * 1024 * 1024 /* 20 MiB */),
     )
 }
+
+// A special configuration for testing the maximum number of canisters on a
+// subnet. The value is set to 3 for the tests.
+pub fn config_max_number_of_canisters() -> InternetComputer {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3))
+}
