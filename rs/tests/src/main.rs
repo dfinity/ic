@@ -43,7 +43,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     vec![
         canister_lifecycle_memory_capacity_pot(),
         canister_lifecycle_memory_size_pot(),
-        max_number_of_canisters_pot(),
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
@@ -84,16 +83,6 @@ fn subnet_capacity_pot() -> pot::Pot {
         execution::legacy_config_memory_capacity(),
         steps! {
             execution::subnet_capacity::exceeding_memory_capacity_fails_during_message_execution
-        }
-    )
-}
-
-fn max_number_of_canisters_pot() -> pot::Pot {
-    composable!(
-        "max_number_of_canisters_pot",
-        execution::canister_lifecycle::config_max_number_of_canisters(),
-        steps! {
-            execution::canister_lifecycle::creating_canisters_fails_if_limit_of_allowed_canisters_is_reached
         }
     )
 }
