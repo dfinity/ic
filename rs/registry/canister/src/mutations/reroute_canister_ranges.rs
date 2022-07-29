@@ -2,7 +2,7 @@ use crate::registry::Registry;
 use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
+use ic_registry_routing_table::{is_subset_of, CanisterIdRange, CanisterIdRanges};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -29,7 +29,21 @@ impl Registry {
         self.get(&make_subnet_record_key(destination).into_bytes(), version)
             .ok_or_else(|| format!("destination {} is not a known subnet", destination))?;
 
-        let dest_to_src = vec![source, destination];
+        // Check if all the canister ID ranges to be rerouted are from the source subnet.
+        // To be clear, the source subnet here always means the subnet
+        // where the canister ranges are currently assigned in the routing table.
+        let routing_table = self.get_routing_table_or_panic(version);
+        let source_subnet_ranges = routing_table.ranges(source);
+
+        if !is_subset_of(
+            reassigned_canister_ranges.iter(),
+            source_subnet_ranges.iter(),
+        ) {
+            return Err(format!(
+                "not all canisters to be migrated are hosted by the provided source subnet {}",
+                source
+            ));
+        }
 
         // Check that routing table mutation is covered by an existing canister migration.
         let canister_migrations = self.get_canister_migrations(version).ok_or_else(|| {
@@ -39,12 +53,20 @@ impl Registry {
             )
         })?;
 
+        let src_to_dest = vec![source, destination];
+        let dest_to_src = vec![destination, source];
         // The exact range needs to be present in the map with the same trace.
+        // In case of rolling back the migration, the trace from destination to source is also allowed.
         let all_covered_by_canister_migrations = reassigned_canister_ranges
             .iter()
-            .all(|range| canister_migrations.get(range) == Some(&dest_to_src));
+            .all(|range| canister_migrations.get(range) == Some(&src_to_dest))
+            || reassigned_canister_ranges
+                .iter()
+                .all(|range| canister_migrations.get(range) == Some(&dest_to_src));
 
         if !all_covered_by_canister_migrations {
+            // If the rerouting is neither valid normal migration nor valid rollback,
+            // the rerouting cannot proceed and an error is returned.
             return Err(format!(
                 "the ranges to be migrated {:?} are not covered by any existing canister migrations.",
                 reassigned_canister_ranges
