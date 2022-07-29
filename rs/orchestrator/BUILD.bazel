@@ -1,0 +1,94 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(include = ["**"])],
+)
+
+rust_library(
+    name = "lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "orchestrator",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "//rs/async_utils",
+        "//rs/canister_client",
+        "//rs/config",
+        "//rs/consensus",
+        "//rs/consensus/message",
+        "//rs/crypto",
+        "//rs/crypto/sha",
+        "//rs/crypto/tls_interfaces",
+        "//rs/http_utils",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/monitoring/metrics_exporter",
+        "//rs/nns/constants",
+        "//rs/orchestrator/image_upgrader",
+        "//rs/orchestrator/registry_replicator",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/local_store",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/sys",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:exec",
+        "@crate_index//:hex",
+        "@crate_index//:http",
+        "@crate_index//:nix",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:signal-hook",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:tar",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)
+
+rust_binary(
+    name = "orchestrator",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_state_tool",
+    edition = "2018",
+    deps = [
+        ":lib",
+        "//rs/async_utils",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "orchestrator_test",
+    crate = ":lib",
+    deps = [
+        "//rs/registry/fake",
+        "//rs/test_utilities",
+        "@crate_index//:assert_cmd",
+        "@crate_index//:wait-timeout",
+    ],
+)

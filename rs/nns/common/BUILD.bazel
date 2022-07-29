@@ -48,8 +48,8 @@ ALIASES = {}
 rust_library(
     name = "common",
     srcs = glob([
-        "src/**",
-        "gen/**",
+        "src/**/*.rs",
+        "gen/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_common",

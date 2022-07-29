@@ -63,6 +63,21 @@ opt_stripped_binary(
 )
 
 opt_stripped_binary(
+    name = "orchestrator",
+    binary = "//rs/orchestrator",
+)
+
+opt_stripped_binary(
+    name = "vsock_agent",
+    binary = "//rs/guestos_vsock_agent",
+)
+
+opt_stripped_binary(
+    name = "ic-regedit",
+    binary = "//rs/registry/regedit:ic-regedit",
+)
+
+opt_stripped_binary(
     name = "ic-crypto-csp",
     binary = "//rs/crypto:ic-crypto-csp",
 )
@@ -76,10 +91,7 @@ cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
     binaries = [
-        "ic-regedit",
         "ic-recovery",
-        "orchestrator",
-        "vsock_agent",
     ],
     cargo_flags = [
         "--manifest-path",
