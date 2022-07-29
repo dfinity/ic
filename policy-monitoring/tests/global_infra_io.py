@@ -22,7 +22,9 @@ def cleanup():
 
 
 def load_global_infra_yaml(fin: Path):
-    return GlobalInfra.fromYamlFile(input_file=fin)
+    res = GlobalInfra.fromYamlFile(input_file=fin)
+    res.source = "<omitted_for_testing>"
+    return res
 
 
 def load_gloabl_infra_json(fin: Path):

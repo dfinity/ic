@@ -1,0 +1,210 @@
+{
+  "__version": 1,
+  "blessed_replica_versions": {
+    "blessed_version_ids": [
+      "fc6baa3f3f31b9ace3950930d6ee82a0cf534dea"
+    ]
+  },
+  "catch_up_package_contents_tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
+    "ecdsa_initializations": "(binary-data)",
+    "height": 0,
+    "initial_ni_dkg_transcript_high_threshold": {
+      "committee": [
+        "(principal-id)lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae"
+      ],
+      "id": {
+        "dealer_subnet": "(principal-id)fscpm-uiaaa-aaaaa-aaaap-yai",
+        "dkg_tag": 2,
+        "remote_target_id": "(binary-data)51CE43A72811E6463609658FFC89310B466AB3FB855EB9BF8AE0623C1E7B74AB",
+        "start_block_height": 0
+      },
+      "internal_csp_transcript": "(binary-data|sha256)3AC893F2535DF02296577B22614D7B752145941ADDB0A72F127EC1799FC61F11",
+      "registry_version": 1,
+      "threshold": 1
+    },
+    "initial_ni_dkg_transcript_low_threshold": {
+      "committee": [
+        "(principal-id)lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae"
+      ],
+      "id": {
+        "dealer_subnet": "(principal-id)fscpm-uiaaa-aaaaa-aaaap-yai",
+        "dkg_tag": 1,
+        "remote_target_id": "(binary-data)51CE43A72811E6463609658FFC89310B466AB3FB855EB9BF8AE0623C1E7B74AB",
+        "start_block_height": 0
+      },
+      "internal_csp_transcript": "(binary-data|sha256)FD224F9E7BC1B6C683CDC0BF1AF16DECF313E1398628AC20D59F37312C229306",
+      "registry_version": 1,
+      "threshold": 1
+    },
+    "registry_store_uri": null,
+    "state_hash": "(binary-data)",
+    "time": 0
+  },
+  "crypto_record_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae_1": {
+    "algorithm": 7,
+    "key_value": "(binary-data)40BEE2D3321D2AE7156B953F5AD4F639D276BBCF15625EC2D65E421AECF777A3",
+    "proof_data": null,
+    "version": 0
+  },
+  "crypto_record_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae_3": {
+    "algorithm": 9,
+    "key_value": "(binary-data|sha256)3A4EEB64A41B309DD16DDADD90A93BD9E89A33A5D661A0360D851CC602EAFD25",
+    "proof_data": "(binary-data|sha256)DDAC8D46E77E5642CBFFECE01D6DB97F128DD87917EDAC157363D75A5580F582",
+    "version": 0
+  },
+  "crypto_record_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae_4": {
+    "algorithm": 1,
+    "key_value": "(binary-data|sha256)09C7E08FCAD55F2996710ECBA465559C4D0FEF563A1BB987E1D8F0CC60DDD8C1",
+    "proof_data": "(binary-data|sha256)D9DE3D7CFA99DF84CDCCE23E3913D0B387E1382E4F0DE2C5C725CF879A007A0D",
+    "version": 0
+  },
+  "crypto_record_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae_5": {
+    "algorithm": 16,
+    "key_value": "(binary-data|sha256)117AE37AF7110114682816CC94B622441C3A00DE3345A73B4FACD5B5ED94E9C0",
+    "proof_data": null,
+    "version": 0
+  },
+  "crypto_threshold_signing_public_key_tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
+    "algorithm": 2,
+    "key_value": "(binary-data|sha256)1FD8BFFD3D9A5ACF924789A1E4D38854CC06E8C3041104B879CBAAB8AB43AA97",
+    "proof_data": null,
+    "version": 0
+  },
+  "crypto_tls_cert_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae": {
+    "certificate_der": "(binary-data|sha256)EB4CF16E6DC811211B76F2515FBF366D2B5467D0D3C7510C2B0E6195DB5768C7"
+  },
+  "nns_subnet_id": {
+    "principal_id": {
+      "raw": "(principal-id)tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+    }
+  },
+  "node_record_lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae": {
+    "http": {
+      "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+      "port": 8080,
+      "protocol": 1
+    },
+    "node_operator_id": "(binary-data)",
+    "p2p_flow_endpoints": [
+      {
+        "endpoint": {
+          "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+          "port": 4100,
+          "protocol": 3
+        },
+        "flow_tag": 1234
+      }
+    ],
+    "private_api": "(binary-data)",
+    "prometheus_metrics": [
+      {
+        "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+        "port": 9090,
+        "protocol": 1
+      }
+    ],
+    "prometheus_metrics_http": {
+      "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+      "port": 9090,
+      "protocol": 1
+    },
+    "public_api": [
+      {
+        "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+        "port": 8080,
+        "protocol": 1
+      }
+    ],
+    "xnet": {
+      "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+      "port": 2497,
+      "protocol": 1
+    },
+    "xnet_api": [
+      {
+        "ip_addr": "2001:4d78:40d:0:50a5:7aff:fe3e:2387",
+        "port": 2497,
+        "protocol": 1
+      }
+    ]
+  },
+  "provisional_whitelist": {
+    "list_type": 1,
+    "set": "(binary-data)"
+  },
+  "replica_version_fc6baa3f3f31b9ace3950930d6ee82a0cf534dea": {
+    "release_package_sha256_hex": "953a1957b4c351747ef47351334c96b16529992cde316315c11b5c2fd7daa40d",
+    "release_package_url": "https://download.dfinity.systems/ic/fc6baa3f3f31b9ace3950930d6ee82a0cf534dea/guest-os/update-img-dev/update-img.tar.zst"
+  },
+  "routing_table": {
+    "entries": [
+      {
+        "range": {
+          "end_canister_id": {
+            "principal_id": {
+              "raw": "(principal-id)n5n4y-3aaaa-aaaaa-p777q-cai"
+            }
+          },
+          "start_canister_id": {
+            "principal_id": {
+              "raw": "(principal-id)rwlgt-iiaaa-aaaaa-aaaaa-cai"
+            }
+          }
+        },
+        "subnet_id": {
+          "principal_id": {
+            "raw": "(principal-id)tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+          }
+        }
+      }
+    ]
+  },
+  "subnet_list": {
+    "subnets": [
+      "(principal-id)tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+    ]
+  },
+  "subnet_record_tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
+    "dkg_dealings_per_block": 1,
+    "dkg_interval_length": 199,
+    "ecdsa_config": null,
+    "features": {
+      "bitcoin": null,
+      "bitcoin_testnet_feature": null,
+      "canister_sandboxing": false,
+      "http_requests": false
+    },
+    "gossip_config": {
+      "advert_config": {
+        "best_effort_percentage": 20
+      },
+      "max_artifact_streams_per_peer": 20,
+      "max_chunk_size": 4096,
+      "max_chunk_wait_ms": 15000,
+      "max_duplicity": 1,
+      "pfn_evaluation_period_ms": 1000,
+      "receive_check_cache_size": 5000,
+      "registry_poll_period_ms": 3000,
+      "retransmission_request_ms": 60000
+    },
+    "initial_notary_delay_millis": 1000,
+    "is_halted": false,
+    "max_block_payload_size": 4194304,
+    "max_ingress_bytes_per_message": 3670016,
+    "max_ingress_messages_per_block": 1000,
+    "max_instructions_per_install_code": 1000000000000,
+    "max_instructions_per_message": 50000000000,
+    "max_instructions_per_round": 70000000000,
+    "max_number_of_canisters": 0,
+    "membership": [
+      "(principal-id)lte5s-dlawb-wkabs-dfefl-kpow3-4qodg-vntew-v7fwm-xdrzz-os57q-nae"
+    ],
+    "replica_version_id": "fc6baa3f3f31b9ace3950930d6ee82a0cf534dea",
+    "ssh_backup_access": "(binary-data)",
+    "ssh_readonly_access": "(binary-data)",
+    "start_as_nns": false,
+    "subnet_type": 2,
+    "unit_delay_millis": 3000
+  },
+  "unassigned_nodes_config": "(binary-data|sha256)F77331EDEE896C76C16102F01E9B7C4D3BACD7A4951144A5DC61D19F2FCEE94B"
+}
