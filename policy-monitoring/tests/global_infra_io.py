@@ -26,7 +26,7 @@ def load_global_infra_yaml(fin: Path):
 
 
 def load_gloabl_infra_json(fin: Path):
-    return GlobalInfra.fromIcRegeditSnapshot(fin)
+    return GlobalInfra.fromIcRegeditSnapshotFile(fin)
 
 
 def dump_global_infra_yaml(ginfra, fout: Path):

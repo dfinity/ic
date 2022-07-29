@@ -16,9 +16,7 @@ from util.print import eprint
 from .alert import AlertService
 from .artifact_manager import ArtifactManager
 from .backend.group import Group
-from .es_doc import ReplicaDoc
 from .formula_manager import formula_local_path
-from .global_infra import GlobalInfra
 from .mode import is_raw_stream_reusable
 from .mode import Mode
 from .mode import multiple_preprocessing_needed
@@ -41,7 +39,6 @@ class Pipeline:
         docker: bool,
         docker_starter: Optional[str] = None,  # only used in alerts with repros
         git_revision: str = "master",  # the Git sha of this pipeline invocation
-        global_infra: Optional[GlobalInfra] = None,
         formulas: Optional[Set[str]] = None,
         fail=False,  # if True, raise exceptions instead of just sending Slack alerts
     ):
@@ -58,8 +55,6 @@ class Pipeline:
         self.docker_starter = docker_starter
         self.git_revision = git_revision
         self.modes = modes
-
-        self._global_infra = global_infra
 
         self.stat: Dict[str, Dict] = dict()
 
@@ -281,20 +276,17 @@ class Pipeline:
                         short_text=f"Exception from Monpoly: {e.msg}",
                     )
 
-    def infer_global_infra(self, group: Group) -> GlobalInfra:
-        eprint("Inferring global infra ...")
-        orch_docs = [ReplicaDoc(doc.repr) for doc in group.logs if doc.is_replica()]
-        infra = GlobalInfra.fromReplicaLogs(replica_docs=orch_docs)
-        self.stat[group.gid]["global_infra"] = infra.to_dict()
-        eprint("Inferring global infra done.")
-        return infra
-
     def _run_single_group(self, group: Group) -> None:
+        # Check preconditions
+        assert (
+            not UniversalPreProcessor.is_global_infra_required(self.formulas) or group.global_infra is not None
+        ), f"Global Infra is required but not available for {str(group)}"
+
         # Init statistics object for this group name
         self.stat[group.gid] = {
             "pre_processor": dict(),
-            "global_infra": dict(),
             "monpoly": dict(),
+            "global_infra": group.global_infra.to_dict(),
         }
 
         # We convert the iterator to List in order to enable two scans.
@@ -315,26 +307,10 @@ class Pipeline:
             # nothing else to do for this group name
             return
 
-        # Obtain Global Infra
-        infra: Optional[GlobalInfra]
-        if self._global_infra:
-            eprint("Using provided global infra")
-            infra = self._global_infra
-            self.stat[group.gid]["global_infra"] = infra.to_dict()
-            group.global_infra = infra
-            self.art_manager.save_global_infra(group)
-        elif UniversalPreProcessor.is_global_infra_required(self.formulas) or Mode.pre_processor_test in self.modes:
-            infra = self.infer_global_infra(group)
-            group.global_infra = infra
-            self.art_manager.save_global_infra(group)
-        else:
-            eprint("No global infra required")
-            infra = None
-
         if Mode.pre_processor_test in self.modes:
-            pproc = UniversalPreProcessor(infra, None)
+            pproc = UniversalPreProcessor(group.global_infra, None)
         else:
-            pproc = UniversalPreProcessor(infra, self.formulas)
+            pproc = UniversalPreProcessor(group.global_infra, self.formulas)
 
         event_stream = pproc.run(group.logs)
 

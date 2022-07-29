@@ -55,7 +55,10 @@ class GlobalInfra:
     in_subnet_relations: Dict[str, List[Tuple[int, str]]]
     original_subnet_membership: Dict[str, str]
 
-    def __init__(self):
+    def __init__(self, source: str):
+        # original source of this Global Infra information
+        self.source = source
+        # data center IPv6 network masks
         self.prefixes = None
         # stores host_ipv6s
         self.known_hosts = set()
@@ -108,6 +111,7 @@ class GlobalInfra:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "source": self.source,
             "subnets": self.in_subnet_relations,
             "original_subnet_types": self.get_original_subnet_types(),
             "original_subnet_membership": self.get_original_subnet_membership(),
@@ -116,8 +120,8 @@ class GlobalInfra:
         }
 
     @classmethod
-    def fromDict(Self, d: Dict[str, Any]) -> "GlobalInfra":
-        infra = GlobalInfra()
+    def fromDict(Self, d: Dict[str, Any], source: str) -> "GlobalInfra":
+        infra = GlobalInfra(source)
         infra.prefixes = list(d["data_centers"].keys())
         infra.original_subnet_types = d["original_subnet_types"]
         infra.original_subnet_membership = d["original_subnet_membership"]
@@ -134,13 +138,11 @@ class GlobalInfra:
         d: Dict[str, Any] = dict()
         with open(input_file, "r") as fin:
             d = yaml.full_load(stream=fin)
-        return GlobalInfra.fromDict(d)
+        return GlobalInfra.fromDict(d, source=str(input_file))
 
     @classmethod
-    def fromIcRegeditSnapshot(Self, input_file: Path) -> "GlobalInfra":
+    def fromIcRegeditSnapshot(Self, j: Any) -> "GlobalInfra":
         d: Dict[str, Any] = dict()
-        with open(input_file, "r") as fin:
-            j = json.load(fin)
 
         def int_to_subnet_type(x: str, subnet_id: str) -> str:
             if x == 4:
@@ -192,11 +194,19 @@ class GlobalInfra:
 
         d["data_centers"] = dcs
 
-        return GlobalInfra.fromDict(d)
+        return GlobalInfra.fromDict(d, "<obtained_from_registry_snapshot>")
+
+    @classmethod
+    def fromIcRegeditSnapshotFile(Self, input_file: Path) -> "GlobalInfra":
+
+        with open(input_file, "r") as fin:
+            j = json.load(fin)
+
+        return Self.fromIcRegeditSnapshot(j)
 
     @classmethod
     def fromReplicaLogs(Self, replica_docs: List[ReplicaDoc]) -> "GlobalInfra":
-        infra = GlobalInfra()
+        infra = GlobalInfra(source="<inferred_from_replica_logs>")
         for doc in replica_docs:
             # Process all replica docs' node_id / subnet data
             unix_ts, node_id, subnet_id, subnet_id_type = (
