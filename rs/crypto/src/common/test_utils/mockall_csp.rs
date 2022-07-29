@@ -11,17 +11,12 @@ use ic_crypto_internal_csp::api::tls_errors::{
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspThresholdSignError,
-    CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,
-    DistributedKeyGenerationCspClient, NiDkgCspClient, NodePublicKeyData,
-    ThresholdSignatureCspClient,
+    CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake, NiDkgCspClient,
+    NodePublicKeyData, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::tls::cert_chain::CspCertificateChain;
-use ic_crypto_internal_csp::types::{
-    CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspPublicKey, CspResponse,
-    CspSignature,
-};
+use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
-use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
@@ -33,7 +28,6 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSigShareInternal,
 };
-use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::CspEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
@@ -51,7 +45,6 @@ use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::KeyId;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use ic_types::IDkgId;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::predicate::*;
 use mockall::*;
@@ -244,92 +237,6 @@ mock! {
             &self,
             active_keys: BTreeSet<CspPublicCoefficients>
         ) -> Result<(), CspDkgRetainThresholdKeysError>;
-    }
-
-    pub trait DistributedKeyGenerationCspClient {
-         fn dkg_create_ephemeral(
-        &self,
-        dkg_id: IDkgId,
-        node_id: &[u8],
-    ) -> Result<(CspEncryptionPublicKey, CspPop), dkg_errors::DkgCreateEphemeralError>;
-
-    fn dkg_verify_ephemeral(
-        &self,
-        dkg_id: IDkgId,
-        node_id: &[u8],
-        key: (CspEncryptionPublicKey, CspPop),
-    ) -> Result<(), dkg_errors::DkgVerifyEphemeralError>;
-
-    fn dkg_create_dealing(
-        &self,
-        dkg_id: IDkgId,
-        threshold: NumberOfNodes,
-        receiver_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-    ) -> Result<CspDealing, dkg_errors::DkgCreateDealingError>;
-
-    fn dkg_verify_dealing(
-        &self,
-        threshold: NumberOfNodes,
-        receiver_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-        csp_dealing: CspDealing,
-    ) -> Result<(), dkg_errors::DkgVerifyDealingError>;
-
-    fn dkg_create_response(
-        &self,
-        dkg_id: IDkgId,
-        verified_csp_dealings: &[((CspEncryptionPublicKey, CspPop), CspDealing)],
-        my_index: NodeIndex,
-    ) -> Result<CspResponse, dkg_errors::DkgCreateResponseError>;
-
-    fn dkg_verify_response(
-        &self,
-        dkg_id: IDkgId,
-        verified_csp_dealings: &[((CspEncryptionPublicKey, CspPop), CspDealing)],
-        receiver_index: NodeIndex,
-        receiver_key: (CspEncryptionPublicKey, CspPop),
-        response: CspResponse,
-    ) -> Result<(), dkg_errors::DkgVerifyResponseError>;
-
-    fn dkg_create_transcript(
-        &self,
-        threshold: NumberOfNodes,
-        verified_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-        verified_csp_dealings: &[((CspEncryptionPublicKey, CspPop), CspDealing)],
-        verified_responses: &[Option<CspResponse>],
-    ) -> Result<CspDkgTranscript, dkg_errors::DkgCreateTranscriptError>;
-
-    fn dkg_load_private_key(
-        &self,
-        dkg_id: IDkgId,
-        csp_transcript: CspDkgTranscript,
-    ) -> Result<(), dkg_errors::DkgLoadPrivateKeyError>;
-
-    fn dkg_create_resharing_dealing(
-        &self,
-        dkg_id: IDkgId,
-        threshold: NumberOfNodes,
-        resharing_public_coefficients: CspPublicCoefficients,
-        receiver_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-    ) -> Result<CspDealing, dkg_errors::DkgCreateReshareDealingError>;
-
-    fn dkg_verify_resharing_dealing(
-        &self,
-        threshold: NumberOfNodes,
-        receiver_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-        csp_dealing: CspDealing,
-        dealer_index: NodeIndex,
-        resharing_public_coefficients: CspPublicCoefficients,
-    ) -> Result<(), dkg_errors::DkgVerifyReshareDealingError>;
-
-    fn dkg_create_resharing_transcript(
-        &self,
-        threshold: NumberOfNodes,
-        verified_keys: &[Option<(CspEncryptionPublicKey, CspPop)>],
-        verified_csp_dealings: &[((CspEncryptionPublicKey, CspPop), CspDealing)],
-        verified_responses: &[Option<CspResponse>],
-        resharing_dealers: &[Option<(CspEncryptionPublicKey, CspPop)>],
-        resharing_public_coefficients: CspPublicCoefficients,
-    ) -> Result<CspDkgTranscript, dkg_errors::DkgCreateReshareTranscriptError>;
     }
 
     pub trait CspSecretKeyStoreChecker {

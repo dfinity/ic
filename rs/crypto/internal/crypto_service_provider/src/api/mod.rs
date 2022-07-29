@@ -12,8 +12,7 @@ pub use canister_threshold::{
 pub use keygen::{CspKeyGenerator, CspSecretKeyStoreChecker, NodePublicKeyData};
 pub use sign::CspSigner;
 pub use threshold::{
-    threshold_sign_error::CspThresholdSignError, DistributedKeyGenerationCspClient, NiDkgCspClient,
-    ThresholdSignatureCspClient,
+    threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 pub use tls::{
     tls_errors, CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,

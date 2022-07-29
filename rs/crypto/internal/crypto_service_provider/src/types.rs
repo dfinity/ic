@@ -13,8 +13,7 @@ use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
-    CLibResponseBytes, CLibTranscriptBytes, EncryptedShareBytes, EphemeralKeySetBytes,
-    EphemeralPopBytes,
+    EphemeralKeySetBytes, EphemeralPopBytes,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
@@ -36,7 +35,7 @@ mod test_utils;
 mod tests;
 
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
-use std::collections::BTreeMap;
+
 #[cfg(test)]
 use test_utils::{
     arbitrary_ecdsa_secp256k1_public_key, arbitrary_ecdsa_secp256r1_public_key,
@@ -120,24 +119,6 @@ impl std::fmt::Debug for CspSecretKey {
                     f,
                     "CspSecretKey::IDkgCommitmentOpening::Pedersen::K256 - REDACTED"
                 )
-            }
-        }
-    }
-}
-
-/// An encrypted threshold BLS12-381 key
-#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum CspEncryptedSecretKey {
-    ThresBls12_381(EncryptedShareBytes),
-}
-
-impl std::fmt::Debug for CspEncryptedSecretKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CspEncryptedSecretKey::ThresBls12_381(bytes) => {
-                // this prints no secret key parts
-                // since Debug for EncryptedShareBytes is redacted:
-                write!(f, "CspEncryptedSecretKey::ThresBls12_381: {:?}", bytes)
             }
         }
     }
@@ -266,33 +247,6 @@ pub enum ThresBls12_381_Signature {
     Individual(threshold_types::IndividualSignatureBytes),
     #[cfg_attr(test, proptest(value(arbitrary_threshold_bls12381_combined_signature)))]
     Combined(threshold_types::CombinedSignatureBytes),
-}
-
-/// Data associated with a dealing of the interactive DKG
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CspDealing {
-    pub common_data: CspPublicCoefficients,
-    pub receiver_data: Vec<Option<CspEncryptedSecretKey>>,
-}
-
-/// A response to a interactive DKG dealing
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CspResponse {
-    Secp256k1(CLibResponseBytes),
-}
-
-impl CspResponse {
-    pub fn new_without_complaints() -> CspResponse {
-        CspResponse::Secp256k1(CLibResponseBytes {
-            complaints: BTreeMap::new(),
-        })
-    }
-}
-
-/// The transcript of a interactive DKG dealing
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CspDkgTranscript {
-    Secp256k1(CLibTranscriptBytes),
 }
 
 impl CspSignature {
