@@ -14,6 +14,7 @@ use assert_matches::assert_matches;
 use candid::Decode;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
@@ -376,6 +377,7 @@ fn upgrade_canister_with_no_wasm_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -417,6 +419,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -429,6 +432,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -441,6 +445,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -515,6 +520,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -635,6 +641,7 @@ fn can_create_canister() {
                     CanisterSettings::default(),
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
+                    SMALL_APP_SUBNET_MAX_SIZE
                 )
                 .0
                 .unwrap(),
@@ -649,6 +656,7 @@ fn can_create_canister() {
                     CanisterSettings::default(),
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
+                    SMALL_APP_SUBNET_MAX_SIZE,
                 )
                 .0
                 .unwrap(),
@@ -672,6 +680,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE
             ),
             (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -702,6 +711,7 @@ fn can_create_canister_with_extra_cycles() {
                     CanisterSettings::default(),
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
+                    SMALL_APP_SUBNET_MAX_SIZE
                 )
                 .0
                 .unwrap(),
@@ -724,6 +734,7 @@ fn cannot_install_non_empty_canister() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -778,6 +789,7 @@ fn install_code_with_wrong_controller_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -826,6 +838,7 @@ fn create_canister_sets_correct_allocations() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -850,12 +863,13 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let creation_fee = cycles_account_manager.canister_creation_fee();
+        let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
             canister
@@ -911,6 +925,7 @@ fn reinstall_on_empty_canister_succeeds() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1010,6 +1025,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1057,6 +1073,7 @@ fn reinstall_clears_stable_memory() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1141,6 +1158,7 @@ fn stop_a_running_canister() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1266,6 +1284,7 @@ fn stop_a_canister_with_incorrect_controller() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1332,6 +1351,7 @@ fn start_a_canister_with_incorrect_controller() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1363,6 +1383,7 @@ fn starting_an_already_running_canister_keeps_it_running() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1463,6 +1484,7 @@ fn get_canister_status_with_incorrect_controller() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1494,6 +1516,7 @@ fn get_canister_status_of_running_canister() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1735,6 +1758,7 @@ fn install_canister_with_query_allocation() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1902,6 +1926,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -1984,6 +2009,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2039,6 +2065,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2141,6 +2168,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2269,6 +2297,7 @@ fn failed_install_hooks_consume_instructions() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2346,6 +2375,7 @@ fn install_code_respects_instruction_limit() {
             CanisterSettings::default(),
             MAX_NUMBER_OF_CANISTERS,
             &mut state,
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .0
         .unwrap();
@@ -2621,6 +2651,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2688,6 +2719,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2782,6 +2814,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2932,6 +2965,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 settings,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -2999,6 +3033,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 settings,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -3077,6 +3112,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 CanisterSettings::default(),
                 3, /* max_number_of_canisters */
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -3088,6 +3124,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 CanisterSettings::default(),
                 3, /* max_number_of_canisters */
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -3099,6 +3136,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 CanisterSettings::default(),
                 3, /* max_number_of_canisters */
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();
@@ -3113,6 +3151,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
             CanisterSettings::default(),
             3, /* max_number_of_canisters */
             &mut state,
+            SMALL_APP_SUBNET_MAX_SIZE,
         );
         assert_matches!(
             res,
@@ -3129,6 +3168,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 CanisterSettings::default(),
                 10, /* max_number_of_canisters */
                 &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .0
             .unwrap();

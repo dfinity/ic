@@ -487,6 +487,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
+        subnet_size: usize,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
@@ -501,11 +502,14 @@ impl CanisterManager {
             );
         }
 
-        if cycles < self.cycles_account_manager.canister_creation_fee() {
+        let fee = self
+            .cycles_account_manager
+            .canister_creation_fee(subnet_size);
+        if cycles < fee {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
                     sent: cycles,
-                    required: self.cycles_account_manager.canister_creation_fee(),
+                    required: fee,
                 }),
                 cycles,
             );
@@ -522,7 +526,7 @@ impl CanisterManager {
                 let canister_id = match self.create_canister_helper(
                     sender,
                     cycles,
-                    self.cycles_account_manager.canister_creation_fee(),
+                    fee,
                     validate_settings,
                     max_number_of_canisters,
                     state,

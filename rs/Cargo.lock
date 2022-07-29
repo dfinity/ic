@@ -5612,6 +5612,7 @@ dependencies = [
  "ic-btc-types",
  "ic-canister-sandbox-replica-controller",
  "ic-config",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
