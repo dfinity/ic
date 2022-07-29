@@ -1,0 +1,76 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/bitcoin/library",
+    "//rs/crypto/sha",
+    "//rs/monitoring/metrics_encoder",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/types/base_types",
+    "@crate_index//:bitcoin",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-ledger-types",
+    "@crate_index//:lazy_static",
+    "@crate_index//:serde",
+    "@crate_index//:tokio-test",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "minter",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ckbtc_minter",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-ckbtc-minter",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":minter"],
+)
+
+rust_test(
+    name = "minter_test",
+    crate = ":minter",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+# minter_test won't run tests for main.rs, we have to do it explicitly here.
+rust_test(
+    name = "minter_main_test",
+    srcs = glob(["src/**"]),
+    crate_root = "src/main.rs",
+    data = ["ckbtc_minter.did"],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":minter"],
+)
