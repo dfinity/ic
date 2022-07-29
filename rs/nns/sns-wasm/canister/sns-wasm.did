@@ -57,7 +57,10 @@ type SnsVersion = record {
   governance_wasm_hash : vec nat8;
 };
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
-type SnsWasmCanisterInitPayload = record { sns_subnet_ids : vec principal };
+type SnsWasmCanisterInitPayload = record {
+  access_controls_enabled : bool;
+  sns_subnet_ids : vec principal;
+};
 type SnsWasmError = record { message : text };
 type SwapDistribution = record {
   total_e8s : nat64;

@@ -10,6 +10,8 @@ pub struct StableCanisterState {
     pub deployed_sns_list: ::prost::alloc::vec::Vec<DeployedSns>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_path: ::core::option::Option<UpgradePath>,
+    #[prost(bool, tag = "5")]
+    pub access_controls_enabled: bool,
 }
 /// Details the offset and size of a WASM binary in stable memory and the hash of this binary
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]

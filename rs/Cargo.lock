@@ -7913,6 +7913,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "maplit",
+ "on_wire",
  "pretty_assertions 1.2.1",
  "prost",
  "registry-canister",

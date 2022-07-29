@@ -1933,6 +1933,8 @@ pub enum NnsFunction {
     PrepareCanisterMigration = 28,
     /// Remove `canister_migrations` entries.
     CompleteCanisterMigration = 29,
+    //// Add a new SNS canister WASM
+    AddSnsWasm = 30,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

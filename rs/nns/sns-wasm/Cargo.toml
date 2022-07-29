@@ -52,3 +52,4 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 pretty_assertions = "1.2.1"
+on_wire = { path = "../../rust_canisters/on_wire" }

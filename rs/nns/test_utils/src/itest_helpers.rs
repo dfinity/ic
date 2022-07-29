@@ -25,6 +25,7 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
+use ic_nns_common::types::ProposalId;
 use ic_nns_common::{init::LifelineCanisterInitPayload, types::NeuronId};
 use ic_nns_constants::*;
 use ic_nns_governance::{
@@ -34,6 +35,7 @@ use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
+use ic_sns_wasm::pb::v1::AddWasmRequest;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -173,6 +175,28 @@ impl NnsCanisters<'_> {
         self.governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
             .await
+    }
+
+    /// Add an SNS WASM via NNS proposal
+    pub async fn add_wasm(&self, payload: AddWasmRequest) {
+        let proposal_id: ProposalId = submit_external_update_proposal(
+            &self.governance,
+            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            NeuronId(TEST_NEURON_1_ID),
+            NnsFunction::AddSnsWasm,
+            payload,
+            "add_wasm".to_string(),
+            "".to_string(),
+        )
+        .await;
+
+        // Wait for the proposal to be accepted and executed.
+        assert_eq!(
+            wait_for_final_state(&self.governance, proposal_id)
+                .await
+                .status(),
+            ProposalStatus::Executed
+        );
     }
 }
 
