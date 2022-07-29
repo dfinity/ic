@@ -3,6 +3,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
+from typing import Iterable
 
 from monpoly.monpoly import Monpoly
 from pipeline.alert import AlertService
@@ -10,6 +11,7 @@ from pipeline.alert import DummyAlertService
 from pipeline.artifact_manager import ArtifactManager
 from pipeline.backend import file_io
 from pipeline.backend.ci import Ci
+from pipeline.backend.ci import CiException
 from pipeline.backend.es import Es
 from pipeline.backend.group import Group
 from pipeline.global_infra import GlobalInfra
@@ -144,6 +146,13 @@ def main():
         help="YAML file containing a Global Infra snapshot",
     )
     parser.add_argument(
+        "--get_global_infra_from_registry",
+        "-ggifr",
+        action="store_true",
+        default=True,
+        help="Query the registry for global infra (don't infer from the logs)",
+    )
+    parser.add_argument(
         "--git_revision",
         "-gr",
         type=str,
@@ -166,6 +175,9 @@ def main():
         exit(1)
     if args.limit_time and args.limit != 0:
         print("Option --limit_time requires setting --limit to 0")
+        exit(1)
+    if args.get_global_infra_from_registry and args.global_infra:
+        print("Option --global_infra requires setting --get_global_infra_from_registry=False")
         exit(1)
 
     if args.install_monpoly_docker_image:
@@ -253,29 +265,9 @@ def main():
     #  within a Docker instance.
     with_docker = not args.without_docker
 
-    if args.global_infra:
-        # Load global infra from file
-        global_infra = GlobalInfra.fromYamlFile(Path(args.global_infra))
-    else:
-        global_infra = None
-
     try:
-        artifact_manager = ArtifactManager(project_root, Path(artifacts_location), signature)
-        monpoly_pipeline = Pipeline(
-            policies_path=str(project_root.joinpath("mfotl-policies")),
-            art_manager=artifact_manager,
-            modes=set(args.mode),
-            alert_service=slack,
-            liveness_channel=liveness_slack,
-            docker=with_docker,
-            docker_starter=docker_starter,
-            git_revision=git_revision,
-            formulas=set(args.policy) if args.policy else None,
-            fail=args.fail,
-            global_infra=global_infra,
-        )
-
         # Obtains logs for each group
+        gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
         if args.read:
             groups = file_io.read_logs(log_file=args.read)
         else:
@@ -286,30 +278,66 @@ def main():
             else:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False, fail=args.fail)
                 if args.group_names:
-                    groups = {gid: Group(gid) for gid in args.group_names}
+                    assert isinstance(args.group_names, Iterable)
+                    gids: Iterable[str] = args.group_names
+                    groups = {gid: Group(gid) for gid in gids}
                 else:
                     if gitlab_token is not None:
                         if args.pre_master_pipeline:
                             # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
-                            groups = Ci.get_premaster_groups_for_pipeline(
+                            groups = gitlab.get_premaster_groups_for_pipeline(
                                 args.pre_master_pipeline, include_pattern=None
                             )
                         else:
                             # Monitor all system tests from the regular pipelines (hourly, nightly)
-                            groups = Ci(
-                                url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token
-                            ).get_regular_groups()
+                            groups = gitlab.get_regular_groups()
 
                     elif args.farm_log_for_test is not None:
                         # Relying upon args.farm_log_for_test for end-to-end testing the pipeline implementation
-                        groups = Ci.get_groups_from_farm_log(args.farm_log_for_test)
+                        groups = Ci.get_groups_from_farm_logs(args.farm_log_for_test)
                     else:
                         print(f"Please specify at least one of the following options: {conflicting_modes_disjunction}")
                         exit(1)
 
             es.download_logs(groups, limit_per_group=args.limit, minutes_per_group=args.limit_time)
 
+        # === Obtain GlobalInfra ===
+        formulas = set(args.policy) if args.policy else None
+
+        if args.global_infra:
+            # Load global infra from file (same for all groups)
+            infra = GlobalInfra.fromYamlFile(Path(args.global_infra))
+            for group in groups.values():
+                group.global_infra = infra
+        elif UniversalPreProcessor.is_global_infra_required(formulas):
+            for group in groups.values():
+                if args.get_global_infra_from_registry:
+                    try:
+                        # Obrain from registry
+                        snap = gitlab.get_registry_snapshot_for_group(group)
+                        group.global_infra = GlobalInfra.fromIcRegeditSnapshot(snap)
+                    except CiException:
+                        print("Falling back to inferring Global Infra from logs ...")
+                        group.infer_global_infra()
+                else:
+                    # Infer from logs
+                    group.infer_global_infra()
+        else:
+            print("Skipping Global Infra")
+
         # === Phase III: Run the pipeline ===
+        monpoly_pipeline = Pipeline(
+            policies_path=str(project_root.joinpath("mfotl-policies")),
+            art_manager=ArtifactManager(project_root, Path(artifacts_location), signature),
+            modes=set(args.mode),
+            alert_service=slack,
+            liveness_channel=liveness_slack,
+            docker=with_docker,
+            docker_starter=docker_starter,
+            git_revision=git_revision,
+            formulas=formulas,
+            fail=args.fail,
+        )
         monpoly_pipeline.run(groups)
         monpoly_pipeline.reproduce_all_violations()
         monpoly_pipeline.save_statistics()

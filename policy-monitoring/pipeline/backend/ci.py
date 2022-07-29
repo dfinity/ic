@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from datetime import timedelta
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,19 +13,30 @@ from util.print import eprint
 from .group import Group
 
 
-class CiPipelineNotFoundException(Exception):
+class CiException(Exception):
+    pass
+
+
+class CiPipelineNotFoundException(CiException):
     def __init__(self, pipeline_id: str):
         super().__init__(pipeline_id)
         self.pipeline_id = pipeline_id
 
 
-class CiJobNotFoundException(Exception):
-    def __init__(self, pipeline_id: str):
-        super().__init__(pipeline_id)
-        self.pipeline_id = pipeline_id
+class CiJobNotFoundException(CiException):
+    def __init__(self, jid: int):
+        super().__init__(jid)
+        self.jid = jid
 
 
-class GroupNamesNotFoundInFarmLog(Exception):
+class PotArtifactNotFoundInCi(CiException):
+    def __init__(self, jid: int, art_path: str):
+        super().__init__(jid, art_path)
+        self.jid = jid
+        self.pot_name = art_path
+
+
+class GroupNamesNotFoundInFarmLog(CiException):
     def __init__(self, farm_log: str):
         super().__init__(farm_log)
         self.farm_log = farm_log
@@ -144,7 +156,7 @@ class Ci:
 
     @staticmethod
     def _get_groups_from_trace(
-        trace: str, include_pattern: Optional[str] = None, job_url: Optional[str] = None
+        trace: str, include_pattern: Optional[str] = None, job_id: Optional[int] = None, job_url: Optional[str] = None
     ) -> Optional[Dict[str, Group]]:
         groups: Dict[str, Group] = dict()
         group_names = re.findall("creating group '(.*)'", trace)
@@ -155,7 +167,7 @@ class Ci:
         for gid in group_names:
             if include_pattern is None or re.match(include_pattern, gid):
                 eprint(f" + {gid}", end="\n", flush=True)
-                groups[gid] = Group(gid, url=job_url)
+                groups[gid] = Group(gid, ci_job_id=job_id, url=job_url)
         return groups
 
     def _get_group_names_from_jobs(
@@ -166,7 +178,9 @@ class Ci:
             eprint(f"Searching for group names for job `{job.name}` ...")
             trace = job.trace().decode("utf-8")
             jurl = Ci.job_url(job)
-            new_groups = self._get_groups_from_trace(trace, include_pattern=include_pattern, job_url=jurl)
+            new_groups = self._get_groups_from_trace(
+                trace, include_pattern=include_pattern, job_id=job.id, job_url=jurl
+            )
             if not new_groups:
                 eprint(f"Warning: cannot find test group name for job {jurl}")
             else:
@@ -204,7 +218,7 @@ class Ci:
         return self._get_group_names_from_jobs(traceful_jobs, include_pattern)
 
     @staticmethod
-    def get_groups_from_farm_log(path: str) -> Dict[str, Group]:
+    def get_groups_from_farm_logs(path: str) -> Dict[str, Group]:
         """
         Arguments:
         - path: str -- path to a test driver log
@@ -220,3 +234,32 @@ class Ci:
             eprint(f"Could not find any groups in test driver log {path}")
             raise GroupNamesNotFoundInFarmLog(path)
         return groups
+
+    def get_registry_snapshot_for_group(self, group: Group) -> Any:
+        assert group.ci_job_id is not None, f"cannot obtain initial registry snapshot for {str(group)} without job ID"
+
+        # Example group ID: "boundary_nodes_pre_master__boundary_nodes_pot-2784039865"
+        # Corresponding pot name: "boundary_nodes_pot"
+        m = re.match(r".*?__(.*)-\d+", group.gid)
+        assert m and len(m.groups()) == 1, f"could not extract pot name from {str(group)}"
+
+        pot_name = m.group(1)
+
+        try:
+            job = self.project.jobs.get(group.ci_job_id)
+        except gitlab.exceptions.GitlabGetError:
+            eprint(f"Cannot find job with ID {group.ci_job_id}")
+            raise CiJobNotFoundException(group.ci_job_id)
+
+        try:
+            snap_path = f"working_dir/{pot_name}/setup/ic_prep/initial_registry_snapshot.json"
+            snap_bs = job.artifact(snap_path)
+            if snap_bs is None:
+                eprint(f"Could not find artifact {snap_path} of {str(group)} (no bytes returned)")
+                raise PotArtifactNotFoundInCi(group.ci_job_id, snap_path)
+            snap = snap_bs.decode().strip()
+        except gitlab.exceptions.GitlabGetError:
+            eprint(f"Could not find artifact {snap_path} of {str(group)}")
+            raise PotArtifactNotFoundInCi(group.ci_job_id, snap_path)
+
+        return snap
