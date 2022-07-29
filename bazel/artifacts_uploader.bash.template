@@ -1,0 +1,28 @@
+#! /usr/bin/env bash
+
+set -eEuo pipefail
+
+declare -A BUILD_INFO
+while read -r k v 
+do
+  BUILD_INFO["$k"]="$v"
+done < "@@VERSION_FILE@@"
+
+VERSION="${BUILD_INFO['COMMIT_SHA']}"
+if [ "${BUILD_INFO['GIT_TREE_STATUS']}" != 'Clean' ]
+then
+  VERSION="${VERSION}-${BUILD_INFO['BUILD_TIMESTAMP']}"
+fi
+
+# Required by rclone to get credentials from $HOME/.aws/credentials
+export HOME="${BUILD_INFO['HOME']}"
+
+for f in "$@"
+do
+  "@@RCLONE_UPLOAD@@" --config "@@RCLONE_CONFIG@@" --version "${VERSION}" "@@BIN_DIR@@/$f" "@@REMOTE_SUBDIR@@/$(basename $f)"
+done
+
+for f in "$@"
+do
+  echo "http://download.dfinity.systems/ic/${VERSION}/$f"
+done > "@@URLS_OUTPUT@@"
