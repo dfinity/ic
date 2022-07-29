@@ -59,6 +59,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub aux_user: Option<String>,
 
+    /// Url from where the registry can be downloaded
+    #[clap(long)]
+    pub registry_url: Option<String>,
+
     /// IP address of the node to download the subnet state from
     #[clap(long)]
     pub download_node: Option<IpAddr>,
@@ -106,6 +110,12 @@ impl NNSRecoveryFailoverNodes {
 
     pub fn get_recovery_api(&self) -> &Recovery {
         &self.recovery
+    }
+
+    pub fn get_local_store_tar(&self) -> PathBuf {
+        self.recovery
+            .work_dir
+            .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE))
     }
 }
 
@@ -187,17 +197,12 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step())),
 
             StepType::UploadAndHostTar => {
+                let tar = self.get_local_store_tar();
                 if let (Some(aux_user), Some(aux_ip)) =
                     (self.params.aux_user.clone(), self.params.aux_ip)
                 {
                     Ok(Box::new(
-                        self.recovery.get_upload_and_host_tar(
-                            aux_user,
-                            aux_ip,
-                            self.recovery
-                                .work_dir
-                                .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
-                        ),
+                        self.recovery.get_upload_and_host_tar(aux_user, aux_ip, tar),
                     ))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -205,14 +210,20 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             }
 
             StepType::ProposeCUP => {
-                if let Some(aux_ip) = self.params.aux_ip {
+                let url_str = if let Some(aux_ip) = self.params.aux_ip {
+                    let url = format!(
+                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
+                        aux_ip, IC_REGISTRY_LOCAL_STORE
+                    );
+                    Some(url)
+                } else {
+                    self.params.registry_url.clone()
+                };
+                if let Some(url_string) = url_str {
                     let state_params = self.recovery.get_replay_output()?;
                     let recovery_height = Recovery::get_recovery_height(state_params.height);
 
-                    let store_tar = self
-                        .recovery
-                        .work_dir
-                        .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE));
+                    let store_tar = self.get_local_store_tar();
                     let mut sha256sum = Command::new("sha256sum");
                     sha256sum.arg(store_tar);
 
@@ -223,10 +234,6 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                         RecoveryError::invalid_output_error("Empty sha output".to_string())
                     })?;
 
-                    let url_string = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
-                        aux_ip, IC_REGISTRY_LOCAL_STORE
-                    );
                     let url = Url::parse(&url_string).map_err(|e| {
                         RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
                     })?;

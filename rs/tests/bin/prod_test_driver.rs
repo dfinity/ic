@@ -835,6 +835,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::subnet_recovery_nns_subnet::test,
                     )]),
                 ),
+                pot_with_setup(
+                    "subnet_recovery_nns_failover_nodes",
+                    orchestrator::subnet_recovery_nns_failover::setup,
+                    par(vec![sys_t(
+                        "subnet_recovery_nns_failover_nodes",
+                        orchestrator::subnet_recovery_nns_failover::test,
+                    )]),
+                ),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
