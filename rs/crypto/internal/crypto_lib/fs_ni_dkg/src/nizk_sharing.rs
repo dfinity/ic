@@ -74,7 +74,7 @@ impl UniqueHash for SharingInstance {
 impl SharingInstance {
     // Computes the hash of the instance.
     pub fn hash_to_scalar(&self) -> BIG {
-        random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_INSTANCE, self)
+        random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_INSTANCE, self).to_miracl()
     }
     pub fn check_instance(&self) -> Result<(), ZkProofSharingError> {
         if self.public_keys.is_empty() || self.public_coefficients.is_empty() {
@@ -110,7 +110,7 @@ fn sharing_proof_challenge(hashed_instance: &BIG, first_move: &FirstMoveSharing)
     let mut map = HashedMap::new();
     map.insert_hashed("instance-hash", hashed_instance);
     map.insert_hashed("first-move", first_move);
-    random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_CHALLENGE, &map)
+    random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_CHALLENGE, &map).to_miracl()
 }
 
 /// Create a proof of correct sharing

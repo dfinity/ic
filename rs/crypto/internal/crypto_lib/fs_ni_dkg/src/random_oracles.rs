@@ -1,13 +1,11 @@
 //! Hashing to group elements (fields, curves)
-use crate::utils::{curve_order, RAND_ChaCha20};
-use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_to_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes, miracl_g2_to_bytes,
-};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
+use std::collections::BTreeMap;
+
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
-use std::collections::BTreeMap;
 
 #[cfg(test)]
 mod tests;
@@ -76,9 +74,7 @@ impl UniqueHash for Vec<u8> {
 /// appended with the serialization of the scalar.
 impl UniqueHash for BIG {
     fn unique_hash(&self) -> [u8; 32] {
-        let mut hasher = new_hasher_with_domain(DOMAIN_RO_SCALAR_ELEMENT);
-        hasher.write(&miracl_fr_to_bytes(self).0);
-        hasher.finish()
+        Scalar::from_miracl(self).unique_hash()
     }
 }
 
@@ -89,9 +85,7 @@ impl UniqueHash for BIG {
 /// serialization of the group element.
 impl UniqueHash for ECP {
     fn unique_hash(&self) -> [u8; 32] {
-        let mut hasher = new_hasher_with_domain(DOMAIN_RO_ECP_POINT);
-        hasher.write(&miracl_g1_to_bytes(self).0);
-        hasher.finish()
+        G1Affine::from_miracl(self).unique_hash()
     }
 }
 
@@ -102,8 +96,48 @@ impl UniqueHash for ECP {
 /// serialization of the group element.
 impl UniqueHash for ECP2 {
     fn unique_hash(&self) -> [u8; 32] {
+        G2Affine::from_miracl(self).unique_hash()
+    }
+}
+
+/// Computes the unique digest of an element in the scalar field of the
+/// curve BLS12_381.
+///
+/// The scalar is reduced modulo the order of the group and serialized in 32
+/// bytes using big-endian order. The digest is the hash of the domain separator
+/// appended with the serialization of the scalar.
+impl UniqueHash for Scalar {
+    fn unique_hash(&self) -> [u8; 32] {
+        let mut hasher = new_hasher_with_domain(DOMAIN_RO_SCALAR_ELEMENT);
+        hasher.write(&self.serialize());
+        hasher.finish()
+    }
+}
+
+/// Computes the unique digest of a group element in G1 of the BLS12_381 curve.
+///
+/// The group element is serialized according to the IETF draft of BLS signatures:
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/>
+/// The digest is the hash of the domain separator appended with the
+/// serialization of the group element.
+impl UniqueHash for G1Affine {
+    fn unique_hash(&self) -> [u8; 32] {
+        let mut hasher = new_hasher_with_domain(DOMAIN_RO_ECP_POINT);
+        hasher.write(&self.serialize());
+        hasher.finish()
+    }
+}
+
+/// Computes the unique digest of a group element in G2 of the BLS12_381 curve.
+///
+/// The group element is serialized according to the IETF draft of BLS signatures:
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/>
+/// The digest is the hash of the domain separator appended with the
+/// serialization of the group element.
+impl UniqueHash for G2Affine {
+    fn unique_hash(&self) -> [u8; 32] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_ECP2_POINT);
-        hasher.write(&miracl_g2_to_bytes(self).0);
+        hasher.write(&self.serialize());
         hasher.finish()
     }
 }
@@ -230,35 +264,21 @@ pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
 /// a random oracle. Returns an element in the scalar field of curve BLS12_381.
 ///
 /// A distinct `domain` should be used for each purpose of the random oracle.
-pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> BIG {
+pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> Scalar {
+    use rand_chacha::rand_core::SeedableRng;
+
     let hash = random_oracle(domain, data);
-    let rng = &mut RAND_ChaCha20::new(hash);
-    BIG::randomnum(&curve_order(), rng)
+    let mut rng = rand_chacha::ChaChaRng::from_seed(hash);
+    Scalar::miracl_random(&mut rng)
 }
 
 /// Computes the hash of a struct using an hash function that can be modelled as
 /// a random oracle. Returns a group element of G1 in BLS12_381.
 ///
 /// A distinct `domain` should be used for each purpose of the random oracle.
-pub fn random_oracle_to_miracl_ecp(domain: &str, data: &dyn UniqueHash) -> ECP {
-    hash_to_miracl_ecp(
+pub fn random_oracle_to_g1(domain: &str, data: &dyn UniqueHash) -> G1Affine {
+    G1Affine::hash(
         DomainSeparationContext::new(domain).as_bytes(),
         &data.unique_hash(),
     )
-}
-
-/// Hash onto BLS12-381 G1 (random oracle variant) returning MIRACL object
-///
-/// This follows the internet draft <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/>
-///
-/// # Arguments
-/// * `dst` is a domain separation tag (see draft-irtf-cfrg-hash-to-curve for
-///   guidance on formatting of this tag)
-/// * `msg` is the message to be hashed to an elliptic curve point on BLS12_381.
-/// # Returns
-/// The G1 point as a MIRACL object
-fn hash_to_miracl_ecp(dst: &[u8], msg: &[u8]) -> ECP {
-    let g1 = ic_crypto_internal_bls12_381_type::G1Projective::hash(dst, msg);
-    miracl_g1_from_bytes_unchecked(&g1.serialize())
-        .expect("MIRACL unable to parse G1 serialization")
 }

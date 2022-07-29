@@ -18,10 +18,9 @@ use crate::nizk_chunking::NUM_ZK_REPETITIONS;
 use crate::random_oracles::{random_oracle, HashedMap};
 use crate::utils::*;
 use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_to_bytes, FrBytes,
-    G1Bytes,
+    miracl_g1_from_bytes, miracl_g1_to_bytes, FrBytes, G1Bytes,
 };
-use ic_crypto_internal_bls12_381_type::G2Affine;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
 use miracl_core::bls12381::ecp::{ECP, G2_TABLE};
@@ -184,17 +183,6 @@ impl zeroize::Zeroize for BTENode {
     }
 }
 
-/// A BIG that cann be zeroized
-pub struct ZeroizedBIG {
-    pub big: BIG,
-}
-
-impl zeroize::Zeroize for ZeroizedBIG {
-    fn zeroize(&mut self) {
-        self.big.zero();
-    }
-}
-
 /// A forward-secure secret key is a list of BTE nodes.
 ///
 /// We can derive the keys of any descendant of any node in the list.
@@ -214,8 +202,8 @@ pub struct PublicKeyWithPop {
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
         let instance = EncryptionKeyInstance {
-            g1_gen: ECP::generator(),
-            public_key: self.key_value.clone(),
+            g1_gen: G1Affine::generator(),
+            public_key: G1Affine::from_miracl(&self.key_value),
             associated_data: associated_data.to_vec(),
         };
         verify_pop(&instance, &self.proof_data).is_ok()
@@ -223,9 +211,9 @@ impl PublicKeyWithPop {
     pub fn serialize(&self) -> Vec<u8> {
         [
             &miracl_g1_to_bytes(&self.key_value).0[..],
-            &miracl_g1_to_bytes(&self.proof_data.pop_key).0[..],
-            &miracl_fr_to_bytes(&self.proof_data.challenge).0[..],
-            &miracl_fr_to_bytes(&self.proof_data.response).0[..],
+            &self.proof_data.pop_key.serialize()[..],
+            &self.proof_data.challenge.serialize()[..],
+            &self.proof_data.response.serialize()[..],
         ]
         .concat()
         .to_vec()
@@ -251,9 +239,9 @@ impl PublicKeyWithPop {
         PublicKeyWithPop {
             key_value: miracl_g1_from_bytes(&y.0).expect("Malformed y"),
             proof_data: EncryptionKeyPop {
-                pop_key: miracl_g1_from_bytes(&pop_key.0).expect("Malformed pop_key"),
-                challenge: miracl_fr_from_bytes(&pop_challenge.0).expect("Malformed challenge"),
-                response: miracl_fr_from_bytes(&pop_response.0).expect("Malformed challenge"),
+                pop_key: G1Affine::deserialize(&pop_key.0).expect("Malformed pop_key"),
+                challenge: Scalar::deserialize(&pop_challenge.0).expect("Malformed challenge"),
+                response: Scalar::deserialize(&pop_response.0).expect("Malformed challenge"),
             },
         }
     }
@@ -326,13 +314,13 @@ pub fn kgen(
     let y = g1.mul(&spec_x);
 
     let pop_instance = EncryptionKeyInstance {
-        g1_gen: ECP::generator(),
-        public_key: y.clone(),
+        g1_gen: G1Affine::generator(),
+        public_key: G1Affine::from_miracl(&y),
         associated_data: associated_data.to_vec(),
     };
 
-    let pop =
-        prove_pop(&pop_instance, &spec_x, rng).expect("Implementation bug: Pop generation failed");
+    let pop = prove_pop(&pop_instance, &Scalar::from_miracl(&spec_x), rng)
+        .expect("Implementation bug: Pop generation failed");
 
     (
         PublicKeyWithPop {

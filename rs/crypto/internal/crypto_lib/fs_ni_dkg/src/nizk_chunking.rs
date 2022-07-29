@@ -473,7 +473,7 @@ fn chunking_proof_challenge_oracle(
     map.insert_hashed("first-challenge", &first_challenge.to_vec());
     map.insert_hashed("second-move", second_move);
 
-    random_oracle_to_scalar(DOMAIN_PROOF_OF_CHUNKING_CHALLENGE, &map)
+    random_oracle_to_scalar(DOMAIN_PROOF_OF_CHUNKING_CHALLENGE, &map).to_miracl()
 }
 
 #[inline]

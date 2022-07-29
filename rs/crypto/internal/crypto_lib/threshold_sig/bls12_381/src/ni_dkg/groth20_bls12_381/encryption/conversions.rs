@@ -6,8 +6,9 @@ use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked,
     miracl_g1_to_bytes, miracl_g2_from_bytes, miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
+use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
 use ic_crypto_internal_fs_ni_dkg::{nizk_chunking::ProofChunking, nizk_sharing::ProofSharing};
-use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey,
     NUM_CHUNKS,
@@ -94,15 +95,10 @@ pub fn public_key_from_miracl(
         let g1 = miracl_g1_to_bytes(&crypto_public_key.key_value);
         FsEncryptionPublicKey(g1)
     };
-    let pop_bytes = {
-        let pop_key = miracl_g1_to_bytes(&crypto_public_key.proof_data.pop_key);
-        let challenge = miracl_fr_to_bytes(&crypto_public_key.proof_data.challenge);
-        let response = miracl_fr_to_bytes(&crypto_public_key.proof_data.response);
-        FsEncryptionPop {
-            pop_key,
-            challenge,
-            response,
-        }
+    let pop_bytes = FsEncryptionPop {
+        pop_key: G1Bytes(crypto_public_key.proof_data.pop_key.serialize()),
+        challenge: FrBytes(crypto_public_key.proof_data.challenge.serialize()),
+        response: FrBytes(crypto_public_key.proof_data.response.serialize()),
     };
     (public_key_bytes, pop_bytes)
 }
@@ -120,9 +116,9 @@ pub fn public_key_into_miracl(
     Ok(crypto::PublicKeyWithPop {
         key_value: miracl_g1_from_bytes(public_key.as_bytes())?,
         proof_data: crypto::EncryptionKeyPop {
-            pop_key: miracl_g1_from_bytes(&pop.pop_key.0)?,
-            challenge: miracl_fr_from_bytes(&pop.challenge.0)?,
-            response: miracl_fr_from_bytes(&pop.response.0)?,
+            pop_key: G1Affine::deserialize(&pop.pop_key.0).map_err(|_| ())?,
+            challenge: Scalar::deserialize(&pop.challenge.0).map_err(|_| ())?,
+            response: Scalar::deserialize(&pop.response.0).map_err(|_| ())?,
         },
     })
 }

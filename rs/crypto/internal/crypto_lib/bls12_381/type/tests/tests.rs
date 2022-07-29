@@ -48,6 +48,27 @@ fn scalar_legacy_random_generates_expected_values() {
 }
 
 #[test]
+fn scalar_miracl_random_generates_expected_values() {
+    let seed = hex::decode("4e42f768bab72a9248a43c439a330b94e3d39595c627eb603fff8ff84b7a9914")
+        .expect("valid");
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
+
+    scalar_test_encoding(
+        Scalar::miracl_random(&mut rng),
+        "0ab77cf4d9338f6bfdcd9541574bf1211e8b552743426917e405739c029407aa",
+    );
+
+    let seed = hex::decode("8844d58a75db49c9df827e21085ea9d46f0a14e2bc6edaab27aeb640f88c313a")
+        .expect("valid");
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.try_into().expect("Invalid size"));
+
+    scalar_test_encoding(
+        Scalar::miracl_random(&mut rng),
+        "583912964c0e5c35604b073bf5fe37c4a17f7dc3cd597481116ff9f4c544b2f3",
+    );
+}
+
+#[test]
 fn scalar_legacy_hash_to_fr_generates_expected_values() {
     fn sha256(input: &[u8]) -> [u8; 32] {
         sha2::Sha256::digest(input).into()
