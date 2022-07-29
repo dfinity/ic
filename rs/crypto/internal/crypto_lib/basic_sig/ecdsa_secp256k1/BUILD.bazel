@@ -29,7 +29,6 @@ rust_library(
         "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
-        "@crate_index//:serde_cbor",
         "@crate_index//:simple_asn1",
         "@crate_index//:zeroize",
     ],
