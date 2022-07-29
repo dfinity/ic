@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:private"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/types/types",
+    "@crate_index//:rand_0_8_4",
+]
+
+rust_library(
+    name = "multi_sigs",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_multi_sigs",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "multi_sigs_test",
+    crate = ":multi_sigs",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
