@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:clap",
+    "@crate_index//:futures",
+    "@crate_index//:humantime",
+    "@crate_index//:mockall",
+    "@crate_index//:nix",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:prometheus",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+rust_binary(
+    name = "denylist_updater",
+    srcs = glob(["src/**"]),
+    crate_name = "denylist_updater",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "denylist_updater_test",
+    srcs = glob(["src/**"]),
+    crate_root = "src/main.rs",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
