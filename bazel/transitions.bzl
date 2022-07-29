@@ -8,7 +8,6 @@ def _opt_stripped_transition(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "always",
-        "@rules_rust//:extra_rustc_flags": ["--codegen=lto=thin"],
     }
 
 opt_stripped_transition = transition(
@@ -17,7 +16,6 @@ opt_stripped_transition = transition(
     outputs = [
         "//command_line_option:compilation_mode",
         "//command_line_option:strip",
-        "@rules_rust//:extra_rustc_flags",
     ],
 )
 
