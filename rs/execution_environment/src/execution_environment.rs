@@ -408,7 +408,7 @@ impl ExecutionEnvironment {
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => Some((Err(err.into()), cycles)),
                                     Ok(settings) =>
-                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state))
+                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size))
                                 };
                                 info!(
                                     self.log,
@@ -1043,6 +1043,7 @@ impl ExecutionEnvironment {
         settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
+        subnet_size: usize,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.find_subnet_id(sender) {
             Ok(sender_subnet_id) => {
@@ -1053,6 +1054,7 @@ impl ExecutionEnvironment {
                     settings,
                     max_number_of_canisters,
                     state,
+                    subnet_size,
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())

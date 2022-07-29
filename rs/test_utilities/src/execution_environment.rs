@@ -184,6 +184,10 @@ impl ExecutionTest {
         &self.lost_messages
     }
 
+    pub fn subnet_size(&self) -> usize {
+        self.registry_settings.subnet_size
+    }
+
     pub fn executed_instructions(&self) -> NumInstructions {
         self.executed_instructions.values().sum()
     }
@@ -244,7 +248,8 @@ impl ExecutionTest {
     }
 
     pub fn canister_creation_fee(&self) -> Cycles {
-        self.cycles_account_manager.canister_creation_fee()
+        self.cycles_account_manager
+            .canister_creation_fee(self.subnet_size())
     }
 
     pub fn http_request_fee(

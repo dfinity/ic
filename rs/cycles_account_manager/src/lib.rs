@@ -124,8 +124,8 @@ impl CyclesAccountManager {
     ////////////////////////////////////////////////////////////////////////////
 
     /// Returns the fee to create a canister in [`Cycles`].
-    pub fn canister_creation_fee(&self) -> Cycles {
-        self.config.canister_creation_fee
+    pub fn canister_creation_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.canister_creation_fee, subnet_size)
     }
 
     /// Returns the fee for receiving an ingress message in [`Cycles`].

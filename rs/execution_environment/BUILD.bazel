@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/types/public",
     "//rs/canister_sandbox/replica_controller",
     "//rs/config",
+    "//rs/constants",
     "//rs/crypto",
     "//rs/crypto/tree_hash",
     "//rs/cycles_account_manager",
