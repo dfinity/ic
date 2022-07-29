@@ -1,0 +1,17 @@
+[package]
+name = "ecdsa-canister"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "ecdsa-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = "0.7.14"
+dfn_core = { path = "../dfn_core" }
+ic-cdk = "0.5.2"
+ic-cdk-macros = "0.5.0"
+ic-ic00-types = { path = "../../types/ic00_types" }
+serde = "1.0"
+serde_json = "1.0.54"
