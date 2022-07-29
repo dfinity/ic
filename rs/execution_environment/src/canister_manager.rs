@@ -19,7 +19,7 @@ use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter,
 };
 use ic_interfaces::messages::RequestOrIngress;
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -557,6 +557,7 @@ impl CanisterManager {
     ) {
         let time = state.time();
         let canister_layout_path = state.path().to_path_buf();
+        let compute_allocation_used = state.total_compute_allocation();
         let memory_taken = state.total_memory_taken();
         let network_topology = state.metadata.network_topology.clone();
 
@@ -575,6 +576,7 @@ impl CanisterManager {
             old_canister,
             time,
             canister_layout_path,
+            compute_allocation_used,
             memory_taken,
             &network_topology,
             execution_parameters,
@@ -627,6 +629,7 @@ impl CanisterManager {
         mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
+        compute_allocation_used: u64,
         memory_taken: NumBytes,
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
@@ -634,14 +637,24 @@ impl CanisterManager {
         compilation_cost_handling: CompilationCostHandling,
     ) -> DtsInstallCodeResult {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
-        if context.compute_allocation.is_some() {
-            warn!(
-                self.log,
-                "Setting compute or memory allocation in canister InstallCode is deprecated. Ignoring supplied parameter. (canister id: {})",
-                canister.canister_id()
-            );
-        }
+
+        // TODO(RUN-221): Validate the compute and memory allocation after the
+        // entire execution completes, Because it could be the case that while
+        // the execution is in progress, the available compute and memory
+        // allocation changes.
+
         // Perform a battery of validation checks.
+        if let Err(err) = self.validate_compute_allocation(
+            compute_allocation_used,
+            &canister,
+            context.compute_allocation,
+        ) {
+            return DtsInstallCodeResult::Finished {
+                canister,
+                message,
+                result: Err(err),
+            };
+        }
         if let Err(err) =
             self.validate_memory_allocation(memory_taken, &canister, context.memory_allocation)
         {

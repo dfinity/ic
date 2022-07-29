@@ -1647,6 +1647,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
     ) -> ReplicatedState {
+        let compute_allocation_used = state.total_compute_allocation();
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,
@@ -1709,6 +1710,7 @@ impl ExecutionEnvironment {
             old_canister,
             state.time(),
             state.path().to_path_buf(),
+            compute_allocation_used,
             state.total_memory_taken(),
             &state.metadata.network_topology,
             execution_parameters,

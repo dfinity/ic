@@ -274,6 +274,11 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Update allocations.  This must happen after we have created the new
     // execution state so that we fairly account for the memory requirements
     // of the new wasm module.
+    if let Some(compute_allocation) = context.compute_allocation {
+        new_canister.scheduler_state.compute_allocation = compute_allocation;
+        execution_parameters.compute_allocation = compute_allocation;
+    }
+
     // While the memory allocation can still be included in the context, we need to
     // try to take it from there. Otherwise, we should use the current memory
     // allocation of the canister.
