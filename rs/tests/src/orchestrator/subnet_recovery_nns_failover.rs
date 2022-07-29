@@ -29,7 +29,9 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
+use crate::orchestrator::utils::rw_message::{
+    can_install_canister, can_read_msg, can_store_msg, store_message,
+};
 use anyhow::bail;
 use ic_recovery::file_sync_helper;
 use ic_recovery::nns_recovery_failover_nodes::{
@@ -40,6 +42,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
 use std::fs;
+use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
@@ -182,6 +185,7 @@ pub fn test(env: TestEnv) {
         aux_ip: None,
         aux_user: None,
         registry_url: None,
+        validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
@@ -222,7 +226,13 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
     );
-    assert!(!can_install_canister(&download_node.get_public_url()));
+    let failed_msg = "this shouldn't be stored!";
+    assert!(!can_store_msg(
+        &logger,
+        &download_node.get_public_url(),
+        app_can_id,
+        failed_msg
+    ));
 
     info!(logger, "Check if download node is behind...");
     let ot_node_metrics = get_node_metrics(&logger, &nns_node.get_ip_addr())
@@ -232,6 +242,7 @@ pub fn test(env: TestEnv) {
     if dn_node_metrics.finalization_height < ot_node_metrics.finalization_height {
         info!(logger, "Use the other node for download.");
         subnet_recovery.params.download_node = Some(nns_node.get_ip_addr());
+        subnet_recovery.params.validate_nns_url = download_node.get_public_url();
     }
 
     info!(
@@ -252,8 +263,14 @@ pub fn test(env: TestEnv) {
             // and also upload it...
             let tar = subnet_recovery.get_local_store_tar();
             let url_to_file = setup_file_server(&env, &tar);
-            info!(logger, "URL: {}", url_to_file);
-            subnet_recovery.params.registry_url = Some(url_to_file);
+            let url = Url::parse(&url_to_file).unwrap_or_else(|err| {
+                panic!(
+                    "Couldn't parse url {} to registry tar: {:?}",
+                    url_to_file, err
+                )
+            });
+            info!(logger, "URL: {}", url);
+            subnet_recovery.params.registry_url = Some(url);
         }
     }
 

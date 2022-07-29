@@ -4,7 +4,10 @@ use crate::error::{RecoveryError, RecoveryResult};
 use crate::file_sync_helper::{remove_dir, rsync};
 use crate::ssh_helper::SshHelper;
 use crate::util::{block_on, parse_hex_str};
-use crate::{replay_helper, ADMIN, CHECKPOINTS, IC_STATE, NEW_IC_STATE, READONLY};
+use crate::{
+    get_member_ips, get_node_heights_from_metrics, replay_helper, ADMIN, CHECKPOINTS, IC_STATE,
+    NEW_IC_STATE, READONLY,
+};
 use crate::{
     Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE,
     IC_STATE_EXCLUDES,
@@ -17,6 +20,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
 use std::{thread, time};
+use url::Url;
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -245,9 +249,9 @@ impl Step for ReplayStep {
 }
 
 pub struct ValidateReplayStep {
-    pub recovery: Recovery,
     pub logger: Logger,
     pub subnet_id: SubnetId,
+    pub validate_nns_url: Url,
     pub work_dir: PathBuf,
     pub extra_batches: u64,
 }
@@ -261,9 +265,11 @@ impl Step for ValidateReplayStep {
         let latest_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        let heights = self
-            .recovery
-            .get_node_heights_from_metrics(self.subnet_id)?;
+        let heights = get_node_heights_from_metrics(
+            &self.logger,
+            self.validate_nns_url.clone(),
+            self.subnet_id,
+        )?;
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
@@ -592,8 +598,8 @@ impl Step for CopyIcStateStep {
 }
 
 pub struct UploadCUPAndTar {
-    pub recovery: Recovery,
     pub logger: Logger,
+    pub nns_url: Url,
     pub subnet_id: SubnetId,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -635,7 +641,7 @@ impl Step for UploadCUPAndTar {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ips = self.recovery.get_member_ips(self.subnet_id)?;
+        let ips = get_member_ips(self.nns_url.clone(), self.subnet_id)?;
 
         ips.into_iter()
             .map(|ip| {
@@ -697,7 +703,6 @@ pub struct DownloadRegistryStoreStep {
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
-    pub recovery: Recovery,
 }
 
 impl Step for DownloadRegistryStoreStep {

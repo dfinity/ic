@@ -61,7 +61,11 @@ pub struct NNSRecoveryFailoverNodesArgs {
 
     /// Url from where the registry can be downloaded
     #[clap(long)]
-    pub registry_url: Option<String>,
+    pub registry_url: Option<Url>,
+
+    /// Url of one of the nodes from the original NNS
+    #[clap(long)]
+    pub validate_nns_url: Url,
 
     /// IP address of the node to download the subnet state from
     #[clap(long)]
@@ -184,10 +188,13 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                 )?,
             )),
 
-            StepType::ValidateReplayOutput => Ok(Box::new(
-                self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
-            )),
+            StepType::ValidateReplayOutput => {
+                Ok(Box::new(self.recovery.get_validate_replay_step_with_nns(
+                    self.params.subnet_id,
+                    self.params.validate_nns_url.clone(),
+                    0,
+                )))
+            }
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
                 self.recovery
@@ -210,16 +217,18 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             }
 
             StepType::ProposeCUP => {
-                let url_str = if let Some(aux_ip) = self.params.aux_ip {
-                    let url = format!(
+                let url = if let Some(aux_ip) = self.params.aux_ip {
+                    let url_str = format!(
                         "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
                         aux_ip, IC_REGISTRY_LOCAL_STORE
                     );
-                    Some(url)
+                    Some(Url::parse(&url_str).map_err(|e| {
+                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
+                    })?)
                 } else {
                     self.params.registry_url.clone()
                 };
-                if let Some(url_string) = url_str {
+                if let Some(url) = url {
                     let state_params = self.recovery.get_replay_output()?;
                     let recovery_height = Recovery::get_recovery_height(state_params.height);
 
@@ -232,10 +241,6 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
 
                     let sha = pipe_all(&mut [sha256sum, cut])?.ok_or_else(|| {
                         RecoveryError::invalid_output_error("Empty sha output".to_string())
-                    })?;
-
-                    let url = Url::parse(&url_string).map_err(|e| {
-                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
                     })?;
 
                     let registry_params = RegistryParams {

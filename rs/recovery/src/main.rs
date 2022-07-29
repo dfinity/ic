@@ -38,7 +38,7 @@ fn main() {
             cli::nns_recovery_failover_nodes(
                 logger.clone(),
                 recovery_args,
-                nns_recovery_args,
+                *nns_recovery_args,
                 args.test,
             )
         }

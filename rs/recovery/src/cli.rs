@@ -1,18 +1,20 @@
 //! Command line interfaces to various subnet recovery processes.
 //! Calls the recovery library.
 use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
+use crate::get_node_heights_from_metrics;
 use crate::nns_recovery_failover_nodes;
 use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs};
 use crate::nns_recovery_same_nodes;
 use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use crate::steps::Step;
 use crate::{app_subnet_recovery, util};
-use crate::{NeuronArgs, Recovery, RecoveryArgs};
+use crate::{NeuronArgs, RecoveryArgs};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use slog::{info, warn, Logger};
 use std::convert::TryFrom;
 use std::io::{stdin, stdout, Write};
 use std::net::IpAddr;
+use url::Url;
 
 /// Application subnets are recovered by:
 ///     1. Halting the broken subnet
@@ -42,6 +44,7 @@ pub fn app_subnet_recovery(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
+    let nns_url = args.nns_url.clone();
     let mut subnet_recovery =
         AppSubnetRecovery::new(logger.clone(), args, neuron_args, subnet_recovery_args);
 
@@ -66,11 +69,7 @@ pub fn app_subnet_recovery(
 
                 // We could pick a node with highest finalization height automatically,
                 // but we might have a preference between nodes of the same finalization height.
-                print_height_info(
-                    &logger,
-                    subnet_recovery.get_recovery_api(),
-                    subnet_recovery.params.subnet_id,
-                );
+                print_height_info(&logger, nns_url.clone(), subnet_recovery.params.subnet_id);
 
                 if subnet_recovery.params.download_node.is_none() {
                     subnet_recovery.params.download_node =
@@ -123,13 +122,10 @@ pub fn nns_recovery_same_nodes(
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
+    let nns_url = args.nns_url.clone();
     let mut nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test);
 
-    print_height_info(
-        &logger,
-        nns_recovery.get_recovery_api(),
-        nns_recovery.params.subnet_id,
-    );
+    print_height_info(&logger, nns_url, nns_recovery.params.subnet_id);
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -181,14 +177,11 @@ pub fn nns_recovery_failover_nodes(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
+    let validate_nns_url = nns_recovery_args.validate_nns_url.clone();
     let mut nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args);
 
-    print_height_info(
-        &logger,
-        nns_recovery.get_recovery_api(),
-        nns_recovery.params.subnet_id,
-    );
+    print_height_info(&logger, validate_nns_url, nns_recovery.params.subnet_id);
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -228,6 +221,14 @@ pub fn nns_recovery_failover_nodes(
                 if nns_recovery.params.aux_ip.is_none() {
                     nns_recovery.params.aux_ip = read_optional_ip(&logger, "Enter aux IP:");
                 }
+                if (nns_recovery.params.aux_user.is_none() || nns_recovery.params.aux_ip.is_none())
+                    && nns_recovery.params.registry_url.is_none()
+                {
+                    nns_recovery.params.registry_url = read_optional_url(
+                        &logger,
+                        "Enter URL of the hosted registry store tar file:",
+                    );
+                }
             }
             nns_recovery_failover_nodes::StepType::ProposeCUP => {
                 if nns_recovery.params.upload_node.is_none() {
@@ -266,9 +267,9 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
     info!(logger, "Creating recovery directory in {:?}", args.dir);
 }
 
-pub fn print_height_info(logger: &Logger, recovery: &Recovery, subnet_id: SubnetId) {
+pub fn print_height_info(logger: &Logger, nns_url: Url, subnet_id: SubnetId) {
     info!(logger, "Select a node with highest finalization height:");
-    match recovery.get_node_heights_from_metrics(subnet_id) {
+    match get_node_heights_from_metrics(logger, nns_url, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }
@@ -320,39 +321,42 @@ pub fn read_optional(logger: &Logger, prompt: &str) -> Option<String> {
 }
 
 pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
-    loop {
-        match read_optional(logger, prompt).map(|nodes_string| {
-            nodes_string
-                .split(' ')
-                .map(|s| util::node_id_from_str(s))
-                .collect::<Result<Vec<NodeId>, _>>()
-        }) {
-            Some(Err(e)) => {
-                warn!(logger, "Failed to parse node ID: {}", e);
-            }
-            Some(Ok(v)) => return Some(v),
-            None => return None,
-        }
-    }
+    read_optional_type(logger, prompt, |input| {
+        input
+            .split(' ')
+            .map(|s| util::node_id_from_str(s))
+            .collect::<Result<Vec<NodeId>, _>>()
+    })
 }
 
 pub fn read_optional_ip(logger: &Logger, prompt: &str) -> Option<IpAddr> {
-    loop {
-        match read_optional(logger, prompt).map(|input| input.parse::<IpAddr>()) {
-            Some(Err(e)) => {
-                warn!(logger, "Couldn't parse given address: {}", e);
-            }
-            Some(Ok(v)) => return Some(v),
-            None => return None,
-        }
-    }
+    read_optional_type(logger, prompt, |input| {
+        input.parse::<IpAddr>().map_err(|err| err.to_string())
+    })
 }
 
 pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVersion> {
+    read_optional_type(logger, prompt, |input| {
+        ReplicaVersion::try_from(input).map_err(|err| err.to_string())
+    })
+}
+
+pub fn read_optional_url(logger: &Logger, prompt: &str) -> Option<Url> {
+    read_optional_type(logger, prompt, |input| {
+        Url::parse(&input).map_err(|e| e.to_string())
+    })
+}
+
+/// Optionally read an input of the generic type by applying the given deserialization function.
+pub fn read_optional_type<T>(
+    logger: &Logger,
+    prompt: &str,
+    mapper: impl Fn(String) -> Result<T, String> + Copy,
+) -> Option<T> {
     loop {
-        match read_optional(logger, prompt).map(|input| ReplicaVersion::try_from(input)) {
+        match read_optional(logger, prompt).map(mapper) {
             Some(Err(e)) => {
-                warn!(logger, "Could not parse replica version: {}", e);
+                warn!(logger, "Could not parse input: {}", e);
             }
             Some(Ok(v)) => return Some(v),
             None => return None,

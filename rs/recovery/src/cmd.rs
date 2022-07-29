@@ -15,7 +15,7 @@ pub enum SubCommand {
     /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),
     /// NNS recovery on a failover IC.
-    NNSRecoveryFailoverNodes(NNSRecoveryFailoverNodesArgs),
+    NNSRecoveryFailoverNodes(Box<NNSRecoveryFailoverNodesArgs>),
     /// NNS recovery on the same nodes.
     NNSRecoverySameNodes(NNSRecoverySameNodesArgs),
 }
