@@ -164,6 +164,73 @@ impl Scalar {
         }
     }
 
+    /// Randomly generate a scalar in a way that is compatible with MIRACL
+    ///
+    /// This should not be used for new code but only for compatability in
+    /// situations where MIRACL's BIG::randomnum was previously used
+    fn miracl_bigrandomnum_impl(bytes: &[u8; 64]) -> Self {
+        /*
+        MIRACL's BIG::randomnum implementation uses an unusually inefficient
+        approach to generating a random integer in a prime field. Effectively it
+        generates a random bitstring of length twice the length of that of the
+        prime (here, the 255-bit BLS12-381 prime subgroup order), and executes a
+        double-and-add algorithm, one bit at a time. As a result, the final bit
+        that was generated is equal to the *lowest order bit* in the result.
+        Finally, it performs a modular reduction on the generated 510 bit
+        integer.
+
+        To replicate this behavior we have to reverse the bits within each byte,
+        and then reverse the bytes as well. This creates `val` which is equal
+        to MIRACL's result after 504 iterations of the loop in randomnum.
+
+        The final 6 bits are handled by using 6 doublings to shift the Scalar value
+        up to provide space, followed by a scalar addition.
+        */
+        let mut rbuf = [0u8; 64];
+        for j in 0..63 {
+            rbuf[j] = bytes[62 - j].reverse_bits();
+        }
+
+        let mut val = Self::new(bls12_381::Scalar::from_bytes_wide(&rbuf));
+
+        for _ in 0..6 {
+            val = val.double();
+        }
+        val += Scalar::from_u32((bytes[63].reverse_bits() >> 2) as u32);
+
+        val
+    }
+
+    /// Randomly generate a scalar in a way that is compatible with MIRACL
+    ///
+    /// This should not be used for new code but only for compatability in
+    /// situations where MIRACL's BIG::randomnum was previously used
+    pub fn miracl_random_using_miracl_rand(
+        rng: &mut impl miracl_core_bls12381::rand::RAND,
+    ) -> Self {
+        let mut bytes = [0u8; 64];
+        for i in 0..64 {
+            bytes[i] = rng.getbyte();
+        }
+        Self::miracl_bigrandomnum_impl(&bytes)
+    }
+
+    /// Randomly generate a scalar in a way that is compatible with MIRACL
+    ///
+    /// This should not be used for new code but only for compatability in
+    /// situations where MIRACL's BIG::randomnum was previously used
+    pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+        use rand::Rng;
+
+        let mut bytes = [0u8; 64];
+
+        // We can't use fill_bytes here because that results in incompatible output.
+        for i in 0..64 {
+            bytes[i] = rng.gen::<u8>();
+        }
+        Self::miracl_bigrandomnum_impl(&bytes)
+    }
+
     /// Return the scalar 0
     pub fn zero() -> Self {
         Self::new(bls12_381::Scalar::zero())
@@ -182,6 +249,11 @@ impl Scalar {
     /// Return the additive inverse of this scalar
     pub fn neg(&self) -> Self {
         Self::new(self.value.neg())
+    }
+
+    /// Double this scalar
+    pub(crate) fn double(&self) -> Self {
+        Self::new(self.value.double())
     }
 
     /// Return the multiplicative inverse of this scalar if it exists
