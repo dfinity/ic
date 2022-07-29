@@ -1,0 +1,53 @@
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "@crate_index//:build-info",
+    "@crate_index//:candid",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/nervous_system/common/build_metadata",
+]
+
+BUILD_DEPENDENCIES = [
+    "@crate_index//:build-info-build",
+]
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_PKG_VERSION": "0.1.0",
+    },
+    data = [],  # build script data (e.g. template files) goes here
+    edition = "2018",
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_canister(
+    name = "test_canister",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nervous_system_common_test_canister",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)

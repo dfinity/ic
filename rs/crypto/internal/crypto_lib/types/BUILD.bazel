@@ -20,6 +20,7 @@ rust_library(
     visibility = [
         "//rs/certified_vars/test-utils:__pkg__",
         "//rs/crypto:__subpackages__",
+        "//rs/identity:__pkg__",
         "//rs/state_machine_tests:__pkg__",
         "//rs/test_utilities:__pkg__",
         "//rs/test_utilities/identity:__pkg__",
