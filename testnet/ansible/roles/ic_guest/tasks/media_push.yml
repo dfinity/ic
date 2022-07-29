@@ -29,7 +29,7 @@
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ hostvars[inventory_hostname].groups.boundary | default([]) }}"
+  loop: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
   tags: [ "boundary_node_vm" ]
 
 - name: copy single boundary node VM media.img to remote
@@ -40,7 +40,7 @@
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ hostvars[inventory_hostname].groups.boundary | default([]) }}"
+  loop: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
   loop_control:
     index_var: index
   tags: [ "boundary_node_vm" ]
