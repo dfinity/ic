@@ -923,7 +923,13 @@ impl Neuron {
         // This group of methods can only be invoked by the
         // controller of the neuron.
         if !self.is_controlled_by(caller) {
-            return Err(GovernanceError::new(ErrorType::NotAuthorized));
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller '{:?}' must be the controller of the neuron to perform this operation.",
+                    caller,
+                ),
+            ));
         }
         let op = &cmd.operation.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
