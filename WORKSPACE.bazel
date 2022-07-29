@@ -56,6 +56,18 @@ external_crates_repository(
                 "opt-level=3",
             ],
         )],
+        "librocksdb-sys": [crate.annotation(
+            build_script_env = {
+                # Bazel executors assign only one core when executing
+                # the build script, making rocksdb compilation
+                # extremely slow. Bazel doesn't provide any way to
+                # override this settings so we cheat by starting more
+                # processes in parallel.
+                #
+                # See IDX-2406.
+                "NUM_JOBS": "8",
+            },
+        )],
         "miracl_core_bls12381": [crate.annotation(
             rustc_flags = [
                 "-C",
