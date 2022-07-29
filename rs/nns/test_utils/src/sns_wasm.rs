@@ -1,7 +1,19 @@
-use crate::state_test_helpers::{query, try_call_with_cycles_via_universal_canister, update};
+use crate::ids::TEST_NEURON_1_ID;
+use crate::state_test_helpers::{
+    query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
+};
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::CanisterId;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::types::ProposalId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::pb::v1::manage_neuron::{Command, NeuronIdOrSubaccount};
+use ic_nns_governance::pb::v1::{
+    manage_neuron_response::Command as CommandResponse, proposal, ExecuteNnsFunction, ManageNeuron,
+    ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo, ProposalStatus,
+};
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
@@ -9,6 +21,7 @@ use ic_sns_wasm::pb::v1::{
     ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::StateMachine;
+use std::time::Duration;
 
 /// Get an SnsWasm with the smallest valid WASM
 pub fn smallest_valid_wasm() -> SnsWasm {
@@ -73,6 +86,65 @@ pub fn add_wasm(
     Decode!(&response, AddWasmResponse).unwrap()
 }
 
+/// Make add_wasm request to a canister in the StateMachine
+pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32]) {
+    let payload = AddWasmRequest {
+        hash: hash.to_vec(),
+        wasm: Some(wasm),
+    };
+
+    let proposal = Proposal {
+        title: Some("title".into()),
+        summary: "summary".into(),
+        url: "".to_string(),
+        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::AddSnsWasm as i32,
+            payload: Encode!(&payload).expect("Error encoding proposal payload"),
+        })),
+    };
+
+    let manage_neuron = ManageNeuron {
+        id: None,
+        command: Some(Command::MakeProposal(Box::new(proposal))),
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+            id: TEST_NEURON_1_ID,
+        })),
+    };
+
+    let response = update_with_sender(
+        env,
+        GOVERNANCE_CANISTER_ID,
+        "manage_neuron",
+        Encode!(&manage_neuron).unwrap(),
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+    )
+    .unwrap();
+
+    let response = Decode!(&response, ManageNeuronResponse).unwrap();
+
+    let pid = match response.command.unwrap() {
+        CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
+        other => panic!("Unexpected response: {:?}", other),
+    };
+
+    while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Call Governance's get_proposal_info method
+fn get_proposal_info(env: &StateMachine, pid: ProposalId) -> Option<ProposalInfo> {
+    let response = query(
+        env,
+        GOVERNANCE_CANISTER_ID,
+        "get_proposal_info",
+        Encode!(&pid).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(&response, Option<ProposalInfo>).unwrap()
+}
+
 /// Make deploy_new_sns request to a canister in the StateMachine
 pub fn deploy_new_sns(
     env: &StateMachine,
@@ -131,41 +203,41 @@ pub fn get_next_sns_version(
 }
 
 /// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
-pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id: CanisterId) {
+pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
     let root_wasm = test_wasm(SnsCanisterType::Root);
     let root_hash = root_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, root_wasm, &root_hash);
+    add_wasm_via_proposal(machine, root_wasm, &root_hash);
 
     let gov_wasm = test_wasm(SnsCanisterType::Governance);
     let gov_hash = gov_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, gov_wasm, &gov_hash);
+    add_wasm_via_proposal(machine, gov_wasm, &gov_hash);
 
     let ledger_wasm = test_wasm(SnsCanisterType::Ledger);
     let ledger_hash = ledger_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
+    add_wasm_via_proposal(machine, ledger_wasm, &ledger_hash);
 
     let swap_wasm = test_wasm(SnsCanisterType::Swap);
     let swap_hash = swap_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, swap_wasm, &swap_hash);
+    add_wasm_via_proposal(machine, swap_wasm, &swap_hash);
 }
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests
-pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id: CanisterId) {
+pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) {
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, root_wasm, &root_hash);
+    add_wasm_via_proposal(machine, root_wasm, &root_hash);
 
     let gov_wasm = build_governance_sns_wasm();
     let gov_hash = gov_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, gov_wasm, &gov_hash);
+    add_wasm_via_proposal(machine, gov_wasm, &gov_hash);
 
     let ledger_wasm = build_ledger_sns_wasm();
     let ledger_hash = ledger_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
+    add_wasm_via_proposal(machine, ledger_wasm, &ledger_hash);
 
     let swap_wasm = build_swap_sns_wasm();
     let swap_hash = swap_wasm.sha256_hash();
-    add_wasm(machine, sns_wasm_canister_id, swap_wasm, &swap_hash);
+    add_wasm_via_proposal(machine, swap_wasm, &swap_hash);
 }
 
 /// Builds the SnsWasm for the root canister.

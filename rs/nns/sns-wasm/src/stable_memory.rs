@@ -226,6 +226,7 @@ mod test {
             sns_subnet_ids,
             deployed_sns_list,
             upgrade_path,
+            access_controls_enabled: true,
         }
     }
 

@@ -38,7 +38,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_swap::pb::v1 as sns_swap_pb;
@@ -485,6 +485,7 @@ impl NnsFunction {
             NnsFunction::CompleteCanisterMigration => {
                 (REGISTRY_CANISTER_ID, "complete_canister_migration")
             }
+            NnsFunction::AddSnsWasm => (SNS_WASM_CANISTER_ID, "add_wasm"),
         };
         Ok((canister_id, method))
     }
@@ -1132,6 +1133,7 @@ impl Proposal {
                             NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
                             NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
                             NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
+                            NnsFunction::AddSnsWasm => Topic::NetworkCanisterManagement,
                         }
                     } else {
                         Topic::Unspecified
@@ -4981,6 +4983,7 @@ impl Governance {
             if update.nns_function != NnsFunction::NnsCanisterUpgrade as i32
                 && update.nns_function != NnsFunction::NnsCanisterInstall as i32
                 && update.nns_function != NnsFunction::NnsRootUpgrade as i32
+                && update.nns_function != NnsFunction::AddSnsWasm as i32
                 && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
             {
                 format!(

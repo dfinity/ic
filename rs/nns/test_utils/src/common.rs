@@ -167,6 +167,12 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_sns_wasm_access_controls(&mut self, access_controls_enabled: bool) -> &mut Self {
+        self.sns_wasms
+            .with_access_controls_enabled(access_controls_enabled);
+        self
+    }
+
     pub fn build(&mut self) -> NnsInitPayloads {
         assert!(self
             .ledger

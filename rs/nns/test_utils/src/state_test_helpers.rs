@@ -84,6 +84,25 @@ pub fn update(
     }
 }
 
+/// Make an update request to a canister on StateMachine (with sender)
+pub fn update_with_sender(
+    machine: &StateMachine,
+    canister_target: CanisterId,
+    method_name: &str,
+    payload: Vec<u8>,
+    sender: PrincipalId,
+) -> Result<Vec<u8>, String> {
+    // move time forward
+    machine.set_time(std::time::SystemTime::now());
+    let result = machine
+        .execute_ingress_as(sender, canister_target, method_name, payload)
+        .map_err(|e| e.to_string())?;
+    match result {
+        WasmResult::Reply(v) => Ok(v),
+        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+    }
+}
+
 /// Internal impl of querying canister
 fn query_impl(
     machine: &StateMachine,
@@ -206,7 +225,7 @@ pub fn try_call_with_cycles_via_universal_canister(
     update(machine, sender, "update", universal_canister_payload)
 }
 
-/// Sets up the NNS for STateMachine tests.
+/// Sets up the NNS for StateMachine tests.
 pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayloads) {
     let registry_canister_id = create_canister(
         machine,

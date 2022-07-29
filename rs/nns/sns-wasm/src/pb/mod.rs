@@ -1,7 +1,7 @@
 use crate::pb::v1::{
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterIds, SnsCanisterType,
-    SnsUpgrade, SnsVersion, SnsWasm, SnsWasmStableIndex, StableCanisterState,
-    UpgradePath as StableUpgradePath,
+    add_wasm_response, AddWasmResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+    SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+    SnsWasmStableIndex, StableCanisterState, UpgradePath as StableUpgradePath,
 };
 use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
 use crate::stable_memory::SnsWasmStableMemory;
@@ -23,6 +23,14 @@ pub fn hash_to_hex_string(hash: &[u8; 32]) -> String {
         let _ = write!(result_hash, "{:02X}", b);
     }
     result_hash
+}
+
+impl AddWasmResponse {
+    pub fn error(message: String) -> Self {
+        Self {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
+        }
+    }
 }
 
 impl SnsWasm {
@@ -129,6 +137,7 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             deployed_sns_list: stable_canister_state.deployed_sns_list,
             upgrade_path,
             stable_memory: SnsWasmStableMemory::<M>::default(),
+            access_controls_enabled: stable_canister_state.access_controls_enabled,
         }
     }
 }
@@ -143,12 +152,14 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             .collect();
         let deployed_sns_list = state.deployed_sns_list;
         let upgrade_path = Some(state.upgrade_path.into());
+        let access_controls_enabled = state.access_controls_enabled;
 
         StableCanisterState {
             wasm_indexes,
             sns_subnet_ids,
             deployed_sns_list,
             upgrade_path,
+            access_controls_enabled,
         }
     }
 }

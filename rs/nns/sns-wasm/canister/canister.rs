@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::api::Funds;
+use dfn_core::api::{caller, Funds};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use dfn_core::{over, over_async, over_init};
@@ -11,6 +11,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterStatusResultV2, CanisterStatusType,
     CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_sns_wasm::canister_api::CanisterApi;
 use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
@@ -270,10 +271,12 @@ fn canister_init() {
 /// In contrast to canister_init(), this method does not do deserialization.
 /// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
-fn canister_init_(_init_payload: SnsWasmCanisterInitPayload) {
+fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
     println!("{}canister_init_", LOG_PREFIX);
     SNS_WASM.with(|c| {
-        c.borrow_mut().set_sns_subnets(_init_payload.sns_subnet_ids);
+        c.borrow_mut().set_sns_subnets(init_payload.sns_subnet_ids);
+        c.borrow_mut()
+            .set_access_controls_enabled(init_payload.access_controls_enabled);
         c.borrow().initialize_stable_memory();
     })
 }
@@ -310,7 +313,13 @@ fn add_wasm() {
 
 #[candid_method(update, rename = "add_wasm")]
 fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
-    SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_wasm(add_wasm_payload))
+    let access_controls_enabled =
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow().access_controls_enabled);
+    if access_controls_enabled && caller() != GOVERNANCE_CANISTER_ID.into() {
+        AddWasmResponse::error("add_wasm can only be called by NNS Governance".into())
+    } else {
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_wasm(add_wasm_payload))
+    }
 }
 
 #[export_name = "canister_query get_wasm"]

@@ -37,6 +37,9 @@ where
     pub upgrade_path: UpgradePath,
     /// Provides convenient access to stable memory
     pub stable_memory: SnsWasmStableMemory<M>,
+    /// If true, updates (e.g. add_wasm) can only be made by NNS Governance
+    /// (via proposal execution), otherwise updates can be made by any caller
+    pub access_controls_enabled: bool,
 }
 const ONE_TRILLION: u64 = 1_000_000_000_000;
 const ONE_BILLION: u64 = 1_000_000_000;
@@ -172,6 +175,10 @@ where
 
     pub fn set_sns_subnets(&mut self, subnet_ids: Vec<SubnetId>) {
         self.sns_subnet_ids = subnet_ids;
+    }
+
+    pub fn set_access_controls_enabled(&mut self, access_controls_enabled: bool) {
+        self.access_controls_enabled = access_controls_enabled;
     }
 
     /// Initialize stable memory. Should only be called on canister init.

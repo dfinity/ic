@@ -25,6 +25,7 @@ message StableCanisterState {
   repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids = 2;
   repeated DeployedSns deployed_sns_list = 3;
   UpgradePath upgrade_path = 4;
+  bool access_controls_enabled = 5;
 }
 
 // Details the offset and size of a WASM binary in stable memory and the hash of this binary
