@@ -125,7 +125,6 @@ impl InstallCodeContextBuilder {
         self
     }
 
-    #[allow(dead_code)]
     pub fn compute_allocation(mut self, compute_allocation: ComputeAllocation) -> Self {
         self.ctx.compute_allocation = Some(compute_allocation);
         self
@@ -341,6 +340,99 @@ where
 }
 
 #[test]
+fn install_canister_makes_subnet_oversubscribed() {
+    with_setup(|canister_manager, mut state, _| {
+        let sender = canister_test_id(42).get();
+        let sender_subnet_id = subnet_test_id(1);
+        let canister_id1 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+        let canister_id2 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+        let canister_id3 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
+                .build(),
+            &mut state,
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id2)
+                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
+                .build(),
+            &mut state,
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
+        let (num_instructions, res, canister) = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
+                .build(),
+            &mut state,
+        );
+        assert_eq!(
+            (num_instructions, res),
+            (
+                MAX_NUM_INSTRUCTIONS,
+                Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
+                    requested: ComputeAllocation::try_from(30).unwrap(),
+                    available: 24
+                })
+            )
+        );
+
+        // Canister state should still be returned.
+        assert_eq!(canister.unwrap().canister_id(), canister_id3);
+    });
+}
+
+#[test]
 fn upgrade_non_existing_canister_fails() {
     with_setup(|canister_manager, mut state, _| {
         let canister_id = canister_test_id(0);
@@ -402,6 +494,200 @@ fn upgrade_canister_with_no_wasm_fails() {
                     HypervisorError::WasmModuleNotFound
                 ))
             )
+        );
+    });
+}
+
+#[test]
+fn can_update_compute_allocation_during_upgrade() {
+    with_setup(|canister_manager, mut state, _| {
+        // Create a new canister.
+        let sender = canister_test_id(1).get();
+        let sender_subnet_id = subnet_test_id(1);
+        let canister_id1 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+
+        // Install the canister with allocation of 60%.
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(60).unwrap())
+                .build(),
+            &mut state,
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
+
+        assert_eq!(
+            state
+                .canister_state(&canister_id1)
+                .unwrap()
+                .scheduler_state
+                .compute_allocation,
+            ComputeAllocation::try_from(60).unwrap()
+        );
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(80).unwrap())
+                .mode(CanisterInstallMode::Upgrade)
+                .build(),
+            &mut state,
+        );
+        // Upgrade the canister to allocation of 80%.
+        assert!(res.1.is_ok());
+
+        assert_eq!(res.2.as_ref().unwrap().canister_id(), canister_id1);
+        assert_eq!(
+            res.2.unwrap().scheduler_state.compute_allocation,
+            ComputeAllocation::try_from(80).unwrap()
+        );
+    });
+}
+
+#[test]
+fn upgrading_canister_makes_subnet_oversubscribed() {
+    with_setup(|canister_manager, mut state, _| {
+        let sender = canister_test_id(27).get();
+        let sender_subnet_id = subnet_test_id(1);
+        let canister_id1 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+        let canister_id2 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+        let canister_id3 = canister_manager
+            .create_canister(
+                sender,
+                sender_subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .0
+            .unwrap();
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
+                .build(),
+            &mut state,
+        );
+        state.put_canister_state(res.2.unwrap());
+        assert!(res.1.is_ok());
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id2)
+                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
+                .build(),
+            &mut state,
+        );
+        state.put_canister_state(res.2.unwrap());
+        assert!(res.1.is_ok());
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .compute_allocation(ComputeAllocation::try_from(20).unwrap())
+                .build(),
+            &mut state,
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
+        println!("Total used3: {}", state.total_compute_allocation());
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
+                .mode(CanisterInstallMode::Upgrade)
+                .build(),
+            &mut state,
+        );
+        assert_eq!(
+            (res.0, res.1),
+            (
+                MAX_NUM_INSTRUCTIONS,
+                Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
+                    requested: ComputeAllocation::try_from(30).unwrap(),
+                    available: 24,
+                })
+            )
+        );
+
+        state.put_canister_state(res.2.unwrap());
+
+        assert_eq!(
+            state
+                .canister_state(&canister_id1)
+                .unwrap()
+                .scheduler_state
+                .compute_allocation,
+            ComputeAllocation::try_from(50).unwrap()
+        );
+        assert_eq!(
+            state
+                .canister_state(&canister_id2)
+                .unwrap()
+                .scheduler_state
+                .compute_allocation,
+            ComputeAllocation::try_from(25).unwrap()
+        );
+        assert_eq!(
+            state
+                .canister_state(&canister_id3)
+                .unwrap()
+                .scheduler_state
+                .compute_allocation,
+            ComputeAllocation::try_from(20).unwrap()
         );
     });
 }
@@ -3622,57 +3908,6 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
 }
 
 #[test]
-fn install_code_with_deprecated_compute_allocation_param() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(100)
-        .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-
-    assert_eq!(
-        ComputeAllocation::try_from(0).unwrap(),
-        test.canister_state(canister_id)
-            .scheduler_state
-            .compute_allocation
-    );
-
-    // Installing canister succeeds.
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        Some(60),
-        None,
-    )
-    .unwrap();
-    // supplied value should have been ignored
-    assert_eq!(
-        ComputeAllocation::try_from(0).unwrap(),
-        test.canister_state(canister_id)
-            .scheduler_state
-            .compute_allocation
-    );
-
-    let args = InstallCodeArgs::new(
-        CanisterInstallMode::Upgrade,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        Some(33),
-        None,
-        None,
-    );
-    let result = test.install_code(args).unwrap();
-    assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
-
-    // supplied value should have been ignored
-    assert_eq!(
-        ComputeAllocation::try_from(0).unwrap(),
-        test.canister_state(canister_id)
-            .scheduler_state
-            .compute_allocation
-    );
-}
-
-#[test]
 fn install_code_when_compute_capacity_is_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(0)
@@ -3685,11 +3920,28 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
         .scheduler_state
         .compute_allocation = ComputeAllocation::try_from(60).unwrap();
 
-    // Installing canister succeeds.
+    // Updating the compute allocation to a higher value fails.
+    let err = test
+        .install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            Some(61),
+            None,
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+    assert_eq!(
+        err.description(),
+        "Canister requested a compute allocation of 61% \
+        which cannot be satisfied because the Subnet's \
+        remaining compute capacity is 60%"
+    );
+
+    // Updating the compute allocation to the same value succeeds.
     test.install_canister_with_allocation(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
+        Some(60),
         None,
     )
     .unwrap();
@@ -3702,16 +3954,16 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
 
     test.uninstall_code(canister_id).unwrap();
 
-    // Installing again succeeds.
+    // Updating the compute allocation to a lower value succeeds.
     test.install_canister_with_allocation(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
+        Some(59),
         None,
     )
     .unwrap();
     assert_eq!(
-        ComputeAllocation::try_from(60).unwrap(),
+        ComputeAllocation::try_from(59).unwrap(),
         test.canister_state(canister_id)
             .scheduler_state
             .compute_allocation
