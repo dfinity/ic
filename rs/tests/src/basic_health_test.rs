@@ -37,6 +37,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::util::*; // to use the universal canister
+use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
@@ -150,17 +151,23 @@ pub fn test(env: TestEnv) {
         node.with_default_agent(move |agent| async move {
             let ucan = UniversalCanister::from_canister_id(&agent, ucan_id);
             // NOTE: retries are important here, 1/3 of the nodes might not observe changes immediately.
-            assert_eq!(
-                ucan.try_read_stable_with_retries(
-                    &log,
-                    0,
-                    XNET_MSG.len() as u32,
-                    READ_RETRIES,
-                    RETRY_WAIT
-                )
-                .await,
-                XNET_MSG.to_vec()
-            );
+            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+                let current_msg = ucan
+                    .try_read_stable_with_retries(
+                        &log,
+                        0,
+                        XNET_MSG.len() as u32,
+                        READ_RETRIES,
+                        RETRY_WAIT,
+                    )
+                    .await;
+                if current_msg != XNET_MSG.to_vec() {
+                    bail!("Expected message not found!")
+                }
+                Ok(())
+            })
+            .await
+            .expect("Node not healty");
         })
     }
 }
