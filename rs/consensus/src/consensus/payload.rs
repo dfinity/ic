@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder, consensus::PayloadValidationError,
     ingress_manager::IngressSelector, messaging::XNetPayloadBuilder,
@@ -7,10 +5,13 @@ use ic_interfaces::{
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_types::{
-    batch::{BatchPayload, CanisterHttpPayload, IngressPayload, ValidationContext},
+    batch::{
+        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload, ValidationContext,
+    },
     consensus::Payload,
     CountBytes, Height, NumBytes, Time,
 };
+use std::sync::Arc;
 
 /// A [`BatchPayloadSectionBuilder`] builds an individual section of the
 /// [`BatchPayload`](ic_types::batch::BatchPayload).
@@ -44,7 +45,6 @@ impl BatchPayloadSectionBuilder {
     /// # Arguments:
     /// - `validation_context`: The [`ValidationContext`], under which the payload must be valid.
     /// - `max_size`: The maximum size in [`NumBytes`], that the payload section has available in the current block.
-    /// - `priority`: The order in which the individual [`BatchPayloadSectionBuilder`] have been called.
     /// - `past_payloads`: All [`BatchPayload`]s from the certified height to the tip.
     /// - `logger`: Access to a [`ReplicaLogger`]
     ///
@@ -56,7 +56,6 @@ impl BatchPayloadSectionBuilder {
         height: Height,
         validation_context: &ValidationContext,
         max_size: NumBytes,
-        priority: usize,
         past_payloads: &[(Height, Time, Payload)],
         logger: &ReplicaLogger,
     ) -> NumBytes {
@@ -108,11 +107,21 @@ impl BatchPayloadSectionBuilder {
                     validation_context,
                     &past_payloads,
                     max_size,
-                    priority,
                 );
 
-                payload.self_validating = self_validating;
-                size
+                // Check that the size limit is respected
+                if size > max_size {
+                    error!(
+                        logger,
+                        "SelfValidatingPayload is larger than byte_limit. This is a bug."
+                    );
+
+                    payload.self_validating = SelfValidatingPayload::default();
+                    NumBytes::new(0)
+                } else {
+                    payload.self_validating = self_validating;
+                    size
+                }
             }
             Self::CanisterHttp(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
