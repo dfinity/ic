@@ -51,7 +51,7 @@ use crate::consensus::{
 };
 use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
-    canister_http::{CanisterHttpPayloadBuilder, CanisterHttpPool},
+    canister_http::CanisterHttpPayloadBuilder,
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
@@ -140,7 +140,6 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-        canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -226,7 +225,6 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 ecdsa_pool.clone(),
-                canister_http_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -628,7 +626,6 @@ pub fn setup(
     canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-    canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -663,7 +660,6 @@ pub fn setup(
             canister_http_payload_builder,
             dkg_pool,
             ecdsa_pool,
-            canister_http_pool,
             dkg_key_manager,
             message_routing.clone(),
             state_manager,
@@ -731,7 +727,6 @@ mod tests {
             state_manager,
             dkg_pool,
             ecdsa_pool,
-            canister_http_pool,
             ..
         } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
         state_manager
@@ -757,7 +752,6 @@ mod tests {
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             dkg_pool,
             ecdsa_pool,
-            canister_http_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
                 metrics_registry.clone(),
                 crypto,

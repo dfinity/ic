@@ -1,7 +1,7 @@
 mod framework;
 
 use crate::framework::ConsensusDriver;
-use ic_artifact_pool::{canister_http_pool, consensus_pool, dkg_pool, ecdsa_pool};
+use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
@@ -96,9 +96,6 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             metrics_registry.clone(),
         )));
-        let canister_http_pool = Arc::new(RwLock::new(
-            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone()),
-        ));
 
         let registry_client = setup_registry(
             replica_config.subnet_id,
@@ -144,7 +141,6 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&ecdsa_pool) as Arc<_>,
-            Arc::clone(&canister_http_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,

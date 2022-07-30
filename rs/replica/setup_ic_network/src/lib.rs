@@ -318,7 +318,6 @@ fn setup_artifact_manager(
                     Arc::clone(&canister_http_payload_builder) as Arc<_>,
                     Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
                     Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
-                    Arc::clone(&artifact_pools.canister_http_pool) as Arc<_>,
                     Arc::clone(&dkg_key_manager) as Arc<_>,
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
