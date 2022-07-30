@@ -215,6 +215,7 @@
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
+/scalability/experiments/run_sns_experiment.py                   @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
 # Capsule.toml belongs to IDX throughout the repo.
 Capsule.toml              @dfinity-lab/teams/idx
