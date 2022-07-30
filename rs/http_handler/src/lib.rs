@@ -408,7 +408,7 @@ pub fn start_server(
                                 }
                             }
                             Ok(Err(err)) => {
-                                warn!(log, "Connection error (can't peek). {}", err);
+                                error!(log, "Can't peek into TCP stream, error = {}", err);
                                 metrics.observe_connection_error(
                                     ConnectionError::Peek,
                                     connection_start_time,
@@ -418,7 +418,7 @@ pub fn start_server(
                             Err(err) => {
                                 warn!(
                                     log,
-                                    "Connection error (tcp peeking timeout after {}s). {}",
+                                    "TCP peeking timeout after {}s, error = {}",
                                     MAX_TCP_PEEK_TIMEOUT_SECS,
                                     err
                                 );
@@ -447,7 +447,7 @@ pub fn start_server(
                 // continue serving.
                 Err(err) => {
                     metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
-                    warn!(log, "Connection error (can't accept) {}", err);
+                    error!(log, "Can't accept TCP connection, error = {}", err);
                 }
             }
         }
@@ -523,31 +523,32 @@ async fn serve_connection(
                     );
                     warn!(
                         log,
-                        "Connection error (TLS handshake): peer_addr = {:?}, error = {}",
-                        peer_addr,
-                        err
+                        "TLS handshake failed, error = {}, peer_addr = {:?}", err, peer_addr,
                     );
                     return;
                 }
                 Ok(tls_stream) => tls_stream,
             };
+            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
             http.serve_connection(tls_stream, service).await
         }
-        AppLayer::Http => http.serve_connection(tcp_stream, service).await,
+        AppLayer::Http => {
+            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
+            http.serve_connection(tcp_stream, service).await
+        }
     };
 
-    if let Err(err) = connection_result {
-        let e = match app_layer {
-            AppLayer::Http => ConnectionError::ServingHttpConnection,
-            AppLayer::Https => ConnectionError::ServingHttpsConnection,
-        };
-        metrics.observe_connection_error(e, connection_start_time);
-        warn!(
-            log,
-            "Connection error (can't serve HTTP connection): {}", err
-        );
-    } else {
-        metrics.observe_connection_setup(app_layer, connection_start_time)
+    match connection_result {
+        Err(err) => {
+            metrics.observe_abrupt_conn_termination(app_layer, connection_start_time);
+            info!(
+                log,
+                "The connection was closed abruptly after {:?}, error = {}",
+                connection_start_time.elapsed(),
+                err
+            );
+        }
+        Ok(()) => metrics.observe_graceful_conn_termination(app_layer, connection_start_time),
     }
 }
 
