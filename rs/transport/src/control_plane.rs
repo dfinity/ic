@@ -14,8 +14,10 @@ use crate::{
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportEventHandler};
-use ic_logger::{error, info, warn};
+use ic_interfaces_transport::{
+    FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportStateChange,
+};
+use ic_logger::{error, warn};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use std::{
     collections::HashMap,
@@ -30,6 +32,7 @@ use tokio::{
     task::JoinHandle,
     time::sleep,
 };
+use tower::Service;
 
 #[derive(Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -303,6 +306,20 @@ impl TransportImpl {
                             .with_label_values(&[STATUS_SUCCESS])
                             .inc();
 
+                        let peer_map = arc_self.peer_map.read().await;
+                        let peer_state = match peer_map.get(&peer_id) {
+                            Some(peer_state) => peer_state,
+                            None => continue,
+                        };
+                        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
+                            Some(flow_state) => flow_state,
+                            None => continue,
+                        };
+                        let mut flow_state = flow_state_mu.write().await;
+                        if flow_state.get_connected().is_some() {
+                            // TODO: P2P-516
+                            continue;
+                        }
                         let tls_stream = match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
                                 arc_self.control_plane_metrics
@@ -327,49 +344,36 @@ impl TransportImpl {
                                 return;
                             }
                         };
-                        match arc_self.try_transition_to_connected(
+
+                        let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
+                            Some(event_handler) => event_handler.clone(),
+                            None => continue,
+                        };
+                        let connected_state = arc_self.create_connected_state(
                             peer_id,
-                            ConnectionRole::Client,
                             flow_tag,
+                            flow_state.flow_label.clone(),
+                            flow_state.send_queue.get_reader(),
+                            ConnectionRole::Client,
                             peer_addr,
                             tls_stream,
-                        )
-                        .await
-                        {
-                            Ok(()) => {
-                                arc_self.control_plane_metrics
-                                    .tcp_conn_to_server_success
-                                    .with_label_values(&[
-                                        &peer_id.to_string(),
-                                        &flow_tag.to_string(),
-                                    ])
-                                    .inc();
-                                return;
-                            }
-                            Err(e) => {
-                                arc_self.control_plane_metrics
-                                    .tcp_conn_to_server_err
-                                    .with_label_values(&[
-                                        &peer_id.to_string(),
-                                        &flow_tag.to_string(),
-                                    ])
-                                    .inc();
-                                    info!(
-                                        every_n_seconds => 300,
-                                        arc_self.log,
-                                        "ControlPlane::spawn_connect_task(): try_transition_to_connected failed. local_addr = {:?}, \
-                                         flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}, retries = {}",
-                                        local_addr,
-                                        flow_tag,
-                                        peer_id,
-                                        peer_addr,
-                                        e,
-                                        retries
-                                    );
-                                sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
-                                continue;
-                            }
-                        }
+                            event_handler.clone(),
+                        );
+                        let _ = event_handler
+                            // Notify the client that peer flow is up.
+                            .call(TransportEvent::StateChange(
+                                TransportStateChange::PeerFlowUp(peer_id),
+                            ))
+                            .await;
+                        flow_state.update(ConnectionState::Connected(connected_state));
+                        arc_self.control_plane_metrics
+                            .tcp_conn_to_server_success
+                            .with_label_values(&[
+                                &peer_id.to_string(),
+                                &flow_tag.to_string(),
+                            ])
+                            .inc();
+                        return;
                     }
                     Err(err) => {
                         arc_self.control_plane_metrics
@@ -386,9 +390,9 @@ impl TransportImpl {
                             peer_addr,
                             retries,
                         );
-                        sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
                     }
                 }
+                sleep(Duration::from_secs(CONNECT_RETRY_SECONDS)).await;
             }
         })
     }

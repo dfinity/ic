@@ -29,7 +29,6 @@ pub(crate) struct ControlPlaneMetrics {
     pub(crate) tcp_accepts: IntCounterVec,
     pub(crate) tcp_accept_conn_success: IntCounterVec,
     pub(crate) tcp_connects: IntCounterVec,
-    pub(crate) tcp_conn_to_server_err: IntCounterVec,
     pub(crate) tcp_conn_to_server_success: IntCounterVec,
     pub(crate) retry_connection: IntCounterVec,
     pub(crate) tls_handshakes: IntCounterVec,
@@ -63,11 +62,6 @@ impl ControlPlaneMetrics {
                 "transport_tcp_connects_total",
                 "Total outgoing connects in client mode",
                 &["status"],
-            ),
-            tcp_conn_to_server_err: metrics_registry.int_counter_vec(
-                "transport_conn_to_server_error",
-                "Error connecting to peer TCP server as client",
-                &["flow_peer_id", "flow_tag"],
             ),
             tcp_conn_to_server_success: metrics_registry.int_counter_vec(
                 "transport_conn_to_server_success",

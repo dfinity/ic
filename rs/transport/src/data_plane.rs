@@ -378,7 +378,7 @@ impl TransportImpl {
     }
 
     /// Handle connection setup. Starts flow read and write tasks.
-    fn create_connected_state(
+    pub(crate) fn create_connected_state(
         &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
