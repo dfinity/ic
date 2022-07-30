@@ -189,7 +189,6 @@ fn can_successfully_create_bitcoin_payload_if_feature_enabled_or_syncing() {
                         &validation_context,
                         &[],
                         SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                        0,
                     )
                     .0;
                 assert_eq!(payload, expected_payload);
@@ -236,7 +235,6 @@ fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_paused_or_disabl
                         &validation_context,
                         &[],
                         SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                        0,
                     )
                     .0;
                 assert_eq!(payload, expected_payload);
@@ -322,7 +320,6 @@ fn includes_only_successful_responses_in_the_payload() {
                         &validation_context,
                         &[],
                         SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                        0,
                     )
                     .0;
                 assert_eq!(payload, expected_payload);
@@ -402,7 +399,6 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
                     &validation_context,
                     &[&past_payload],
                     SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                    0,
                 )
                 .0;
             assert_eq!(payload, expected_payload);
@@ -434,13 +430,12 @@ fn bitcoin_payload_builder_respects_byte_limit() {
 
     // There are 3 adapter requests available in the bitcoin state. We test with
     // 4 different byte limits:
-    //   1. A value that is smaller than one response to ensure we always include
-    //      at least one response in the payload.
+    //   1. A value that allows 1 of the 3 responses to be included.
     //   2. A value that allows 2 of the 3 responses to be included.
     //   3. A value that allows *exactly* all 3 responses.
     //   4. A large enough value that allows all 3 responses.
     let byte_limits = vec![
-        NumBytes::from(dummy_response_wrapper_size - 10),
+        NumBytes::from(dummy_response_wrapper_size),
         NumBytes::from(3 * dummy_response_wrapper_size - 10),
         NumBytes::from(3 * dummy_response_wrapper_size),
         NumBytes::from(100 * dummy_response_wrapper_size),
@@ -530,7 +525,7 @@ fn bitcoin_payload_builder_respects_byte_limit() {
             registry_client,
             |validation_context, bitcoin_payload_builder| {
                 let payload = bitcoin_payload_builder
-                    .get_self_validating_payload(&validation_context, &[], byte_limit, 0)
+                    .get_self_validating_payload(&validation_context, &[], byte_limit)
                     .0;
                 assert_eq!(
                     payload, expected_payloads[i],

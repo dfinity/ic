@@ -10,7 +10,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{log, warn, ReplicaLogger};
+use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::BitcoinFeatureStatus;
@@ -93,7 +93,6 @@ impl BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
-        priority: usize,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
         let state = self
@@ -168,35 +167,6 @@ impl BitcoinPayloadBuilder {
                             let response_size = response.count_bytes() as u64;
                             self.metrics.observe_adapter_response_size(response_size);
 
-                            // This is a special case:
-                            // If priority is 0 (i.e. highest), and we have not included a response yet, but the next block is already
-                            // oversized, we include that single block anyway and immidiately return.
-                            // We will also report `byte_limit` as the size.
-                            //
-                            // For this block to be accepted by the validator, it is crucial that the following invariant holds:
-                            // if priority == 0 then byte_size == max_block_payload_size_bytes.
-                            // Just to be 100% sure, we also check that invariant here as well.
-                            if priority == 0
-                                && responses.is_empty()
-                                && response_size > byte_limit.get()
-                                && self
-                                    .registry
-                                    .get_max_block_payload_size_bytes(
-                                        self.subnet_id,
-                                        validation_context.registry_version,
-                                    )
-                                    .unwrap_or(None)
-                                    .unwrap_or(0)
-                                    == byte_limit.get()
-                            {
-                                warn!(
-                                    self.log,
-                                    "SelfValidatingPayload Size exception was triggered"
-                                );
-                                responses.push(response);
-                                return Ok(SelfValidatingPayload::new(responses));
-                            }
-
                             if response_size + current_payload_size > byte_limit.get() {
                                 break;
                             }
@@ -267,25 +237,21 @@ impl BitcoinPayloadBuilder {
 
         let size = NumBytes::new(payload.count_bytes() as u64);
 
-        // NOTE: Bitcoin payload is special in that the IC can not ultimately decide the size of the blocks.
-        // Rather, it is up to the bitcoin network to decide the block sizes.
-        // For that reason, the validator allows oversized blocks, if there is only one block in the payload.
-        // Exploiting this as a DOS is infeasible, since it would require the attacker to bloat the blocks on the
-        // bitcoin network.
-        if payload.num_bitcoin_blocks() == 1 {
-            Ok(size.min(NumBytes::from(
-                self.registry
-                    .get_max_block_payload_size_bytes(
-                        self.subnet_id,
-                        validation_context.registry_version,
-                    )
-                    .map_err(|err| {
-                        SelfValidatingPayloadValidationError::Transient(
-                            SelfValidatingTransientValidationError::GetRegistryFailed(err),
-                        )
-                    })?
-                    .unwrap_or_else(|| size.get()),
-            )))
+        // Check that the payload does not exceed the maximum block size
+        let max_block_size = self
+            .registry
+            .get_max_block_payload_size_bytes(self.subnet_id, validation_context.registry_version)
+            .map_err(|err| {
+                SelfValidatingPayloadValidationError::Transient(
+                    SelfValidatingTransientValidationError::GetRegistryFailed(err),
+                )
+            })?
+            .unwrap_or_else(|| size.get());
+
+        if size.get() > max_block_size {
+            Err(SelfValidatingPayloadValidationError::Permanent(
+                InvalidSelfValidatingPayload::PayloadTooBig,
+            ))
         } else {
             Ok(size)
         }
@@ -298,14 +264,12 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
-        priority: usize,
     ) -> (SelfValidatingPayload, NumBytes) {
         let timer = Timer::start();
         let payload = match self.get_self_validating_payload_impl(
             validation_context,
             past_payloads,
             byte_limit,
-            priority,
         ) {
             Ok(payload) => {
                 // As a safety measure, the payload is validated, before submitting it.
