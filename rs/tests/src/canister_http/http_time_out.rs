@@ -52,7 +52,7 @@ pub fn test(env: TestEnv) {
             )
             .await
             .expect("update call failed");
-        assert!(succeeded.is_ok());
+        let _ = succeeded.expect("send_request failed");
 
         let httpbin_success = proxy_canister
             .query_(
