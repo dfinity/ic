@@ -45,8 +45,6 @@ pub(crate) fn to_legacy_request_type(req_type: ApiReqType) -> &'static str {
 #[strum(serialize_all = "snake_case")]
 pub(crate) enum ConnectionError {
     TlsHandshake,
-    ServingHttpConnection,
-    ServingHttpsConnection,
     Accept,
     Peek,
     PeekTimeout,
@@ -91,14 +89,6 @@ mod tests {
         assert_eq!(
             StaticStr::from(ConnectionError::TlsHandshake),
             "tls_handshake"
-        );
-        assert_eq!(
-            StaticStr::from(ConnectionError::ServingHttpConnection),
-            "serving_http_connection"
-        );
-        assert_eq!(
-            StaticStr::from(ConnectionError::ServingHttpsConnection),
-            "serving_https_connection"
         );
         assert_eq!(StaticStr::from(ConnectionError::Accept), "accept");
         assert_eq!(StaticStr::from(ConnectionError::Peek), "peek");

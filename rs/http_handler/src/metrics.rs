@@ -30,6 +30,7 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) connections: IntGauge,
     pub(crate) connections_total: IntCounter,
     connection_setup_duration: HistogramVec,
+    connection_duration: HistogramVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -85,6 +86,12 @@ impl HttpHandlerMetrics {
                 decimal_buckets(-3, 1),
                 &[LABEL_STATUS, LABEL_DETAIL],
             ),
+            connection_duration: metrics_registry.histogram_vec(
+                "replica_http_connection_duration_seconds",
+                "HTTP connection durations, by closing status and protocol (HTTP/HTTPS).",
+                decimal_buckets(-3, 3),
+                &[LABEL_STATUS, LABEL_PROTOCOL],
+            ),
         }
     }
 
@@ -97,9 +104,29 @@ impl HttpHandlerMetrics {
 
     /// Records the duration of a successful connection setup, by app layer
     /// (protocol).
-    pub(crate) fn observe_connection_setup(&self, app_layer: AppLayer, start_time: Instant) {
+    pub(crate) fn observe_successful_connection_setup(
+        &self,
+        app_layer: AppLayer,
+        start_time: Instant,
+    ) {
         self.connection_setup_duration
             .with_label_values(&[STATUS_SUCCESS, app_layer.into()])
+            .observe(start_time.elapsed().as_secs_f64());
+    }
+
+    pub(crate) fn observe_graceful_conn_termination(
+        &self,
+        app_layer: AppLayer,
+        start_time: Instant,
+    ) {
+        self.connection_duration
+            .with_label_values(&[STATUS_SUCCESS, app_layer.into()])
+            .observe(start_time.elapsed().as_secs_f64());
+    }
+
+    pub(crate) fn observe_abrupt_conn_termination(&self, app_layer: AppLayer, start_time: Instant) {
+        self.connection_duration
+            .with_label_values(&[STATUS_ERROR, app_layer.into()])
             .observe(start_time.elapsed().as_secs_f64());
     }
 }
