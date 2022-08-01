@@ -1,0 +1,85 @@
+title = "Measures how many Canister HTTP calls can happen on a given subnet"
+description = "Continuously raise workload to proxy_canister alongside workload to counter_canister."
+
+[[workload]]
+canister = "proxy_canister#1"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "send_request"
+method = "update"
+raw_payload="4449444c056c07efd6e40271e1edeb4a01a2f5ed880471ecdaccac0402c6a4a1980603e4d8feef067c8daacd9408786b01f6b8d8017f6e716d046c020071017101001768747470733a2f2f7777772e6578616d706c652e636f6d000001097472616e73666f726d010361626303646566c0843d0088526a74000000"
+
+[[workload]]
+canister = "proxy_canister#2"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "send_request"
+method = "update"
+raw_payload="4449444c056c07efd6e40271e1edeb4a01a2f5ed880471ecdaccac0402c6a4a1980603e4d8feef067c8daacd9408786b01f6b8d8017f6e716d046c020071017101001768747470733a2f2f7777772e6578616d706c652e636f6d000001097472616e73666f726d010361626303646566c0843d0088526a74000000"
+
+
+[[workload]]
+canister = "proxy_canister#3"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "send_request"
+method = "update"
+raw_payload="4449444c056c07efd6e40271e1edeb4a01a2f5ed880471ecdaccac0402c6a4a1980603e4d8feef067c8daacd9408786b01f6b8d8017f6e716d046c020071017101001768747470733a2f2f7777772e6578616d706c652e636f6d000001097472616e73666f726d010361626303646566c0843d0088526a74000000"
+
+[[workload]]
+canister = "proxy_canister#4"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "send_request"
+method = "update"
+raw_payload="4449444c056c07efd6e40271e1edeb4a01a2f5ed880471ecdaccac0402c6a4a1980603e4d8feef067c8daacd9408786b01f6b8d8017f6e716d046c020071017101001768747470733a2f2f7777772e6578616d706c652e636f6d000001097472616e73666f726d010361626303646566c0843d0088526a74000000"
+
+[[workload]]
+canister = "proxy_canister#5"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "check_response"
+method = "query"
+raw_payload="4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267"
+
+[[workload]]
+canister = "proxy_canister#6"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "check_response"
+method = "query"
+raw_payload="4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267"
+
+[[workload]]
+canister = "proxy_canister#7"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "check_response"
+method = "query"
+raw_payload="4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267"
+
+[[workload]]
+canister = "proxy_canister#8"
+start_delay = 30
+duration = 270
+rps_ratio = 0.1
+call_method = "check_response"
+method = "query"
+raw_payload="4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267"
+
+[[workload]]
+canister = "counter"
+duration = 300
+rps_ratio = 0.1
+
+[[workload]]
+canister = "counter#2"
+duration = 300
+rps_ratio = 0.1

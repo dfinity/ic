@@ -141,6 +141,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         self.write_summary_file(
             "run_mixed_workload_experiment",
             {
+                "is_update": FLAGS.use_updates,
                 "rps_base": [rate for rate, _, _ in results],
                 "failure_rate": [[d[i].failure_rate for d in data] for i in range(num_workloads)],
                 "latency": [[d[i].percentiles[95] for d in data] for i in range(num_workloads)],
