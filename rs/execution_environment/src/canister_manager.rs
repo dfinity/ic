@@ -1152,7 +1152,6 @@ impl CanisterManager {
         }
 
         let new_canister_id = self.generate_new_canister_id(state)?;
-        self.validate_canister_id_available(state, &new_canister_id)?;
 
         // Take the fee out of the cycles that are going to be added as the canister's
         // initial balance.
@@ -1222,17 +1221,6 @@ impl CanisterManager {
             });
         }
         Ok(())
-    }
-
-    fn validate_canister_id_available(
-        &self,
-        state: &ReplicatedState,
-        canister_id: &CanisterId,
-    ) -> Result<(), CanisterManagerError> {
-        match state.canister_state(canister_id) {
-            Some(_) => Err(CanisterManagerError::CanisterAlreadyExists(*canister_id)),
-            _ => Ok(()),
-        }
     }
 
     fn validate_compute_allocation(
@@ -1318,6 +1306,11 @@ impl CanisterManager {
         Ok(())
     }
 
+    /// Generates a new canister ID.
+    ///
+    /// Returns `Err` if the subnet can generate no more canister IDs; or a canister
+    /// with the newly generated ID already exists.
+    //
     // WARNING!!! If you change the logic here, please ensure that the sequence
     // of NNS canister ids as defined in nns/constants/src/constants.rs are also
     // updated.
@@ -1325,24 +1318,16 @@ impl CanisterManager {
         &self,
         state: &mut ReplicatedState,
     ) -> Result<CanisterId, CanisterManagerError> {
-        let canister_id_ranges = state
-            .metadata
-            .network_topology
-            .routing_table
-            .ranges(self.config.own_subnet_id);
-        if state.metadata.generated_id_counter as u128 >= canister_id_ranges.total_count() {
-            error!(
-                self.log,
-                "Subnet is full.  Total allowed is {} and generated_count is {}",
-                canister_id_ranges.total_count(),
-                state.metadata.generated_id_counter
-            );
-            return Err(CanisterManagerError::SubnetOutOfCanisterIds {
-                allowed: canister_id_ranges.total_count(),
-            });
+        let canister_id = state.metadata.generate_new_canister_id().map_err(|err| {
+            error!(self.log, "Unable to generate new canister IDs: {}", err);
+            CanisterManagerError::SubnetOutOfCanisterIds
+        })?;
+
+        // Sanity check: ensure that no canister with this ID exists already.
+        if state.canister_state(&canister_id).is_some() {
+            return Err(CanisterManagerError::CanisterAlreadyExists(canister_id));
         }
-        let canister_id = canister_id_ranges.locate(state.metadata.generated_id_counter);
-        state.metadata.generated_id_counter += 1;
+
         Ok(canister_id)
     }
 
@@ -1408,9 +1393,7 @@ pub(crate) enum CanisterManagerError {
     },
     InstallCodeNotEnoughCycles(CanisterOutOfCyclesError),
     InstallCodeRateLimited(CanisterId),
-    SubnetOutOfCanisterIds {
-        allowed: u128,
-    },
+    SubnetOutOfCanisterIds,
 
     InvalidSettings {
         message: String,
@@ -1542,13 +1525,10 @@ impl From<CanisterManagerError> for UserError {
                     format!("Canister {} is rate limited because it executed too many instructions in the previous install_code messages. Please retry installation after several minutes.", canister_id),
                 )
             }
-            SubnetOutOfCanisterIds{ allowed } => {
+            SubnetOutOfCanisterIds => {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
-                    format!(
-                        "Could not create canister.  Subnet has surpassed its limit {} of canister ids",
-                        allowed,
-                    ),
+                    "Could not create canister. Subnet has surpassed its canister ID allocation.",
                 )
             }
             InvalidSettings { message } => {

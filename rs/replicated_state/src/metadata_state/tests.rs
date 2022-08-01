@@ -3,6 +3,7 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaCurve;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -224,6 +225,240 @@ fn streams_stats_after_deserialization() {
         system_metadata.streams.responses_size_bytes(),
         deserialized_system_metadata.streams.responses_size_bytes()
     );
+}
+
+#[test]
+fn init_allocation_ranges_if_empty() {
+    let own_subnet_id = SUBNET_0;
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            // Valid range, but not last one.
+            CanisterIdRange{ start: CanisterId::from(CANISTER_IDS_PER_SUBNET), end: CanisterId::from(2 * CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
+            // Valid range, this is what we're looking for.
+            CanisterIdRange{ start: CanisterId::from(3 * CANISTER_IDS_PER_SUBNET), end: CanisterId::from(4 * CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
+            // Doesn't start at boundary.
+            CanisterIdRange{ start: CanisterId::from(5 * CANISTER_IDS_PER_SUBNET + 1), end: CanisterId::from(6 * CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
+            // Doesn't end at boundary.
+            CanisterIdRange{ start: CanisterId::from(7 * CANISTER_IDS_PER_SUBNET), end: CanisterId::from(8 * CANISTER_IDS_PER_SUBNET) } => own_subnet_id,
+            // Spans 2 * CANISTER_IDS_PER_SUBNET.
+            CanisterIdRange{ start: CanisterId::from(9 * CANISTER_IDS_PER_SUBNET), end: CanisterId::from(11 * CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
+        })
+        .unwrap(),
+    );
+    let network_topology = NetworkTopology {
+        subnets: BTreeMap::new(),
+        routing_table,
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(42),
+        ecdsa_signing_subnets: Default::default(),
+    };
+
+    let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
+    system_metadata.network_topology = network_topology;
+
+    assert_eq!(
+        CanisterIdRanges::try_from(vec![]).unwrap(),
+        system_metadata.canister_allocation_ranges
+    );
+    assert_eq!(None, system_metadata.last_generated_canister_id);
+
+    // Pretend we've fully consumed the first routing table range and generated
+    // 13 canister IDs from the second routing table range already.
+    system_metadata.generated_id_counter = CANISTER_IDS_PER_SUBNET + 13;
+
+    system_metadata.init_allocation_ranges_if_empty().unwrap();
+
+    assert_eq!(
+        CanisterIdRanges::try_from(vec![CanisterIdRange {
+            start: CanisterId::from(3 * CANISTER_IDS_PER_SUBNET),
+            end: CanisterId::from(4 * CANISTER_IDS_PER_SUBNET - 1)
+        }])
+        .unwrap(),
+        system_metadata.canister_allocation_ranges
+    );
+    assert_eq!(
+        Some(CanisterId::from(3 * CANISTER_IDS_PER_SUBNET + 12)),
+        system_metadata.last_generated_canister_id
+    );
+}
+
+#[test]
+fn generate_new_canister_id_no_allocation_ranges() {
+    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+
+    assert_eq!(
+        Err("Canister ID allocation was consumed".into()),
+        system_metadata.generate_new_canister_id()
+    );
+    assert_eq!(None, system_metadata.last_generated_canister_id);
+}
+
+/// Tests that canister IDs are actually generated from the ranges:
+/// ```
+///     (canister_allocation_ranges
+///          ∩ routing_table.ranges(own_subnet_id))
+///          \ canister_migrations.ranges()
+/// ```
+#[test]
+fn generate_new_canister_id() {
+    fn range(start: u64, end: u64) -> CanisterIdRange {
+        CanisterIdRange {
+            start: start.into(),
+            end: end.into(),
+        }
+    }
+
+    // `canister_allocation_ranges = [[10, 19], [30, 30]]`
+    let canister_allocation_ranges = vec![range(10, 19), range(30, 30)];
+
+    // `routing_table.ranges(own_subnet_id) = [[10, 12], [17, 39]]`
+    let own_subnet_id = SUBNET_0;
+    let other_subnet_id = subnet_test_id(42);
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 12) => own_subnet_id,
+            range(13, 15) => other_subnet_id,
+            range(17, 39) => own_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    // `canister_migration.ranges() = [[12, 13], [18, 18]]`
+    let canister_migrations = Arc::new(
+        CanisterMigrations::try_from(btreemap! {
+            range(12, 13) => vec![own_subnet_id, other_subnet_id],
+            range(18, 18) => vec![own_subnet_id, other_subnet_id],
+        })
+        .unwrap(),
+    );
+
+    let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
+
+    system_metadata.canister_allocation_ranges = canister_allocation_ranges.try_into().unwrap();
+    let network_topology = NetworkTopology {
+        subnets: BTreeMap::new(),
+        routing_table,
+        canister_migrations,
+        nns_subnet_id: other_subnet_id,
+        ecdsa_signing_subnets: Default::default(),
+    };
+    system_metadata.network_topology = network_topology;
+
+    assert_eq!(None, system_metadata.last_generated_canister_id);
+    assert_eq!(2, system_metadata.canister_allocation_ranges.len());
+
+    /// Asserts that the next generated canister ID is the expected one.
+    /// And that `last_generated_canister_id` is updated accordingly.
+    fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
+        assert_eq!(
+            Ok(expected.into()),
+            system_metadata.generate_new_canister_id()
+        );
+        assert_eq!(
+            Some(expected.into()),
+            system_metadata.last_generated_canister_id
+        );
+    }
+
+    assert_next_generated(10, &mut system_metadata);
+    assert_next_generated(11, &mut system_metadata);
+    // 12 is being migrated, 13-16 are hosted by a different subnet.
+    assert_next_generated(17, &mut system_metadata);
+
+    // Same outcome if last generated canister ID had been within the allocation
+    // range, but being migrated.
+    system_metadata.last_generated_canister_id = Some(12.into());
+    assert_next_generated(17, &mut system_metadata);
+
+    assert_next_generated(19, &mut system_metadata);
+    // Still have both allocation ranges.
+    assert_eq!(2, system_metadata.canister_allocation_ranges.len());
+
+    // Once we've generated 30, the first allocation range should have been dropped.
+    assert_next_generated(30, &mut system_metadata);
+    assert_eq!(1, system_metadata.canister_allocation_ranges.len());
+
+    // Ensure backwards compatibility: we've generated 6 canister IDs so far.
+    assert_eq!(6, system_metadata.generated_id_counter);
+
+    // No more canister IDs can be generated.
+    assert_eq!(
+        Err("Canister ID allocation was consumed".into()),
+        system_metadata.generate_new_canister_id()
+    );
+    // But last generated is the same.
+    assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
+    // The last allocation range is still there.
+    assert_eq!(1, system_metadata.canister_allocation_ranges.len());
+    // And we're still at 6 generated canister IDs.
+    assert_eq!(6, system_metadata.generated_id_counter);
+}
+
+#[test]
+fn roundtrip_encoding() {
+    use ic_protobuf::state::system_metadata::v1 as pb;
+
+    fn range(start: u64, end: u64) -> CanisterIdRange {
+        CanisterIdRange {
+            start: start.into(),
+            end: end.into(),
+        }
+    }
+
+    // `canister_allocation_ranges = [[10, 19], [30, 30]]`
+    let canister_allocation_ranges = vec![range(10, 19), range(30, 30)];
+
+    // `routing_table.ranges(own_subnet_id) = [[10, 12]]`
+    let own_subnet_id = SUBNET_0;
+    let other_subnet_id = subnet_test_id(42);
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 12) => own_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    // `canister_migration.ranges() = [[12, 13]]`
+    let canister_migrations = Arc::new(
+        CanisterMigrations::try_from(btreemap! {
+            range(12, 13) => vec![own_subnet_id, other_subnet_id],
+        })
+        .unwrap(),
+    );
+
+    let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
+
+    let network_topology = NetworkTopology {
+        subnets: BTreeMap::new(),
+        routing_table,
+        canister_migrations,
+        nns_subnet_id: other_subnet_id,
+        ecdsa_signing_subnets: Default::default(),
+    };
+    system_metadata.network_topology = network_topology;
+
+    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
+    let mut proto = pb::SystemMetadata::from(&system_metadata);
+    proto.canister_allocation_ranges = None;
+    assert_eq!(system_metadata, proto.try_into().unwrap());
+
+    // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
+    fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
+        let proto = pb::SystemMetadata::from(system_metadata);
+        assert_eq!(*system_metadata, proto.try_into().unwrap());
+    }
+
+    // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
+    system_metadata.canister_allocation_ranges = canister_allocation_ranges.try_into().unwrap();
+    validate_roundtrip_encoding(&system_metadata);
+
+    // Set `last_generated_canister_id` to valid canister ID.
+    system_metadata.last_generated_canister_id = Some(11.into());
+    validate_roundtrip_encoding(&system_metadata);
+
+    // Set `last_generated_canister_id` to valid, but migrated canister ID.
+    system_metadata.last_generated_canister_id = Some(15.into());
+    validate_roundtrip_encoding(&system_metadata);
 }
 
 #[test]

@@ -70,6 +70,28 @@ fn try_convert_string_into_canister_id_range() {
 }
 
 #[test]
+fn canister_id_range_generate_canister_id() {
+    let range = CanisterIdRange {
+        start: 5.into(),
+        end: 10.into(),
+    };
+
+    // `previous_canister_id` is `None`: `range.start`.
+    assert_eq!(Some(5.into()), range.generate_canister_id(None));
+
+    // `previous_canister_id < range.start`: `range.start`.
+    assert_eq!(Some(5.into()), range.generate_canister_id(Some(0.into())));
+
+    // In-range `previous_canister_id`: next canister ID.
+    assert_eq!(Some(6.into()), range.generate_canister_id(Some(5.into())));
+    assert_eq!(Some(10.into()), range.generate_canister_id(Some(9.into())));
+
+    // `previous_canister_id >= range.end`: `None`.
+    assert_eq!(None, range.generate_canister_id(Some(10.into())));
+    assert_eq!(None, range.generate_canister_id(Some(11.into())));
+}
+
+#[test]
 fn invalid_canister_id_ranges() {
     let ranges = CanisterIdRanges(vec![CanisterIdRange {
         start: CanisterId::from(1),
@@ -152,6 +174,99 @@ fn canister_id_ranges_are_not_disjoint() {
         new_canister_migrations(vec![((3, 15), vec![0, 1]), ((18, 20), vec![0, 1])]);
     assert!(!are_disjoint(canister_migrations.ranges(), ranges_b.iter()));
     assert!(!are_disjoint(canister_migrations.ranges(), ranges_c.iter()));
+}
+
+#[test]
+fn canister_id_ranges_generate_canister_id() {
+    let empty_ranges = new_canister_id_ranges(vec![]);
+
+    // Empty ranges: `None`.
+    assert_eq!(None, empty_ranges.generate_canister_id(Some(1.into())));
+    assert_eq!(None, empty_ranges.generate_canister_id(None));
+
+    let ranges = new_canister_id_ranges(vec![(10, 19), (30, 39)]);
+
+    // `previous_canister_id` is `None`: `self.start`.
+    assert_eq!(Some(10.into()), ranges.generate_canister_id(None));
+
+    // `previous_canister_id < self.start`: `self.start`.
+    assert_eq!(Some(10.into()), ranges.generate_canister_id(Some(9.into())));
+
+    // `previous_canister_id < ranges.end()`: next canister ID.
+    assert_eq!(
+        Some(11.into()),
+        ranges.generate_canister_id(Some(10.into()))
+    );
+    assert_eq!(
+        Some(19.into()),
+        ranges.generate_canister_id(Some(18.into()))
+    );
+    assert_eq!(
+        Some(30.into()),
+        ranges.generate_canister_id(Some(19.into()))
+    );
+    assert_eq!(
+        Some(30.into()),
+        ranges.generate_canister_id(Some(25.into()))
+    );
+    assert_eq!(
+        Some(31.into()),
+        ranges.generate_canister_id(Some(30.into()))
+    );
+    assert_eq!(
+        Some(39.into()),
+        ranges.generate_canister_id(Some(38.into()))
+    );
+
+    // `previous_canister_id == self.end`: `None`.
+    assert_eq!(None, ranges.generate_canister_id(Some(39.into())));
+}
+
+#[test]
+fn canister_id_ranges_is_empty_start_end() {
+    let empty_ranges = new_canister_id_ranges(vec![]);
+
+    assert_eq!(0, empty_ranges.len());
+    assert_eq!(None, empty_ranges.start());
+    assert_eq!(None, empty_ranges.end());
+
+    let ranges = new_canister_id_ranges(vec![(10, 19), (30, 39)]);
+
+    assert_eq!(2, ranges.len());
+    assert_eq!(Some(10.into()), ranges.start());
+    assert_eq!(Some(39.into()), ranges.end());
+}
+
+#[test]
+fn test_intersection() {
+    let left = new_canister_id_ranges(vec![(10, 19), (30, 39), (50, 59), (70, 79), (90, 99)]);
+    let right = new_canister_id_ranges(vec![
+        (2, 3),
+        (25, 31),
+        (33, 35),
+        (38, 42),
+        (45, 59),
+        (65, 85),
+    ]);
+    let expected = new_canister_id_ranges(vec![(30, 31), (33, 35), (38, 39), (50, 59), (70, 79)]);
+
+    assert_eq!(Ok(expected), intersection(left.iter(), right.iter()))
+}
+
+#[test]
+fn test_difference() {
+    let left = new_canister_id_ranges(vec![(10, 19), (30, 39), (50, 59), (70, 79), (90, 99)]);
+    let right = new_canister_id_ranges(vec![
+        (2, 3),
+        (25, 31),
+        (33, 35),
+        (38, 42),
+        (45, 59),
+        (65, 85),
+    ]);
+    let expected = new_canister_id_ranges(vec![(10, 19), (32, 32), (36, 37), (90, 99)]);
+
+    assert_eq!(Ok(expected), difference(left.iter(), right.iter()))
 }
 
 #[test]

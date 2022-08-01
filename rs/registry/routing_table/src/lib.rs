@@ -4,10 +4,14 @@ use candid::CandidType;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::{collections::BTreeMap, convert::TryFrom};
 
-fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
+/// Every subnet starts off with an allocation of roughly 1M canister IDs.
+pub const CANISTER_IDS_PER_SUBNET: u64 = 1 << 20;
+
+pub fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
     const LENGTH: usize = std::mem::size_of::<u64>();
     let principal_id = canister_id.get();
     let bytes = principal_id.as_slice();
@@ -36,6 +40,47 @@ fn canister_id_into_u128(canister_id: CanisterId) -> u128 {
 pub struct CanisterIdRange {
     pub start: CanisterId,
     pub end: CanisterId,
+}
+
+impl CanisterIdRange {
+    /// Returns `true` if `canister_id` is contained in the range.
+    pub fn contains(&self, canister_id: &CanisterId) -> bool {
+        &self.start <= canister_id && canister_id <= &self.end
+    }
+
+    /// Returns the next canister ID after `previous_canister_id`, if one is
+    /// available.
+    ///
+    /// Returns:
+    /// * `self.start` if `previous_canister_id` is `None`.
+    /// * `self.start` if `previous_canister_id < self.start`.
+    /// * `None` if `previous_canister_id >= self.end`.
+    /// * `previous_canister_id + 1` otherwise.
+    pub fn generate_canister_id(
+        &self,
+        previous_canister_id: Option<CanisterId>,
+    ) -> Option<CanisterId> {
+        let previous_canister_id = match previous_canister_id {
+            Some(previous_canister_id) => previous_canister_id,
+
+            // If no previous canister ID was generated, return `self.start`.
+            None => return Some(self.start),
+        };
+
+        if previous_canister_id < self.start {
+            // No more canister IDs left.
+            return Some(self.start);
+        }
+
+        if previous_canister_id >= self.end {
+            // No more canister IDs left.
+            return None;
+        }
+
+        Some(CanisterId::from(
+            canister_id_into_u64(previous_canister_id) + 1,
+        ))
+    }
 }
 
 /// Errors encountered while parsing `CanisterIdRange` from string representations.
@@ -124,36 +169,12 @@ impl CanisterIdRanges {
     /// Returns Ok if this collection of canister ID ranges is well-formed
     /// (non-empty, sorted and disjoint).
     fn well_formed(&self) -> Result<(), WellFormedError> {
-        use WellFormedError::*;
-
-        // Ranges are non-empty (ranges are closed).
-        for range in self.iter() {
-            if range.start > range.end {
-                return Err(CanisterIdRangeEmptyRange(format!(
-                    "start {} is greater than end {}",
-                    range.start, range.end,
-                )));
-            }
-        }
-
-        // Ranges are sorted and disjoint.
-        for i in 1..self.0.len() {
-            let current_start = self.0[i].start;
-            let previous_end = self.0[i - 1].end;
-            if previous_end >= current_start {
-                return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
-                    "previous_end {} >= current_start {}",
-                    previous_end, current_start
-                )));
-            }
-        }
-
-        Ok(())
+        well_formed(self.0.iter())
     }
 
     /// Returns an iterator over canister ID ranges.
     /// The canister ranges are guaranteed to be sorted.
-    pub fn iter(&self) -> impl Iterator<Item = &CanisterIdRange> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &CanisterIdRange> {
         self.0.iter()
     }
 
@@ -167,6 +188,47 @@ impl CanisterIdRanges {
             sum += 1_u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
         }
         sum
+    }
+
+    /// Returns the number of `CanisterIdRange` entries.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` if the `CanisterIdRanges` contains no ranges.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Drops the first range, shifting all elements after it to the left.
+    ///
+    /// Panics if there is no range to drop.
+    pub fn drop_first(&mut self) -> CanisterIdRange {
+        self.0.remove(0)
+    }
+
+    /// Returns the start of the first `CanisterIdRange`, if any.
+    pub fn start(&self) -> Option<CanisterId> {
+        self.0.first().map(|range| range.start)
+    }
+
+    /// Returns the end of the last `CanisterIdRange`, if any.
+    pub fn end(&self) -> Option<CanisterId> {
+        self.0.last().map(|range| range.end)
+    }
+
+    /// Generates the next canister ID after the (provided) previously generated
+    /// canister ID, if any is available.
+    ///
+    /// Returns `None` if no more canister IDs can be generated.
+    pub fn generate_canister_id(
+        &self,
+        previous_canister_id: Option<CanisterId>,
+    ) -> Option<CanisterId> {
+        self.0
+            .iter()
+            .flat_map(|range| range.generate_canister_id(previous_canister_id))
+            .next()
     }
 
     /// Given location 'loc' in the range [0, total_count()), select a Canister
@@ -195,14 +257,12 @@ pub fn routing_table_insert_subnet(
     routing_table: &mut RoutingTable,
     subnet_id: SubnetId,
 ) -> Result<(), WellFormedError> {
-    // We assign roughly 1M canisters to each subnet
-    let num_canisters_per_subnet: u64 = 1 << 20;
     let start = match routing_table.iter().last() {
         Some((last_canister_id_range, _)) => canister_id_into_u64(last_canister_id_range.end) + 1,
         None => 0,
     };
     // The -1 because the ranges are stored as closed intervals.
-    let end = start + num_canisters_per_subnet - 1;
+    let end = start + CANISTER_IDS_PER_SUBNET - 1;
     let canister_id_range = CanisterIdRange {
         start: CanisterId::from(start),
         end: CanisterId::from(end),
@@ -763,6 +823,131 @@ where
         }
     }
     true
+}
+
+/// Computes the intersection of two canister ID range collections.
+///
+/// Only works if both `CanisterIdRange` collections are well-formed
+/// `CanisterIdRanges`, i.e. non-empty, sorted and disjoint.
+pub fn intersection<'a, T1, T2>(
+    mut lhs: T1,
+    mut rhs: T2,
+) -> Result<CanisterIdRanges, WellFormedError>
+where
+    T1: Iterator<Item = &'a CanisterIdRange>,
+    T2: Iterator<Item = &'a CanisterIdRange>,
+{
+    let mut res = Vec::new();
+
+    let mut left_next = lhs.next();
+    let mut right_next = rhs.next();
+    while let (Some(left_range), Some(right_range)) = (left_next, right_next) {
+        // If the two ranges intersect, add the intersection to the result.
+        let start = left_range.start.max(right_range.start);
+        let end = left_range.end.min(right_range.end);
+        if start <= end {
+            res.push(CanisterIdRange { start, end });
+        }
+
+        // Advance the side that ends first.
+        if left_range.end < right_range.end {
+            left_next = lhs.next();
+        } else {
+            right_next = rhs.next();
+        }
+    }
+    res.try_into()
+}
+
+/// Computes the difference of two canister ID range collections.
+///
+/// Only works if both `CanisterIdRange` collections are well-formed
+/// `CanisterIdRanges`, i.e. non-empty, sorted and disjoint.
+pub fn difference<'a, T1, T2>(lhs: T1, mut rhs: T2) -> Result<CanisterIdRanges, WellFormedError>
+where
+    T1: Iterator<Item = &'a CanisterIdRange>,
+    T2: Iterator<Item = &'a CanisterIdRange>,
+{
+    fn inc(canister_id: CanisterId) -> CanisterId {
+        (canister_id_into_u64(canister_id) + 1).into()
+    }
+    fn dec(canister_id: CanisterId) -> CanisterId {
+        (canister_id_into_u64(canister_id) - 1).into()
+    }
+
+    let mut res = Vec::new();
+    let mut right_next = rhs.next();
+
+    'left: for &CanisterIdRange { mut start, end } in lhs {
+        'right: while let Some(right_range) = right_next {
+            // `right_range` fully before `left_range`.
+            if right_range.end < start {
+                right_next = rhs.next();
+                continue 'right;
+            }
+
+            // `left_range` fully before `right_range`.
+            if end < right_range.start {
+                res.push(CanisterIdRange { start, end });
+                continue 'left;
+            }
+
+            // `left_range` starts before `right_range`, but there is overlap.
+            if start < right_range.start {
+                // Push left_range's prefix.
+                res.push(CanisterIdRange {
+                    start,
+                    end: dec(right_range.start),
+                });
+            }
+
+            // `left_range` entirely consumed, move on.
+            if end <= right_range.end {
+                continue 'left;
+            }
+
+            // Advance the start of `left_range` and move on to the next `right_range`.
+            start = inc(right_range.end);
+            right_next = rhs.next();
+        }
+
+        res.push(CanisterIdRange { start, end });
+    }
+
+    res.try_into()
+}
+
+/// Returns Ok if the provided collection of canister ID ranges is well-formed
+/// (non-empty, sorted and disjoint).
+fn well_formed<'a, T>(ranges: T) -> Result<(), WellFormedError>
+where
+    T: Iterator<Item = &'a CanisterIdRange>,
+{
+    use WellFormedError::*;
+
+    let mut previous_range: Option<&CanisterIdRange> = None;
+    for range in ranges {
+        // Ranges are non-empty (ranges are closed).
+        if range.start > range.end {
+            return Err(CanisterIdRangeEmptyRange(format!(
+                "start {} is greater than end {}",
+                range.start, range.end,
+            )));
+        }
+
+        // Ranges are sorted and disjoint.
+        if let Some(previous_range) = previous_range {
+            if previous_range.end >= range.start {
+                return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
+                    "previous_end {} >= current_start {}",
+                    previous_range.end, range.start
+                )));
+            }
+        }
+        previous_range = Some(range)
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -56,7 +56,7 @@ pub struct SubnetRecord {
     /// Information on whether a feature is supported by this subnet.
     #[prost(message, optional, tag = "23")]
     pub features: ::core::option::Option<SubnetFeatures>,
-    /// The number of canisters allowed to be created on this subnet.
+    /// The maximum number of canisters that may be present on the subnet at any given time.
     ///
     /// A value of 0 is equivalent to setting no limit. This also provides an easy way
     /// to maintain compatibility of different versions of replica and registry.
