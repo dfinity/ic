@@ -70,6 +70,7 @@ const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
+const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -241,7 +242,10 @@ pub(crate) struct MessageRoutingMetrics {
     /// correct operations.
     canisters_memory_usage_bytes: IntGauge,
     /// Critical error for not being able to calculate a subnet size.
-    missing_subnet_size_error: IntCounter,
+    critical_error_missing_subnet_size: IntCounter,
+    /// Critical error: subnet has no canister allocation range to generate new
+    /// canister IDs from.
+    critical_error_no_canister_allocation_range: IntCounter,
 }
 
 impl MessageRoutingMetrics {
@@ -281,9 +285,21 @@ impl MessageRoutingMetrics {
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
             ),
-            missing_subnet_size_error: metrics_registry
+            critical_error_missing_subnet_size: metrics_registry
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
+            critical_error_no_canister_allocation_range: metrics_registry
+                .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
         }
+    }
+
+    pub fn observe_no_canister_allocation_range(&self, log: &ReplicaLogger, message: String) {
+        self.critical_error_no_canister_allocation_range.inc();
+        warn!(
+            log,
+            "{}: {}. Subnet is unable to generate new canister IDs.",
+            message,
+            CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE
+        );
     }
 }
 
@@ -679,7 +695,7 @@ impl BatchProcessor for BatchProcessorImpl {
             .get(&state.metadata.own_subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
             .unwrap_or_else(|| {
-                self.metrics.missing_subnet_size_error.inc();
+                self.metrics.critical_error_missing_subnet_size.inc();
                 warn!(
                     self.log,
                     "{}: [EXC-1168] Unable to get subnet size from network topology. Cycles accounting may no longer be accurate.",

@@ -17,7 +17,10 @@ use ic_protobuf::{
         system_metadata::v1::{self as pb_metadata, TimeOfLastAllocationCharge},
     },
 };
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{
+    canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
+    RoutingTable, CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::nominal_cycles::NominalCycles;
@@ -59,6 +62,15 @@ pub struct SystemMetadata {
     /// A counter used for generating new canister ids.
     /// Used for canister creation.
     pub generated_id_counter: u64,
+
+    /// The canister ID ranges from which this subnet generates canister IDs.
+    canister_allocation_ranges: CanisterIdRanges,
+    /// The last generated canister ID; or `None` if this subnet has not
+    /// generated any canister IDs yet.
+    ///
+    /// If present, must be within the first `CanisterIdRange` in
+    /// `canister_allocation_ranges` (and the latter may not be empty).
+    last_generated_canister_id: Option<CanisterId>,
 
     /// The hash of the previous partial canonical state.
     /// The initial state doesn't have any previous state.
@@ -406,6 +418,8 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
         Self {
             own_subnet_id: Some(subnet_id_into_protobuf(item.own_subnet_id)),
             generated_id_counter: item.generated_id_counter,
+            canister_allocation_ranges: Some(item.canister_allocation_ranges.clone().into()),
+            last_generated_canister_id: item.last_generated_canister_id.map(Into::into),
             prev_state_hash: item
                 .prev_state_hash
                 .clone()
@@ -438,6 +452,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 
 impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
     type Error = ProxyDecodeError;
+
     fn try_from(item: pb_metadata::SystemMetadata) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -450,6 +465,28 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             );
         }
         let certification_version = item.certification_version;
+
+        let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
+            Some(canister_allocation_ranges) => canister_allocation_ranges.try_into()?,
+            None => Default::default(),
+        };
+        let last_generated_canister_id = item
+            .last_generated_canister_id
+            .map(TryInto::try_into)
+            .transpose()?;
+        // Validate that `last_generated_canister_id` (if not `None`) is within the
+        // first `canister_allocation_ranges` range.
+        if let Some(last_generated_canister_id) = last_generated_canister_id {
+            match canister_allocation_ranges.iter().next() {
+                Some(first_allocation_range)
+                    if first_allocation_range.contains(&last_generated_canister_id) => {}
+                _ => return Err(ProxyDecodeError::Other(format!(
+                    "SystemMetadata::last_generated_canister_id ({}) not in the first SystemMetadata::canister_allocation_ranges range ({:?})",
+                    last_generated_canister_id, canister_allocation_ranges
+                ))),
+            }
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -461,6 +498,8 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             generated_id_counter: item.generated_id_counter,
+            canister_allocation_ranges,
+            last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
             batch_time: Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
             ingress_history: try_from_option_field(
@@ -509,6 +548,8 @@ impl SystemMetadata {
             ingress_history: Default::default(),
             streams: Default::default(),
             generated_id_counter: Default::default(),
+            canister_allocation_ranges: Default::default(),
+            last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
@@ -547,6 +588,130 @@ impl SystemMetadata {
     /// Returns a reference to the streams.
     pub fn streams(&self) -> &Streams {
         &self.streams
+    }
+
+    /// One-off initialization: populate `canister_allocation_ranges` with the only
+    /// `[N * 2^20, (N+1) * 2^20 - 1]` range fully hosted by the subnet as per the
+    /// routing table; and initialize `last_generated_canister_id` based on
+    /// `generated_id_counter`.
+    ///
+    /// This is done under the assumption that the registry always assigns exactly
+    /// 2^20 canister IDs to every newly created subnet (and at this point in time
+    /// no canisters have yet been migrated).
+    ///
+    /// Canister ID allocation range assignment will be made explicit in a follow-up
+    /// change.
+    ///
+    /// Returns `Ok` if `canister_allocation_ranges` is not empty (whether it was
+    /// populated by this call or not); `Err` if empty (and the subnet is unable
+    /// to generate new canister IDs).
+    pub fn init_allocation_ranges_if_empty(&mut self) -> Result<(), String> {
+        if !self.canister_allocation_ranges.is_empty() {
+            return Ok(());
+        }
+
+        let routing_table_ranges = self
+            .network_topology
+            .routing_table
+            .ranges(self.own_subnet_id);
+        for range in routing_table_ranges.iter().rev() {
+            let start = canister_id_into_u64(range.start);
+            let end = canister_id_into_u64(range.end);
+            if start % CANISTER_IDS_PER_SUBNET == 0 && end == start + CANISTER_IDS_PER_SUBNET - 1 {
+                // Found the `[N * 2^20, (N+1) * 2^20 - 1]` (sub)range, use it as allocation
+                // range.
+
+                // If any canister IDs were generated, initialize `last_generated_canister_id`
+                // accordingly.
+                if self.generated_id_counter > 0 {
+                    // Last actually generated canister ID.
+                    let last_generated_canister_id =
+                        routing_table_ranges.locate(self.generated_id_counter - 1);
+                    if !range.contains(&last_generated_canister_id) {
+                        return Err(format!(
+                            "Last generated canister ID ({}) not in the [{}, {}] range",
+                            last_generated_canister_id, range.start, range.end
+                        ));
+                    }
+                    self.last_generated_canister_id = Some(last_generated_canister_id);
+                }
+
+                // Unwrapping is safe because the only reason why we would fail to convert is if
+                // we provided set of ranges that was not well formed. This is not the case
+                // here, as we are creating a `CanisterIdRanges` out of one non-empty range.
+                self.canister_allocation_ranges = vec![*range].try_into().unwrap();
+                break;
+            }
+        }
+
+        if self.canister_allocation_ranges.is_empty() {
+            return Err("No range of length CANISTER_IDS_PER_SUBNET in routing table".into());
+        }
+        Ok(())
+    }
+
+    /// Generates a new canister ID.
+    ///
+    /// If a canister ID from a second canister allocation range is generated, the
+    /// first range is dropped. The last canister allocation range is never dropped.
+    ///
+    /// Returns `Err` iff no more canister IDs can be generated.
+    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
+        // Start off with
+        //     (canister_allocation_ranges
+        //          ∩ routing_table.ranges(own_subnet_id))
+        //          \ canister_migrations.ranges()
+        let own_subnet_ranges = self
+            .network_topology
+            .routing_table
+            .ranges(self.own_subnet_id);
+        let canister_allocation_ranges = intersection(
+            self.canister_allocation_ranges.iter(),
+            own_subnet_ranges.iter(),
+        )
+        .map_err(|err| {
+            format!(
+                "intersection({:?}, {:?}) is not well formed: {:?}",
+                self.canister_allocation_ranges, own_subnet_ranges, err
+            )
+        })?;
+        let canister_allocation_ranges = difference(
+            canister_allocation_ranges.iter(),
+            self.network_topology.canister_migrations.ranges(),
+        )
+        .map_err(|err| {
+            format!(
+                "difference({:?}, {:?}) is not well formed: {:?}",
+                canister_allocation_ranges, self.network_topology.canister_migrations, err
+            )
+        })?;
+
+        let res = canister_allocation_ranges.generate_canister_id(self.last_generated_canister_id);
+
+        if let Some(res) = &res {
+            self.last_generated_canister_id = Some(*res);
+
+            while self.canister_allocation_ranges.len() > 1
+                && !self
+                    .canister_allocation_ranges
+                    .iter()
+                    .next()
+                    .unwrap()
+                    .contains(res)
+            {
+                // Drop the first canister allocation range iff consumed and more allocation
+                // ranges are available.
+                self.canister_allocation_ranges.drop_first();
+            }
+
+            // Bump the generated ID counter for backwards compatibility.
+            //
+            // Note: This is only guaranteed to be backwards compatible as long as no
+            // canisters were migrated.
+            self.generated_id_counter += 1;
+        }
+
+        res.ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 }
 

@@ -34,7 +34,7 @@ use ic_interfaces::{
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1248,13 +1248,12 @@ impl ExecutionTestBuilder {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
         let own_range = CanisterIdRange {
-            start: CanisterId::from(0x100),
-            end: CanisterId::from(self.registry_settings.max_number_of_canisters - 1),
+            start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
+            end: CanisterId::from(2 * CANISTER_IDS_PER_SUBNET - 1),
         };
         let routing_table = Arc::new(match self.caller_canister_id {
             None => RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => self.own_subnet_id,
-                own_range => self.own_subnet_id,
+                CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => self.own_subnet_id,
             }).unwrap(),
             Some(caller_canister) => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
@@ -1289,6 +1288,7 @@ impl ExecutionTestBuilder {
         }
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
+        state.metadata.init_allocation_ranges_if_empty().unwrap();
 
         if self.subnet_features.is_empty() {
             state.metadata.own_subnet_features = SubnetFeatures::default();

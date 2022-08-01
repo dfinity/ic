@@ -28,7 +28,7 @@ use ic_interfaces::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
@@ -247,7 +247,7 @@ fn canister_manager_config(
 fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => subnet_id,
         })
         .unwrap(),
     );
@@ -255,6 +255,7 @@ fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
         ReplicatedState::new_rooted_at(subnet_id, SubnetType::Application, path.to_path_buf());
     state.metadata.network_topology.routing_table = routing_table;
     state.metadata.network_topology.nns_subnet_id = subnet_id;
+    state.metadata.init_allocation_ranges_if_empty().unwrap();
     state
 }
 

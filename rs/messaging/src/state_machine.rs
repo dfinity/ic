@@ -135,6 +135,10 @@ impl StateMachine for StateMachineImpl {
         metadata.batch_time = batch.time;
         metadata.network_topology = network_topology;
         metadata.own_subnet_features = subnet_features;
+        if let Err(message) = metadata.init_allocation_ranges_if_empty() {
+            self.metrics
+                .observe_no_canister_allocation_range(&self.log, message);
+        }
         state.set_system_metadata(metadata);
 
         self.remove_canisters_not_in_routing_table(&mut state);
