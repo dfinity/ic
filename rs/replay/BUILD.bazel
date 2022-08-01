@@ -1,0 +1,92 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/artifact_pool",
+    "//rs/canister_client",
+    "//rs/canister_sandbox/backend_lib",
+    "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
+    "//rs/config",
+    "//rs/consensus",
+    "//rs/consensus/message",
+    "//rs/crypto",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/sha",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/http_handler",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/messaging",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/nervous_system/common",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance",
+    "//rs/nns/init",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/local_store",
+    "//rs/registry/nns_data_provider",
+    "//rs/registry/subnet_type",
+    "//rs/registry/transport",
+    "//rs/replica:replica_lib",
+    "//rs/replicated_state",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/state_manager",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "replay",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_replay",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-replay",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":replay"],
+)

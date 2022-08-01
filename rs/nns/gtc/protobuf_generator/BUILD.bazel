@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:prost.bzl", "protobuf_generator")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_nns_gtc_protobuf_generator",
+    edition = "2018",
+    deps = [
+        "//rs/utils/rustfmt",
+        "@crate_index//:prost-build",
+    ],
+)
+
+protobuf_generator(
+    name = "protobuf_generator",
+    srcs = ["src/main.rs"],
+    manifest_dir = "rs/nns/gtc/protobuf_generator",
+    deps = [":lib"],
+)

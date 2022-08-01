@@ -1,0 +1,71 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/interfaces",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance",
+    "//rs/nns/test_utils",
+    "//rs/registry/local_store",
+    "//rs/registry/proto_data_provider",
+    "//rs/registry/transport",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rust_canisters/canister_test",
+    "//rs/sys",
+    "//rs/test_utilities/identity",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:prost",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "init",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_nns_init",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-nns-init",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":init"],
+)
+
+rust_binary(
+    name = "ic-get-neuron-ids",
+    srcs = ["src/get_neuron_ids.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":init"],
+)
