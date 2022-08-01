@@ -2,11 +2,13 @@ use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
 
+mod test_rng;
+
 fn gen_private_keys(
     curve: EccCurveType,
     cnt: usize,
 ) -> Result<(Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let mut private_keys = Vec::with_capacity(cnt);
 
     for _i in 0..cnt {
@@ -24,7 +26,7 @@ fn gen_private_keys(
 #[test]
 fn create_random_dealing() -> Result<(), IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let associated_data = vec![1, 2, 3];
     let (private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 2;
@@ -64,7 +66,7 @@ fn create_random_dealing() -> Result<(), IdkgCreateDealingInternalError> {
 #[test]
 fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let associated_data = vec![1, 2, 3];
     let (private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 2;
@@ -103,7 +105,7 @@ fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalErro
 #[test]
 fn create_reshare_masked_dealings() -> Result<(), IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let associated_data = vec![1, 2, 3];
     let (private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 2;
@@ -143,7 +145,7 @@ fn create_reshare_masked_dealings() -> Result<(), IdkgCreateDealingInternalError
 #[test]
 fn create_mult_dealing() -> Result<(), IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let associated_data = vec![1, 2, 3];
     let (private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 2;
@@ -184,7 +186,7 @@ fn create_mult_dealing() -> Result<(), IdkgCreateDealingInternalError> {
 #[test]
 fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let associated_data = vec![1, 2, 3];
     let (private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 2;
@@ -236,7 +238,7 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
 #[test]
 fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     {
         let shares = SecretShares::Random;
@@ -294,7 +296,7 @@ fn flip_curve(s: &EccScalar) -> EccScalar {
 
 #[test]
 fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     let curve = EccCurveType::K256;
     let associated_data = vec![1, 2, 3];
@@ -324,7 +326,7 @@ fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError>
 
 #[test]
 fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     let curve = EccCurveType::K256;
     let associated_data = vec![1, 2, 3];
@@ -355,7 +357,7 @@ fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     let curve = EccCurveType::K256;
     let associated_data = vec![1, 2, 3];

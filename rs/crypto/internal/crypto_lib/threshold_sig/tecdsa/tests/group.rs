@@ -1,5 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
+mod test_rng;
+
 #[test]
 fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
     // Repro of https://github.com/RustCrypto/elliptic-curves/issues/529
@@ -39,7 +41,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert_eq!(b, b2);
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve_type in EccCurveType::all() {
         let identity = EccPoint::identity(curve_type);
@@ -156,7 +158,7 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         let zero = EccScalar::zero(curve);
@@ -197,7 +199,7 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = test_utils::seeded_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve_type in EccCurveType::all() {
         let id = EccPoint::identity(curve_type);

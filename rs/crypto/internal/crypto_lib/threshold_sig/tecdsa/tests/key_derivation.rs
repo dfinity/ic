@@ -2,6 +2,8 @@ use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
+mod test_rng;
+
 #[allow(dead_code)]
 mod test_utils;
 
@@ -24,7 +26,7 @@ fn test_index_next_behavior() {
 
 #[test]
 fn test_that_key_derivation_on_secp256r1_currently_fails() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let path = DerivationPath::new_bip32(&[1, 2, 3]);
     let master_key = EccPoint::hash_to_point(
         EccCurveType::P256,
@@ -100,13 +102,11 @@ fn verify_bip32_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
 fn should_bip32_derivation_match_external_lib() -> Result<(), ThresholdEcdsaError> {
     let nodes = 9;
     let threshold = 2;
-    let setup = SignatureProtocolSetup::new(
-        EccCurveType::K256,
-        nodes,
-        threshold,
-        threshold,
-        random_seed(),
-    )?;
+
+    let random_seed = Seed::from_rng(&mut test_rng::test_rng());
+
+    let setup =
+        SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, random_seed)?;
 
     let key_1 = setup.public_key(&DerivationPath::new_bip32(&[1]))?;
     let key_1_2 = setup.public_key(&DerivationPath::new_bip32(&[1, 2]))?;

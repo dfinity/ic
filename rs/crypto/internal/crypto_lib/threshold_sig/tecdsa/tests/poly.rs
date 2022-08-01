@@ -1,6 +1,8 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
 
+mod test_rng;
+
 #[test]
 fn poly_zero_times_zero_is_zero() -> ThresholdEcdsaResult<()> {
     for curve in EccCurveType::all() {
@@ -19,7 +21,7 @@ fn poly_zero_times_zero_is_zero() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         let constant = EccScalar::random(curve, &mut rng)?;
@@ -38,7 +40,7 @@ fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_simple_polynomial_x_1() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     // Test the behavior of evaluating polynomial x+1
 
@@ -61,7 +63,7 @@ fn poly_simple_polynomial_x_1() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_simple_polynomial_x2_x_1() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     // Test the behavior of evaluating polynomial x^2+x+1
 
@@ -86,7 +88,7 @@ fn poly_simple_polynomial_x2_x_1() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_interpolate_works() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
@@ -110,7 +112,7 @@ fn poly_interpolate_works() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
@@ -135,7 +137,7 @@ fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
@@ -166,7 +168,7 @@ fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_interpolate_is_resilient_to_low_x_points() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
@@ -194,7 +196,7 @@ fn poly_interpolate_is_resilient_to_low_x_points() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_threshold_secret_sharing() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         let zero = EccScalar::zero(curve);
@@ -221,7 +223,7 @@ fn poly_threshold_secret_sharing() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_simple_commitments() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
@@ -235,7 +237,7 @@ fn poly_simple_commitments() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_pedersen_commitments() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
@@ -302,7 +304,7 @@ fn interpolation_at_zero(x: &[NodeIndex], y: &[EccPoint]) -> ThresholdEcdsaResul
 }
 
 fn random_node_indexes(count: usize) -> Vec<NodeIndex> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     let mut set = std::collections::BTreeSet::new();
 
@@ -316,7 +318,7 @@ fn random_node_indexes(count: usize) -> Vec<NodeIndex> {
 
 #[test]
 fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..30 {
@@ -344,7 +346,7 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..30 {
@@ -375,7 +377,7 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..30 {
@@ -405,7 +407,7 @@ fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..10 {
@@ -432,7 +434,7 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult
 
 #[test]
 fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         for num_coefficients in 2..20 {
@@ -462,7 +464,7 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
 
 #[test]
 fn polynomial_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         let constant = EccScalar::random(curve, &mut rng)?;
@@ -479,7 +481,7 @@ fn polynomial_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 
 #[test]
 fn commitment_opening_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve in EccCurveType::all() {
         let scalar = EccScalar::random(curve, &mut rng)?;

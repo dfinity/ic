@@ -1,11 +1,13 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
 
+mod test_rng;
+
 #[test]
 fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let ad = rng.gen::<[u8; 32]>();
 
     let seed = Seed::from_rng(&mut rng);
@@ -32,7 +34,7 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
 fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let ad = rng.gen::<[u8; 32]>();
 
     let seed = Seed::from_rng(&mut rng);
@@ -64,7 +66,7 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
 fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let ad = rng.gen::<[u8; 32]>();
 
     let seed = Seed::from_rng(&mut rng);
@@ -92,7 +94,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
 fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
     let ad = rng.gen::<[u8; 32]>();
 
     let seed = Seed::from_rng(&mut rng);
