@@ -21,6 +21,52 @@
     - ubuntu
   timeout: 3 hours
 
+# BENCHMARK SUITE maximum capacity for Canister HTTP calls
+maximum-capacity-canister-http:
+  extends: .benchmark-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      echo '{"test_ledger_accounts":["b3gus-edhie-77egn-fejju-pt4xd-zz2pt-7v22l-rrts4-a3ebi-fcm4d-wae"]}' > test-accounts.json
+      export TESTNET_LOG="testnet_deployment.log"
+      $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh "$TESTNET" --git-revision "$GIT_REVISION" --no-boundary-nodes  --ansible-args "-e @$PWD/test-accounts.json" &> $TESTNET_LOG
+
+      # Obtains nns_node URL
+      NNS_URL=$(grep "$TESTNET-0-" "$TESTNET_LOG" | tail -1 | grep -o -P '(?<=http).*(?=8080)' | sed 's/$/8080/' | sed 's/^/http/')
+      echo "$NNS_URL" > nns_url.log
+      echo "Obtained NNS subnet URL: $NNS_URL"
+
+      # Enables http_request feature on subnet
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="$GIT_REVISION" --remote-path="release" \
+          --out="artifacts/release"
+      pigz -d "${CI_PROJECT_DIR}/artifacts/release/ic-admin.gz"
+      chmod u+x "${CI_PROJECT_DIR}/artifacts/release/ic-admin"
+      ln -sf "${CI_PROJECT_DIR}/artifacts/release/ic-admin" ic-admin
+      "${CI_PROJECT_DIR}/artifacts/release/ic-admin" --nns-url="$NNS_URL" propose-to-update-subnet --features http_requests --subnet 1 --test-neuron-proposer
+
+      cd ./scalability
+      $SHELL_WRAPPER pipenv --python 3
+      $SHELL_WRAPPER pipenv install -r requirements.txt
+
+      $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --initial_rps=50 --increment_rps=50 --target_rps=200 --max_rps=500 --workload workloads/canister-http-benchmark.toml
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
+
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
 # BENCHMARK SUITE maximum_capacity_system_baseline with query calls
 maximum-capacity-system-baseline-query:
   extends: .benchmark-test
