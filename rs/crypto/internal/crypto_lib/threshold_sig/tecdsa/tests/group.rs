@@ -194,3 +194,29 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_point_negate() -> ThresholdEcdsaResult<()> {
+    let mut rng = test_utils::seeded_rng();
+
+    for curve_type in EccCurveType::all() {
+        let id = EccPoint::identity(curve_type);
+        let g = EccPoint::generator_g(curve_type)?;
+
+        assert_eq!(id.negate(), id);
+
+        for _trial in 0..100 {
+            let random_scalar = EccScalar::random(curve_type, &mut rng)?;
+            let random_point = g.scalar_mul(&random_scalar)?;
+            let n_random_point = random_point.negate();
+
+            let should_be_zero = random_point.add_points(&n_random_point)?;
+            assert_eq!(should_be_zero, id);
+
+            let should_be_zero = n_random_point.add_points(&random_point)?;
+            assert_eq!(should_be_zero, id);
+        }
+    }
+
+    Ok(())
+}
