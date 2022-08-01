@@ -843,8 +843,3 @@ impl SignatureProtocolExecution {
         Ok(())
     }
 }
-
-pub fn random_seed() -> Seed {
-    let mut rng = rand::thread_rng();
-    Seed::from_rng(&mut rng)
-}

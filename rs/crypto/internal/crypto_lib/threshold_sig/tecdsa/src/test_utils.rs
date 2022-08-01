@@ -1,6 +1,3 @@
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-
 use crate::{zk::ProofOfDLogEquivalence, *};
 
 /// Corrupts this dealing by modifying the ciphertext intended for
@@ -134,11 +131,4 @@ pub fn corrupt_opening(opening: &CommitmentOpening) -> ThresholdEcdsaResult<Comm
         }
     };
     Ok(corrupted_opening)
-}
-
-pub fn seeded_rng() -> ChaCha20Rng {
-    let mut thread_rng = rand::thread_rng();
-    let seed = thread_rng.gen::<u64>();
-    println!("RNG seed {}", seed);
-    ChaCha20Rng::seed_from_u64(seed)
 }

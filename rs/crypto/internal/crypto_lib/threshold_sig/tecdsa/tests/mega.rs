@@ -1,6 +1,8 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use std::convert::TryFrom;
 
+mod test_rng;
+
 #[test]
 fn mega_key_generation() -> ThresholdEcdsaResult<()> {
     let mut seed = Seed::from_bytes(&[0x42; 32]);
@@ -39,7 +41,7 @@ fn mega_key_generation() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn mega_key_validity() -> ThresholdEcdsaResult<()> {
-    let mut rng = rand::thread_rng();
+    let mut rng = test_rng::test_rng();
 
     for curve_type in EccCurveType::all() {
         let sk = MEGaPrivateKey::generate(curve_type, &mut rng)?;
