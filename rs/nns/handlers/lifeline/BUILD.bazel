@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = []
+
+BUILD_DEPENDENCIES = [
+    "//rs/nns/constants",
+    "//rs/types/base_types",
+]
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = [
+        "lifeline.did",
+        "lifeline.mo",
+        "//rs/nns/governance:canister/governance.did",
+        "//rs/nns/handlers/root:canister/root.did",
+    ],
+    edition = "2018",
+    version = "0.8.0",
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_library(
+    name = "lifeline",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "lifeline",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)

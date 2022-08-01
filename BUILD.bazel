@@ -54,8 +54,23 @@ opt_stripped_binary(
 )
 
 opt_stripped_binary(
+    name = "ic-btc-adapter",
+    binary = "//rs/bitcoin/adapter:ic-btc-adapter",
+)
+
+opt_stripped_binary(
+    name = "ic-consensus-pool-util",
+    binary = "//rs/artifact_pool:ic-consensus-pool-util",
+)
+
+opt_stripped_binary(
     name = "sandbox_launcher",
     binary = "//rs/canister_sandbox/sandbox_launcher",
+)
+
+opt_stripped_binary(
+    name = "canister_sandbox",
+    binary = "//rs/canister_sandbox",
 )
 
 opt_stripped_binary(
@@ -88,17 +103,9 @@ opt_stripped_binary(
     binary = "//rs/state_tool",
 )
 
-cargo_build(
-    name = "binaries",
-    srcs = ["//rs:all_sources"],
-    binaries = [
-        "ic-recovery",
-    ],
-    cargo_flags = [
-        "--manifest-path",
-        "rs/Cargo.toml",
-    ],
-    profile = "release-stripped",
+opt_stripped_binary(
+    name = "ic-recovery",
+    binary = "//rs/recovery:ic-recovery",
 )
 
 cargo_build(

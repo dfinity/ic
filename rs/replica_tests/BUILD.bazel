@@ -1,0 +1,69 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/execution_environment",
+    "//rs/interfaces",
+    "//rs/interfaces/p2p",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/prep",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/subnet_type",
+    "//rs/replica:replica_lib",
+    "//rs/replicated_state",
+    "//rs/state_manager",
+    "//rs/test_utilities",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:futures",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_4_6",
+    "@crate_index//:slog",
+    "@crate_index//:slog-scope",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@wabt_rs//:wabt",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "replica_tests",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_replica_tests",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

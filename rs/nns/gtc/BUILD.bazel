@@ -5,8 +5,6 @@ load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["canister/governance.did"])
-
 filegroup(
     name = "sources",
     srcs = glob(
@@ -28,41 +26,30 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
-    "//rs/monitoring/metrics_encoder",
-    "//rs/nervous_system/common",
-    "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/protobuf",
-    "//rs/registry/canister",
+    "//rs/nns/governance",
+    "//rs/nns/gtc_accounts",
     "//rs/rosetta-api/ledger_canister",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
-    "@crate_index//:comparable",
+    "@crate_index//:hex",
+    "@crate_index//:lazy_static",
+    "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
     "@crate_index//:rand_0_7_3",
     "@crate_index//:rand_core",
+    "@crate_index//:hex-literal",
     "@crate_index//:serde",
-    "@crate_index//:strum",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "@crate_index//:csv",
-        "//rs/nervous_system/common/test_keys",
-    ],
-})
+    "@crate_index//:sha3",
+    "@crate_index//:simple_asn1",
+]
 
 MACRO_DEPENDENCIES = [
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:async-trait",
-    "@crate_index//:strum_macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -82,29 +69,25 @@ cargo_build_script(
 )
 
 rust_library(
-    name = "governance",
+    name = "gtc",
     srcs = glob([
         "src/**",
         "gen/**",
     ]),
     aliases = ALIASES,
-    crate_name = "ic_nns_governance",
+    crate_name = "ic_nns_gtc",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_canister(
-    name = "governance-canister",
+    name = "genesis-token-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    compile_data = ["canister/governance.did"],
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":governance",
-        ":build_script",
-    ],
+    deps = DEPENDENCIES + [":gtc"] + [":build_script"],
 )
 
 generated_files_check(
@@ -112,15 +95,12 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["gen/**"]) + [
         ":protos",
-        "//rs/types/base_types:protos",
         "//rs/nns/common:protos",
-        "//rs/rosetta-api/ledger_canister:protos",
-        "//rs/sns/root:protos",
-        "//rs/sns/swap:protos",
+        "//rs/types/base_types:protos",
     ],
-    manifest_dir = "rs/nns/governance",
+    manifest_dir = "rs/nns/gtc",
     deps = [
-        "//rs/nns/governance/protobuf_generator:lib",
+        "//rs/nns/gtc/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
     ],
