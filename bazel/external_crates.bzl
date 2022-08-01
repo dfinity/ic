@@ -321,7 +321,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.20.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.5",
+                version = "^0.5.5",
                 default_features = False,
             ),
             "ic-cdk-macros": crate.spec(

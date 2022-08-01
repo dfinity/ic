@@ -6,54 +6,37 @@
 //! otherwise errors out.
 //!
 use candid::{candid_method, Principal};
-use ic_ic00_types::{CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod};
+use ic_cdk::api::call::RejectionCode;
+use ic_ic00_types::{CanisterHttpResponsePayload, Payload};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 thread_local! {
-    pub static REMOTE_CALLS: RefCell<HashMap<String,RemoteHttpResponse>>  = RefCell::new(HashMap::new());
+    #[allow(clippy::type_complexity)]
+    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
 }
 
 #[ic_cdk_macros::update(name = "send_request")]
 #[candid_method(update, rename = "send_request")]
-async fn send_request(request: RemoteHttpRequest) -> Result<(), String> {
-    let canister_http_headers = request
-        .headers
-        .clone()
-        .into_iter()
-        .map(|header| HttpHeader {
-            name: header.0,
-            value: header.1,
-        })
-        .collect();
-    println!("send_request being called");
-
-    let canister_http_request = CanisterHttpRequestArgs {
-        url: request.url.clone(),
-        http_method: HttpMethod::GET,
-        body: Some(request.body.as_bytes().to_vec()),
-        transform_method_name: request.transform.clone(),
-        headers: canister_http_headers,
-        max_response_bytes: request.max_response_size,
-    };
-
-    println!("send_request encoding CanisterHttpRequestArgs message.");
-    let encoded_req = candid::utils::encode_one(&canister_http_request).unwrap();
-
+async fn send_request(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    let RemoteHttpRequest { request, cycles } = request;
+    let request_url = request.url.clone();
     println!("send_request making IC call.");
     match ic_cdk::api::call::call_raw(
         Principal::management_canister(),
         "http_request",
-        &encoded_req[..],
-        request.cycles,
+        &request.encode(),
+        cycles,
     )
     .await
     {
         Ok(raw_response) => {
             println!("send_request returning with success case.");
             let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
-                .map_err(|err| return format!("Decoding raw http response failed: {}", err))?;
+                .expect("Failed to decode CanisterHttpResponsePayload");
             let mut response_headers = vec![];
             for header in decoded.headers {
                 response_headers.push((header.name, header.value));
@@ -61,48 +44,42 @@ async fn send_request(request: RemoteHttpRequest) -> Result<(), String> {
             let response = RemoteHttpResponse::new(
                 decoded.status as u8,
                 response_headers,
-                String::from_utf8(decoded.body).map_err(|err| return format!("Internet Computer cansiter HTTP calls expects request and response be UTF-8 encoded. However, the response content is not UTF-8 compliant. Error: {}", err))?,
+                String::from_utf8_lossy(&decoded.body).to_string(),
             );
 
-            let request_url = request.url.clone();
             REMOTE_CALLS.with(|results| {
                 let mut writer = results.borrow_mut();
-                writer.entry(request_url).or_insert(response);
+                writer
+                    .entry(request_url)
+                    .or_insert_with(|| Ok(response.clone()));
             });
-            Result::Ok(())
+            Result::Ok(response)
         }
         Err((r, m)) => {
-            println!("send_request returning with failure case.");
-            let error = format!(
-                "Failed to send request to {}. CanisterId: {}, RejectionCode: {:?}, Message: {}",
-                &request.url,
-                ic_cdk::id(),
-                r,
-                m
-            );
-            Err(error)
+            REMOTE_CALLS.with(|results| {
+                let mut writer = results.borrow_mut();
+                writer
+                    .entry(request.url)
+                    .or_insert_with(|| Err((r, m.clone())));
+            });
+            Err((r, m))
         }
     }
 }
 
 #[ic_cdk_macros::query(name = "check_response")]
 #[candid_method(query, rename = "check_response")]
-async fn check_response(url: String) -> Result<RemoteHttpResponse, String> {
+async fn check_response(
+    url: String,
+) -> Option<Result<RemoteHttpResponse, (RejectionCode, String)>> {
     println!("check_response being called");
     REMOTE_CALLS.with(|results| {
         let reader = results.borrow();
         println!("Size of dictionary is: {}", reader.len());
         match reader.get(&url) {
-            Some(x) => {
-                println!("check_response returning with success case.");
-                Result::Ok(x.clone())
-            }
-            _ => {
-                println!("check_response returning with failure case.");
-                let message = format!("Request to URL {} has not been made.", url);
-                println!("{}", message);
-                Result::Err(message)
-            }
+            Some(Ok(x)) => Some(Ok(x.clone())),
+            Some(Err((r, m))) => Some(Err((*r, m.clone()))),
+            None => None,
         }
     })
 }
@@ -118,6 +95,7 @@ fn transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
+    use ic_ic00_types::HttpHeader;
 
     #[test]
     fn test_transform() {

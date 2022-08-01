@@ -1,17 +1,18 @@
 /* tag::catalog[]
-Title:: Basic HTTP requests from canisters
+Title:: Fault tolerance test for Http requests
 
-Goal:: Ensure simple HTTP requests can be made from canisters.
+Goal:: Ensure HTTP requests can be made from canisters while a 1 of 3 nodes fail.
 
 Runbook::
 1. Instantiate an IC with one applications subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Make a query to the proxy canister to a non-existent endpoint
-5. Verify response timed out
+4. Spawn task to continously send http requests.
+5. Kill one of the nodes.
+6. Query proxy canister and verify state is restored.
 
 Success::
-1. Result of last query returns what the update call put in the canister.
+1. Http requests succeed in environment where nodes fail.
 
 end::catalog[] */
 use crate::canister_http::lib::*;
@@ -23,7 +24,8 @@ use crate::util;
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_ic00_types::HttpMethod;
+use ic_cdk::api::call::RejectionCode;
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
@@ -50,7 +52,6 @@ pub fn test(env: TestEnv) {
         .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
         .collect();
     let app_endpoint = app_endpoints.first().expect("no Application nodes.");
-    //let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
     let app_runtime = util::runtime_from_url(app_endpoint.url.clone());
     rt.block_on(app_endpoint.assert_ready(&ctx));
     info!(&logger, "NNS endpoint reachable over http.");
@@ -77,8 +78,9 @@ pub fn test(env: TestEnv) {
     info!(&logger, "proxy_canister {cid} installed");
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    let log = logger.clone();
     let continuous_http_calls = rt.spawn(async move {
-        println!("Starting workload of continued remote HTTP calls.");
+        info!(&log, "Starting workload of continued remote HTTP calls.");
         let proxy_canister = Canister::new(
             &app_runtime,
             CanisterId::new(PrincipalId::from(cid)).unwrap(),
@@ -90,26 +92,30 @@ pub fn test(env: TestEnv) {
             let success_update = proxy_canister
                 .update_(
                     "send_request",
-                    candid_one::<Result<(), String>, RemoteHttpRequest>,
+                    candid_one::<
+                        Result<RemoteHttpResponse, (RejectionCode, String)>,
+                        RemoteHttpRequest,
+                    >,
                     RemoteHttpRequest {
-                        url: format!("https://[{webserver_ipv6}]:443"),
-                        headers: vec![],
-                        method: HttpMethod::GET,
-                        body: "".to_string(),
-                        transform: Some("transform".to_string()),
-                        max_response_size: None,
+                        request: CanisterHttpRequestArgs {
+                            url: format!("https://[{webserver_ipv6}]:443"),
+                            headers: vec![],
+                            http_method: HttpMethod::GET,
+                            body: Some("".as_bytes().to_vec()),
+                            transform_method_name: Some("transform".to_string()),
+                            max_response_bytes: None,
+                        },
                         cycles: 500_000_000_000,
                     },
                 )
                 .await
-                .expect("HTTP request failed");
+                .expect("Call to proxy canister failed.");
             match success_update {
-                Ok(_) => {
-                    println!("Update call successful!")
+                Ok(r) => {
+                    info!(&log, "Canister http call success {:?}", r);
                 }
-                Err(failure) => {
-                    let message = format!("Failed to make the update call. {}", failure);
-                    panic!("{}", message);
+                Err((_, failure)) => {
+                    panic!("Failed to make canister http request: {}", failure);
                 }
             }
         }
@@ -149,36 +155,40 @@ pub fn test(env: TestEnv) {
             if Instant::now() - start > EXPIRATION {
                 panic!("Restarted node not able to catch up cached query content before timeout.");
             }
-            let waited_query = restarted_canister_endpoint
-                .query_(
-                    "check_response",
-                    candid_one::<Result<RemoteHttpResponse, String>, _>,
-                    format!("https://[{webserver_ipv6}]:443"),
-                )
-                .await;
+            let waited_query =
+                restarted_canister_endpoint
+                    .query_(
+                        "check_response",
+                        candid_one::<
+                            Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
+                            String,
+                        >,
+                        format!("https://[{webserver_ipv6}]:443"),
+                    )
+                    .await;
 
-            if let Err(error) = waited_query {
-                std::thread::sleep(BACKOFF_DELAY);
-                warn!(
-                    &logger,
-                    "Restarted node hasn't caught up. Got error: {error}. Retrying.."
-                );
-                continue;
-            }
-
-            match waited_query.unwrap() {
-                Err(error) => {
-                    std::thread::sleep(BACKOFF_DELAY);
+            match waited_query {
+                Ok(Some(Ok(queried))) if queried.status == 200 && !queried.body.is_empty() => {
+                    info!(&logger, "Restarted node is caught up!");
+                    break;
+                }
+                Ok(Some(Ok(queried))) => {
+                    warn!(
+                        &logger,
+                        "Http service didn't return 200 response: {:?}", queried
+                    );
+                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
+                }
+                Ok(None) => {
+                    warn!(&logger, "Request to http endpoint has not been made yet");
+                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
+                }
+                Ok(Some(Err((_, error)))) | Err(error) => {
                     warn!(
                         &logger,
                         "Restarted node hasn't caught up. Got inner error: {error}. Retrying.."
                     );
-                }
-                Ok(queried) => {
-                    info!(&logger, "Restarted node is caught up!");
-                    assert!(queried.status == 200);
-                    assert!(!queried.body.is_empty());
-                    break;
+                    let _ = tokio::time::sleep(BACKOFF_DELAY).await;
                 }
             }
         }

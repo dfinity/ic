@@ -8,24 +8,26 @@ Runbook::
 1. Instantiate an IC with one application subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Make a query to the proxy canister
-5. Make an update call to the proxy canister
-6. Make a query to the proxy canister
+4. Make an update call to the proxy canister.
 
 Success::
-1. Result of last query returns what the update call put in the canister.
+1. Received http response with status 200.
 
 end::catalog[] */
 
 use crate::canister_http::lib::*;
-use crate::driver::test_env::TestEnv;
+use crate::driver::{
+    test_env::TestEnv,
+    test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT},
+};
 use crate::util::block_on;
+use anyhow::bail;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_ic00_types::HttpMethod;
+use ic_cdk::api::call::RejectionCode;
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::{error, info, Logger};
-use std::time::Instant;
+use slog::{info, Logger};
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -46,65 +48,35 @@ pub fn test(env: TestEnv) {
 }
 
 async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
-    let empty_result = proxy_canister
-        .query_(
-            "check_response",
-            candid_one::<Result<RemoteHttpResponse, String>, _>,
-            url.to_string(),
-        )
-        .await
-        .expect("Error");
-    assert!(empty_result.is_err());
-    assert_eq!(
-        empty_result.unwrap_err(),
-        format!("Request to URL {} has not been made.", url)
-    );
-
-    info!(&logger, "Trying sending update calls...");
-    let start = Instant::now();
-    while let Err(failed) = proxy_canister
-        .update_(
-            "send_request",
-            candid_one::<Result<(), String>, RemoteHttpRequest>,
-            RemoteHttpRequest {
-                url: url.to_string(),
-                headers: vec![],
-                body: "".to_string(),
-                transform: Some("transform".to_string()),
-                method: HttpMethod::GET,
-                max_response_size: None,
-                cycles: 500_000_000_000,
-            },
-        )
-        .await
-        .expect("Error")
-    {
-        if Instant::now() - start > EXPIRATION {
-            panic!("Update call not available till before timeout.");
+    retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        let res =
+            proxy_canister
+                .update_(
+                    "send_request",
+                    candid_one::<
+                        Result<RemoteHttpResponse, (RejectionCode, String)>,
+                        RemoteHttpRequest,
+                    >,
+                    RemoteHttpRequest {
+                        request: CanisterHttpRequestArgs {
+                            url: url.to_string(),
+                            headers: vec![],
+                            body: Some("".as_bytes().to_vec()),
+                            transform_method_name: Some("transform".to_string()),
+                            http_method: HttpMethod::GET,
+                            max_response_bytes: None,
+                        },
+                        cycles: 500_000_000_000,
+                    },
+                )
+                .await
+                .expect("Update call to proxy canister failed");
+        if !matches!(res, Ok(ref x) if x.status == 200) {
+            bail!("Http request failed response: {:?}", res);
         }
-        info!(
-            &logger,
-            "Not ready for update call. Error: {failed}. Retrying in few seconds."
-        );
-    }
-    info!(&logger, "Update call succeeded!");
-
-    let _ = proxy_canister
-        .query_(
-            "check_response",
-            candid_one::<Result<RemoteHttpResponse, String>, String>,
-            url.to_string(),
-        )
-        .await
-        .map_err(|err| {
-            error!(&logger, "Failed to pull response: {}", err);
-        })
-        .map(|result| {
-            let success = result.unwrap();
-            info!(
-                &logger,
-                "Successfully pulled response! status: {}, body: {}", success.status, success.body
-            );
-            assert_ne!("", success.body);
-        });
+        info!(&logger, "Update call succeeded! {:?}", res);
+        Ok(())
+    })
+    .await
+    .expect("Timeout on doing a canister http call to the webserver");
 }

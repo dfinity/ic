@@ -5,22 +5,16 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-use candid::CandidType;
-use ic_ic00_types::HttpMethod;
-use serde::{Deserialize, Serialize};
+use candid::{CandidType, Deserialize};
+use ic_ic00_types::CanisterHttpRequestArgs;
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct RemoteHttpRequest {
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub method: HttpMethod,
-    pub body: String,
-    pub transform: Option<String>,
-    pub max_response_size: Option<u64>,
+    pub request: CanisterHttpRequestArgs,
     pub cycles: u64,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct RemoteHttpResponse {
     pub status: u8,
     pub headers: Vec<(String, String)>,

@@ -1,28 +1,31 @@
 /* tag::catalog[]
-Title:: Basic HTTP requests from canisters
+Title:: Basic HTTP requests from canisters to remote service.
 
-Goal:: Ensure simple HTTP requests can be made from canisters.
+Goal:: Ensure simple HTTP requests can be made from canisters to service in internet.
 
 Runbook::
 1. Instantiate an IC with one applications subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Make a query to the proxy canister
-5. Make an update call to the proxy canister
-6. Make a query to the proxy canister
+4. Make an update call to the proxy canister
 
 Success::
-1. Result of last query returns what the update call put in the canister.
+1. Received http response with status 200.
 
 end::catalog[] */
 
 use crate::canister_http::lib::*;
-use crate::driver::test_env::TestEnv;
+use crate::driver::{
+    test_env::TestEnv,
+    test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT},
+};
 use crate::util::block_on;
+use anyhow::bail;
 use dfn_candid::candid_one;
-use ic_ic00_types::HttpMethod;
+use ic_cdk::api::call::RejectionCode;
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::{error, info};
+use slog::info;
 
 pub fn test(env: TestEnv) {
     let mut nodes = get_node_snapshots(&env);
@@ -32,63 +35,39 @@ pub fn test(env: TestEnv) {
 
     block_on(async {
         let url = "https://example.com/";
-        let empty_result = proxy_canister
-            .query_(
-                "check_response",
-                candid_one::<Result<RemoteHttpResponse, String>, _>,
-                url.to_string(),
-            )
-            .await
-            .expect("Error");
-        assert!(empty_result.is_err());
-        assert_eq!(
-            empty_result.unwrap_err(),
-            format!("Request to URL {} has not been made.", url)
-        );
-
         info!(&env.logger(), "Send an update call...");
-
-        let updated = proxy_canister
-            .update_(
-                "send_request",
-                candid_one::<Result<(), String>, RemoteHttpRequest>,
-                RemoteHttpRequest {
-                    url: url.to_string(),
-                    headers: vec![],
-                    method: HttpMethod::GET,
-                    body: "".to_string(),
-                    transform: Some("transform".to_string()),
-                    max_response_size: None,
-                    cycles: 500_000_000_000,
-                },
-            )
-            .await
-            .expect("Failed to send update call")
-            .expect("Update call failed");
-        info!(
-            &env.logger(),
-            "Canister Http update call response: {:?}", updated
-        );
-
-        let _ = proxy_canister
-            .query_(
-                "check_response",
-                candid_one::<Result<RemoteHttpResponse, String>, String>,
-                url.to_string(),
-            )
-            .await
-            .map_err(|err| {
-                error!(&env.logger(), "Failed to pull response: {}", err);
-            })
-            .map(|result| {
-                let success = result.unwrap();
-                info!(
-                    &env.logger(),
-                    "Successfully pulled response! status: {}, body: {}",
-                    success.status,
-                    success.body
-                );
-                assert_ne!("", success.body);
-            });
+        retry_async(&env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let updated = proxy_canister
+                .update_(
+                    "send_request",
+                    candid_one::<
+                        Result<RemoteHttpResponse, (RejectionCode, String)>,
+                        RemoteHttpRequest,
+                    >,
+                    RemoteHttpRequest {
+                        request: CanisterHttpRequestArgs {
+                            url: url.to_string(),
+                            headers: vec![],
+                            http_method: HttpMethod::GET,
+                            body: Some("".as_bytes().to_vec()),
+                            transform_method_name: Some("transform".to_string()),
+                            max_response_bytes: None,
+                        },
+                        cycles: 500_000_000_000,
+                    },
+                )
+                .await
+                .expect("Failed to send update call");
+            if !matches!(updated, Ok(ref x) if x.status == 200) {
+                bail!("Http request failed response: {:?}", updated);
+            }
+            info!(
+                &env.logger(),
+                "Canister Http update call response: {:?}", updated
+            );
+            Ok(())
+        })
+        .await
+        .expect("Timeout on doing a canister http call to the webserver");
     });
 }
