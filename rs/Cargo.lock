@@ -2585,7 +2585,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "dfn_core",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-ic00-types",
  "serde",
@@ -3581,7 +3581,7 @@ name = "http_counter"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-certified-map",
  "serde",
@@ -4128,7 +4128,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-btc-types",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "serde",
  "tokio",
@@ -4434,9 +4434,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.5.2"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e471fa2e2464d4f9d676b81d33ae0d1cd190981166c53bbe4d536f13da281fc6"
+checksum = "141341c2cb26c4e5f196d5b64305c677b1abebe093eefbe2c622b4a2e6de8a9f"
 dependencies = [
  "candid",
  "cfg-if 1.0.0",
@@ -4450,7 +4450,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f50910f1df55124b5374847fd2b4e3515c426f6d1ce1a23503208e80832fbc2"
 dependencies = [
  "candid",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "proc-macro2 1.0.39",
  "quote 1.0.17",
  "serde",
@@ -4520,7 +4520,7 @@ dependencies = [
  "dfn_http_metrics",
  "ic-base-types",
  "ic-btc-library",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-crypto-sha",
  "ic-ledger-types",
@@ -5805,7 +5805,7 @@ dependencies = [
  "candid",
  "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
  "ic-base-types",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-icrc1",
  "ic-ledger-core",
@@ -5836,7 +5836,7 @@ dependencies = [
  "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
  "hex",
  "ic-base-types",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-crypto-tree-hash",
  "ic-icrc1",
@@ -6029,7 +6029,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "ic-canister-client",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types 0.8.0",
@@ -6081,7 +6081,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "serde",
  "serde_bytes",
  "sha2 0.9.9",
@@ -7403,7 +7403,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-constants",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
@@ -7863,7 +7863,7 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-base-types",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-icrc1-ledger",
@@ -9742,9 +9742,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
+checksum = "fd7e2f3618557f980e0b17e8856252eee3c97fa12c54dff0ca290fb6266ca4a9"
 dependencies = [
  "lazy_static",
  "libc",
@@ -11089,7 +11089,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.5.2",
+ "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-ic00-types",
  "ic-types 0.8.0",
@@ -13148,6 +13148,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-types",
  "ic-canister-client",
+ "ic-cdk 0.5.5",
  "ic-certified-vars",
  "ic-config",
  "ic-constants",

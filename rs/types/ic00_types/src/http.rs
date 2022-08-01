@@ -11,7 +11,7 @@ use serde::Serialize;
 //     body : opt blob;
 //     transform : opt variant { function: func (http_response) -> (http_response) query };
 //   })`
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
