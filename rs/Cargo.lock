@@ -654,7 +654,7 @@ name = "bazelifier"
 version = "0.1.0"
 dependencies = [
  "askama",
- "clap 3.2.12",
+ "clap 3.2.14",
  "eyre",
  "lazy_static",
  "maplit",
@@ -927,42 +927,32 @@ dependencies = [
 
 [[package]]
 name = "boundary-node-control-plane"
-version = "0.8.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "fix-hidden-lifetime-bug",
+ "axum",
+ "bytes",
+ "clap 3.2.14",
+ "dashmap 5.3.4",
  "futures",
- "gflags",
- "hyper",
- "hyper-tls",
- "ic-config",
- "ic-crypto",
- "ic-crypto-tls",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-threshold-sig",
- "ic-metrics",
- "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
- "ic-registry-keys",
  "ic-registry-nns-data-provider",
- "ic-registry-routing-table",
- "ic-test-utilities",
  "ic-types 0.8.0",
- "lazy_static",
- "native-tls",
- "openssl",
- "prometheus 0.12.0",
+ "mockall 0.11.1",
+ "opentelemetry 0.17.0",
+ "opentelemetry-prometheus",
+ "prometheus 0.13.1",
+ "reqwest",
  "serde",
  "serde_cbor",
  "serde_json",
- "slog",
- "slog-scope",
- "slog-term",
- "substring",
+ "tempfile",
  "tokio",
- "tokio-openssl",
+ "tracing",
+ "tracing-subscriber 0.3.11",
  "url",
 ]
 
@@ -975,7 +965,7 @@ dependencies = [
  "axum",
  "base64 0.13.0",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "futures",
  "garcon",
  "glob 0.3.0",
@@ -1135,9 +1125,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-version = "1.0.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
+checksum = "f0b3de4a0c5e67e16066a0715723abd91edc2f9001d09c46e1dca929351e130e"
 
 [[package]]
 name = "bytestring"
@@ -1427,9 +1417,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.12"
+version = "3.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8b79fe3946ceb4a0b1c080b4018992b8d27e9ff363644c1c9b6387c854614d"
+checksum = "54635806b078b7925d6e36810b1755f2a4b5b4d57560432c1ecf60bcbe10602b"
 dependencies = [
  "atty",
  "bitflags",
@@ -2234,7 +2224,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "clap 3.2.12",
+ "clap 3.2.14",
  "futures",
  "humantime 2.1.0",
  "mockall 0.11.1",
@@ -2912,26 +2902,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c5f6c2c942da57e2aaaa84b8a521489486f14e75e7fa91dab70aba913975f98"
 
 [[package]]
-name = "fix-hidden-lifetime-bug"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b7e739f1d47bbc5185391f0b280ef0bd953fa2327d0bf0c619183502923938"
-dependencies = [
- "fix-hidden-lifetime-bug-proc_macros",
-]
-
-[[package]]
-name = "fix-hidden-lifetime-bug-proc_macros"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb97774845ef67bfa186b3a39ed2dec87ed70b4932f076ca75392e9c58a6bda1"
-dependencies = [
- "proc-macro2 1.0.39",
- "quote 1.0.17",
- "syn 1.0.96",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3336,7 +3306,7 @@ dependencies = [
  "bytes",
  "candid",
  "canister-test",
- "clap 3.2.12",
+ "clap 3.2.14",
  "dfn_candid",
  "garcon",
  "ic-agent",
@@ -3784,7 +3754,7 @@ dependencies = [
  "bytes",
  "candid",
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "cycles-minting-canister",
  "ed25519-dalek",
  "futures",
@@ -3913,7 +3883,7 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "byteorder",
- "clap 3.2.12",
+ "clap 3.2.14",
  "criterion",
  "ic-config",
  "ic-consensus-message",
@@ -3976,7 +3946,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "dashmap 5.3.4",
  "futures",
  "humantime 2.1.0",
@@ -4034,7 +4004,7 @@ name = "ic-btc-adapter"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
- "clap 3.2.12",
+ "clap 3.2.14",
  "futures",
  "hashlink 0.8.0",
  "hex",
@@ -4090,7 +4060,7 @@ dependencies = [
  "bitcoin",
  "byteorder",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "ic-btc-test-utils",
  "ic-btc-types",
  "ic-btc-types-internal",
@@ -4246,7 +4216,7 @@ dependencies = [
  "async-socks5",
  "async-stream",
  "byte-unit",
- "clap 3.2.12",
+ "clap 3.2.14",
  "fast-socks5",
  "futures",
  "futures-core",
@@ -4652,7 +4622,7 @@ dependencies = [
  "arrayvec 0.5.1",
  "async-trait",
  "base64 0.11.0",
- "clap 3.2.12",
+ "clap 3.2.14",
  "criterion",
  "ed25519-consensus",
  "hex",
@@ -5491,7 +5461,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.8.0"
 dependencies = [
- "clap 3.2.12",
+ "clap 3.2.14",
  "hex",
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-launcher",
@@ -5878,7 +5848,7 @@ name = "ic-identity"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.2.12",
+ "clap 3.2.14",
  "ed25519-consensus",
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
@@ -6026,7 +5996,7 @@ dependencies = [
  "actix-web",
  "async-trait",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "dfn_protobuf",
  "ic-canister-client",
  "ic-certified-vars",
@@ -6469,7 +6439,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "canister-test",
- "clap 3.2.12",
+ "clap 3.2.14",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces",
@@ -6493,7 +6463,7 @@ dependencies = [
 name = "ic-nns-inspector"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.12",
+ "clap 3.2.14",
  "csv",
  "hex",
  "ic-base-types",
@@ -6680,7 +6650,7 @@ name = "ic-p8s-service-discovery"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.2.12",
+ "clap 3.2.14",
  "crossbeam 0.8.0",
  "crossbeam-channel 0.5.6",
  "elastic_common_schema",
@@ -6761,7 +6731,7 @@ dependencies = [
  "assert_matches",
  "base64 0.11.0",
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "fs_extra",
  "ic-config",
  "ic-constants",
@@ -6846,7 +6816,7 @@ name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "hex",
  "ic-base-types",
  "ic-cup-explorer",
@@ -6876,7 +6846,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "base64 0.11.0",
- "clap 3.2.12",
+ "clap 3.2.14",
  "ic-base-types",
  "ic-crypto",
  "ic-crypto-sha",
@@ -7158,7 +7128,7 @@ name = "ic-replay"
 version = "0.8.0"
 dependencies = [
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
@@ -7215,7 +7185,7 @@ dependencies = [
  "assert_cmd",
  "base64 0.11.0",
  "canister-test",
- "clap 3.2.12",
+ "clap 3.2.14",
  "criterion",
  "hex",
  "ic-async-utils",
@@ -7416,7 +7386,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.0",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "dfn_candid",
  "dfn_macro",
  "dfn_protobuf",
@@ -7495,7 +7465,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "colored",
  "crossbeam-channel 0.5.6",
  "dfn_candid",
@@ -7560,7 +7530,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "dfn_candid",
  "dfn_core",
  "dfn_protobuf",
@@ -7598,7 +7568,7 @@ dependencies = [
  "build-info-build",
  "bytes",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "comparable",
  "criterion",
  "csv",
@@ -7925,7 +7895,7 @@ name = "ic-starter"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.2.12",
+ "clap 3.2.14",
  "ic-config",
  "ic-ic00-types",
  "ic-logger",
@@ -8069,7 +8039,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.8.0"
 dependencies = [
- "clap 3.2.12",
+ "clap 3.2.14",
  "hex",
  "ic-config",
  "ic-logger",
@@ -8309,7 +8279,7 @@ name = "ic-transport-test-client"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "clap 3.2.12",
+ "clap 3.2.14",
  "crossbeam-channel 0.5.6",
  "futures",
  "ic-config",
@@ -8497,7 +8467,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "console 0.11.3",
  "ed25519-dalek",
  "futures",
@@ -9348,7 +9318,7 @@ name = "log_analyzer"
 version = "0.8.0"
 dependencies = [
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "criterion",
  "lazy_static",
  "regex",
@@ -10260,7 +10230,7 @@ dependencies = [
  "assert_cmd",
  "async-trait",
  "candid",
- "clap 3.2.12",
+ "clap 3.2.14",
  "exec",
  "hex",
  "http",
@@ -12177,9 +12147,9 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.139"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0171ebb889e45aa68b44aee0859b3eede84c6f5f5c228e6f140c0b2a0a46cad6"
+checksum = "fc855a42c7967b7c369eb5860f7164ef1f6f81c20c7cc1141f2a604e18723b03"
 dependencies = [
  "serde_derive",
 ]
@@ -12226,9 +12196,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.139"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc1d3230c1de7932af58ad8ffbe1d784bd55efd5a9d84ac24f69c72d83543dfb"
+checksum = "6f2122636b9fe3b81f1cb25099fcf2d3f542cdb1d45940d56c713158884a05da"
 dependencies = [
  "proc-macro2 1.0.39",
  "quote 1.0.17",
@@ -12882,15 +12852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "substring"
-version = "1.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-dependencies = [
- "autocfg 1.1.0",
-]
-
-[[package]]
 name = "subtle"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13157,7 +13118,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.2.12",
+ "clap 3.2.14",
  "crossbeam-channel 0.5.6",
  "cycles-minting-canister",
  "dfn_candid",
@@ -13939,9 +13900,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.2.1"
+version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ccd964113622c8e9322cfac19eb1004a07e636c545f325da085d5cdde6f1f8b"
+checksum = "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -14009,7 +13970,7 @@ dependencies = [
 name = "vsock_agent"
 version = "0.8.0"
 dependencies = [
- "clap 3.2.12",
+ "clap 3.2.14",
  "libc",
  "nix 0.23.0",
  "rand 0.8.5",

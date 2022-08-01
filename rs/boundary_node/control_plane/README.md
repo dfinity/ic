@@ -6,9 +6,9 @@ Download routing information from the NNS.
 
 ## Running
 
-   ```
-   cargo run -- \
-     --nns_urls http://10.12.34.7:8080,http://10.12.34.13:8080 \
-     --nns_public_key nns_public_key.pem \
-     --routes_dir .
-   ```
+```
+cargo run -- \
+  --nns_url <NNS_URL_1> ... --nns_url <NNS_URL_N> \
+  --nns_public_key nns_public_key.pem \
+  --routes_dir .
+```
