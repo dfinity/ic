@@ -208,6 +208,11 @@ impl Point {
         Self::new(self.p.double())
     }
 
+    /// Perform point negation
+    pub fn negate(&self) -> Self {
+        Self::new(self.p.neg())
+    }
+
     /// Scalar multiplication
     pub fn mul(&self, scalar: &Scalar) -> Self {
         Self::new(self.p * scalar.s)

@@ -552,6 +552,14 @@ impl EccPoint {
         }
     }
 
+    /// Perform point negation
+    pub fn negate(&self) -> Self {
+        match self {
+            Self::K256(pt) => Self::K256(pt.negate()),
+            Self::P256(pt) => Self::P256(pt.negate()),
+        }
+    }
+
     /// Perform point*scalar multiplication for node indexes (not constant time)
     ///
     /// Returns the result of a point multiplied by (index + 1)
