@@ -176,3 +176,39 @@ endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-prober-%Y.%m.%d"
 tls.verify_certificate = false
+
+# control-plane
+
+[sources.control_plane]
+type = "journald"
+include_units = ["control-plane"]
+
+[transforms.control_plane_json]
+type = "remap"
+inputs = ["control_plane"]
+source = """
+d = {}; ks = ["host"]
+
+for_each(ks) -> |_, k| {
+    v = get!(., [k])
+    if v != null {
+        d = set!(d, [k], v)
+    }
+}
+
+. = parse_json!(.message)
+
+.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
+.@timestamp = to_unix_timestamp!(.@timestamp, unit: "milliseconds")
+del(.timestamp)
+
+. = merge!(., d)
+"""
+
+[sinks.elasticsearch_control_plane]
+type = "elasticsearch"
+inputs = ["control_plane_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-control-plane-%Y.%m.%d"
+tls.verify_certificate = false
