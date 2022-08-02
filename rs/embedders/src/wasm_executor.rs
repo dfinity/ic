@@ -197,17 +197,17 @@ impl WasmExecutor for WasmExecutorImpl {
         } = match self.get_embedder_cache(&execution_state.wasm_binary, compilation_cache) {
             Ok(cache_result) => cache_result,
             Err(err) => {
-                // TODO(RUN-269): The `num_instructions_left` should be set to
-                // the limit, not zero here.
                 return (
                     None,
                     WasmExecutionResult::Finished(
                         SliceExecutionOutput {
-                            executed_instructions: execution_parameters.instruction_limits.slice(),
+                            executed_instructions: NumInstructions::from(0),
                         },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
-                            num_instructions_left: NumInstructions::from(0),
+                            num_instructions_left: execution_parameters
+                                .instruction_limits
+                                .message(),
                             allocated_bytes: NumBytes::from(0),
                             allocated_message_bytes: NumBytes::from(0),
                             instance_stats: InstanceStats {
