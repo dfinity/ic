@@ -4,6 +4,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
+use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
 use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
@@ -173,8 +174,19 @@ impl Hypervisor {
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
         // If a wasm instruction has no arguments then it can be represented as
         // a single byte. So taking the length of the wasm source is a
-        // conservative estimate of the number of instructions.
-        let compilation_cost = self.cost_to_compile_wasm_instruction * canister_module.len() as u64;
+        // conservative estimate of the number of instructions. If we can't
+        // determine the decoded size, take the actual size as an approximation.
+        let wasm_size_result = decoded_wasm_size(canister_module.as_slice());
+        let wasm_size = match wasm_size_result {
+            Ok(size) => std::cmp::max(size, canister_module.len()),
+            Err(_) => canister_module.len(),
+        };
+        let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
+        if let Err(err) = wasm_size_result {
+            round_limits.instructions -= as_round_instructions(compilation_cost);
+            return (compilation_cost, Err(err.into()));
+        }
+
         let creation_result = self.wasm_executor.create_execution_state(
             canister_module,
             canister_root,
