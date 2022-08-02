@@ -3,7 +3,7 @@ IC Policy Monitoring Pipeline
 
 The script `main.py` performs subsets of the following actions:
 * 🔭 determining which system tests were recently finished
-    * _unless `-g` is given, fixing a Farm group name_
+    * _unless `-g` is given, fixing a system tests group name_
 * ⬇️ extracting Elasticsearch documents for system tests
     * _unless `-r` is given, specifying a file with previously downloaded raw
       logs_
@@ -42,12 +42,12 @@ To use this script, run the following commands:
 3. `(venv) $ pip install wheel`
 4. `(venv) $ pip install -r ./requirements.txt`
 5. `(venv) $ python main.py --install_monpoly_docker_image`
-6. `(venv) $ python main.py -g [Farm group name] -p [policy name(s)]`
+6. `(venv) $ python main.py -g [system tests group name] -p [policy name(s)]`
     - _Note: use option `-l` to specify the maximal number of log entries that
       will be pre-processed. The default value `1000` safeguards from accidental
       command invocations but is almost certainly insufficient for monitoring
       policies in system tests. To download _all the logs_ associated with the
-      given `Farm group name`, set `-l 0`; this may result in transmitting
+      given `system tests group name`, set `-l 0`; this may result in transmitting
       gigabytes of logs._
 7. To list all available policies, run `(venv) $ python main.py --list_policies`
 8. To list all available options, run `(venv) $ python main.py --help` 

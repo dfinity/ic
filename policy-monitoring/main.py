@@ -4,6 +4,7 @@ import sys
 import traceback
 from pathlib import Path
 from typing import Iterable
+from typing import Optional
 
 from monpoly.monpoly import Monpoly
 from pipeline.alert import AlertService
@@ -14,6 +15,7 @@ from pipeline.backend.ci import Ci
 from pipeline.backend.ci import CiException
 from pipeline.backend.es import Es
 from pipeline.backend.group import Group
+from pipeline.backend.system_tests_artifact_manager import SystemTestsArtifactManager
 from pipeline.global_infra import GlobalInfra
 from pipeline.mode import Mode
 from pipeline.pipeline import Pipeline
@@ -45,7 +47,7 @@ def main():
         "-g",
         type=str,
         nargs="*",
-        help='The group name(s) for this Farm test run (search for "creating group" in Farm logs).',
+        help='The group name(s) for this system test run (search for "creating group" in system test logs).',
     )
     parser.add_argument(
         "--limit",
@@ -94,10 +96,10 @@ def main():
         help="Specifies Gitlab pipeline ID for which pre-master system tests should be monitored",
     )
     parser.add_argument(
-        "--farm_log_for_test",
-        "-fl",
+        "--system_tests_working_dir",
+        "-w",
         type=str,
-        help="Specifies path to a test driver's log file that contains group names that should be monitored",
+        help="Specifies path to a test driver's working_dir (used to extract group names and initial registry snapshots)",
     )
     parser.add_argument(
         "--fail",
@@ -143,14 +145,10 @@ def main():
         "--global_infra",
         "-gi",
         type=str,
-        help="YAML file containing a Global Infra snapshot",
-    )
-    parser.add_argument(
-        "--get_global_infra_from_registry",
-        "-ggifr",
-        action="store_true",
-        default=True,
-        help="Query the registry for global infra (don't infer from the logs)",
+        help=(
+            "Path to a file containing a Global Infra snapshot; either internal YAML format (.yml or .yaml)"
+            " or the ic-regedit's JSON (.json)"
+        ),
     )
     parser.add_argument(
         "--git_revision",
@@ -163,9 +161,7 @@ def main():
     args_by_name = vars(args)
 
     # Detect meaningless option combinations
-    conflicting_modes = set(
-        filter(lambda x: args_by_name[x], ["mainnet", "group_names", "pre_master_pipeline", "farm_log_for_test"])
-    )
+    conflicting_modes = set(filter(lambda x: args_by_name[x], ["mainnet", "group_names", "pre_master_pipeline"]))
     conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", conflicting_modes))
     if len(conflicting_modes) > 1:
         print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
@@ -173,11 +169,13 @@ def main():
     if args.mainnet and not args.limit_time:
         print("Option --limit_time should be specified together with --mainnet")
         exit(1)
+    if args.mainnet and not args.global_infra:
+        print(
+            "Warning: if you are monitoring policies that require Global Infra, "
+            "then option --global_infra shoul dbe used together with --mainnet; see --list_policies"
+        )
     if args.limit_time and args.limit != 0:
         print("Option --limit_time requires setting --limit to 0")
-        exit(1)
-    if args.get_global_infra_from_registry and args.global_infra:
-        print("Option --global_infra requires setting --get_global_infra_from_registry=False")
         exit(1)
 
     if args.install_monpoly_docker_image:
@@ -267,10 +265,10 @@ def main():
 
     try:
         # Obtains logs for each group
-        gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
         if args.read:
             groups = file_io.read_logs(log_file=args.read)
         else:
+            gitlab: Optional[Ci] = None
             if args.mainnet:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True, fail=args.fail)
                 gid = "mainnet"
@@ -283,6 +281,7 @@ def main():
                     groups = {gid: Group(gid) for gid in gids}
                 else:
                     if gitlab_token is not None:
+                        gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
                         if args.pre_master_pipeline:
                             # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
                             groups = gitlab.get_premaster_groups_for_pipeline(
@@ -292,9 +291,11 @@ def main():
                             # Monitor all system tests from the regular pipelines (hourly, nightly)
                             groups = gitlab.get_regular_groups()
 
-                    elif args.farm_log_for_test is not None:
-                        # Relying upon args.farm_log_for_test for end-to-end testing the pipeline implementation
-                        groups = Ci.get_groups_from_farm_logs(args.farm_log_for_test)
+                    elif args.system_tests_working_dir is not None:
+                        # Relying upon args.system_tests_working_dir, e.g., for end-to-end testing the pipeline implementation
+                        groups = Ci.get_groups_from_systest_logs(
+                            SystemTestsArtifactManager(args.system_tests_working_dir).test_driver_log_path()
+                        )
                     else:
                         print(f"Please specify at least one of the following options: {conflicting_modes_disjunction}")
                         exit(1)
@@ -306,22 +307,36 @@ def main():
 
         if args.global_infra:
             # Load global infra from file (same for all groups)
-            infra = GlobalInfra.fromYamlFile(Path(args.global_infra))
+            print(f"Setting global infra for all groups based on {args.global_infra}")
+            glob_infra_path = Path(args.global_infra)
+            suf = glob_infra_path.suffix
+            if suf in [".yml", ".yaml"]:
+                infra = GlobalInfra.fromYamlFile(glob_infra_path)
+            elif suf == ".json":
+                infra = GlobalInfra.fromIcRegeditSnapshotFile(glob_infra_path)
+            else:
+                raise Exception(f"unsupported file format: {suf}")
             for group in groups.values():
                 group.global_infra = infra
         elif UniversalPreProcessor.is_global_infra_required(formulas):
             for group in groups.values():
-                if args.get_global_infra_from_registry:
+                print(f"Setting global infra for {str(group)}")
+                if args.system_tests_working_dir:
+                    # Extract Global Infra from an initial registry snapshot file
+                    group.global_infra = GlobalInfra.fromIcRegeditSnapshotFile(
+                        SystemTestsArtifactManager(args.system_tests_working_dir).registry_snapshot_path(
+                            group.pot_name()
+                        )
+                    )
+                else:
+                    # Obrain Global Infra from initial registry snapshot Gitbal artifact
+                    assert gitlab is not None
                     try:
-                        # Obrain from registry
-                        snap = gitlab.get_registry_snapshot_for_group(group)
-                        group.global_infra = GlobalInfra.fromIcRegeditSnapshot(snap)
+                        snap_bulb = gitlab.get_registry_snapshot_for_group(group)
+                        group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb)
                     except CiException:
                         print("Falling back to inferring Global Infra from logs ...")
                         group.infer_global_infra()
-                else:
-                    # Infer from logs
-                    group.infer_global_infra()
         else:
             print("Skipping Global Infra")
 
