@@ -9,10 +9,11 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+subtle = "2.4"
 num-bigint = "~0.4.3"
 hex = "0.4"
 
-[dependencies.tecdsa]
+[dependencies.ic-crypto-internal-threshold-sig-ecdsa]
 path = ".."
 
 # Prevent this from interfering with workspaces

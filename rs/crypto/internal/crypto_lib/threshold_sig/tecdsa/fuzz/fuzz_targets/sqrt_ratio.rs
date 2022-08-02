@@ -3,14 +3,17 @@ use libfuzzer_sys::fuzz_target;
 
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
-// hash2curve has two possible implementations of sqrt_ratio
-// one generic and one that is optimized for p == 3 (mod 4)
-// run both and compare them
+/*
+hash2curve has two possible implementations of sqrt_ratio, one generic
+that works for any curve and another that is optimized for p == 3 (mod 4)
+
+Run both and compare them
+*/
 
 fn cmov(
     a: &EccFieldElement,
     b: &EccFieldElement,
-    c: bool,
+    c: subtle::Choice,
 ) -> ThresholdEcdsaResult<EccFieldElement> {
     let mut r = *a;
     r.ct_assign(b, c)?;
@@ -20,24 +23,23 @@ fn cmov(
 fn sqrt_ratio_generic(
     u: &EccFieldElement,
     v: &EccFieldElement,
-) -> ThresholdEcdsaResult<(bool, EccFieldElement)> {
+) -> ThresholdEcdsaResult<(subtle::Choice, EccFieldElement)> {
     let curve_type = u.curve_type();
 
     // Generic but slower codepath for other primes
     let z = EccFieldElement::sswu_z(curve_type);
     let vinv = v.invert();
     let uov = u.mul(&vinv)?;
-    let sqrt_uov = uov.sqrt();
-    let uov_is_qr = !sqrt_uov.is_zero();
+    let (uov_is_qr, sqrt_uov) = uov.sqrt();
     let z_uov = z.mul(&uov)?;
-    let sqrt_z_uov = z_uov.sqrt();
+    let (_, sqrt_z_uov) = z_uov.sqrt();
     Ok((uov_is_qr, cmov(&sqrt_z_uov, &sqrt_uov, uov_is_qr)?))
 }
 
 fn sqrt_ratio_p_3_mod_4(
     u: &EccFieldElement,
     v: &EccFieldElement,
-) -> ThresholdEcdsaResult<(bool, EccFieldElement)> {
+) -> ThresholdEcdsaResult<(subtle::Choice, EccFieldElement)> {
     let curve_type = u.curve_type();
 
     // Fast codepath for curves where p == 3 (mod 4)
@@ -52,7 +54,7 @@ fn sqrt_ratio_p_3_mod_4(
     let y2 = y1.mul(&c2)?;
     let tv3 = y1.square()?;
     let tv3 = tv3.mul(v)?;
-    let is_qr = tv3 == *u;
+    let is_qr = tv3.ct_eq(u)?;
     let y = cmov(&y2, &y1, is_qr)?;
     Ok((is_qr, y))
 }
@@ -62,7 +64,7 @@ fn sqrt_ratio_fuzz_run(curve_type: EccCurveType, data: &[u8]) {
     let u = EccFieldElement::from_bytes_wide(curve_type, &data[..half]).unwrap();
     let v = EccFieldElement::from_bytes_wide(curve_type, &data[half..]).unwrap();
 
-    if u.is_zero() {
+    if bool::from(u.is_zero()) {
         // invalid case
         return;
     }
@@ -70,7 +72,7 @@ fn sqrt_ratio_fuzz_run(curve_type: EccCurveType, data: &[u8]) {
     let refv = sqrt_ratio_generic(&u, &v).unwrap();
     let optv = sqrt_ratio_p_3_mod_4(&u, &v).unwrap();
 
-    assert_eq!(refv, optv);
+    assert_eq!(refv.1, optv.1);
 }
 
 fuzz_target!(|data: &[u8]| {
