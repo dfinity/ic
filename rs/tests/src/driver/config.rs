@@ -22,5 +22,5 @@ pub const POT_SETUP_DIR: &str = "setup";
 // Test owner channels
 pub const TEST_FAILURE_CHANNEL: &str = "test-failure-alerts";
 pub const ENG_TESTING_CHANNEL: &str = "eng-testing";
-pub const ENG_CONSENSUS_CHANNEL: &str = "eng-consensus";
+pub const ENG_CONSENSUS_CHANNEL: &str = "eng-consensus-test-failures";
 pub const ENG_NODE_CHANNEL: &str = "eng-node";
