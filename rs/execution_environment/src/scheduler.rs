@@ -14,7 +14,8 @@ use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
+    CanisterIdRecord, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method,
+    Method, Payload as _, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
@@ -33,7 +34,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
-    NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    NumBytes, NumInstructions, NumRounds, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -288,9 +289,87 @@ impl SchedulerImpl {
         }
     }
 
-    // Performs multiple iterations of canister execution until the instruction
-    // limit per round is reached or the canisters become idle. The canisters
-    // are executed in parallel using the thread pool.
+    /// Drains the subnet queues, executing all messages not blocked by long executions.
+    fn drain_subnet_queues(
+        &self,
+        mut state: ReplicatedState,
+        csprng: &mut Csprng,
+        round_limits: &mut RoundLimits,
+        measurement_scope: &MeasurementScope,
+        long_running_canister_ids: &BTreeSet<CanisterId>,
+        registry_settings: &RegistryExecutionSettings,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ) -> ReplicatedState {
+        let mut total_bitcoin_requests = 0;
+
+        loop {
+            let mut available_subnet_messages = false;
+            let mut loop_detector = state.subnet_queues_loop_detector();
+            while let Some(msg) = state.peek_subnet_input() {
+                if can_execute_msg(&msg, long_running_canister_ids) {
+                    available_subnet_messages = true;
+                    break;
+                }
+                state.skip_subnet_input(&mut loop_detector);
+                if loop_detector.detected_loop(state.subnet_queues()) {
+                    break;
+                }
+            }
+
+            if !available_subnet_messages {
+                break;
+            }
+            if let Some(msg) = state.pop_subnet_input() {
+                let max_instructions_per_message =
+                    get_instructions_limit_for_subnet_message(&self.config, &msg);
+                let instruction_limits = InstructionLimits::new(
+                    self.deterministic_time_slicing,
+                    max_instructions_per_message,
+                    self.config.max_instructions_per_slice,
+                );
+
+                if is_bitcoin_request(&msg) {
+                    total_bitcoin_requests += 1;
+                }
+
+                let instructions_before = round_limits.instructions;
+                state = self.exec_env.execute_subnet_message(
+                    msg,
+                    state,
+                    instruction_limits,
+                    csprng,
+                    ecdsa_subnet_public_keys,
+                    registry_settings,
+                    round_limits,
+                );
+                let instructions_executed =
+                    as_num_instructions(instructions_before - round_limits.instructions);
+                measurement_scope.add(instructions_executed, NumMessages::from(1));
+                if round_limits.instructions <= RoundInstructions::from(0) {
+                    break;
+                }
+
+                // Stop after executing at most `MAX_BITCOIN_REQUESTS_PER_ROUND`.
+                //
+                // Note that this is a rather crude measure to ensure that we
+                // do not exceed a "reasonable" amount of work in a round. We
+                // rely on the assumption that no other subnet messages can
+                // exist on bitcoin enabled subnets, so blocking the subnet
+                // message progress does not affect other types of messages.
+                // On the other hand, on non-bitcoin enabled subnets, there
+                // should be no bitcoin related requests, so this should be
+                // a no-op for those subnets.
+                if total_bitcoin_requests >= MAX_BITCOIN_REQUESTS_PER_ROUND {
+                    break;
+                }
+            }
+        }
+        state
+    }
+
+    /// Performs multiple iterations of canister execution until the instruction
+    /// limit per round is reached or the canisters become idle. The canisters
+    /// are executed in parallel using the thread pool.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn inner_round<'a>(
         &'a self,
@@ -865,6 +944,7 @@ impl Scheduler for SchedulerImpl {
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
+        let long_running_canister_ids;
         {
             let _timer = self.metrics.round_preparation_duration.start_timer();
             round_log = new_logger!(self.log; messaging.round => current_round.get());
@@ -877,6 +957,19 @@ impl Scheduler for SchedulerImpl {
             );
             self.metrics.execute_round_called.inc();
             observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics, &round_log);
+
+            long_running_canister_ids = match self.deterministic_time_slicing {
+                FlagStatus::Enabled => state
+                    .canister_states
+                    .iter()
+                    .filter(|(_, canister_state)| {
+                        canister_state.scheduler_state.long_execution_progress > NumRounds::new(0)
+                    })
+                    .map(|(canister_id, _)| *canister_id)
+                    .collect(),
+                // Don't iterate through canisters if DTS is not enabled.
+                FlagStatus::Disabled => BTreeSet::new(),
+            };
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
@@ -986,56 +1079,18 @@ impl Scheduler for SchedulerImpl {
         }
 
         {
-            // Drain the subnet queues.
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
 
-            let mut total_bitcoin_requests = 0;
-
-            while let Some(msg) = state.pop_subnet_input() {
-                let max_instructions_per_message =
-                    get_instructions_limit_for_subnet_message(&self.config, &msg);
-                let instruction_limits = InstructionLimits::new(
-                    self.deterministic_time_slicing,
-                    max_instructions_per_message,
-                    self.config.max_instructions_per_slice,
-                );
-
-                if is_bitcoin_request(&msg) {
-                    total_bitcoin_requests += 1;
-                }
-
-                let instructions_before = round_limits.instructions;
-                state = self.exec_env.execute_subnet_message(
-                    msg,
-                    state,
-                    instruction_limits,
-                    &mut csprng,
-                    &ecdsa_subnet_public_keys,
-                    registry_settings,
-                    &mut round_limits,
-                );
-                let instructions_executed =
-                    as_num_instructions(instructions_before - round_limits.instructions);
-                measurement_scope.add(instructions_executed, NumMessages::from(1));
-                if round_limits.instructions <= RoundInstructions::from(0) {
-                    break;
-                }
-
-                // Stop after executing at most `MAX_BITCOIN_REQUESTS_PER_ROUND`.
-                //
-                // Note that this is a rather crude measure to ensure that we
-                // do not exceed a "reasonable" amount of work in a round. We
-                // rely on the assumption that no other subnet messages can
-                // exist on bitcoin enabled subnets, so blocking the subnet
-                // message progress does not affect other types of messages.
-                // On the other hand, on non-bitcoin enabled subnets, there
-                // should be no bitcoin related requests, so this should be
-                // a no-op for those subnets.
-                if total_bitcoin_requests >= MAX_BITCOIN_REQUESTS_PER_ROUND {
-                    break;
-                }
-            }
+            state = self.drain_subnet_queues(
+                state,
+                &mut csprng,
+                &mut round_limits,
+                &measurement_scope,
+                &long_running_canister_ids,
+                registry_settings,
+                &ecdsa_subnet_public_keys,
+            );
         }
 
         // Reset the round limit after executing all subnet messages.
@@ -1492,6 +1547,70 @@ fn observe_replicated_state_metrics(
     metrics
         .canisters_not_in_routing_table
         .set(canisters_not_in_routing_table);
+}
+
+fn extract_effective_canister_id(method_name: &str, payload: &[u8]) -> Option<CanisterId> {
+    match Method::from_str(method_name) {
+        Ok(Method::ProvisionalCreateCanisterWithCycles) | Ok(Method::ProvisionalTopUpCanister) => {
+            None
+        }
+        Ok(Method::StartCanister)
+        | Ok(Method::CanisterStatus)
+        | Ok(Method::DeleteCanister)
+        | Ok(Method::UninstallCode)
+        | Ok(Method::StopCanister) => match CanisterIdRecord::decode(payload) {
+            Ok(record) => Some(record.get_canister_id()),
+            Err(_) => None,
+        },
+        Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(payload) {
+            Ok(record) => Some(record.get_canister_id()),
+            Err(_) => None,
+        },
+        Ok(Method::SetController) => match SetControllerArgs::decode(payload) {
+            Ok(record) => Some(record.get_canister_id()),
+            Err(_) => None,
+        },
+        Ok(Method::InstallCode) => match InstallCodeArgs::decode(payload) {
+            Ok(record) => Some(record.get_canister_id()),
+            Err(_) => None,
+        },
+        Ok(Method::CreateCanister)
+        | Ok(Method::SetupInitialDKG)
+        | Ok(Method::DepositCycles)
+        | Ok(Method::HttpRequest)
+        | Ok(Method::RawRand)
+        | Ok(Method::ECDSAPublicKey)
+        | Ok(Method::SignWithECDSA)
+        | Ok(Method::ComputeInitialEcdsaDealings)
+        | Ok(Method::BitcoinGetBalance)
+        | Ok(Method::BitcoinGetUtxos)
+        | Ok(Method::BitcoinSendTransaction)
+        | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
+            // Subnet method not allowed for ingress.
+            None
+        }
+        Err(_) => None,
+    }
+}
+
+/// Verifies if a message is not blocked due to long-running execution.
+fn can_execute_msg(
+    msg: &CanisterInputMessage,
+    long_running_canister_ids: &BTreeSet<CanisterId>,
+) -> bool {
+    let effective_canister_id: Option<CanisterId> = match msg {
+        CanisterInputMessage::Ingress(ingress) => {
+            extract_effective_canister_id(&ingress.method_name, ingress.method_payload.as_slice())
+        }
+        CanisterInputMessage::Request(request) => {
+            extract_effective_canister_id(&request.method_name, request.method_payload.as_slice())
+        }
+        CanisterInputMessage::Response(_) => None,
+    };
+
+    effective_canister_id
+        .map(|id| !long_running_canister_ids.contains(&id))
+        .unwrap_or(true)
 }
 
 /// Based on the type of the subnet message to execute, figure out its

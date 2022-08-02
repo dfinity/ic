@@ -29,6 +29,37 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 /// (and enqueuing the response into the output queue might also fail).
 pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
 
+/// Encapsulates information about `CanisterQueues`,
+/// used in detecting a loop when consuming the input messages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CanisterQueuesLoopDetector {
+    pub local_queue_skip_count: usize,
+    pub remote_queue_skip_count: usize,
+    pub skipped_ingress_queue: bool,
+}
+
+impl CanisterQueuesLoopDetector {
+    /// Detects a loop in `CanisterQueues`.
+    pub fn detected_loop(&self, canister_queues: &CanisterQueues) -> bool {
+        let skipped_all_remote =
+            self.remote_queue_skip_count >= canister_queues.remote_subnet_input_schedule.len();
+
+        let skipped_all_local =
+            self.local_queue_skip_count >= canister_queues.local_subnet_input_schedule.len();
+
+        let ingress_is_empty = canister_queues.peek_ingress().is_none();
+
+        // An empty queue is skipped implicitly by `peek_input()` and `pop_input()`.
+        // This means that no new messages can be consumed from an input source if
+        // - either it is empty,
+        // - or all its queues were explicitly skipped.
+        // Note that `skipped_all_remote` and `skipped_all_local` are trivially
+        // true if the corresponding input source is empty because empty queues
+        // are removed from the source.
+        skipped_all_remote && skipped_all_local && (ingress_is_empty || self.skipped_ingress_queue)
+    }
+}
+
 /// Wrapper around the induction pool (ingress and input queues); a priority
 /// queue used for round-robin scheduling of senders when consuming input
 /// messages; and output queues.
@@ -216,6 +247,11 @@ impl CanisterQueues {
         self.ingress_queue.pop()
     }
 
+    /// Peeks the next ingress message from `ingress_queue`.
+    fn peek_ingress(&self) -> Option<&Arc<Ingress>> {
+        self.ingress_queue.peek()
+    }
+
     /// For each output queue, invokes `f` on every message until `f` returns
     /// `Err`; then moves on to the next output queue.
     ///
@@ -337,7 +373,7 @@ impl CanisterQueues {
     /// Note: We pop senders from the head of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
-    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<RequestOrResponse> {
+    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterInputMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
             InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
@@ -356,10 +392,48 @@ impl CanisterQueues {
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
             debug_assert!(self.stats_ok());
 
+            let msg = match msg {
+                RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
+                RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
+            };
+
             return Some(msg);
         }
 
         None
+    }
+
+    /// Peeks the next canister-to-canister message from `input_queues`.
+    fn peek_canister_input(&self, input_queue: InputQueueType) -> Option<CanisterInputMessage> {
+        let input_schedule = match input_queue {
+            InputQueueType::LocalSubnet => &self.local_subnet_input_schedule,
+            InputQueueType::RemoteSubnet => &self.remote_subnet_input_schedule,
+        };
+        if let Some(sender) = input_schedule.front() {
+            // Get the message queue of this canister.
+            let input_queue = &self.canister_queues.get(sender).unwrap().0;
+            let msg = match input_queue.peek().unwrap() {
+                RequestOrResponse::Request(msg) => CanisterInputMessage::Request(Arc::clone(msg)),
+                RequestOrResponse::Response(msg) => CanisterInputMessage::Response(Arc::clone(msg)),
+            };
+            return Some(msg);
+        }
+
+        None
+    }
+
+    /// Skips the next canister-to-canister message from `input_queues`.
+    fn skip_canister_input(&mut self, input_queue: InputQueueType) {
+        let input_schedule = match input_queue {
+            InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
+            InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
+        };
+        if let Some(sender) = input_schedule.pop_front() {
+            let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
+            if input_queue.num_messages() != 0 {
+                input_schedule.push_back(sender);
+            }
+        }
     }
 
     /// Returns `true` if `ingress_queue` or at least one of the `input_queues`
@@ -374,6 +448,63 @@ impl CanisterQueues {
         self.output_queues_stats.message_count > 0
     }
 
+    /// Peeks the next inter-canister or ingress message (round-robin) from
+    /// `self.subnet_queues`.
+    pub(crate) fn peek_input(&mut self) -> Option<CanisterInputMessage> {
+        // Try all 3 inputs: Ingress, Local, and Remote subnets
+        for _ in 0..3 {
+            let next_input = match self.next_input_queue {
+                NextInputQueue::Ingress => self
+                    .peek_ingress()
+                    .map(|ingress| CanisterInputMessage::Ingress(Arc::clone(ingress))),
+
+                NextInputQueue::RemoteSubnet => {
+                    self.peek_canister_input(InputQueueType::RemoteSubnet)
+                }
+                NextInputQueue::LocalSubnet => {
+                    self.peek_canister_input(InputQueueType::LocalSubnet)
+                }
+            };
+
+            match next_input {
+                Some(msg) => return Some(msg),
+                // Try another input queue.
+                None => {
+                    self.next_input_queue = match self.next_input_queue {
+                        NextInputQueue::LocalSubnet => NextInputQueue::Ingress,
+                        NextInputQueue::Ingress => NextInputQueue::RemoteSubnet,
+                        NextInputQueue::RemoteSubnet => NextInputQueue::LocalSubnet,
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
+    pub(crate) fn skip_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
+        let current_input_queue = self.next_input_queue;
+        match current_input_queue {
+            NextInputQueue::Ingress => {
+                loop_detector.skipped_ingress_queue = true;
+                self.next_input_queue = NextInputQueue::RemoteSubnet
+            }
+
+            NextInputQueue::RemoteSubnet => {
+                self.skip_canister_input(InputQueueType::RemoteSubnet);
+                loop_detector.remote_queue_skip_count += 1;
+                self.next_input_queue = NextInputQueue::LocalSubnet;
+            }
+
+            NextInputQueue::LocalSubnet => {
+                self.skip_canister_input(InputQueueType::LocalSubnet);
+                loop_detector.local_queue_skip_count += 1;
+                self.next_input_queue = NextInputQueue::Ingress;
+            }
+        }
+    }
+
     /// Extracts the next ingress, priority, or normal message (round-robin).
     ///
     /// We define three buckets of queues: messages from canisters on the same
@@ -384,7 +515,7 @@ impl CanisterQueues {
     /// buckets. We also round robin between the queues in the local subnet and
     /// remote subnet buckets when we pop messages from those buckets.
     pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-        // Try all 3 input: Ingress, Local, and Remote subnets
+        // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
             let cur_input_queue = self.next_input_queue;
             // Switch to the next input queue
@@ -397,19 +528,11 @@ impl CanisterQueues {
             let next_input = match cur_input_queue {
                 NextInputQueue::Ingress => self.pop_ingress().map(CanisterInputMessage::Ingress),
 
-                NextInputQueue::RemoteSubnet => self
-                    .pop_canister_input(InputQueueType::RemoteSubnet)
-                    .map(|msg| match msg {
-                        RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
-                        RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
-                    }),
+                NextInputQueue::RemoteSubnet => {
+                    self.pop_canister_input(InputQueueType::RemoteSubnet)
+                }
 
-                NextInputQueue::LocalSubnet => self
-                    .pop_canister_input(InputQueueType::LocalSubnet)
-                    .map(|msg| match msg {
-                        RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
-                        RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
-                    }),
+                NextInputQueue::LocalSubnet => self.pop_canister_input(InputQueueType::LocalSubnet),
             };
 
             if next_input.is_some() {
