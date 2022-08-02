@@ -10,6 +10,7 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
+use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::{
     governance::Governance,
     ledger::Ledger,
@@ -911,7 +912,12 @@ async fn zero_total_reward_shares() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
         }),
-
+        sns_metadata: Some(SnsMetadata {
+            logo: Some("X".repeat(100)),
+            url: Some("https://internetcomputer.org/".to_string()),
+            name: Some("ServiceNervousSystemTest".to_string()),
+            description: Some("A project testing the SNS".to_string()),
+        }),
         ..Default::default()
     };
     let mut governance = Governance::new(

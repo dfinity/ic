@@ -1,7 +1,7 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     pb::v1::{
-        governance::{self, neuron_in_flight_command},
+        governance::{self, neuron_in_flight_command, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron, manage_neuron_response,
         manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
@@ -879,6 +879,86 @@ impl ManageNeuronResponse {
                 manage_neuron_response::RemoveNeuronPermissionsResponse {},
             )),
         }
+    }
+}
+
+impl SnsMetadata {
+    /// The maximum number of characters allowed for a SNS url.
+    pub const MAX_URL_LENGTH: usize = 512;
+
+    /// The minimum number of characters allowed for a SNS url.
+    pub const MIN_URL_LENGTH: usize = 10;
+
+    /// The maximum number of characters allowed for a SNS logo encoding.
+    /// Roughly 256Kb
+    pub const MAX_LOGO_LENGTH: usize = 341334;
+
+    /// The maximum number of characters allowed for a SNS name.
+    pub const MAX_NAME_LENGTH: usize = 255;
+
+    /// The minimum number of characters allowed for a SNS name.
+    pub const MIN_NAME_LENGTH: usize = 10;
+
+    /// The maximum number of characters allowed for a SNS description.
+    pub const MAX_DESCRIPTION_LENGTH: usize = 2000;
+
+    /// The minimum number of characters allowed for a SNS description.
+    pub const MIN_DESCRIPTION_LENGTH: usize = 10;
+
+    // TODO NNS1-1599 : Finalize validation with NNS-Dapp
+    /// Validate the SnsMetadata values
+    pub fn validate(&self) -> Result<(), String> {
+        let url = self.url.as_ref().ok_or("SnsMetadata.url must be set")?;
+        if url.len() > Self::MAX_URL_LENGTH {
+            return Err(format!(
+                "SnsMetadata.url must be less than {} characters",
+                Self::MAX_URL_LENGTH
+            ));
+        } else if url.len() < Self::MIN_URL_LENGTH {
+            return Err(format!(
+                "SnsMetadata.url must be greater than {} characters",
+                Self::MIN_URL_LENGTH
+            ));
+        }
+
+        let logo = self.logo.as_ref().ok_or("SnsMetadata.logo must be set")?;
+        if logo.len() > Self::MAX_LOGO_LENGTH {
+            return Err(format!(
+                "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
+                Self::MAX_LOGO_LENGTH
+            ));
+        }
+
+        let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
+        if name.len() > Self::MAX_NAME_LENGTH {
+            return Err(format!(
+                "SnsMetadata.name must be less than {} characters",
+                Self::MAX_NAME_LENGTH
+            ));
+        } else if name.len() < Self::MIN_NAME_LENGTH {
+            return Err(format!(
+                "SnsMetadata.name must be greater than {} characters",
+                Self::MIN_NAME_LENGTH
+            ));
+        }
+
+        let description = self
+            .description
+            .as_ref()
+            .ok_or("SnsMetadata.description must be set")?;
+        if description.len() > Self::MAX_DESCRIPTION_LENGTH {
+            return Err(format!(
+                "SnsMetadata.description must be less than {} characters",
+                Self::MAX_DESCRIPTION_LENGTH
+            ));
+        } else if description.len() < Self::MIN_DESCRIPTION_LENGTH {
+            return Err(format!(
+                "SnsMetadata.description must be greater than {} characters",
+                Self::MIN_DESCRIPTION_LENGTH
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -1796,5 +1876,68 @@ pub(crate) mod tests {
             &DISALLOWED_TARGET_CANISTER_IDS,
             &functions,
         );
+    }
+
+    #[test]
+    fn test_sns_metadata_validate() {
+        let default = SnsMetadata {
+            logo: Some("X".repeat(10)),
+            url: Some("X".repeat(SnsMetadata::MIN_URL_LENGTH)),
+            name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
+            description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
+        };
+
+        let invalid_sns_metadata = vec![
+            SnsMetadata {
+                url: None,
+                ..default.clone()
+            },
+            SnsMetadata {
+                logo: None,
+                ..default.clone()
+            },
+            SnsMetadata {
+                name: None,
+                ..default.clone()
+            },
+            SnsMetadata {
+                description: None,
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("X".repeat(SnsMetadata::MAX_URL_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                url: Some("X".repeat(SnsMetadata::MIN_URL_LENGTH - 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                name: Some("X".repeat(SnsMetadata::MAX_NAME_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH - 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                description: Some("X".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1)),
+                ..default.clone()
+            },
+            SnsMetadata {
+                description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1)),
+                ..default.clone()
+            },
+        ];
+
+        for sns_metadata in invalid_sns_metadata {
+            assert!(sns_metadata.validate().is_err());
+        }
+
+        assert!(default.validate().is_ok());
     }
 }

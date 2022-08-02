@@ -17,6 +17,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
+use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
@@ -94,6 +95,10 @@ impl SnsInitPayload {
             min_icp_e8s: None,
             max_participant_icp_e8s: None,
             fallback_controller_principal_ids: vec![],
+            logo: None,
+            url: None,
+            name: None,
+            description: None,
         }
     }
 
@@ -123,6 +128,10 @@ impl SnsInitPayload {
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
             fallback_controller_principal_ids: vec!["aa-aaaa".to_string()],
+            logo: Some("X".repeat(100)),
+            name: Some("ServiceNervousSystemTest".to_string()),
+            url: Some("https://internetcomputer.org/".to_string()),
+            description: Some("Description of an SNS Project".to_string()),
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -163,6 +172,14 @@ impl SnsInitPayload {
         parameters.neuron_grantable_permissions = Some(all_permissions);
         parameters.neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s;
         parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
+
+        governance.sns_metadata = Some(SnsMetadata {
+            logo: self.logo.clone(),
+            url: self.url.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+        });
+
         governance.neurons = self.get_initial_neurons(parameters)?;
 
         Ok(governance)
@@ -302,6 +319,10 @@ impl SnsInitPayload {
             self.validate_min_icp_e8s(),
             self.validate_max_participant_icp_e8s(),
             self.validate_fallback_controller_principal_ids(),
+            self.validate_url(),
+            self.validate_logo(),
+            self.validate_description(),
+            self.validate_name(),
         ];
 
         let defect_msg = validation_fns
@@ -439,7 +460,7 @@ impl SnsInitPayload {
 
         if max_icp_e8s < (min_participants as u64) * min_participant_icp_e8s {
             Err(
-                "Target icp e8s must be larger than min_participants * min_participant_icp_e8s"
+                "Target max_icp_e8s must be larger than min_participants * min_participant_icp_e8s"
                     .to_string(),
             )
         } else {
@@ -490,7 +511,7 @@ impl SnsInitPayload {
             .ok_or("Error: max_icp_e8s must be specified.")?;
         if max_participant_icp_e8s < min_participant_icp_e8s {
             Err(
-                "Error: max_participant_icp_e8s can not be samller than min_participant_e8s"
+                "Error: max_participant_icp_e8s can not be smaller than min_participant_e8s"
                     .to_string(),
             )
         } else {
@@ -501,10 +522,82 @@ impl SnsInitPayload {
     fn validate_fallback_controller_principal_ids(&self) -> Result<(), String> {
         if self.fallback_controller_principal_ids.is_empty() {
             return Err(
-                "At least one principal ID must be supplied as a fallback controller \
+                "Error: At least one principal ID must be supplied as a fallback controller \
                  in case the initial token swap fails."
                     .to_string(),
             );
+        }
+
+        Ok(())
+    }
+
+    fn validate_logo(&self) -> Result<(), String> {
+        let logo = self
+            .logo
+            .as_ref()
+            .ok_or_else(|| "Error: logo must be specified".to_string())?;
+
+        if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
+            return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
+        }
+
+        Ok(())
+    }
+
+    fn validate_url(&self) -> Result<(), String> {
+        let url = self.url.as_ref().ok_or("Error: url must be specified")?;
+
+        if url.len() > SnsMetadata::MAX_URL_LENGTH {
+            return Err(format!(
+                "Error: url must be less than {} characters, given character count is {}.",
+                SnsMetadata::MAX_URL_LENGTH,
+                url.len()
+            ));
+        } else if url.len() < SnsMetadata::MIN_URL_LENGTH {
+            return Err(format!(
+                "Error: url must be greater than {} characters, given character count is {}.",
+                SnsMetadata::MIN_URL_LENGTH,
+                url.len()
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_name(&self) -> Result<(), String> {
+        let name = self.name.as_ref().ok_or("Error: name must be specified")?;
+
+        if name.len() > SnsMetadata::MAX_NAME_LENGTH {
+            return Err(format!(
+                "Error: name must be less than {} characters, given character count is {}.",
+                SnsMetadata::MAX_NAME_LENGTH,
+                name.len()
+            ));
+        } else if name.len() < SnsMetadata::MIN_NAME_LENGTH {
+            return Err(format!(
+                "Error: name must be greater than {} characters, given character count is {}.",
+                SnsMetadata::MIN_NAME_LENGTH,
+                name.len()
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_description(&self) -> Result<(), String> {
+        let description = self
+            .description
+            .as_ref()
+            .ok_or("Error: description must be specified")?;
+
+        if description.len() > SnsMetadata::MAX_DESCRIPTION_LENGTH {
+            return Err(format!(
+                "Error: description must be less than {} characters, given character count is {}.",
+                SnsMetadata::MAX_DESCRIPTION_LENGTH,
+                description.len()
+            ));
+        } else if description.len() < SnsMetadata::MIN_DESCRIPTION_LENGTH {
+            return Err(format!("Error: description must be greater than {} characters, given character count is {}.", SnsMetadata::MIN_DESCRIPTION_LENGTH, description.len()));
         }
 
         Ok(())
@@ -525,6 +618,7 @@ mod test {
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1::Account;
     use ic_sns_governance::governance::ValidGovernanceProto;
+    use ic_sns_governance::pb::v1::governance::SnsMetadata;
 
     fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
         FractionalDeveloperVotingPower(FractionalDVP {
@@ -546,8 +640,13 @@ mod test {
 
     fn get_test_sns_init_payload() -> SnsInitPayload {
         SnsInitPayload {
+            transaction_fee_e8s: Some(10_000),
+            token_name: Some("ServiceNervousSystem".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            proposal_reject_cost_e8s: Some(100_000_000),
+            neuron_minimum_stake_e8s: Some(100_000_000),
             max_icp_e8s: Some(1_000_000_000),
-            min_participants: Some(100),
+            min_participants: Some(1),
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
@@ -555,7 +654,11 @@ mod test {
                 PrincipalId::new_user_test_id(1_552_301),
             )
             .to_text()],
-            ..SnsInitPayload::with_default_values()
+            logo: Some("X".repeat(100)),
+            name: Some("ServiceNervousSystem".to_string()),
+            description: Some("A project that decentralizes a dapp".to_string()),
+            url: Some("https://internetcomputer.org/".to_string()),
+            min_participant_icp_e8s: Some(100_000_000),
         }
     }
 
@@ -572,14 +675,9 @@ mod test {
     fn test_sns_init_payload_validate() {
         // Build a payload that passes validation, then test the parts that wouldn't
         let get_sns_init_payload = || {
-            SnsInitPayload {
-                token_name: Some("ServiceNervousSystem".to_string()),
-                token_symbol: Some("SNS".to_string()),
-                initial_token_distribution: Some(create_valid_initial_token_distribution()),
-                ..get_test_sns_init_payload()
-            }
-            .validate()
-            .expect("Payload did not pass validation.")
+            get_test_sns_init_payload()
+                .validate()
+                .expect("Payload did not pass validation.")
         };
 
         let mut sns_init_payload = get_sns_init_payload();
@@ -621,7 +719,52 @@ mod test {
                     .expect("Expected min_participant_icp_e8s to be Some"))
                 - 1,
         );
+
+        sns_init_payload.description = None;
         assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.description = Some("S".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.description = Some("S".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.name = None;
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.name = Some("S".repeat(SnsMetadata::MAX_NAME_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.name = Some("S".repeat(SnsMetadata::MIN_NAME_LENGTH - 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.url = None;
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.url = Some("S".repeat(SnsMetadata::MAX_URL_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.url = Some("S".repeat(SnsMetadata::MIN_URL_LENGTH - 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.logo = None;
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        assert!(sns_init_payload.validate().is_ok());
     }
 
     #[test]
@@ -719,6 +862,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate().expect("");
         assert!(sns_init_payload.validate().is_ok());
 
         // Create valid CanisterIds

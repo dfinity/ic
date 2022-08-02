@@ -62,6 +62,18 @@ pub struct SnsInitPayload {
     /// set of controller(s). Must not be empty.
     #[prost(string, repeated, tag = "12")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// The logo for the SNS project represented as a base64 encoded string.
+    #[prost(string, optional, tag = "13")]
+    pub logo: ::core::option::Option<::prost::alloc::string::String>,
+    /// Url to the dapp controlled by the SNS project.
+    #[prost(string, optional, tag = "14")]
+    pub url: ::core::option::Option<::prost::alloc::string::String>,
+    /// Name of the SNS project. This may differ from the name of the associated token.
+    #[prost(string, optional, tag = "15")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Description of the SNS project.
+    #[prost(string, optional, tag = "16")]
+    pub description: ::core::option::Option<::prost::alloc::string::String>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

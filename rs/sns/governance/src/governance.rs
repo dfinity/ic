@@ -24,13 +24,14 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
-    GetProposalResponse, Governance as GovernanceProto, GovernanceError,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron,
-    NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
-    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    proposal, Ballot, DefaultFollowees, Empty, GetMetadataRequest, GetMetadataResponse, GetNeuron,
+    GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
+    GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+    ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister,
+    UpgradeSnsToNextVersion, Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
@@ -383,6 +384,7 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
 
         Self::valid_mode_or_err(&base)?;
         Self::validate_required_field("parameters", &base.parameters)?.validate()?;
+        Self::validate_required_field("sns_metadata", &base.sns_metadata)?.validate()?;
         validate_id_to_nervous_system_functions(&base.id_to_nervous_system_functions)?;
         validate_default_followees(&base)?;
 
@@ -403,7 +405,7 @@ pub fn validate_id_to_nervous_system_functions(
 
         // Require that the key match the value.
         if *id != validated_function.id {
-            return Err("At least one entry in id_to_nervous_system_functions\
+            return Err("At least one entry in id_to_nervous_system_functions \
                  doesn't have a matching id to the map key."
                 .to_string());
         }
@@ -412,7 +414,7 @@ pub fn validate_id_to_nervous_system_functions(
     Ok(())
 }
 
-/// Requires that the neurons identified in base.parameters.default_followeees
+/// Requires that the neurons identified in base.parameters.default_followees
 /// exist (i.e. be in base.neurons). default_followees can be None.
 ///
 /// Assumes that base.parameters is Some.
@@ -3505,12 +3507,12 @@ impl Governance {
         Ok(())
     }
 
-    // Gets the raw proposal data
+    /// Gets the raw proposal data
     fn get_proposal_data(&self, pid: impl Into<ProposalId>) -> Option<&ProposalData> {
         self.proto.proposals.get(&pid.into().id)
     }
 
-    // Gets the raw proposal data as a mut
+    /// Gets the raw proposal data as a mut
     fn get_proposal_data_mut(&mut self, pid: impl Into<ProposalId>) -> Option<&mut ProposalData> {
         self.proto.proposals.get_mut(&pid.into().id)
     }
@@ -3531,6 +3533,22 @@ impl Governance {
             .neurons
             .get_mut(&nid.to_string())
             .ok_or_else(|| Self::neuron_not_found_error(nid))
+    }
+
+    /// Gets the metadata describing the SNS.
+    pub fn get_metadata(&self, _request: &GetMetadataRequest) -> GetMetadataResponse {
+        let sns_metadata = self
+            .proto
+            .sns_metadata
+            .as_ref()
+            .expect("Expected the SnsMetadata to exist");
+
+        GetMetadataResponse {
+            logo: sns_metadata.logo.clone(),
+            url: sns_metadata.url.clone(),
+            name: sns_metadata.name.clone(),
+            description: sns_metadata.description.clone(),
+        }
     }
 }
 
@@ -3620,6 +3638,7 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::governance::SnsMetadata;
     use crate::pb::v1::UpgradeSnsControlledCanister;
     use crate::pb::v1::UpgradeSnsToNextVersion;
     use crate::sns_upgrade::{ListSnsCanistersRequest, ListSnsCanistersResponse};
@@ -3672,6 +3691,12 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::try_from(vec![99_u8]).unwrap()),
             parameters: Some(NervousSystemParameters::with_default_values()),
             mode: governance::Mode::Normal as i32,
+            sns_metadata: Some(SnsMetadata {
+                logo: Some("X".repeat(100)),
+                name: Some("ServiceNervousSystem-Test".to_string()),
+                description: Some("A project to spin up a ServiceNervousSystem".to_string()),
+                url: Some("https://internetcomputer.org".to_string()),
+            }),
             ..Default::default()
         };
 

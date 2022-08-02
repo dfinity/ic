@@ -116,6 +116,12 @@ type GenericNervousSystemFunction = record {
   validator_method_name : opt text;
   target_method_name : opt text;
 };
+type GetMetadataResponse = record {
+  url : opt text;
+  logo : opt text;
+  name : opt text;
+  description : opt text;
+};
 type GetNeuron = record { neuron_id : opt NeuronId };
 type GetNeuronResponse = record { result : opt Result };
 type GetProposal = record { proposal_id : opt ProposalId };
@@ -131,6 +137,7 @@ type Governance = record {
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { text; NeuronInFlightCommand };
+  sns_metadata : opt GetMetadataResponse;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
 };
@@ -288,6 +295,7 @@ type UpgradeSnsControlledCanister = record {
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
   get_build_metadata : () -> (text) query;
+  get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;

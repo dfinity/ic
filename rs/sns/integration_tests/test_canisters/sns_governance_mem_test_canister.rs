@@ -11,7 +11,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Subaccount;
 use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
 use ic_sns_governance::governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES;
-use ic_sns_governance::pb::v1::governance::NeuronInFlightCommand;
+use ic_sns_governance::pb::v1::governance::{NeuronInFlightCommand, SnsMetadata};
 use ic_sns_governance::pb::v1::nervous_system_function::{
     FunctionType, GenericNervousSystemFunction,
 };
@@ -310,6 +310,12 @@ fn populate_canister_state() {
         id_to_nervous_system_functions: Default::default(),
         ledger_canister_id: Some(CanisterId::from_u64(1).get()),
         root_canister_id: Some(CanisterId::from_u64(2).get()),
+        sns_metadata: Some(SnsMetadata {
+            logo: Some("X".repeat(100)),
+            name: Some("ServiceNervousSystem-Test".to_string()),
+            description: Some("A project to spin up a ServiceNervousSystem".to_string()),
+            url: Some("https://internetcomputer.org".to_string()),
+        }),
         ..Default::default()
     };
 

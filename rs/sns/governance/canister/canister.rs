@@ -10,10 +10,6 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use ic_nervous_system_common::stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
-};
-use ic_sns_governance::ledger::LedgerCanister;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::boxed::Box;
@@ -32,14 +28,19 @@ use dfn_core::{
 
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_nervous_system_common::get_canister_status;
+use ic_nervous_system_common::{
+    get_canister_status,
+    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+};
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
+    ledger::LedgerCanister,
     pb::v1::{
-        governance, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
+        governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
+        GetProposal, GetProposalResponse, Governance as GovernanceProto,
+        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+        RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -295,6 +296,19 @@ fn get_nervous_system_parameters_(_: ()) -> NervousSystemParameters {
         .parameters
         .clone()
         .expect("NervousSystemParameters are not set")
+}
+
+/// Returns metadata describing the SNS.
+#[export_name = "canister_query get_metadata"]
+fn get_metadata() {
+    println!("{}get_metadata", log_prefix());
+    over(candid_one, get_metadata_)
+}
+
+/// Internal method for calling get_metadata.
+#[candid_method(query, rename = "get_metadata")]
+fn get_metadata_(request: GetMetadataRequest) -> GetMetadataResponse {
+    governance().get_metadata(&request)
 }
 
 /// Performs a command on a neuron if the caller is authorised to do so.

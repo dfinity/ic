@@ -7537,6 +7537,8 @@ dependencies = [
 name = "ic-sns-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "base64 0.13.0",
  "bytes",
  "candid",
  "clap 3.2.14",
@@ -7639,6 +7641,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_approx_eq",
+ "base64 0.13.0",
  "candid",
  "dfn_candid",
  "dfn_core",
