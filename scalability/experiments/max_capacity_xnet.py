@@ -57,6 +57,7 @@ if __name__ == "__main__":
         {
             "rps": rps_iterations,
             "rps_max": max_capacity,
+            "is_update": True,
         },
         [FLAGS.payload_size],
         "payload size [bytes]",
