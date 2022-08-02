@@ -61,7 +61,7 @@ fn precomp_sys_h() -> [FP4; G2_TABLE] {
 const FP12_SIZE: usize = 12 * big::MODBYTES;
 
 /// The ciphertext is an element of Fr which is 256-bits
-pub const MESSAGE_BYTES: usize = 32;
+pub(crate) const MESSAGE_BYTES: usize = 32;
 
 /// The size in bytes of a chunk
 pub const CHUNK_BYTES: usize = 2;
@@ -78,6 +78,7 @@ pub const CHUNK_MAX: isize = CHUNK_MIN + CHUNK_SIZE - 1;
 /// NUM_CHUNKS is simply the number of chunks needed to hold a message (element
 /// of Fr)
 pub const NUM_CHUNKS: usize = (MESSAGE_BYTES + CHUNK_BYTES - 1) / CHUNK_BYTES;
+
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
@@ -331,70 +332,6 @@ pub fn kgen(
     )
 }
 
-/// Generates the specified child of a given BTE node.
-/// Only used by slow_derive(), which has been superseded by fast_derive().
-/// We keep it around as documentation. Hopefully it makes fast_derive() easier
-/// to understand.
-pub fn node_gen(node: &BTENode, child: Bit, rng: &mut impl RAND, sys: &SysParam) -> BTENode {
-    let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
-    let delta = BIG::randomnum(&spec_r, rng);
-    let g1 = ECP::generator();
-
-    // Construct new tau.
-    let mut new_tau = node.tau.clone();
-    new_tau.push(child);
-
-    // Compute new a: new_a = a * g_1 ^ delta
-    let mut new_a = g1.mul(&delta);
-    new_a.add(&node.a);
-
-    // Compute new b and new d_t.
-    let mut new_b = node.b.clone();
-    let mut new_d_t = LinkedList::new();
-    let f_tau = match ftau_partial(&new_tau, sys) {
-        None => {
-            unreachable!("node_gen() on leaf node");
-        }
-        Some(x) => x,
-    };
-    let offset = node.tau.len();
-    let mut iter = node.d_t.iter().enumerate();
-    // The first entry of `d_t` is used for `new_b`
-    if let Some((_, d)) = iter.next() {
-        new_b.add(&f_tau.mul(&delta));
-        if child == Bit::One {
-            new_b.add(d);
-        }
-    };
-    // The remanining entries of `d_t` are used for `new_d_t`
-    for (i, d) in iter {
-        let mut new_d = sys.f[offset + i].mul(&delta);
-        new_d.add(d);
-        new_d_t.push_back(new_d);
-    }
-
-    // Compute new d_h.
-    let mut new_d_h = Vec::with_capacity(node.d_h.len());
-    for (i, d) in node.d_h.iter().enumerate() {
-        let mut new_d = sys.f_h[i].mul(&delta);
-        new_d.add(d);
-        new_d_h.push(new_d);
-    }
-
-    // Compute new e.
-    let mut new_e = sys.h.mul(&delta);
-    new_e.add(&node.e);
-
-    BTENode {
-        tau: new_tau,
-        a: new_a,
-        b: new_b,
-        d_t: new_d_t,
-        d_h: new_d_h,
-        e: new_e,
-    }
-}
-
 impl SecretKey {
     /// The current key (the end of list of BTENodes) of a `SecretKey` should
     /// always correspond to an epoch described by lambda_t bits. Some
@@ -422,7 +359,7 @@ impl SecretKey {
     /// key update is a bit fiddlier.
     ///
     /// No-op if `self` is empty.
-    pub fn fast_derive(&mut self, sys: &SysParam, rng: &mut impl RAND) {
+    pub(crate) fn fast_derive(&mut self, sys: &SysParam, rng: &mut impl RAND) {
         let mut epoch = Vec::new();
         if self.bte_nodes.is_empty() {
             return;
@@ -436,26 +373,6 @@ impl SecretKey {
             }
         }
         self.update_to(&epoch, sys, rng);
-    }
-
-    /// A simpler but slower variant of the above.
-    pub fn slow_derive(&mut self, sys: &SysParam, rng: &mut impl RAND) {
-        let mut append_me = match self.bte_nodes.pop_back() {
-            None => return,
-            Some(mut node) => {
-                let mut ks = LinkedList::new();
-                loop {
-                    if node.d_t.is_empty() {
-                        ks.push_back(node);
-                        break;
-                    }
-                    ks.push_back(node_gen(&node, Bit::One, rng, sys));
-                    node = node_gen(&node, Bit::Zero, rng, sys);
-                }
-                ks
-            }
-        };
-        self.bte_nodes.append(&mut append_me);
     }
 
     fn new(bte_root: BTENode) -> SecretKey {
@@ -482,9 +399,7 @@ impl SecretKey {
             }
         }
     }
-    pub fn epoch(&mut self) -> Option<&[Bit]> {
-        self.bte_nodes.back().map(|node| node.tau.as_slice())
-    }
+
     /// Updates `self` to the given `epoch`.
     ///
     /// If `epoch` is in the past, then disables `self`.
@@ -723,17 +638,6 @@ fn unecp2(buf: &[u8], cur: &mut usize) -> ECP2 {
     a
 }
 
-/// A forward secure ciphertext
-///
-/// This is the (C,R,S,Z) tuple of Dec in section 5.2 of
-/// <https://eprint.iacr.org/2021/339.pdf>
-pub struct SingleCiphertext {
-    pub cc: ECP,
-    pub rr: ECP,
-    pub ss: ECP,
-    pub zz: ECP2,
-}
-
 /// Forward secure ciphertexts
 ///
 /// This is (C,R,S,Z) tuple of section 5.2, with multiple C values,
@@ -770,7 +674,7 @@ impl std::fmt::Debug for Crsz {
 /// Randomness needed for NIZK proofs.
 pub struct ToxicWaste {
     pub spec_r: Vec<BIG>,
-    pub s: Vec<BIG>,
+    pub(crate) s: Vec<BIG>,
 }
 
 impl zeroize::Zeroize for ToxicWaste {

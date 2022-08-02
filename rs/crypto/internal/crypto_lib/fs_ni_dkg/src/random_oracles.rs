@@ -254,7 +254,7 @@ impl UniqueHash for HashedMap {
 /// The digest is the hash of `domain` appended with the unique digest of
 /// `data`. A distinct `domain` should be used for each purpose of the random
 /// oracle.
-pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
+pub(crate) fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
     let mut hasher = new_hasher_with_domain(domain);
     hasher.write(&data.unique_hash());
     hasher.finish()

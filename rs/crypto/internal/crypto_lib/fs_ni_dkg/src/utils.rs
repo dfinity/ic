@@ -12,41 +12,41 @@ use rand_chacha::ChaCha20Rng;
 mod tests;
 
 /// Order of the prime order subgroup of curve BLS12_381.
-pub fn curve_order() -> BIG {
+pub(crate) fn curve_order() -> BIG {
     BIG::new_ints(&CURVE_ORDER)
 }
 
 /// Point at infinity on G1 of curve BLS12_381.
-pub fn ecp_inf() -> ECP {
+pub(crate) fn ecp_inf() -> ECP {
     let mut new = ECP::new();
     new.inf();
     new
 }
 
 /// Point at infinity on G2 of curve BLS12_381.
-pub fn ecp2_inf() -> ECP2 {
+pub(crate) fn ecp2_inf() -> ECP2 {
     let mut new = ECP2::new();
     new.inf();
     new
 }
 
 /// Zero element in the scalar field of curve BLS12_381.
-pub fn big_zero() -> BIG {
+pub(crate) fn big_zero() -> BIG {
     BIG::new_int(0)
 }
 
 /// Identity element in the scalar field of curve BLS12_381.
-pub fn big_one() -> BIG {
+pub(crate) fn big_one() -> BIG {
     BIG::new_int(1)
 }
 
 /// Addition of two field elements modulo the prime order of the group.
-pub fn field_add(left: &BIG, right: &BIG) -> BIG {
+pub(crate) fn field_add(left: &BIG, right: &BIG) -> BIG {
     BIG::modadd(left, right, &curve_order())
 }
 
 /// Multiplication of two field elements modulo the prime order of the group.
-pub fn field_mul(left: &BIG, right: &BIG) -> BIG {
+pub(crate) fn field_mul(left: &BIG, right: &BIG) -> BIG {
     BIG::modmul(left, right, &curve_order())
 }
 
