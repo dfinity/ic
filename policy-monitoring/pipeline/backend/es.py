@@ -256,7 +256,7 @@ class Es:
         except exceptions.TransportError as e:
             msg = (
                 "ES query failed.\n"
-                "If your Farm tests have started recently, try repeating "
+                "If your system tests have started recently, try repeating "
                 "this script in a few minutes.\n"
             )
             self.alert_service.alert(

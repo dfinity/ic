@@ -35,3 +35,8 @@ class Group:
         orch_docs = [ReplicaDoc(doc.repr) for doc in self.logs if doc.is_replica()]
         self.global_infra = GlobalInfra.fromReplicaLogs(replica_docs=orch_docs)
         eprint(f"Inferring global infra for {str(self)} done.")
+
+    def pot_name(self) -> str:
+        # Example group ID: "boundary_nodes_pre_master__boundary_nodes_pot-2784039865"
+        # Corresponding pot name: "boundary_nodes_pot"
+        return self.gid.split("__")[-1].split("-")[0]

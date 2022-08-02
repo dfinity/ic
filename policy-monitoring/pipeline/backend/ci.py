@@ -1,13 +1,14 @@
 import re
 from datetime import datetime
 from datetime import timedelta
-from typing import Any
+from pathlib import Path
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import gitlab.base
 import pytz
+from pipeline.backend.system_tests_artifact_manager import SystemTestsArtifactManager
 from util.print import eprint
 
 from .group import Group
@@ -29,6 +30,10 @@ class CiJobNotFoundException(CiException):
         self.jid = jid
 
 
+class CiJobNotDefinedForGroup(CiException):
+    pass
+
+
 class PotArtifactNotFoundInCi(CiException):
     def __init__(self, jid: int, art_path: str):
         super().__init__(jid, art_path)
@@ -36,10 +41,10 @@ class PotArtifactNotFoundInCi(CiException):
         self.pot_name = art_path
 
 
-class GroupNamesNotFoundInFarmLog(CiException):
-    def __init__(self, farm_log: str):
-        super().__init__(farm_log)
-        self.farm_log = farm_log
+class GroupNamesNotFoundInSystestLog(CiException):
+    def __init__(self, system_tests_log: Path):
+        super().__init__(system_tests_log)
+        self.system_tests_log = system_tests_log
 
 
 class Ci:
@@ -218,32 +223,27 @@ class Ci:
         return self._get_group_names_from_jobs(traceful_jobs, include_pattern)
 
     @staticmethod
-    def get_groups_from_farm_logs(path: str) -> Dict[str, Group]:
+    def get_groups_from_systest_logs(path: Path) -> Dict[str, Group]:
         """
         Arguments:
         - path: str -- path to a test driver log
         Returns: Map from group names to Groups
         Throws:
-        - GroupNamesNotFoundInFarmLog if no grroups names were found
+        - GroupNamesNotFoundInSystestLog if no grroups names were found
         """
         trace: str
-        with open(path, "r") as farm_log:
-            trace = "\n".join(farm_log.readlines())
+        with open(path, "r") as system_tests_log:
+            trace = "\n".join(system_tests_log.readlines())
         groups = Ci._get_groups_from_trace(trace)
         if not groups:
-            eprint(f"Could not find any groups in test driver log {path}")
-            raise GroupNamesNotFoundInFarmLog(path)
+            eprint(f"Could not find any groups in test driver log {str(path)}")
+            raise GroupNamesNotFoundInSystestLog(path)
         return groups
 
-    def get_registry_snapshot_for_group(self, group: Group) -> Any:
-        assert group.ci_job_id is not None, f"cannot obtain initial registry snapshot for {str(group)} without job ID"
-
-        # Example group ID: "boundary_nodes_pre_master__boundary_nodes_pot-2784039865"
-        # Corresponding pot name: "boundary_nodes_pot"
-        m = re.match(r".*?__(.*)-\d+", group.gid)
-        assert m and len(m.groups()) == 1, f"could not extract pot name from {str(group)}"
-
-        pot_name = m.group(1)
+    def get_registry_snapshot_for_group(self, group: Group) -> str:
+        if group.ci_job_id is None:
+            eprint(f"cannot obtain initial registry snapshot for {str(group)} without job ID")
+            raise CiJobNotDefinedForGroup()
 
         try:
             job = self.project.jobs.get(group.ci_job_id)
@@ -251,15 +251,14 @@ class Ci:
             eprint(f"Cannot find job with ID {group.ci_job_id}")
             raise CiJobNotFoundException(group.ci_job_id)
 
+        snap_bs: bytes
         try:
-            snap_path = f"working_dir/{pot_name}/setup/ic_prep/initial_registry_snapshot.json"
+            snap_path = str(SystemTestsArtifactManager("working_dir").registry_snapshot_path(group.pot_name()))
             snap_bs = job.artifact(snap_path)
             if snap_bs is None:
-                eprint(f"Could not find artifact {snap_path} of {str(group)} (no bytes returned)")
-                raise PotArtifactNotFoundInCi(group.ci_job_id, snap_path)
-            snap = snap_bs.decode().strip()
+                gitlab.exceptions.GitlabGetError()
         except gitlab.exceptions.GitlabGetError:
             eprint(f"Could not find artifact {snap_path} of {str(group)}")
             raise PotArtifactNotFoundInCi(group.ci_job_id, snap_path)
 
-        return snap
+        return snap_bs.decode().strip()

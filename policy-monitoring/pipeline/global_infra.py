@@ -141,7 +141,7 @@ class GlobalInfra:
         return GlobalInfra.fromDict(d, source=str(input_file))
 
     @classmethod
-    def fromIcRegeditSnapshot(Self, j: Any) -> "GlobalInfra":
+    def _fromIcRegeditSnapshot(Self, j: Any) -> "GlobalInfra":
         d: Dict[str, Any] = dict()
 
         def int_to_subnet_type(x: str, subnet_id: str) -> str:
@@ -197,12 +197,17 @@ class GlobalInfra:
         return GlobalInfra.fromDict(d, "<obtained_from_registry_snapshot>")
 
     @classmethod
+    def fromIcRegeditSnapshotBulb(Self, input_bulb: str) -> "GlobalInfra":
+        j = json.loads(input_bulb)
+        return Self._fromIcRegeditSnapshot(j)
+
+    @classmethod
     def fromIcRegeditSnapshotFile(Self, input_file: Path) -> "GlobalInfra":
 
         with open(input_file, "r") as fin:
             j = json.load(fin)
 
-        return Self.fromIcRegeditSnapshot(j)
+        return Self._fromIcRegeditSnapshot(j)
 
     @classmethod
     def fromReplicaLogs(Self, replica_docs: List[ReplicaDoc]) -> "GlobalInfra":
