@@ -1,0 +1,68 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/canister_client/sender",
+    "//rs/nns/constants",
+    "//rs/rosetta-api",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:hex",
+    "@crate_index//:log",
+    "@crate_index//:nix",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_distr",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_rosetta_test_utils",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test_utils_test",
+    aliases = ALIASES,
+    crate = ":test_utils",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
