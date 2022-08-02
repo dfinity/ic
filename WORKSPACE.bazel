@@ -116,6 +116,27 @@ load("@wasm_crate_index//:defs.bzl", wasm_crate_repositories = "crate_repositori
 
 wasm_crate_repositories()
 
+http_archive(
+    name = "rules_motoko",
+    sha256 = "9b677fc5d3b42749d13b7734b3a87d4d40135499a189e843ae3f183965e255b7",
+    strip_prefix = "rules_motoko-0.1.0",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.1.0.zip"],
+)
+
+http_archive(
+    name = "motoko_base",
+    build_file_content = """
+filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
+      """,
+    sha256 = "582d1c90faa65047354ae7530f09160dd7e04882991287ced7ea7a72bd89d06e",
+    strip_prefix = "motoko-base-moc-0.6.24/src",
+    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.6.24.zip"],
+)
+
+load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
+
+rules_motoko_dependencies()
+
 # Third party dependencies that require special treatment
 
 wabt_rs_repository(name = "wabt_rs")

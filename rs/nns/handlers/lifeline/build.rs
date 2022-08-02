@@ -99,7 +99,7 @@ fn remove_governance_service_args(did: &mut String) {
 const GOVERNANCE_DID: &str = "../../governance/canister/governance.did";
 const ROOT_DID: &str = "../root/canister/root.did";
 
-fn compile_lifeline(out: &Path) -> Result<(), BuildError> {
+fn compile_lifeline(out: &Path) -> Result<PathBuf, BuildError> {
     // Add symlinks to the .did files for foreign canisters
     let governance_args = create_did_alias(
         out,
@@ -124,7 +124,7 @@ fn compile_lifeline(out: &Path) -> Result<(), BuildError> {
         .output()?;
 
     if output.status.success() {
-        Ok(())
+        Ok(out.join("lifeline.wasm"))
     } else {
         Err(BuildError::MocFailure(output))
     }
@@ -140,7 +140,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"));
     let out_did = out_dir.join("rrkah-fqaaa-aaaaa-aaaaq-cai.did");
 
-    compile_lifeline(&out_dir).unwrap_or_else(|e| {
+    let lifeline_wasm = compile_lifeline(&out_dir).unwrap_or_else(|e| {
         eprintln!("Could not build the Wasm for the lifeline canister. Error:");
         e.print_stderr();
 
@@ -165,4 +165,9 @@ fn main() {
 
         panic!()
     });
+
+    println!(
+        "cargo:rustc-env=LIFELINE_CANISTER_WASM_PATH={}",
+        lifeline_wasm.display()
+    );
 }
