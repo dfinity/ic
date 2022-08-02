@@ -1475,6 +1475,9 @@ fn observe_replicated_state_metrics(
     observe_reading(CanisterStatusType::Running, num_running_canisters);
     observe_reading(CanisterStatusType::Stopping, num_stopping_canisters);
     observe_reading(CanisterStatusType::Stopped, num_stopped_canisters);
+    metrics
+        .available_canister_ids
+        .set(state.metadata.available_canister_ids() as i64);
 
     metrics.observe_input_messages(MESSAGE_KIND_INGRESS, ingress_queue_message_count);
     metrics.observe_input_queues_size_bytes(MESSAGE_KIND_INGRESS, ingress_queue_size_bytes);

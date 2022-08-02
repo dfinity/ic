@@ -713,6 +713,20 @@ impl SystemMetadata {
 
         res.ok_or_else(|| "Canister ID allocation was consumed".into())
     }
+
+    /// Returns the number of canister IDs that can still be generated.
+    pub fn available_canister_ids(&self) -> u64 {
+        let generated_canister_ids = match (
+            self.canister_allocation_ranges.start(),
+            self.last_generated_canister_id,
+        ) {
+            (Some(start), Some(last)) => {
+                canister_id_into_u64(last) + 1 - canister_id_into_u64(start)
+            }
+            _ => 0,
+        };
+        self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
+    }
 }
 
 /// Stream is the state of bi-directional communication session with a remote
