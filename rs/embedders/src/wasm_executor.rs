@@ -636,7 +636,7 @@ pub fn process(
 
     let instance_stats = instance.get_stats();
 
-    // Has the side effect up deallocating memory if message failed and
+    // Has the side effect of deallocating memory if message failed and
     // returning cycles from a request that wasn't sent.
     let mut wasm_result = instance
         .store_data_mut()
