@@ -4,6 +4,12 @@ use libfuzzer_sys::fuzz_target;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use num_bigint::BigUint;
 
+/*
+The fe-derive macro defines arithmetic types for operating in the fields defined
+by the integers modulo the prime of P-256 and K-256. Compare their arithmetic
+results against a generic biginteger implementation of the same operation.
+*/
+
 fn prime_for(curve: EccCurveType) -> BigUint {
     match curve {
         EccCurveType::P256 => BigUint::parse_bytes(
@@ -19,15 +25,47 @@ fn prime_for(curve: EccCurveType) -> BigUint {
     }
 }
 
+// Format a BigUint in the fixed-length SEC1 format
 fn format_bn(bn: &BigUint) -> String {
+    let field_bytes = 32;
+
     // Include leading zeros
     let bn_bytes = bn.to_bytes_be();
 
-    assert!(bn_bytes.len() <= 32);
+    assert!(bn_bytes.len() <= field_bytes);
 
-    let padding_bytes = 32 - bn_bytes.len();
+    let padding_bytes = field_bytes - bn_bytes.len();
 
     hex::encode(vec![0u8; padding_bytes]) + &hex::encode(bn_bytes)
+}
+
+fn assert_fe_eq(fe: &EccFieldElement, bn: &BigUint) {
+    assert_eq!(hex::encode(fe.as_bytes()), format_bn(&bn));
+}
+
+/*
+Test field element inversion and sqrt
+
+If the element is not zero, invert it
+
+Multiply the inverse by the original input - it must be equal to 1
+
+Sqrt the element. If it exists, then verify that -element does not
+have a valid square root. (This is specific for p == 3 mod 4 and may
+need adjustment if other curves are added)
+*/
+fn check_field_inversion_and_sqrt(fe: &EccFieldElement) -> ThresholdEcdsaResult<()> {
+    if !bool::from(fe.is_zero()) {
+        let fe_inv = fe.invert();
+        let maybe_one = fe_inv.mul(&fe)?;
+        assert_eq!(maybe_one, EccFieldElement::one(fe.curve_type()));
+
+        let fe_sqrt = fe.sqrt();
+        if bool::from(fe_sqrt.0) {
+            assert!(!bool::from(fe.negate().unwrap().sqrt().0));
+        }
+    }
+    Ok(())
 }
 
 fn fe_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), ThresholdEcdsaError> {
@@ -36,9 +74,7 @@ fn fe_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), ThresholdEcd
     let few = EccFieldElement::from_bytes_wide(curve_type, data).unwrap();
     let refw = BigUint::from_bytes_be(data) % &prime;
 
-    assert_eq!(hex::encode(few.as_bytes()), format_bn(&refw));
-
-    let one = EccFieldElement::one(curve_type);
+    assert_fe_eq(&few, &refw);
 
     let fe1_bits = &data[..32];
     let fe2_bits = &data[32..];
@@ -60,39 +96,21 @@ fn fe_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), ThresholdEcd
             assert_eq!(hex::encode(fe1w.as_bytes()), hex::encode(fe1_bits));
             assert_eq!(hex::encode(fe2w.as_bytes()), hex::encode(fe2_bits));
 
-            let fe_sum = fe1.add(&fe2)?;
+            // Check field addition:
             let ref_sum = (&ref1 + &ref2) % &prime;
-            assert_eq!(hex::encode(fe_sum.as_bytes()), format_bn(&ref_sum));
+            assert_fe_eq(&fe1.add(&fe2)?, &ref_sum);
 
-            let fe_sub = fe1.sub(&fe2)?;
+            // Check field subtraction:
             let ref_sub = ((&prime + &ref1) - &ref2) % &prime;
-            assert_eq!(hex::encode(fe_sub.as_bytes()), format_bn(&ref_sub));
+            assert_fe_eq(&fe1.sub(&fe2)?, &ref_sub);
 
-            let fe_mul = fe1.mul(&fe2)?;
+            // Check field multiplication:
             let ref_mul = (&ref1 * &ref2) % &prime;
-            assert_eq!(hex::encode(fe_mul.as_bytes()), format_bn(&ref_mul));
+            assert_fe_eq(&fe1.mul(&fe2)?, &ref_mul);
 
-            if fe1.is_zero() == false {
-                let fe1_inv = fe1.invert();
-                let maybe_one = fe1_inv.mul(&fe1)?;
-                assert_eq!(maybe_one, one);
-
-                let fe1_sqrt = fe1.sqrt();
-                if fe1_sqrt.is_zero() {
-                    assert!(!fe1.negate().unwrap().sqrt().is_zero());
-                }
-            }
-
-            if fe2.is_zero() == false {
-                let fe2_inv = fe2.invert();
-                let maybe_one = fe2_inv.mul(&fe2)?;
-                assert_eq!(maybe_one, one);
-
-                let fe2_sqrt = fe2.sqrt();
-                if fe2_sqrt.is_zero() {
-                    assert!(!fe2.negate().unwrap().sqrt().is_zero());
-                }
-            }
+            // Check field inversion and square root
+            check_field_inversion_and_sqrt(&fe1)?;
+            check_field_inversion_and_sqrt(&fe2)?;
         }
 
         (_, _) => {

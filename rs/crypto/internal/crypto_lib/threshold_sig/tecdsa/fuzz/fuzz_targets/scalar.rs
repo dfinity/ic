@@ -33,6 +33,12 @@ fn format_bn(bn: &BigUint) -> String {
 fn scalar_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), ThresholdEcdsaError> {
     let prime = prime_for(curve_type);
 
+    /*
+    Test that EccScalar::from_bytes_wide reduces as we expect, by comparing
+    it with the result from a generic biginteger function.
+
+    For k256 and p256 the implementation of this function is a little unusual
+    */
     let our_val = EccScalar::from_bytes_wide(curve_type, data).unwrap();
     let ref_val = BigUint::from_bytes_be(data) % &prime;
     assert_eq!(hex::encode(our_val.serialize()), format_bn(&ref_val));
