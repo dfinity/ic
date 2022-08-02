@@ -33,6 +33,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) ingress_history_length: IntGauge,
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
+    pub(super) available_canister_ids: IntGauge,
     pub(super) consumed_cycles_since_replica_started: Gauge,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
@@ -169,6 +170,10 @@ impl SchedulerMetrics {
                 "replicated_state_registered_canisters",
                 "Total number of canisters keyed by their current status.",
                 &["status"],
+            ),
+            available_canister_ids: metrics_registry.int_gauge(
+                "replicated_state_available_canister_ids",
+                "Number of allocated canister IDs that can still be generated.",
             ),
             /// Metric `consumed_cycles_since_replica_started` is not
             /// monotonically increasing. Cycles consumed are increasing the
