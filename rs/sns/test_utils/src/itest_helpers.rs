@@ -40,7 +40,8 @@ use ic_sns_governance::{
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
-    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse, SnsRootCanister},
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
@@ -192,9 +193,15 @@ pub fn populate_canister_ids(
     // Root.
     {
         let root = &mut sns_canister_init_payloads.root;
-        root.governance_canister_id = governance_canister_id;
-        root.ledger_canister_id = ledger_canister_id;
-        root.swap_canister_id = swap_canister_id;
+        if root.governance_canister_id.is_none() {
+            root.governance_canister_id = governance_canister_id;
+        }
+        if root.ledger_canister_id.is_none() {
+            root.ledger_canister_id = ledger_canister_id;
+        }
+        if root.swap_canister_id.is_none() {
+            root.swap_canister_id = swap_canister_id;
+        }
     }
 
     // Governance canister_init args.
@@ -996,6 +1003,22 @@ impl SnsCanisters<'_> {
             .update_from_sender("manage_neuron", candid_one, manage_neuron, sender)
             .await
             .expect("Error calling the manage_neuron")
+    }
+
+    pub async fn register_dapp_canister(
+        &self,
+        canister_id: CanisterId,
+    ) -> RegisterDappCanisterResponse {
+        self.root
+            .update_(
+                "register_dapp_canister",
+                candid_one,
+                RegisterDappCanisterRequest {
+                    canister_id: Some(canister_id.get()),
+                },
+            )
+            .await
+            .expect("Call to register_dapp_canister failed")
     }
 }
 

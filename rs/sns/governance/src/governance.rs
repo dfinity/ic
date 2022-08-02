@@ -11,6 +11,7 @@ use std::string::ToString;
 use crate::account_from_proto;
 use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
+    upgrade_canister_directly,
 };
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
@@ -57,7 +58,9 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
-use crate::sns_upgrade::get_all_sns_canisters;
+use crate::sns_upgrade::{
+    get_all_sns_canisters, get_current_version, get_next_version, get_upgrade_info,
+};
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
@@ -1917,23 +1920,15 @@ impl Governance {
             ));
         }
 
-        // TODO move this commented logic to the new UpgradeSnsToNextVersion action handler
-        // let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
-        // println!(
-        //     "{}target_is_root: {} (target_canister_id = {})",
-        //     log_prefix(),
-        //     target_is_root,
-        //     target_canister_id
-        // );
-        // if target_is_root {
-        //     return upgrade_canister_directly(
-        //         &*self.env,
-        //         target_canister_id,
-        //         upgrade.new_canister_wasm,
-        //     )
-        //     .await;
-        // }
+        self.upgrade_non_root_canister(target_canister_id, upgrade.new_canister_wasm)
+            .await
+    }
 
+    async fn upgrade_non_root_canister(
+        &mut self,
+        target_canister_id: CanisterId,
+        wasm: Vec<u8>,
+    ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
             // We need to stop a canister before we upgrade it. Otherwise it might
@@ -1950,7 +1945,7 @@ impl Governance {
 
             let change_canister_arg =
                 ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
-                    .with_wasm(upgrade.new_canister_wasm);
+                    .with_wasm(wasm);
 
             candid::Encode!(&change_canister_arg).unwrap()
         };
@@ -1978,7 +1973,32 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
-        Ok(())
+        let current_version =
+            get_current_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
+
+        let next_version = get_next_version(&*self.env, &current_version)
+            .await
+            .expect("There is no next version for the current version of the SNS.");
+
+        let sns_canisters =
+            get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic()).await;
+
+        let (target_canister_id, target_wasm) =
+            get_upgrade_info(&*self.env, &sns_canisters, &current_version, &next_version).await?;
+
+        let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
+        println!(
+            "{}target_is_root: {} (target_canister_id = {})",
+            log_prefix(),
+            target_is_root,
+            target_canister_id
+        );
+        if target_is_root {
+            return upgrade_canister_directly(&*self.env, target_canister_id, target_wasm).await;
+        }
+
+        self.upgrade_non_root_canister(target_canister_id, target_wasm)
+            .await
     }
 
     /// Returns the nervous system parameters
@@ -3641,7 +3661,12 @@ mod tests {
     use crate::pb::v1::governance::SnsMetadata;
     use crate::pb::v1::UpgradeSnsControlledCanister;
     use crate::pb::v1::UpgradeSnsToNextVersion;
-    use crate::sns_upgrade::{ListSnsCanistersRequest, ListSnsCanistersResponse};
+    use crate::sns_upgrade::{
+        CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+        GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
+        GetWasmResponse, ListSnsCanistersRequest, ListSnsCanistersResponse, SnsCanisterType,
+        SnsVersion, SnsWasm,
+    };
     use crate::{
         pb::v1::{
             manage_neuron_response,
@@ -3652,8 +3677,13 @@ mod tests {
         types::test_helpers::NativeEnvironment,
     };
     use async_trait::async_trait;
+    use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
+    use ic_ic00_types::{
+        CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
+    };
     use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
+    use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities::types::ids::canister_test_id;
     use maplit::btreemap;
@@ -4057,6 +4087,61 @@ mod tests {
         }
     }
 
+    // A helper function to execute each proposal.
+    fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalData {
+        governance.process_proposal(proposal_id);
+
+        let now = std::time::Instant::now;
+
+        let start = now();
+        // In practice, the exit condition of the following loop occurs in much
+        // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
+        // generous limit is twofold: 1. avoid flakes in CI, while at the same
+        // time 2. do not run forever if something goes wrong.
+        let give_up = || now() < start + std::time::Duration::from_secs(30);
+        let final_proposal_data = loop {
+            let result = governance
+                .get_proposal(&GetProposal {
+                    proposal_id: Some(ProposalId { id: proposal_id }),
+                })
+                .result
+                .unwrap();
+            let proposal_data = match result {
+                get_proposal_response::Result::Proposal(p) => p,
+                _ => panic!("get_proposal result: {:#?}", result),
+            };
+
+            if proposal_data.status().is_final() {
+                break proposal_data;
+            }
+
+            if give_up() {
+                panic!("Proposal took too long to terminate (in the failed state).")
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+        final_proposal_data
+    }
+
+    fn canister_status_for_test(
+        module_hash: Vec<u8>,
+        status: CanisterStatusType,
+    ) -> CanisterStatusResultV2 {
+        CanisterStatusResultV2::new(
+            status,
+            Some(module_hash),
+            PrincipalId::new_anonymous(),
+            vec![],
+            NumBytes::new(0),
+            0,
+            0,
+            Some(0),
+            0,
+            0,
+        )
+    }
+
     #[test]
     fn two_sns_version_upgrades_cannot_be_concurrent() {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
@@ -4200,6 +4285,282 @@ mod tests {
     }
 
     #[test]
+    fn test_upgrade_sns_to_next_version_for_root() {
+        let expected_canister_to_upgrade = SnsCanisterType::Root;
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3, 4],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+        };
+        test_upgrade_sns_to_next_version_upgrades_correct_canister(
+            next_version,
+            vec![1, 2, 3, 4],
+            expected_canister_to_upgrade,
+        );
+    }
+    #[test]
+    fn test_upgrade_sns_to_next_version_for_governance() {
+        let expected_canister_to_upgrade = SnsCanisterType::Governance;
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4, 5],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+        };
+        test_upgrade_sns_to_next_version_upgrades_correct_canister(
+            next_version,
+            vec![2, 3, 4, 5],
+            expected_canister_to_upgrade,
+        );
+    }
+    #[test]
+    fn test_upgrade_sns_to_next_version_for_ledger() {
+        let expected_canister_to_upgrade = SnsCanisterType::Ledger;
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5, 6],
+            swap_wasm_hash: vec![4, 5, 6],
+        };
+        test_upgrade_sns_to_next_version_upgrades_correct_canister(
+            next_version,
+            vec![3, 4, 5, 6],
+            expected_canister_to_upgrade,
+        );
+    }
+
+    /// This assumes that the current_version is:
+    /// SnsVersion {
+    ///     root_wasm_hash: vec![1, 2, 3],
+    ///     governance_wasm_hash: vec![2, 3, 4],
+    ///     ledger_wasm_hash: vec![3, 4, 5],
+    ///     swap_wasm_hash: vec![4, 5, 6],
+    /// }
+    /// Any test inputs should only change one canister to a new version
+    ///
+    /// This also sets a slightly different expectation for upgrading root versus other canisters
+    fn test_upgrade_sns_to_next_version_upgrades_correct_canister(
+        next_version: SnsVersion,
+        expected_wasm_hash_requested: Vec<u8>,
+        expected_canister_to_be_upgraded: SnsCanisterType,
+    ) {
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
+
+        // Upgrade Proposal
+        let proposal_id = 1;
+        let proposal = ProposalData {
+            action: (&action).into(),
+            id: Some(proposal_id.into()),
+            ballots: btreemap! {
+                "neuron 1".to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: 9001,
+                    cast_timestamp_seconds: 1,
+                },
+            },
+            wait_for_quiet_state: Some(WaitForQuietState::default()),
+            proposal: Some(Proposal {
+                title: "Upgrade Proposal".to_string(),
+                action: Some(action),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(proposal.status(), Status::Open);
+
+        use ProposalDecisionStatus as Status;
+
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let ledger_canister_id = canister_test_id(502);
+        let swap_canister_id = canister_test_id(503);
+        let ledger_archive_ids = vec![canister_test_id(504)];
+
+        let dapp_canisters = vec![canister_test_id(600)];
+
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.default_canister_call_response =
+            Err((Some(1), "Oh no something was not covered!".to_string()));
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
+            Ok(Encode!(&GetSnsCanistersSummaryResponse {
+                root: Some(CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![1, 2, 3],
+                        CanisterStatusType::Running
+                    )),
+                    canister_id: Some(root_canister_id.get())
+                }),
+                governance: Some(CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![2, 3, 4],
+                        CanisterStatusType::Running
+                    )),
+                    canister_id: Some(governance_canister_id.get())
+                }),
+                ledger: Some(CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![3, 4, 5],
+                        CanisterStatusType::Running
+                    )),
+                    canister_id: Some(ledger_canister_id.get())
+                }),
+                swap: Some(CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![4, 5, 6],
+                        CanisterStatusType::Running
+                    )),
+                    canister_id: Some(swap_canister_id.get())
+                }),
+                dapps: vec![],
+                archives: vec![],
+            })
+            .unwrap()),
+        );
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+            Ok(Encode!(&ListSnsCanistersResponse {
+                root: Some(root_canister_id.get()),
+                governance: Some(governance_canister_id.get()),
+                ledger: Some(ledger_canister_id.get()),
+                swap: Some(swap_canister_id.get()),
+                dapps: dapp_canisters.iter().map(|id| id.get()).collect(),
+                archives: ledger_archive_ids.iter().map(|id| id.get()).collect()
+            })
+            .unwrap()),
+        );
+        env.set_call_canister_response(
+            SNS_WASM_CANISTER_ID,
+            "get_next_sns_version",
+            Encode!(&GetNextSnsVersionRequest {
+                current_version: Some(SnsVersion {
+                    root_wasm_hash: vec![1, 2, 3],
+                    governance_wasm_hash: vec![2, 3, 4],
+                    ledger_wasm_hash: vec![3, 4, 5],
+                    swap_wasm_hash: vec![4, 5, 6],
+                })
+            })
+            .unwrap(),
+            Ok(Encode!(&GetNextSnsVersionResponse {
+                next_version: Some(next_version)
+            })
+            .unwrap()),
+        );
+        env.set_call_canister_response(
+            SNS_WASM_CANISTER_ID,
+            "get_wasm",
+            Encode!(&GetWasmRequest {
+                hash: expected_wasm_hash_requested
+            })
+            .unwrap(),
+            Ok(Encode!(&GetWasmResponse {
+                wasm: Some(SnsWasm {
+                    wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
+                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                })
+            })
+            .unwrap()),
+        );
+
+        let canister_to_be_upgraded = match expected_canister_to_be_upgraded {
+            SnsCanisterType::Unspecified => {
+                panic!("Cannot be unspecified")
+            }
+            SnsCanisterType::Root => root_canister_id,
+            SnsCanisterType::Governance => governance_canister_id,
+            SnsCanisterType::Ledger => ledger_canister_id,
+            SnsCanisterType::Swap => {
+                panic!("Swap upgrade not supported via SNS (ownership)")
+            }
+        };
+
+        if expected_canister_to_be_upgraded != SnsCanisterType::Root {
+            // This is the essential call we need to happen in order to know that the correct canister
+            // was upgraded.
+            env.require_call_canister_invocation(
+                root_canister_id,
+                "change_canister",
+                Encode!(&ChangeCanisterProposal::new(
+                    true,
+                    CanisterInstallMode::Upgrade,
+                    canister_to_be_upgraded
+                )
+                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2]))
+                .unwrap(),
+                // We don't actually look at the response from this call anywhere
+                Some(Ok(Encode!().unwrap())),
+            );
+        } else {
+            // These three are needed for the request to function, but we aren't interested in re-testing
+            // canister_control methods here.
+            env.set_call_canister_response(
+                CanisterId::ic_00(),
+                "stop_canister",
+                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
+                Ok(vec![]),
+            );
+            env.set_call_canister_response(
+                CanisterId::ic_00(),
+                "canister_status",
+                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
+                Ok(Encode!(&canister_status_for_test(
+                    vec![],
+                    CanisterStatusType::Stopped
+                ))
+                .unwrap()),
+            );
+            env.set_call_canister_response(
+                CanisterId::ic_00(),
+                "start_canister",
+                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
+                Ok(vec![]),
+            );
+            // For root canister, this is the required call that ensures our wiring was correct.
+            env.require_call_canister_invocation(
+                CanisterId::ic_00(),
+                "install_code",
+                Encode!(&ic_ic00_types::InstallCodeArgs {
+                    mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                    canister_id: canister_to_be_upgraded.get(),
+                    wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
+                    query_allocation: None,
+                })
+                .unwrap(),
+                Some(Ok(vec![])),
+            );
+        }
+        // Init Governance.
+        let mut governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    proposal_id => proposal
+                },
+                root_canister_id: Some(root_canister_id.get()),
+                ledger_canister_id: Some(ledger_canister_id.get()),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // When we execute the proposal
+        let dapp_upgrade_result = execute_proposal(&mut governance, 1);
+        // Then we check things happened as expected
+        assert_eq!(dapp_upgrade_result.status(), Status::Executed);
+        // See `impl Drop for NativeEnvironment` which asserts that required calls were in fact made.
+    }
+
+    #[test]
     fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
         // Helper to let us create a lot of proposals to test.
         let create_upgrade_proposal = |id: u64, canister_id: CanisterId| {
@@ -4244,10 +4605,7 @@ mod tests {
         let dapp_canisters = vec![canister_test_id(600)];
 
         // Setup Env to return a response to our canister_call query.
-        let mut env = NativeEnvironment {
-            local_canister_id: Some(governance_canister_id),
-            ..Default::default()
-        };
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
         env.set_call_canister_response(
             root_canister_id,
             "list_sns_canisters",
@@ -4294,43 +4652,6 @@ mod tests {
             Box::new(DoNothingLedger {}),
         );
 
-        // A helper function to execute each proposal.
-        let mut execute_proposal = |proposal_id| {
-            governance.process_proposal(proposal_id);
-
-            let now = std::time::Instant::now;
-
-            let start = now();
-            // In practice, the exit condition of the following loop occurs in much
-            // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
-            // generous limit is twofold: 1. avoid flakes in CI, while at the same
-            // time 2. do not run forever if something goes wrong.
-            let give_up = || now() < start + std::time::Duration::from_secs(30);
-            let final_proposal_data = loop {
-                let result = governance
-                    .get_proposal(&GetProposal {
-                        proposal_id: Some(ProposalId { id: proposal_id }),
-                    })
-                    .result
-                    .unwrap();
-                let proposal_data = match result {
-                    get_proposal_response::Result::Proposal(p) => p,
-                    _ => panic!("get_proposal result: {:#?}", result),
-                };
-
-                if proposal_data.status().is_final() {
-                    break proposal_data;
-                }
-
-                if give_up() {
-                    panic!("Proposal took too long to terminate (in the failed state).")
-                }
-
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            };
-            final_proposal_data
-        };
-
         // Helper function to assert failures.
         let assert_proposal_failed = |data: ProposalData, proposal_name: &str| {
             assert_eq!(
@@ -4351,16 +4672,19 @@ mod tests {
         };
 
         // This is the only proposal that should succeed.
-        let dapp_upgrade_result = execute_proposal(1);
+        let dapp_upgrade_result = execute_proposal(&mut governance, 1);
         assert_eq!(dapp_upgrade_result.status(), Status::Executed);
 
         // We assert the rest of the proposals fail.
-        assert_proposal_failed(execute_proposal(2), "Root upgrade");
-        assert_proposal_failed(execute_proposal(3), "Governance upgrade");
-        assert_proposal_failed(execute_proposal(4), "Ledger upgrade");
-        assert_proposal_failed(execute_proposal(5), "Swap upgrade");
-        assert_proposal_failed(execute_proposal(6), "Ledger Archive upgrade");
-        assert_proposal_failed(execute_proposal(7), "Unregistered canister upgrade");
+        assert_proposal_failed(execute_proposal(&mut governance, 2), "Root upgrade");
+        assert_proposal_failed(execute_proposal(&mut governance, 3), "Governance upgrade");
+        assert_proposal_failed(execute_proposal(&mut governance, 4), "Ledger upgrade");
+        assert_proposal_failed(execute_proposal(&mut governance, 5), "Swap upgrade");
+        assert_proposal_failed(execute_proposal(&mut governance, 6), "Archive upgrade");
+        assert_proposal_failed(
+            execute_proposal(&mut governance, 7),
+            "Unregistered canister upgrade",
+        );
     }
 
     #[test]

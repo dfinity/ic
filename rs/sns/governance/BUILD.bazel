@@ -29,6 +29,7 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
+    "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icrc1",

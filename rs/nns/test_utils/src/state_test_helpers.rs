@@ -18,6 +18,7 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
 use std::default::Default;
 use std::env;
@@ -84,21 +85,33 @@ pub fn update(
     }
 }
 
-/// Make an update request to a canister on StateMachine (with sender)
-pub fn update_with_sender(
+pub fn update_with_sender<Payload, ReturnType, Witness>(
     machine: &StateMachine,
     canister_target: CanisterId,
     method_name: &str,
-    payload: Vec<u8>,
+    _: Witness,
+    payload: Payload::Inner,
     sender: PrincipalId,
-) -> Result<Vec<u8>, String> {
+) -> Result<ReturnType::Inner, String>
+where
+    Payload: IntoWire + NewType,
+    Witness: FnOnce(ReturnType, Payload::Inner) -> (ReturnType::Inner, Payload),
+    ReturnType: FromWire + NewType,
+{
     // move time forward
     machine.set_time(std::time::SystemTime::now());
+    let payload = Payload::from_inner(payload);
     let result = machine
-        .execute_ingress_as(sender, canister_target, method_name, payload)
+        .execute_ingress_as(
+            sender,
+            canister_target,
+            method_name,
+            payload.into_bytes().unwrap(),
+        )
         .map_err(|e| e.to_string())?;
+
     match result {
-        WasmResult::Reply(v) => Ok(v),
+        WasmResult::Reply(v) => FromWire::from_bytes(v).map(|x: ReturnType| x.into_inner()),
         WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
     }
 }
