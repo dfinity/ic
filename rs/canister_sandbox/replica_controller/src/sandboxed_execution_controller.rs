@@ -477,7 +477,6 @@ impl WasmExecutor for SandboxedExecutionController {
         execution_state: &ExecutionState,
     ) -> (Option<CompilationResult>, WasmExecutionResult) {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
-        let slice_instruction_limit = execution_parameters.instruction_limits.slice();
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics
@@ -505,14 +504,12 @@ impl WasmExecutor for SandboxedExecutionController {
                 return (
                     None,
                     WasmExecutionResult::Finished(
-                        // TODO(RUN-269): The `num_instructions_left` should be set to
-                        // the limit, not zero here.
                         SliceExecutionOutput {
-                            executed_instructions: slice_instruction_limit,
+                            executed_instructions: NumInstructions::from(0),
                         },
                         WasmExecutionOutput {
                             wasm_result: Err(err),
-                            num_instructions_left: NumInstructions::from(0),
+                            num_instructions_left: message_instruction_limit,
                             allocated_bytes: NumBytes::from(0),
                             allocated_message_bytes: NumBytes::from(0),
                             instance_stats: InstanceStats {
