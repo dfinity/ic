@@ -138,7 +138,7 @@ fn test_decode_large_compressed_module() {
 }
 
 #[test]
-#[should_panic(expected = "too large")]
+#[should_panic(expected = "specified uncompressed size 100 does not match extracted size 101")]
 fn test_decode_large_compressed_module_with_tweaked_size() {
     // We also tested decoding with a much larger file.
     // To save space and CI time, we do not include the larger archive file and

@@ -292,6 +292,8 @@ impl SchedulerTest {
         target: CanisterId,
         install_code: TestInstallCode,
     ) {
+        let wasm_module = wabt::wat2wasm("(module)").unwrap();
+
         let mode = match &install_code {
             TestInstallCode::Install { .. } => CanisterInstallMode::Install,
             TestInstallCode::Reinstall { .. } => CanisterInstallMode::Reinstall,
@@ -301,7 +303,7 @@ impl SchedulerTest {
         let message_payload = InstallCodeArgs {
             mode,
             canister_id: target.get(),
-            wasm_module: vec![],
+            wasm_module,
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -908,9 +910,11 @@ impl TestWasmExecutorCore {
             WasmMethod::System(SystemMethod::CanisterInit),
         ];
         if !canister_module.as_slice().is_empty() {
-            let text = std::str::from_utf8(canister_module.as_slice()).unwrap();
-            let system_method = SystemMethod::try_from(text).unwrap();
-            exported_functions.push(WasmMethod::System(system_method));
+            if let Ok(text) = std::str::from_utf8(canister_module.as_slice()) {
+                if let Ok(system_method) = SystemMethod::try_from(text) {
+                    exported_functions.push(WasmMethod::System(system_method));
+                }
+            }
         }
         let execution_state = ExecutionState::new(
             Default::default(),
