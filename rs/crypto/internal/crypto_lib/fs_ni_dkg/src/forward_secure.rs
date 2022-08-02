@@ -20,13 +20,12 @@ use crate::utils::*;
 use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_g1_from_bytes, miracl_g1_to_bytes, FrBytes, G1Bytes,
 };
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, G2Prepared, Gt, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
-use miracl_core::bls12381::ecp::{ECP, G2_TABLE};
+use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
 use miracl_core::bls12381::fp12::FP12;
-use miracl_core::bls12381::fp4::FP4;
 use miracl_core::bls12381::rom;
 use miracl_core::bls12381::{big, big::BIG};
 use miracl_core::rand::RAND;
@@ -35,27 +34,12 @@ use miracl_core::rand::RAND;
 mod tests;
 
 lazy_static! {
-    static ref PRECOMP_SYS_H: [FP4; G2_TABLE] = precomp_sys_h();
+    static ref PRECOMP_SYS_H: G2Prepared = precomp_sys_h();
 }
 
-fn precomp_sys_h() -> [FP4; G2_TABLE] {
-    // Pre-compute the line calculations (for pairing) on `sys.h`.
-    //
-    // Cf. the `bls.rs` example in the `miracl_core` repo.
-
-    use miracl_core::bls12381::pair;
-
-    let mut ret = [FP4::new(); G2_TABLE];
-
-    let mut sys = mk_sys_params();
-    // The multi-pairing requires that `h` be in affine coordinates;
-    // the `mk_sys_params` call *should* have already done this,
-    // but we repeat just in case
-    // (if it already is in affine coords, this is almost a noop).
-    sys.h.affine();
-
-    pair::precomp(&mut ret, &sys.h);
-    ret
+fn precomp_sys_h() -> G2Prepared {
+    let sys = mk_sys_params();
+    G2Prepared::from(G2Affine::from_miracl(&sys.h))
 }
 
 const FP12_SIZE: usize = 12 * big::MODBYTES;
@@ -983,18 +967,11 @@ pub fn verify_ciphertext_integrity(
         return Err(());
     }
 
-    use miracl_core::bls12381::pair;
-    let mut g1_neg = ECP::generator();
-    g1_neg.neg();
     let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
-    let mut id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
+    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
 
-    // Pre-compute the line calculations (for pairing) on `id`
-    // (the multi-pairing requires that `id` be in affine coordinates;
-    // the `another` function projects to affine coords, but `another_pc` doesn't).
-    id.affine();
-    let mut precomp_id = [FP4::new(); G2_TABLE];
-    pair::precomp(&mut precomp_id, &id);
+    let g1_neg = G1Affine::generator().neg();
+    let precomp_id = G2Prepared::from(G2Affine::from_miracl(&id));
 
     // check for all j:
     //     1 =
@@ -1003,31 +980,19 @@ pub fn verify_ciphertext_integrity(
     //      e(S_j,h)
     //   (PRECOMP_SYS_H is the system-parameter h value,
     //   pre-loaded before this function call)
-    //
-    //   Cf. the `bls.rs` example in the `miracl_core` repo.
     let checks: Result<(), ()> = crsz
         .rr
         .iter()
         .zip(crsz.ss.iter().zip(crsz.zz.iter()))
         .try_for_each(|(spec_r, (s, z))| {
-            // Initialize (to 1) an array of Fp12 points
-            // (one for each iteration of the Miller loop).
-            let mut r = pair::initmp();
+            let spec_r = G1Affine::from_miracl(spec_r);
+            let s = G1Affine::from_miracl(s);
+            let z = G2Prepared::from(G2Affine::from_miracl(z));
 
-            // Compute all the necessary line functions and evaluations,
-            // for the three pairing computations.
-            pair::another_pc(&mut r, &precomp_id, spec_r);
-            pair::another_pc(&mut r, &PRECOMP_SYS_H[..], s);
-            pair::another(&mut r, z, &g1_neg);
+            let v =
+                Gt::multipairing(&[(&spec_r, &precomp_id), (&s, &PRECOMP_SYS_H), (&g1_neg, &z)]);
 
-            // Collapse the Fp12 array built above,
-            // by making the appropriate multiplications of the Miller loop.
-            let mut v = pair::miller(&mut r);
-
-            // Perform final exponentiation.
-            v = pair::fexp(&v);
-
-            if v.isunity() {
+            if v.is_identity() {
                 Ok(())
             } else {
                 Err(())
