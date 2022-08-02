@@ -1,0 +1,31 @@
+= IC_Subnet_AccumulatingFiles
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A replica reports that there are more files than expected (> 2e6) stored on disk 
+for 5 minutes.
+
+== Impact
+
+If files keep accumulating the disk will eventually fill up.
+
+== Possible causes (non-exhaustive)
+
+* A bug in the replica that prevents cleaning up files that are no longer required.
+
+* If the alert fires simultaneously for multiple nodes on the same subnet
+  it may be the case that the threshold for when the alert fires needs
+  to be adjusted.
+
+== Troubleshooting and remediation
+
+* If the alert fires together with `IC_Subnet_AccumulatingCheckpoints` 
+  inform the Message Routing team (at https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
+  `@team-messaging`) to start investigating the root cause and find a
+  permanent solution.
+
+* Otherwise inform the Node team (at https://dfinity.slack.com/archives/C026JQ1B2AF[`#eng-node`] or via 
+  `@node-team`) to start investigating the root cause and find a permanent
+  solution.
