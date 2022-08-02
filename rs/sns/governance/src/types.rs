@@ -1195,6 +1195,11 @@ pub mod test_helpers {
     use super::*;
     use ic_crypto_sha::Sha256;
     use rand::{Rng, RngCore};
+    use std::borrow::BorrowMut;
+    use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
+
+    type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 
     /// An implementation of the Environment trait that behaves in a
     /// "reasonable" but not necessarily entirely realistic way (compared to the
@@ -1211,11 +1216,17 @@ pub mod test_helpers {
 
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
-        pub canister_calls_map: BTreeMap<[u8; 32], Result<Vec<u8>, (Option<i32>, String)>>,
+        pub canister_calls_map: HashMap<[u8; 32], CanisterCallResult>,
+
         // The default response is canister_calls_map doesn't have an entry.  Useful when you only
         // care about specifying a single response for a given test, or alternately want to ensure
         // that any call without a specified response returns an error.
-        pub default_canister_call_response: Result<Vec<u8>, (Option<i32>, String)>,
+        pub default_canister_call_response: CanisterCallResult,
+
+        /// Calls we require to be made to call_canister in order for the test to succeed.
+        /// See `impl Drop for NativeEnvironment`
+        #[allow(clippy::type_complexity)]
+        pub required_canister_call_invocations: Arc<RwLock<Vec<(CanisterId, String, Vec<u8>)>>>,
     }
 
     /// NativeEnvironment is "empty" by default. I.e. the canister_id method
@@ -1226,14 +1237,16 @@ pub mod test_helpers {
                 local_canister_id: None,
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
+                required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
             }
         }
     }
 
+    /// Used to create a hash for our call map.
     fn compute_call_canister_key(
         canister_id: CanisterId,
         method_name: &str,
-        arg: Vec<u8>,
+        arg: &Vec<u8>,
     ) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.write(canister_id.get().as_slice());
@@ -1243,6 +1256,15 @@ pub mod test_helpers {
     }
 
     impl NativeEnvironment {
+        pub fn new(local_canister_id: Option<CanisterId>) -> Self {
+            Self {
+                local_canister_id,
+                canister_calls_map: Default::default(),
+                default_canister_call_response: Ok(vec![]),
+                required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
+            }
+        }
+
         /// Set the response for a given canister call.  This ensures that we only respond in
         /// a given way if the parameters match what we expect.
         pub fn set_call_canister_response(
@@ -1250,13 +1272,41 @@ pub mod test_helpers {
             canister_id: CanisterId,
             method_name: &str,
             arg: Vec<u8>,
-            response: Result<Vec<u8>, (Option<i32>, String)>,
+            response: CanisterCallResult,
         ) {
-            println!("Expected call: {:?} {} {:?}", canister_id, method_name, arg);
             self.canister_calls_map.insert(
-                compute_call_canister_key(canister_id, method_name, arg),
+                compute_call_canister_key(canister_id, method_name, &arg),
                 response,
             );
+        }
+
+        /// Requires that a call will be made (and optionally sets a response)
+        ///
+        /// See `impl Drop for NativeEnvironment`.
+        pub fn require_call_canister_invocation(
+            &mut self,
+            canister_id: CanisterId,
+            method_name: &str,
+            arg: Vec<u8>,
+            response: Option<CanisterCallResult>,
+        ) {
+            self.required_canister_call_invocations
+                .try_write()
+                .unwrap()
+                .borrow_mut()
+                .push((canister_id, method_name.to_string(), arg.clone()));
+            if let Some(res) = response {
+                self.set_call_canister_response(canister_id, method_name, arg, res);
+            }
+        }
+    }
+
+    /// Used to assert that any post-conditions are true.  This is needed because NativeEnvironment
+    /// is owned by Governance in tests, so we cannot make assertions against its contents.
+    impl Drop for NativeEnvironment {
+        fn drop(&mut self) {
+            let invocations = self.required_canister_call_invocations.try_read().unwrap();
+            assert!(invocations.is_empty());
         }
     }
 
@@ -1284,13 +1334,34 @@ pub mod test_helpers {
             canister_id: CanisterId,
             method_name: &str,
             arg: Vec<u8>,
-        ) -> Result<Vec<u8>, (Option<i32>, String)> {
-            println!("Actual call: {:?} {} {:?}", canister_id, method_name, arg);
-            let entry = compute_call_canister_key(canister_id, method_name, arg);
-            self.canister_calls_map
-                .get(&entry)
-                .unwrap_or(&self.default_canister_call_response)
-                .clone()
+        ) -> CanisterCallResult {
+            // Find and remove any required_canister_call_invocations so our assertions work that
+            // it was in fact called.
+            let invocations = self.required_canister_call_invocations.try_read().unwrap();
+            if invocations.contains(&(canister_id, method_name.to_string(), arg.clone())) {
+                let index = invocations.iter().position(|(canister, method, arg_)| {
+                    canister.get() == canister_id.get() && method.eq(method_name) && arg_ == &arg
+                });
+                drop(invocations);
+                if let Some(index) = index {
+                    self.required_canister_call_invocations
+                        .try_write()
+                        .unwrap()
+                        .remove(index);
+                }
+            }
+
+            let entry = compute_call_canister_key(canister_id, method_name, &arg);
+            match self.canister_calls_map.get(&entry) {
+                None => {
+                    println!(
+                        "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}",
+                        canister_id, method_name, arg, &self.default_canister_call_response
+                    );
+                    &self.default_canister_call_response
+                }
+                Some(entry) => entry
+            }.clone()
         }
 
         /// At least in the case of Governance (the only known user of

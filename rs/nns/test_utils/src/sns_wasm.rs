@@ -4,6 +4,7 @@ use crate::state_test_helpers::{
 };
 use candid::{Decode, Encode};
 use canister_test::Project;
+use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::pb::v1::NeuronId;
@@ -103,24 +104,21 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32])
         })),
     };
 
-    let manage_neuron = ManageNeuron {
-        id: None,
-        command: Some(Command::MakeProposal(Box::new(proposal))),
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-            id: TEST_NEURON_1_ID,
-        })),
-    };
-
-    let response = update_with_sender(
+    let response: ManageNeuronResponse = update_with_sender(
         env,
         GOVERNANCE_CANISTER_ID,
         "manage_neuron",
-        Encode!(&manage_neuron).unwrap(),
+        candid_one,
+        ManageNeuron {
+            id: None,
+            command: Some(Command::MakeProposal(Box::new(proposal))),
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                id: TEST_NEURON_1_ID,
+            })),
+        },
         *TEST_NEURON_1_OWNER_PRINCIPAL,
     )
     .unwrap();
-
-    let response = Decode!(&response, ManageNeuronResponse).unwrap();
 
     let pid = match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),

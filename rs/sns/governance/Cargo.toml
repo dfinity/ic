@@ -34,6 +34,7 @@ ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-common-build-metadata = {path = "../../nervous_system/common/build_metadata"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
+ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
