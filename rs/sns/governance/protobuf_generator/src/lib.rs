@@ -272,6 +272,30 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.SnsMetadata",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetMetadataRequest",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetMetadataResponse",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.NeuronInFlightCommand",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",

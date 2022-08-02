@@ -1,5 +1,7 @@
-use crate::pb::v1::governance::Mode;
-use crate::pb::v1::{Governance, NervousSystemParameters, Neuron};
+use crate::pb::v1::{
+    governance::{Mode, SnsMetadata},
+    Governance, NervousSystemParameters, Neuron,
+};
 use ic_base_types::PrincipalId;
 use std::collections::BTreeMap;
 
@@ -14,6 +16,12 @@ impl GovernanceCanisterInitPayloadBuilder {
             proto: Governance {
                 parameters: Some(NervousSystemParameters::with_default_values()),
                 mode: Mode::Normal as i32,
+                sns_metadata: Some(SnsMetadata {
+                    logo: Some("X".repeat(100)),
+                    name: Some("ServiceNervousSystemTest".to_string()),
+                    url: Some("https://internetcomputer.org".to_string()),
+                    description: Some("Launch an SNS Project".to_string()),
+                }),
                 ..Default::default()
             },
         }
@@ -49,6 +57,11 @@ impl GovernanceCanisterInitPayloadBuilder {
 
     pub fn with_neurons(&mut self, neurons: BTreeMap<String, Neuron>) -> &mut Self {
         self.proto.neurons = neurons;
+        self
+    }
+
+    pub fn with_sns_metadata(&mut self, sns_metadata: SnsMetadata) -> &mut Self {
+        self.proto.sns_metadata = Some(sns_metadata);
         self
     }
 

@@ -912,6 +912,34 @@ message Governance {
   // When this is unpopulated, mode should be Normal, and when this is
   // populated, mode should be PreInitializationSwap.
   ic_base_types.pb.v1.PrincipalId swap_canister_id = 20;
+
+  // Metadata about this SNS.
+  message SnsMetadata {
+    // The logo for the SNS project represented as a base64 encoded string.
+    optional string logo = 1;
+
+    // Url to the dapp controlled by the SNS project.
+    optional string url = 2;
+
+    // Name of the SNS project. This may differ from the name of the associated token.
+    optional string name = 3;
+
+    // Description of the SNS project.
+    optional string description = 4;
+  }
+
+  SnsMetadata sns_metadata = 21;
+}
+
+// Request message for 'get_metadata'.
+message GetMetadataRequest {}
+
+// Response message for 'get_metadata'.
+message GetMetadataResponse {
+  optional string logo = 1;
+  optional string url = 2;
+  optional string name = 3;
+  optional string description = 4;
 }
 
 // Empty message to use in oneof fields that represent empty

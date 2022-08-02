@@ -4,7 +4,8 @@ mod deploy;
 mod init_config_file;
 
 use crate::deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer};
-use crate::init_config_file::InitConfigFileArgs;
+use crate::init_config_file::{InitConfigFileArgs, SnsCliInitConfig};
+use anyhow::anyhow;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
@@ -13,10 +14,11 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{exit, Command, Output};
 use std::str::FromStr;
 use tempfile::NamedTempFile;
 
@@ -118,14 +120,36 @@ impl DeployArgs {
         }
     }
 
-    pub fn generate_sns_init_payload(&self) -> SnsInitPayload {
-        let file =
-            File::open(&self.init_config_file).expect("Couldn't open initial parameters file");
-        let sns_init_payload: SnsInitPayload =
-            serde_yaml::from_reader(file).expect("Couldn't parse the initial parameters file");
+    pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
+        let file = File::open(&self.init_config_file).map_err(|err| {
+            anyhow!(
+                "Couldn't open initial parameters file ({:?}): {}",
+                &self.init_config_file,
+                err
+            )
+        })?;
+
+        let sns_cli_init_config: SnsCliInitConfig =
+            serde_yaml::from_reader(file).map_err(|err| {
+                anyhow!(
+                    "Couldn't parse the initial parameters file ({:?}): {}",
+                    &self.init_config_file,
+                    err
+                )
+            })?;
+
+        let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config).map_err(|err| {
+            anyhow!(
+                "Error encountered when building the SnsInitPayload from the config file: {}",
+                err
+            )
+        })?;
+
         sns_init_payload
             .validate()
-            .expect("Initial parameters file failed validation.")
+            .map_err(|err| anyhow!("Initial parameters file failed validation: {}", err))?;
+
+        Ok(sns_init_payload)
     }
 }
 
@@ -161,15 +185,27 @@ fn main() {
 /// Deploy via SNS-WASM canister.
 fn deploy(args: DeployArgs) {
     args.validate();
-    let sns_init_payload = args.generate_sns_init_payload();
+    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
+        eprintln!(
+            "Error encountered when generating the SnsInitPayload: {}",
+            err
+        );
+        exit(1);
+    });
     SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
 }
 
 /// Deploy an SNS with the given DeployArgs to a local subnet or a testnet,
-/// skipping sns-wams. Does not work on mainnet.
+/// skipping sns-wasm. Does not work on mainnet.
 fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
     args.validate();
-    let sns_init_payload = args.generate_sns_init_payload();
+    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
+        eprintln!(
+            "Error encountered when generating the SnsInitPayload: {}",
+            err
+        );
+        exit(1);
+    });
     DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
 }
 

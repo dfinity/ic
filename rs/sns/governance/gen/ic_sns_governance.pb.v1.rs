@@ -813,6 +813,8 @@ pub struct Governance {
     /// populated, mode should be PreInitializationSwap.
     #[prost(message, optional, tag = "20")]
     pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "21")]
+    pub sns_metadata: ::core::option::Option<governance::SnsMetadata>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -937,6 +939,24 @@ pub mod governance {
         #[prost(uint64, tag = "15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
     }
+    /// Metadata about this SNS.
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SnsMetadata {
+        /// The logo for the SNS project represented as a base64 encoded string.
+        #[prost(string, optional, tag = "1")]
+        pub logo: ::core::option::Option<::prost::alloc::string::String>,
+        /// Url to the dapp controlled by the SNS project.
+        #[prost(string, optional, tag = "2")]
+        pub url: ::core::option::Option<::prost::alloc::string::String>,
+        /// Name of the SNS project. This may differ from the name of the associated token.
+        #[prost(string, optional, tag = "3")]
+        pub name: ::core::option::Option<::prost::alloc::string::String>,
+        /// Description of the SNS project.
+        #[prost(string, optional, tag = "4")]
+        pub description: ::core::option::Option<::prost::alloc::string::String>,
+    }
     #[derive(
         strum_macros::EnumIter,
         Clone,
@@ -959,6 +979,25 @@ pub mod governance {
         /// integrity of the initial token swap.
         PreInitializationSwap = 2,
     }
+}
+/// Request message for 'get_metadata'.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetMetadataRequest {}
+/// Response message for 'get_metadata'.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetMetadataResponse {
+    #[prost(string, optional, tag = "1")]
+    pub logo: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "2")]
+    pub url: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "4")]
+    pub description: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.

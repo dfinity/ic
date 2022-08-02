@@ -66,6 +66,18 @@ message SnsInitPayload {
   // principal IDs. In most use-cases, this would be the same as the original
   // set of controller(s). Must not be empty.
   repeated string fallback_controller_principal_ids = 12;
+
+  // The logo for the SNS project represented as a base64 encoded string.
+  optional string logo = 13;
+
+  // Url to the dapp controlled by the SNS project.
+  optional string url = 14;
+
+  // Name of the SNS project. This may differ from the name of the associated token.
+  optional string name = 15;
+
+  // Description of the SNS project.
+  optional string description = 16;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures
