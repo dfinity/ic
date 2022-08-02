@@ -239,6 +239,10 @@ impl InputQueue {
         }
     }
 
+    pub fn peek(&self) -> Option<&RequestOrResponse> {
+        self.queue.peek()
+    }
+
     pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
         self.queue.reserve_slot()
     }
@@ -472,6 +476,10 @@ impl IngressQueue {
             debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
         }
         res
+    }
+
+    pub(super) fn peek(&self) -> Option<&Arc<Ingress>> {
+        self.queue.front()
     }
 
     pub(super) fn size(&self) -> usize {

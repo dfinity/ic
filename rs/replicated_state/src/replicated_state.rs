@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{
     bitcoin_state::{BitcoinState, BitcoinStateError},
+    canister_state::queues::CanisterQueuesLoopDetector,
     canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
     metadata_state::StreamMap,
     CanisterQueues,
@@ -682,6 +683,22 @@ impl ReplicatedState {
     /// `self.subnet_queues`.
     pub fn pop_subnet_input(&mut self) -> Option<CanisterInputMessage> {
         self.subnet_queues.pop_input()
+    }
+
+    /// Peeks the next inter-canister or ingress message (round-robin) from
+    /// `self.subnet_queues`.
+    pub fn peek_subnet_input(&mut self) -> Option<CanisterInputMessage> {
+        self.subnet_queues.peek_input()
+    }
+
+    /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
+    pub fn skip_subnet_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
+        self.subnet_queues.skip_input(loop_detector);
+    }
+
+    /// Creates a new loop detector.
+    pub fn subnet_queues_loop_detector(&mut self) -> CanisterQueuesLoopDetector {
+        CanisterQueuesLoopDetector::default()
     }
 
     /// Pushes a `Response` type message into the relevant subnet output queue.
