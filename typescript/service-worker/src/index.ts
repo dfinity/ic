@@ -34,6 +34,8 @@ window.addEventListener('load', async () => {
       await navigator.serviceWorker.register('/sw.js');
     }
 
+    // delays code execution until serviceworker is ready
+    await navigator.serviceWorker.ready;
     const registration = await navigator.serviceWorker.getRegistration();
     if (registration.active && !navigator.serviceWorker.controller) {
       // There's an active SW, but no controller for this tab. The service worker events are also _not_ fired.
