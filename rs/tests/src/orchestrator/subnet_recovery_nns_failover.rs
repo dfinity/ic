@@ -30,7 +30,7 @@ use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister, can_read_msg, can_store_msg, store_message,
+    can_install_canister, can_read_msg, cannot_store_msg, store_message,
 };
 use anyhow::bail;
 use ic_recovery::file_sync_helper;
@@ -226,12 +226,11 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
     );
-    let failed_msg = "this shouldn't be stored!";
-    assert!(!can_store_msg(
-        &logger,
+    assert!(cannot_store_msg(
+        logger.clone(),
         &download_node.get_public_url(),
         app_can_id,
-        failed_msg
+        msg
     ));
 
     info!(logger, "Check if download node is behind...");

@@ -1,4 +1,6 @@
-use crate::util::{assert_create_agent, block_on, create_agent, create_delay, UniversalCanister};
+use crate::driver::test_env_api::*;
+use crate::util::*;
+use anyhow::bail;
 use candid::Principal;
 use reqwest::Url;
 use slog::{debug, info, Logger};
@@ -14,6 +16,7 @@ pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
     })
 }
 
+/// Try to store the given message within the next 30 seconds, return true if successful
 pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     let bytes = msg.as_bytes();
     block_on(async {
@@ -32,6 +35,18 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
             }
         }
     })
+}
+
+/// Try to store the given message. Retry for 300 seconds or until update was unsuccessful
+pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+    retry(log.clone(), secs(300), secs(10), || {
+        if can_store_msg(&log, url, canister_id, msg) {
+            bail!("retry...")
+        } else {
+            Ok(())
+        }
+    })
+    .is_ok()
 }
 
 pub(crate) fn can_read_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
