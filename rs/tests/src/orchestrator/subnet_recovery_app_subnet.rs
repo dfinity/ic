@@ -27,7 +27,7 @@ end::catalog[] */
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, can_store_msg, store_message};
+use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg, store_message};
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
 use ic_base_types::NodeId;
@@ -227,12 +227,11 @@ pub fn test(env: TestEnv) {
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
     );
-    let failed_msg = "this shouldn't be stored!";
-    assert!(!can_store_msg(
-        &logger,
+    assert!(cannot_store_msg(
+        logger.clone(),
         &app_node.get_public_url(),
         app_can_id,
-        failed_msg
+        msg
     ));
 
     let download_node = env
