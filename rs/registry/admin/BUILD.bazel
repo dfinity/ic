@@ -1,0 +1,92 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/config",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/sha",
+    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_utils",
+    "//rs/interfaces",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/root",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance",
+    "//rs/nns/handlers/root",
+    "//rs/nns/init",
+    "//rs/nns/test_utils",
+    "//rs/prep",
+    "//rs/protobuf",
+    "//rs/registry/canister",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/local_store",
+    "//rs/registry/nns_data_provider",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/registry/transport",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:chrono",
+    "@crate_index//:clap",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+    "@crate_index//:regex",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde-bytes-repr",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:strum",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+    "@crate_index//:walkdir",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:strum_macros",
+    "//rs/registry/admin-derive",
+]
+
+ALIASES = {}
+
+rust_binary(
+    name = "ic-admin",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
