@@ -1,0 +1,77 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/config",
+    "//rs/crypto/sha",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/root",
+    "//rs/nns/constants",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/client",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/sns/governance",
+    "//rs/sns/init",
+    "//rs/sns/root",
+    "//rs/sns/swap",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:num-traits",
+    "@crate_index//:prost",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_sns_test_utils",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test_utils_test",
+    aliases = ALIASES,
+    crate = ":test_utils",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

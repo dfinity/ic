@@ -168,7 +168,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             }
         };
 
-        let encoded_logo = base64::encode(buffer);
+        let encoded_logo = base64::encode(&buffer);
 
         Ok(SnsInitPayload {
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
@@ -503,7 +503,10 @@ mod test {
     /// Test reading a valid and an invalid yaml file.
     #[test]
     fn test_read_yaml_file() {
-        let mut file_contents = r#"
+        let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        logo_path.push("test.png");
+        let mut file_contents = format!(
+            r#"
 ---
 transaction_fee_e8s: 10000
 token_name: Bitcoin
@@ -532,12 +535,13 @@ min_participant_icp_e8s: 1
 max_participant_icp_e8s: 10000
 min_icp_e8s: 9000
 fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
-logo: test.png
+logo: {}
 description: Launching an SNS
 name: ServiceNervousSystemTest
 url: https://internetcomputer.org/
-        "#
-        .to_string();
+        "#,
+            logo_path.into_os_string().into_string().unwrap()
+        );
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         assert!(resulting_payload.validate().is_ok());
 
@@ -548,6 +552,8 @@ url: https://internetcomputer.org/
 
     #[test]
     fn test_try_from_sns_cli_init_config() {
+        let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        logo_path.push("test.png");
         let create_sns_cli_init_config = || SnsCliInitConfig {
             transaction_fee_e8s: Some(1),
             token_name: Some("ServiceNervousSystem".to_string()),
@@ -562,7 +568,7 @@ url: https://internetcomputer.org/
             fallback_controller_principal_ids: vec![
                 "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
             ],
-            logo: Some("test.png".to_string().into()),
+            logo: Some(logo_path.clone()),
             url: Some("https://internetcomputer.org".to_string()),
             name: Some("Name".to_string()),
             description: Some("Description".to_string()),
@@ -628,11 +634,12 @@ url: https://internetcomputer.org/
 
         // Read the test.png file into memory
         let logo_path = sns_cli_init_config.logo.unwrap();
+
         let file = File::open(&logo_path).unwrap();
         let mut reader = BufReader::new(file);
         let mut buffer: Vec<u8> = vec![];
         reader.read_to_end(&mut buffer).unwrap();
-        let encoded_logo = base64::encode(buffer);
+        let encoded_logo = base64::encode(&buffer);
 
         assert_eq!(Some(encoded_logo), sns_init_payload.logo);
     }
