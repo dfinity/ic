@@ -206,6 +206,7 @@ type NervousSystemParameters = record {
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   reject_cost_e8s : opt nat64;
   max_proposals_to_keep_per_action : opt nat32;
+  wait_for_quiet_deadline_increase_seconds : opt nat64;
   max_number_of_neurons : opt nat64;
   transaction_fee_e8s : opt nat64;
   max_number_of_proposals_with_ballots : opt nat64;

@@ -9,7 +9,7 @@ use crate::pb::v1::{
     NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
     Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
-use crate::types::{Environment, ONE_DAY_SECONDS};
+use crate::types::Environment;
 use crate::{validate_chars_count, validate_len, validate_required_field};
 
 use crate::pb::v1::proposal::Action;
@@ -36,11 +36,6 @@ pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 /// favor of the proposal. This minimum of votes is expressed as a ratio of the used
 /// voting power in favor of the proposal divided by the total available voting power.
 pub const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
-
-/// The value that determines the maximum time that a proposal's initial deadline can be
-/// increased by the wait-for-quiet algorithm.
-/// This maximum total voting period extension is 2 * WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
-pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of proposals returned by one call to the method `list_proposals`,
 /// which can be used to list all proposals in a paginated fashion.
@@ -579,11 +574,12 @@ impl ProposalData {
     /// has turned (a yes-result turned into a no-result or vice versa) and, if
     /// this is the case, extends the proposal's deadline.
     /// The initial voting period is extended by at most
-    /// 2 * WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
+    /// 2 * wait_for_quiet_deadline_increase_seconds.
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
         voting_period_seconds: u64,
+        wait_for_quiet_deadline_increase_seconds: u64,
         old_tally: &Tally,
         new_tally: &Tally,
     ) {
@@ -616,7 +612,7 @@ impl ProposalData {
             return;
         }
 
-        // Let W be short for WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS. A proposal's voting
+        // Let W be short for wait_for_quiet_deadline_increase_seconds. A proposal's voting
         // period starts with an initial_voting_period and can be extended
         // to at most initial_voting_period + 2 * W.
         // The required_margin reflects the proposed deadline extension to be
@@ -646,10 +642,10 @@ impl ProposalData {
         //
         // This means that whenever there is a flip, the deadline is always
         // set to the current time plus the required_margin, which places us
-        // along the a linear path that was determined by the starting
+        // along the linear path that was determined by the starting
         // variables.
         let elapsed_seconds = now_seconds.saturating_sub(self.proposal_creation_timestamp_seconds);
-        let required_margin = WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS
+        let required_margin = wait_for_quiet_deadline_increase_seconds
             .saturating_add(voting_period_seconds / 2)
             .saturating_sub(elapsed_seconds / 2);
         let new_deadline = std::cmp::max(
@@ -673,7 +669,12 @@ impl ProposalData {
 
     /// Recomputes the proposal's tally.
     /// This is an expensive operation.
-    pub fn recompute_tally(&mut self, now_seconds: u64, voting_period_seconds: u64) {
+    pub fn recompute_tally(
+        &mut self,
+        now_seconds: u64,
+        voting_period_seconds: u64,
+        wait_for_quiet_deadline_increase_seconds: u64,
+    ) {
         // Tally proposal
         let mut yes = 0;
         let mut no = 0;
@@ -715,6 +716,7 @@ impl ProposalData {
             self.evaluate_wait_for_quiet(
                 now_seconds,
                 voting_period_seconds,
+                wait_for_quiet_deadline_increase_seconds,
                 &old_tally,
                 &new_tally,
             );

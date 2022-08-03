@@ -1667,6 +1667,7 @@ fn test_intermittent_proposal_submission() {
             }),
             reward_distribution_period_seconds: Some(reward_distribution_period_seconds),
             initial_voting_period: Some(initial_voting_period),
+            wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period / 4), // The default of one day is too short
             ..NervousSystemParameters::with_default_values()
         };
 
