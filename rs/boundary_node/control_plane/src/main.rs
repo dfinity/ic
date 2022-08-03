@@ -1,5 +1,6 @@
 use std::{
     fs::File,
+    io::BufWriter,
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -129,6 +130,7 @@ async fn main() -> Result<(), Error> {
     let checker = WithSemaphore::wrap(checker, 32);
 
     let persister = Persister::new(cli.routes_dir.clone());
+    let persister = WithDedup(persister, None);
     let persister = WithMetrics(
         persister,
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
@@ -251,9 +253,14 @@ impl Check for Checker {
     }
 }
 
+enum PersistStatus {
+    Completed,
+    Skipped,
+}
+
 #[async_trait]
 trait Persist: Send + Sync {
-    async fn persist(&self, rt: RoutingTable) -> Result<(), Error>;
+    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error>;
 }
 
 struct Persister {
@@ -268,14 +275,15 @@ impl Persister {
 
 #[async_trait]
 impl Persist for Persister {
-    async fn persist(&self, rt: RoutingTable) -> Result<(), Error> {
+    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
         let p = format!("{:020}.routes", rt.registry_version);
         let p = self.routes_dir.join(p);
 
-        let f = File::create(p).context("failed to create routes file")?;
-        serde_json::to_writer(f, &rt).context("failed to write json routes file")?;
+        let w = File::create(p).context("failed to create routes file")?;
+        let w = BufWriter::new(w);
+        serde_json::to_writer(w, &rt).context("failed to write json routes file")?;
 
-        Ok(())
+        Ok(PersistStatus::Completed)
     }
 }
 
@@ -455,5 +463,20 @@ impl<T: Check> Check for WithSemaphore<T> {
     async fn check(&self, addr: &str) -> Result<(), Error> {
         let _permit = self.1.acquire().await?;
         self.0.check(addr).await
+    }
+}
+
+struct WithDedup<T, U>(T, Option<U>);
+
+#[async_trait]
+impl<T: Persist> Persist for WithDedup<T, RoutingTable> {
+    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+        if self.1.as_ref() == Some(&rt) {
+            return Ok(PersistStatus::Skipped);
+        } else {
+            self.1 = Some(rt.clone());
+        }
+
+        self.0.persist(rt).await
     }
 }
