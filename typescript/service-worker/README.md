@@ -44,4 +44,4 @@ For example:
 3. Merge MR to master
 4. Tag the commit on `master` with `service-worker_v${version}`
 5. Verify that the desired version has been pushed to NPM: https://www.npmjs.com/package/@dfinity/service-worker
-6. Create an MR for the boundary nodes team that updates the `sw_version` and `sw_sha256` in `ic-os/boundary-guestos/rootfs/Dockerfile.base`
+6. Create an MR for the boundary nodes team that updates the `sw_version` and `sw_sha256` in `ic-os/boundary-guestos/rootfs/Dockerfile`
