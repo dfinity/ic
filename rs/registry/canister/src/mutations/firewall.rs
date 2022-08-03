@@ -263,7 +263,9 @@ mod tests {
     };
     use ic_base_types::{NodeId, SubnetId};
     use ic_nns_test_utils::registry::TEST_ID;
-    use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleSet};
+    use ic_protobuf::registry::firewall::v1::{
+        FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+    };
     use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
     use ic_types::PrincipalId;
 
@@ -282,6 +284,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 1".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["12.0.0.0/8".to_string()],
@@ -289,6 +293,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 2".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
         ];
 
@@ -324,6 +330,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 3".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["13.0.0.0/8".to_string()],
@@ -331,6 +339,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 4".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
         ];
 
@@ -372,6 +382,8 @@ mod tests {
                 ports: vec![80, 8080, 9090],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 1".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["12.0.0.0/8".to_string()],
@@ -379,6 +391,8 @@ mod tests {
                 ports: vec![80, 8080, 9090],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 2".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
         ];
 
@@ -447,6 +461,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 15".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["16.0.0.0/8".to_string()],
@@ -454,6 +470,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 16".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["17.0.0.0/8".to_string()],
@@ -461,6 +479,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 17".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["18.0.0.0/8".to_string()],
@@ -468,6 +488,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 18".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
         ];
         let new_rules_tail = vec![
@@ -477,6 +499,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 20".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["21.0.0.0/8".to_string()],
@@ -484,6 +508,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 21".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["22.0.0.0/8".to_string()],
@@ -491,6 +517,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 22".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
             FirewallRule {
                 ipv4_prefixes: vec!["23.0.0.0/8".to_string()],
@@ -498,6 +526,8 @@ mod tests {
                 ports: vec![80, 8080],
                 action: FirewallAction::Allow as i32,
                 comment: "test comment 23".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
             },
         ];
 

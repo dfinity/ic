@@ -1,7 +1,7 @@
 syntax = "proto3";
 package registry.firewall.v1;
 
-// Firewall configuration
+// Firewall configuration - Deprecated
 message FirewallConfig {
   // The firewall configuration content
   string firewall_config = 1;
@@ -16,8 +16,18 @@ message FirewallConfig {
 // Available actions for firewall rules
 enum FirewallAction {
   FIREWALL_ACTION_UNSPECIFIED = 0;
+  // Allow traffic
   FIREWALL_ACTION_ALLOW = 1;
+  // Deny (drop) traffic
   FIREWALL_ACTION_DENY = 2;
+  // Reject traffic (send ICMP error back)
+  FIREWALL_ACTION_REJECT = 3;
+}
+
+enum FirewallRuleDirection {
+  FIREWALL_RULE_DIRECTION_UNSPECIFIED = 0;
+  FIREWALL_RULE_DIRECTION_INBOUND = 1;
+  FIREWALL_RULE_DIRECTION_OUTBOUND = 2;
 }
 
 message FirewallRule {
@@ -26,6 +36,8 @@ message FirewallRule {
   repeated uint32 ports = 3;
   FirewallAction action = 4;
   string comment = 5;
+  optional string user = 6;
+  optional FirewallRuleDirection direction = 7;
 }
 
 message FirewallRuleSet {

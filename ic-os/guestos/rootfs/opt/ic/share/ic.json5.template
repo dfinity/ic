@@ -195,6 +195,8 @@
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
+    <<IPv4_OUTBOUND_RULES>>\n\
   }\n\
 }\n\
 \n\
@@ -213,7 +215,6 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
-    ct state { new } tcp dport { 80, 443, 20000-65535 } reject # Explicitly block ports that may be used by users of the canister HTTP request feature \n\
     <<IPv6_RULES>>\n\
   }\n\
 \n\
@@ -223,11 +224,15 @@ table ip6 filter {\n\
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2607:fb58:9005::/48, 2607:f6f0:3004::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
         ipv4_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         ipv6_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_user_output_rule_template: "meta skuid <<USER>> ip daddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_user_output_rule_template: "meta skuid <<USER>> ip6 daddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         default_rules: [{
           ipv4_prefixes: [],
           ipv6_prefixes: [
@@ -304,8 +309,10 @@ table ip6 filter {\n\
           ports: [22, 2497, 4100, 8080, 9090, 9091, 9100, 19531],
           action: 1,
           comment: "Default rule from template",
+          direction: 1,
         }],
         ports_for_node_whitelist: [2497, 4100, 8080],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 8080, 9090, 9091, 9100, 19531],
     },
 
     registration: {

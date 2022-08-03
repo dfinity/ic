@@ -37,7 +37,7 @@ use crate::util::{self, block_on, get_random_nns_node_endpoint};
 use candid::CandidType;
 use ic_fondue::ic_manager::IcEndpoint;
 use ic_nns_governance::pb::v1::NnsFunction;
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule};
+use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::firewall::{
@@ -139,6 +139,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         ports: vec![9090],
         action: deny_port.into(),
         comment: "Test rule".to_string(),
+        user: None,
+        direction: Some(FirewallRuleDirection::Inbound as i32),
     }];
     let proposal = prepare_add_rules_proposal(
         FirewallRulesScope::Node(toggle_endpoint.node_id),
