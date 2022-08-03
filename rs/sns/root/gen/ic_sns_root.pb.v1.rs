@@ -19,14 +19,21 @@ pub struct SnsRootCanister {
     /// The SNS Ledger canister ID
     #[prost(message, optional, tag = "2")]
     pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Dapp canister IDs.
+    #[prost(message, repeated, tag = "3")]
+    pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     /// Required.
     ///
     /// The swap canister ID.
     #[prost(message, optional, tag = "4")]
     pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// Dapp canister IDs.
-    #[prost(message, repeated, tag = "3")]
-    pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// CanisterIds of the archives of the SNS Ledger blocks.
+    #[prost(message, repeated, tag = "5")]
+    pub archive_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// The timestamp of the latest poll for archives of the ledger canister,
+    /// in seconds since the Unix epoch.
+    #[prost(uint64, optional, tag = "6")]
+    pub latest_ledger_archive_poll_timestamp_seconds: ::core::option::Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]

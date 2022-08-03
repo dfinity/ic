@@ -57,6 +57,8 @@ type SetDappControllersRequest = record {
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
 type SnsRootCanister = record {
   dapp_canister_ids : vec principal;
+  latest_ledger_archive_poll_timestamp_seconds : opt nat64;
+  archive_canister_ids : vec principal;
   governance_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;

@@ -246,6 +246,8 @@ impl SnsInitPayload {
             ledger_canister_id: Some(sns_canister_ids.ledger),
             swap_canister_id: Some(sns_canister_ids.swap),
             dapp_canister_ids: vec![],
+            archive_canister_ids: vec![],
+            latest_ledger_archive_poll_timestamp_seconds: None,
         }
     }
 

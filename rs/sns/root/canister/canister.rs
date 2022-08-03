@@ -1,11 +1,11 @@
 use std::cell::RefCell;
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::{over, over_async, over_init};
-use ic_base_types::PrincipalId;
-
+use dfn_core::{api::now, call, over, over_async, over_init};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
@@ -17,7 +17,8 @@ use ic_sns_root::{
         SetDappControllersResponse, SnsRootCanister,
     },
     CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
-    GetSnsCanistersSummaryResponse, ManagementCanisterClient, UpdateSettingsArgs,
+    GetSnsCanistersSummaryResponse, LedgerCanisterClient, ManagementCanisterClient,
+    UpdateSettingsArgs,
 };
 
 use prost::Message;
@@ -25,6 +26,7 @@ use prost::Message;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_ic00_types::IC_00;
+use ic_icrc1::endpoints::ArchiveInfo;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
@@ -44,7 +46,7 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
         &mut self,
         canister_id_record: &CanisterIdRecord,
     ) -> Result<CanisterStatusResultV2, CanisterCallError> {
-        dfn_core::api::call(IC_00, "canister_status", candid_one, canister_id_record)
+        call(IC_00, "canister_status", candid_one, canister_id_record)
             .await
             .map_err(CanisterCallError::from)
     }
@@ -53,7 +55,28 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
         &mut self,
         request: &UpdateSettingsArgs,
     ) -> Result<EmptyBlob, CanisterCallError> {
-        dfn_core::api::call(IC_00, "update_settings", candid_one, request)
+        call(IC_00, "update_settings", candid_one, request)
+            .await
+            .map_err(CanisterCallError::from)
+    }
+}
+
+/// An implementation of the LedgerCanisterClient trait that is suitable for
+/// production use.
+struct RealLedgerCanisterClient {
+    ledger_canister_id: CanisterId,
+}
+
+impl RealLedgerCanisterClient {
+    fn new(ledger_canister_id: CanisterId) -> Self {
+        Self { ledger_canister_id }
+    }
+}
+
+#[async_trait]
+impl LedgerCanisterClient for RealLedgerCanisterClient {
+    async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
+        call(self.ledger_canister_id, "archives", candid_one, ())
             .await
             .map_err(CanisterCallError::from)
     }
@@ -275,6 +298,33 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
             .expect("STATE.governance_canister_id is not populated");
         assert_eq!(id, governance_canister_id);
     });
+}
+
+/// The canister's heartbeat.
+#[export_name = "canister_heartbeat"]
+fn canister_heartbeat() {
+    let future = canister_heartbeat_();
+
+    // The canister_heartbeat must be synchronous, so it cannot .await the future.
+    dfn_core::api::futures::spawn(future);
+}
+
+/// Asynchronous method called for the canister_heartbeat that injects dependencies
+/// to run_periodic_tasks.
+async fn canister_heartbeat_() {
+    let now = now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Could not get the duration")
+        .as_secs();
+
+    let ledger_canister_id = STATE
+        .with(|state| state.borrow().ledger_canister_id())
+        .try_into()
+        .expect("Expected the ledger_canister_id to be convertable to a CanisterId");
+
+    let mut ledger_client = RealLedgerCanisterClient::new(ledger_canister_id);
+
+    SnsRootCanister::run_periodic_tasks(&STATE, &mut ledger_client, now).await
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

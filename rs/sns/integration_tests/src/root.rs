@@ -22,6 +22,8 @@ fn test_get_status() {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(43)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
+                archive_canister_ids: vec![],
+                latest_ledger_archive_poll_timestamp_seconds: None,
             },
         )
         .await;
