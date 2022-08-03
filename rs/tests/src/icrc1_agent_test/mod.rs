@@ -132,6 +132,34 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             agent.total_supply(CallMode::Update).await.unwrap()
         );
 
+        // fee
+        assert_eq!(
+            Nat::from(init_args.transfer_fee),
+            agent.fee(CallMode::Query).await.unwrap()
+        );
+        assert_eq!(
+            Nat::from(init_args.transfer_fee),
+            agent.fee(CallMode::Update).await.unwrap()
+        );
+
+        // minting account
+        assert_eq!(
+            Some(&init_args.minting_account),
+            agent
+                .minting_account(CallMode::Query)
+                .await
+                .unwrap()
+                .as_ref()
+        );
+        assert_eq!(
+            Some(&init_args.minting_account),
+            agent
+                .minting_account(CallMode::Update)
+                .await
+                .unwrap()
+                .as_ref()
+        );
+
         // metadata
         let expected_metadata = vec![
             Value::entry(
@@ -140,6 +168,7 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             ),
             Value::entry("icrc1:name", init_args.token_name),
             Value::entry("icrc1:symbol", init_args.token_symbol),
+            Value::entry("icrc1:fee", init_args.transfer_fee),
         ];
         assert_eq!(
             expected_metadata,

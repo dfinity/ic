@@ -137,6 +137,31 @@ impl Icrc1Agent {
         })
     }
 
+    // Returns the transfer fee.
+    pub async fn fee(&self, mode: CallMode) -> Result<Nat, Icrc1AgentError> {
+        Ok(match mode {
+            CallMode::Query => Decode!(&self.query("icrc1_fee", &Encode!()?).await?, Nat)?,
+            CallMode::Update => Decode!(&self.update("icrc1_fee", &Encode!()?).await?, Nat)?,
+        })
+    }
+
+    // Returns the minting account if this ledger supports minting and burning tokens.
+    pub async fn minting_account(
+        &self,
+        mode: CallMode,
+    ) -> Result<Option<Account>, Icrc1AgentError> {
+        Ok(match mode {
+            CallMode::Query => Decode!(
+                &self.query("icrc1_minting_account", &Encode!()?).await?,
+                Option<Account>
+            )?,
+            CallMode::Update => Decode!(
+                &self.update("icrc1_minting_account", &Encode!()?).await?,
+                Option<Account>
+            )?,
+        })
+    }
+
     /// Transfers amount of tokens from the account (caller, from_subaccount) to the account (to_principal, to_subaccount).
     pub async fn transfer(
         &self,

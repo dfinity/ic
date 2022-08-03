@@ -246,6 +246,7 @@ impl Ledger {
         records.push(Value::entry("icrc1:decimals", decimals));
         records.push(Value::entry("icrc1:name", self.token_name()));
         records.push(Value::entry("icrc1:symbol", self.token_symbol()));
+        records.push(Value::entry("icrc1:fee", self.transfer_fee().get_e8s()));
         records
     }
 

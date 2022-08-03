@@ -87,8 +87,20 @@ fn icrc1_decimals() -> u8 {
 
 #[query]
 #[candid_method(query)]
+fn icrc1_fee() -> Nat {
+    Nat::from(Access::with_ledger(|ledger| ledger.transfer_fee()).get_e8s())
+}
+
+#[query]
+#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_minting_account() -> Option<Account> {
+    Access::with_ledger(|ledger| Some(ledger.minting_account().clone()))
 }
 
 #[query(name = "icrc1_balance_of")]
