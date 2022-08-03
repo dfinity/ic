@@ -72,7 +72,7 @@ class OriginalSubnetTypePreambleEvent(InfraEvent):
     """Synthetic event"""
 
     def __init__(self, infra: GlobalInfra):
-        super().__init__(name="p2p__original_subnet_type", doc=None, infra=infra)
+        super().__init__(name="original_subnet_type", doc=None, infra=infra)
 
     def unix_ts(self) -> int:
         return 0
@@ -86,7 +86,7 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
     """Synthetic event"""
 
     def __init__(self, infra: GlobalInfra):
-        super().__init__(name="p2p__originally_in_subnet", doc=None, infra=infra)
+        super().__init__(name="originally_in_subnet", doc=None, infra=infra)
 
     def unix_ts(self) -> int:
         return 0
