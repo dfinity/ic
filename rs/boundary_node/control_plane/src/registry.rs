@@ -46,27 +46,27 @@ impl CreateRegistryClient for CreateRegistryClientImpl {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Node {
     pub node_id: String,
     pub socket_addr: String,
     pub tls_certificate_pem: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Subnet {
     pub subnet_id: String,
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CanisterRange {
     pub subnet_id: String,
     pub start_canister_id: String,
     pub end_canister_id: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RoutingTable {
     pub registry_version: u64,
     pub nns_subnet_id: String,
