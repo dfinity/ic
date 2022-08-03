@@ -85,6 +85,21 @@ impl<R: Runtime> ICRC1Client<R> {
             .map(nat_to_u64)
     }
 
+    pub async fn fee(&self) -> Result<u64, (i32, String)> {
+        self.runtime
+            .call(self.ledger_canister_id, "icrc1_fee", ())
+            .await
+            .map(untuple)
+            .map(nat_to_u64)
+    }
+
+    pub async fn minting_account(&self) -> Result<Option<Account>, (i32, String)> {
+        self.runtime
+            .call(self.ledger_canister_id, "icrc1_minting_account", ())
+            .await
+            .map(untuple)
+    }
+
     pub async fn transfer(
         &self,
         args: TransferArg,
