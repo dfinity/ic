@@ -20,19 +20,20 @@
 use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
-        Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader,
-        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
+        Connected, ConnectionRole, SendQueueReader, TransportHeader, TransportImpl,
+        TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
-    FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportMessage,
-    TransportPayload, TransportStateChange,
+    FlowTag, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
+    TransportStateChange,
 };
 use ic_logger::warn;
 use std::convert::TryInto;
 use std::net::SocketAddr;
+use std::sync::Weak;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
@@ -119,7 +120,6 @@ impl TransportImpl {
     /// Per-flow send task. Reads the requests from the send queue and writes to
     /// the socket.
     fn spawn_write_task(
-        &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
         flow_label: String,
@@ -127,10 +127,11 @@ impl TransportImpl {
         mut writer: Box<TlsWriteHalf>,
         event_handler: TransportEventHandler,
         data_plane_metrics: DataPlaneMetrics,
+        weak_self: Weak<TransportImpl>,
+        rt_handle: tokio::runtime::Handle,
     ) -> JoinHandle<()> {
         let flow_tag_str = flow_tag.to_string();
-        let weak_self = self.weak_self.read().unwrap().clone();
-        self.rt_handle.spawn(async move  {
+        rt_handle.spawn(async move  {
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
             loop {
                 let loop_start_time = Instant::now();
@@ -216,18 +217,18 @@ impl TransportImpl {
     /// Per-flow receive task. Reads the messages from the socket and passes to
     /// the client.
     fn spawn_read_task(
-        &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
         flow_label: String,
         mut event_handler: TransportEventHandler,
         mut reader: Box<TlsReadHalf>,
         data_plane_metrics: DataPlaneMetrics,
+        weak_self: Weak<TransportImpl>,
+        rt_handle: tokio::runtime::Handle,
     ) -> JoinHandle<()> {
         let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
         let flow_tag_str = flow_tag.to_string();
-        let weak_self = self.weak_self.read().unwrap().clone();
-        self.rt_handle.spawn(async move {
+        rt_handle.spawn(async move {
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
             loop {
                 // If the TransportImpl has been deleted, abort.
@@ -392,7 +393,7 @@ impl TransportImpl {
         let (tls_reader, tls_writer) = tls_stream.split();
         // Spawn write task
         let event_handler_cl = event_handler.clone();
-        let write_task = self.spawn_write_task(
+        let write_task = Self::spawn_write_task(
             peer_id,
             flow_tag,
             flow_label.clone(),
@@ -400,15 +401,19 @@ impl TransportImpl {
             Box::new(tls_writer),
             event_handler_cl,
             self.data_plane_metrics.clone(),
+            self.weak_self.read().unwrap().clone(),
+            self.rt_handle.clone(),
         );
 
-        let read_task = self.spawn_read_task(
+        let read_task = Self::spawn_read_task(
             peer_id,
             flow_tag,
             flow_label,
             event_handler,
             Box::new(tls_reader),
             self.data_plane_metrics.clone(),
+            self.weak_self.read().unwrap().clone(),
+            self.rt_handle.clone(),
         );
 
         Connected {
@@ -417,56 +422,5 @@ impl TransportImpl {
             write_task,
             role,
         }
-    }
-
-    /// The function will try to transition to Connected state for the given peer.
-    /// If the transition is successful then the old ConnectionState will be dropped
-    /// which will result in abort of the tokio task executing the call.
-    pub(crate) async fn try_transition_to_connected(
-        &self,
-        peer_id: NodeId,
-        role: ConnectionRole,
-        flow_tag: FlowTag,
-        peer_addr: SocketAddr,
-        tls_stream: TlsStream,
-    ) -> Result<(), TransportErrorCode> {
-        let peer_map = self.peer_map.read().await;
-        let peer_state = match peer_map.get(&peer_id) {
-            Some(peer_state) => peer_state,
-            None => return Err(TransportErrorCode::TransportClientNotFound),
-        };
-        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-            Some(flow_state) => flow_state,
-            None => return Err(TransportErrorCode::FlowNotFound),
-        };
-        let mut flow_state = flow_state_mu.write().await;
-        if flow_state.get_connected().is_some() {
-            // TODO: P2P-516
-            return Err(TransportErrorCode::FlowConnectionUp);
-        }
-
-        let mut event_handler = match self.event_handler.lock().await.as_ref() {
-            Some(event_handler) => event_handler.clone(),
-            None => return Err(TransportErrorCode::TransportClientNotFound),
-        };
-        let connected_state = self.create_connected_state(
-            peer_id,
-            flow_tag,
-            flow_state.flow_label.clone(),
-            flow_state.send_queue.get_reader(),
-            role,
-            peer_addr,
-            tls_stream,
-            event_handler.clone(),
-        );
-
-        let _ = event_handler
-            // Notify the client that peer flow is up.
-            .call(TransportEvent::StateChange(
-                TransportStateChange::PeerFlowUp(peer_id),
-            ))
-            .await;
-        flow_state.update(ConnectionState::Connected(connected_state));
-        Ok(())
     }
 }
