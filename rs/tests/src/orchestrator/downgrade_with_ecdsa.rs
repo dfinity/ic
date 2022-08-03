@@ -56,6 +56,9 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
     let mainnet_version =
         env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
 
+    assert!(mainnet_version.len() >= 40);
+    assert!(hex::decode(&mainnet_version).is_ok());
+
     // choose a node from the nns subnet
     let nns_node = env
         .topology_snapshot()
