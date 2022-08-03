@@ -276,8 +276,7 @@ pub fn test(env: TestEnv) {
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
 
-    // there is no way to reliably detect the node readiness to write a message only from the node logs,
-    // hence we will retry to install a canister until that is possible
+    // wait until state sync is completed
     retry(logger.clone(), secs(120), secs(5), || {
         info!(logger, "Try to install canister...");
         if can_install_canister(&upload_node.get_public_url()) {

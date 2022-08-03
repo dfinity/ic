@@ -23,7 +23,10 @@ use crate::driver::driver_setup::{
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg, store_message};
+use crate::orchestrator::utils::rw_message::{
+    can_install_canister, can_read_msg, cannot_store_msg, store_message,
+};
+use anyhow::bail;
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
@@ -198,6 +201,19 @@ pub fn test(env: TestEnv) {
 
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
+
+    // wait until state sync is completed
+    retry(logger.clone(), secs(120), secs(5), || {
+        info!(logger, "Try to install canister...");
+        if can_install_canister(&upload_node.get_public_url()) {
+            info!(logger, "Installing canister is possible.");
+            Ok(())
+        } else {
+            bail!("retry...")
+        }
+    })
+    .expect("Canister installation should work!");
+
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(
         &logger,
