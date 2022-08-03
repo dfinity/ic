@@ -615,6 +615,18 @@ pub struct NervousSystemParameters {
     /// INITIAL_VOTING_PERIOD_CEILING.
     #[prost(uint64, optional, tag = "5")]
     pub initial_voting_period: ::core::option::Option<u64>,
+    /// The wait for quiet algorithm extends the voting period of a proposal when
+    /// there is a flip in the majority vote during the proposal's voting period.
+    /// This parameter determines the maximum time period that the voting period
+    /// may be extended after a flip. If there is a flip at the very end of the
+    /// original proposal deadline, the remaining time will be set to this parameter.
+    /// If there is a flip before or after the original deadline, the deadline will
+    /// extended by somewhat less than this parameter.
+    /// The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
+    /// For more information, see the wiki page on the wait-for-quiet algorithm:
+    /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
+    #[prost(uint64, optional, tag = "18")]
+    pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
     /// The set of default followees that every newly created neuron will follow
     /// per function. This is specified as a mapping of proposal functions to followees.
     ///

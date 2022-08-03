@@ -57,6 +57,9 @@ use std::time::{Duration, SystemTime};
 /// be before it's created.
 pub const NONCE: u64 = 12345_u64;
 
+/// Constant that defines the time in tenths of a second to wait for a test
+pub const TIME_FOR_HEARTBEAT: u64 = 200;
+
 /// Packages commonly used test data into a single struct.
 #[derive(Clone)]
 pub struct UserInfo {
@@ -924,7 +927,7 @@ impl SnsCanisters<'_> {
 
     /// Await a RewardEvent to be created.
     pub async fn await_reward_event(&self, last_reward_period: u64) -> RewardEvent {
-        for _ in 0..25 {
+        for _ in 0..TIME_FOR_HEARTBEAT {
             let reward_event = self.get_latest_reward_event().await;
 
             if reward_event.periods_since_genesis > last_reward_period {
@@ -941,7 +944,7 @@ impl SnsCanisters<'_> {
 
     /// Await a Proposal being rewarded via it's reward_event_round field.
     pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> u64 {
-        for _ in 0..25 {
+        for _ in 0..TIME_FOR_HEARTBEAT {
             let proposal = self.get_proposal(proposal_id).await;
 
             if proposal.reward_event_round != 0 {
