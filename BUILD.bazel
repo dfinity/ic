@@ -1,4 +1,4 @@
-load("//bazel:defs.bzl", "cargo_build", "gzip_compress")
+load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
 load("//bazel:transitions.bzl", "opt_stripped_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
@@ -108,63 +108,32 @@ opt_stripped_binary(
     binary = "//rs/recovery:ic-recovery",
 )
 
-cargo_build(
-    name = "ledger_archive_wasm",
-    srcs = ["//rs:all_sources"],
-    binaries = [
-        "ledger-archive-node-canister",
-    ],
-    cargo_flags = [
-        "--manifest-path",
-        "rs/Cargo.toml",
-    ],
-    profile = "canister-release",
-    target = "wasm32-unknown-unknown",
-)
-
 optimized_canister(
     name = "ledger_archive_canister",
-    wasm = ":ledger_archive_wasm",
+    wasm = "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
 )
 
-CANISTERS = [
-    "cycles-minting-canister",
-    "genesis-token-canister",
-    "governance-canister",
-    "ledger-canister",
-    "nns-ui-canister",
-    "registry-canister",
-    "root-canister",
-    "sns-governance-canister",
-    "sns-root-canister",
-    "sns-swap-canister",
-    "xnet-test-canister",
-]
+CANISTERS = {
+    "cycles-minting-canister": "//rs/nns/cmc:cycles-minting-canister",
+    "genesis-token-canister": "//rs/nns/gtc:genesis-token-canister",
+    "governance-canister": "//rs/nns/governance:governance-canister",
+    "ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "nns-ui-canister": "//rs/nns/nns-ui:nns-ui-canister",
+    "registry-canister": "//rs/registry/canister:registry-canister",
+    "root-canister": "//rs/nns/handlers/root:root-canister",
+    "sns-governance-canister": "//rs/sns/governance:sns-governance-canister",
+    "sns-root-canister": "//rs/sns/root:sns-root-canister",
+    "sns-swap-canister": "//rs/sns/swap:sns-swap-canister",
+    "xnet-test-canister": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+}
 
-cargo_build(
-    name = "all_canisters",
-    srcs = ["//rs:all_sources"],
-    binaries = CANISTERS,
-    cargo_flags = [
-        "--manifest-path",
-        "rs/Cargo.toml",
-    ],
-    env_paths = {
-        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath :ledger_archive_canister)",
-    },
-    profile = "canister-release",
-    target = "wasm32-unknown-unknown",
-    deps = [
-        ":ledger_archive_canister",
-    ],
-)
-
-[optimized_canister(
-    name = canister + "-opt",
-    wasm = ":" + canister + ".wasm",
-) for canister in CANISTERS]
-
-[gzip_compress(
-    name = canister + ".wasm.gz",
-    srcs = [":" + canister + "-opt.wasm"],
-) for canister in CANISTERS]
+[[
+    optimized_canister(
+        name = name,
+        wasm = CANISTERS[name],
+    ),
+    gzip_compress(
+        name = name + ".wasm.gz",
+        srcs = [":" + name + ".wasm"],
+    ),
+] for name in CANISTERS]
