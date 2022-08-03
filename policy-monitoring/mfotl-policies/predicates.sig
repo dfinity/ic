@@ -1,4 +1,4 @@
-log(node_id:string, subnet_id:string, level:string, message:string)
+log(node_id:string, subnet_id:string, crate:string, module:string, level:string, message:string)
 log1(node:string, val:float)
 
 p2p__original_subnet_type(subnet_id:string, subnet_type:string)

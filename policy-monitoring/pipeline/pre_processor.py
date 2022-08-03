@@ -23,6 +23,7 @@ from .event import DeliverBatchEvent
 from .event import Event
 from .event import FinalEvent
 from .event import FinalizedEvent
+from .event import GenericLogEvent
 from .event import MoveBlockProposalEvent
 from .event import NodeMembershipEvent
 from .event import OriginallyInSubnetPreambleEvent
@@ -34,7 +35,6 @@ from .event import RegistryNodeRemovedEvent
 from .event import RegistrySubnetCreatedEvent
 from .event import RegistrySubnetUpdatedEvent
 from .event import ReplicaDivergedEvent
-from .event import UnusualLogEvent
 from .event import ValidatedBlockProposalEvent
 from .global_infra import GlobalInfra
 
@@ -217,7 +217,7 @@ class DeclarativePreProcessor(PreProcessor):
 
     def get_event_stream_builder(self, pred: str, doc: EsDoc) -> Event:
         if pred == "log":
-            return UnusualLogEvent(doc)
+            return GenericLogEvent(doc)
         if pred == "reboot":
             assert self._infra is not None, f"{pred} event requires global infra"
             return RebootEvent(doc, self._infra)
