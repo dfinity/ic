@@ -2,13 +2,11 @@
 //! Tests for combined forward secure encryption and ZK proofs
 #![allow(clippy::many_single_char_names)]
 
-use ic_crypto_internal_bls12381_serde_miracl::miracl_fr_to_bytes;
-use ic_crypto_internal_fs_ni_dkg as dkg;
-
-use dkg::forward_secure::*;
-use dkg::nizk_chunking::*;
-use dkg::nizk_sharing::*;
-use dkg::utils::RAND_ChaCha20;
+use ic_crypto_internal_bls12_381_type::Scalar;
+use ic_crypto_internal_fs_ni_dkg::forward_secure::*;
+use ic_crypto_internal_fs_ni_dkg::nizk_chunking::*;
+use ic_crypto_internal_fs_ni_dkg::nizk_sharing::*;
+use ic_crypto_internal_fs_ni_dkg::utils::RAND_ChaCha20;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
@@ -23,9 +21,7 @@ fn potpourri() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
 
     println!("generating key pair...");
-    let (mut pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-    let v = pk.serialize();
-    pk = PublicKeyWithPop::deserialize(&v);
+    let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
     assert!(
         pk.verify(KEY_GEN_ASSOCIATED_DATA),
         "Forward secure public key failed validation"
@@ -33,8 +29,6 @@ fn potpourri() {
     for _i in 0..10 {
         println!("upgrading private key...");
         dk.update(sys, rng);
-        let v = dk.serialize();
-        dk = SecretKey::deserialize(&v);
     }
     let epoch10 = Epoch::from(10);
     let tau10 = tau_from_epoch(sys, epoch10);
@@ -152,7 +146,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let plaintext_chunks: Vec<Vec<isize>> = plaintexts
         .iter_mut()
         .map(|plaintext| {
-            let mut bytes = miracl_fr_to_bytes(plaintext).0;
+            let mut bytes = Scalar::from_miracl(plaintext).serialize();
             bytes.reverse(); // Make little endian.
             let chunks = bytes[..].chunks(CHUNK_BYTES); // The last, most significant, chunk may be partial.
             chunks

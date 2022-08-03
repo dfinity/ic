@@ -2,8 +2,6 @@
 use zeroize::Zeroize;
 
 use std::collections::LinkedList;
-use std::io::IoSliceMut;
-use std::io::Read;
 use std::vec::Vec;
 
 // NOTE: the paper uses multiplicative notation for operations on G1, G2, GT,
@@ -17,9 +15,6 @@ use crate::nizk_chunking::CHALLENGE_BITS;
 use crate::nizk_chunking::NUM_ZK_REPETITIONS;
 use crate::random_oracles::{random_oracle, HashedMap};
 use crate::utils::*;
-use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_g1_from_bytes, miracl_g1_to_bytes, FrBytes, G1Bytes,
-};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, G2Prepared, Gt, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
@@ -192,43 +187,6 @@ impl PublicKeyWithPop {
             associated_data: associated_data.to_vec(),
         };
         verify_pop(&instance, &self.proof_data).is_ok()
-    }
-    pub fn serialize(&self) -> Vec<u8> {
-        [
-            &miracl_g1_to_bytes(&self.key_value).0[..],
-            &self.proof_data.pop_key.serialize()[..],
-            &self.proof_data.challenge.serialize()[..],
-            &self.proof_data.response.serialize()[..],
-        ]
-        .concat()
-        .to_vec()
-    }
-    pub fn deserialize(buf: &[u8]) -> PublicKeyWithPop {
-        let mut buf = buf;
-        let expected_length = G1Bytes::SIZE + G1Bytes::SIZE + FrBytes::SIZE + FrBytes::SIZE;
-        let mut y = G1Bytes([0u8; G1Bytes::SIZE]);
-        let mut pop_key = G1Bytes([0u8; G1Bytes::SIZE]);
-        let mut pop_challenge = FrBytes([0u8; FrBytes::SIZE]);
-        let mut pop_response = FrBytes([0u8; FrBytes::SIZE]);
-        assert_eq!(
-            buf.read_vectored(&mut [
-                IoSliceMut::new(&mut y.0),
-                IoSliceMut::new(&mut pop_key.0),
-                IoSliceMut::new(&mut pop_challenge.0),
-                IoSliceMut::new(&mut pop_response.0)
-            ])
-            .expect("Read failed"),
-            expected_length,
-            "Input too short"
-        );
-        PublicKeyWithPop {
-            key_value: miracl_g1_from_bytes(&y.0).expect("Malformed y"),
-            proof_data: EncryptionKeyPop {
-                pop_key: G1Affine::deserialize(&pop_key.0).expect("Malformed pop_key"),
-                challenge: Scalar::deserialize(&pop_challenge.0).expect("Malformed challenge"),
-                response: Scalar::deserialize(&pop_response.0).expect("Malformed challenge"),
-            },
-        }
     }
 }
 
@@ -510,116 +468,6 @@ impl SecretKey {
         });
         node.zeroize();
     }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut buf: [u8; 1 + 48] = [0; 1 + 48];
-        let mut buf2: [u8; 1 + 96] = [0; 1 + 96];
-        let mut v = Vec::new();
-        leb128(&mut v, self.bte_nodes.len());
-        for it in self.bte_nodes.iter() {
-            leb128(&mut v, it.tau.len());
-            for i in it.tau.iter() {
-                v.push(i.into());
-            }
-            it.a.tobytes(&mut buf, true);
-            v.extend_from_slice(&buf);
-            it.b.tobytes(&mut buf2, true);
-            v.extend_from_slice(&buf2);
-            leb128(&mut v, it.d_t.len());
-            for d in it.d_t.iter() {
-                d.tobytes(&mut buf2, true);
-                v.extend_from_slice(&buf2);
-            }
-            leb128(&mut v, it.d_h.len());
-            for d in it.d_h.iter() {
-                d.tobytes(&mut buf2, true);
-                v.extend_from_slice(&buf2);
-            }
-            it.e.tobytes(&mut buf2, true);
-            v.extend_from_slice(&buf2);
-        }
-        v
-    }
-
-    pub fn deserialize(buf: &[u8]) -> SecretKey {
-        let mut cur = 0;
-        let listlen = unleb128(buf, &mut cur);
-        let mut bte_nodes = LinkedList::new();
-        for _i in 0..listlen {
-            let taulen = unleb128(buf, &mut cur);
-            let mut tau: Vec<Bit> = Vec::new();
-            for _i in 0..taulen {
-                tau.push(Bit::from(buf[cur]));
-                cur += 1;
-            }
-            let a = unecp(buf, &mut cur);
-            let b = unecp2(buf, &mut cur);
-            let dslen = unleb128(buf, &mut cur);
-
-            let mut d_t = LinkedList::new();
-            for _i in 0..dslen {
-                let d = unecp2(buf, &mut cur);
-                d_t.push_back(d);
-            }
-            let d_hlen = unleb128(buf, &mut cur);
-            let mut d_h = Vec::new();
-            for _i in 0..d_hlen {
-                let d = unecp2(buf, &mut cur);
-                d_h.push(d);
-            }
-            let e = unecp2(buf, &mut cur);
-            bte_nodes.push_back(BTENode {
-                tau,
-                a,
-                b,
-                d_t,
-                d_h,
-                e,
-            });
-        }
-        SecretKey { bte_nodes }
-    }
-}
-
-fn leb128(v: &mut Vec<u8>, mut n: usize) {
-    loop {
-        let mut b = n & 127;
-        if n > 127 {
-            b |= 128
-        };
-        v.push(b as u8);
-        n >>= 7;
-        if n == 0 {
-            break;
-        }
-    }
-}
-
-fn unleb128(v: &[u8], cur: &mut usize) -> usize {
-    let mut n = 0;
-    let mut m = 1;
-    loop {
-        let b = v[*cur] as usize;
-        *cur += 1;
-        n += m * (b & 127);
-        if b < 128 {
-            break;
-        }
-        m *= 128;
-    }
-    n
-}
-
-fn unecp(buf: &[u8], cur: &mut usize) -> ECP {
-    let a = ECP::frombytes(&buf[*cur..]);
-    *cur = *cur + 1 + 48;
-    a
-}
-
-fn unecp2(buf: &[u8], cur: &mut usize) -> ECP2 {
-    let a = ECP2::frombytes(&buf[*cur..]);
-    *cur = *cur + 1 + 96;
-    a
 }
 
 /// Forward secure ciphertexts
