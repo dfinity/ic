@@ -4764,6 +4764,7 @@ dependencies = [
  "serde_bytes",
  "simple_asn1 0.6.1",
  "strum 0.23.0",
+ "wycheproof",
  "zeroize",
 ]
 
@@ -4785,19 +4786,8 @@ dependencies = [
  "serde_bytes",
  "simple_asn1 0.6.1",
  "strum 0.23.0",
+ "wycheproof",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-internal-basic-sig-ecdsa-wycheproof"
-version = "0.8.0"
-dependencies = [
- "hex",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
- "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
- "openssl",
- "serde",
- "serde_json",
 ]
 
 [[package]]

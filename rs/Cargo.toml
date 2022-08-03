@@ -45,7 +45,6 @@ members = [
   "crypto/internal/crypto_lib/basic_sig/der_utils",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
-  "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests",
   "crypto/internal/crypto_lib/basic_sig/ed25519",
   "crypto/internal/crypto_lib/basic_sig/iccsa",
   "crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
