@@ -1,8 +1,5 @@
 //! Generating and verifying Proofs of Possession (PoP)
 
-#[cfg(test)]
-mod tests;
-
 use crate::random_oracles::{random_oracle_to_g1, random_oracle_to_scalar, HashedMap, UniqueHash};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use miracl_core::rand::RAND;

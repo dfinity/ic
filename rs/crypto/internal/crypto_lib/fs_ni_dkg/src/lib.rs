@@ -25,6 +25,8 @@
 //   ECP   The group G_1.
 //   ECP2  The group G_2.
 
+pub use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
+
 pub mod encryption_key_pop;
 pub mod forward_secure;
 pub mod nizk_chunking;

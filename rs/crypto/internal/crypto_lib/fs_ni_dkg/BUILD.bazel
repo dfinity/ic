@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -30,15 +30,6 @@ rust_library(
     ],
 )
 
-rust_test(
-    name = "fs_ni_dkg_test",
-    aliases = ALIASES,
-    crate = ":fs_ni_dkg",
-    deps = [
-        "@crate_index//:proptest",
-    ],
-)
-
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
@@ -51,6 +42,8 @@ rust_test_suite(
         "//rs/crypto/sha",
         "@crate_index//:hex",
         "@crate_index//:miracl_core_bls12381",
+        "@crate_index//:proptest",
         "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
     ],
 )

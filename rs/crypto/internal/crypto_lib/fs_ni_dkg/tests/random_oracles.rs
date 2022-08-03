@@ -1,5 +1,6 @@
-use super::*;
-use miracl_core::bls12381::big::BIG;
+use ic_crypto_internal_fs_ni_dkg::random_oracles::*;
+use ic_crypto_sha::{DomainSeparationContext, Sha256};
+use miracl_core::bls12381::{big::BIG, ecp::ECP, ecp2::ECP2};
 
 struct StructToBeHashed {
     point: ECP,
@@ -45,6 +46,10 @@ impl UniqueHash for StructToBeHashed {
 mod unique_hashing {
     use super::*;
 
+    fn new_hasher_with_domain(domain: &str) -> Sha256 {
+        Sha256::new_with_context(&DomainSeparationContext::new(domain))
+    }
+
     #[test]
     fn should_hash_strings_correctly() {
         // UniqueHash of the string "This is a string" using domain separator
@@ -68,7 +73,7 @@ mod unique_hashing {
 
         assert_eq!(
             hash.to_vec(),
-            new_hasher_with_domain(DOMAIN_RO_STRING).finish()
+            new_hasher_with_domain("ic-random-oracle-string").finish()
         );
     }
 
@@ -95,7 +100,7 @@ mod unique_hashing {
 
         assert_eq!(
             hash.to_vec(),
-            new_hasher_with_domain(DOMAIN_RO_BYTE_ARRAY).finish()
+            new_hasher_with_domain("ic-random-oracle-byte-array").finish()
         );
     }
 
@@ -170,7 +175,7 @@ mod unique_hashing {
 
         assert_eq!(
             hash.to_vec(),
-            new_hasher_with_domain(DOMAIN_RO_VECTOR).finish()
+            new_hasher_with_domain("ic-random-oracle-vector").finish()
         );
     }
 

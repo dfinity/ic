@@ -8,9 +8,6 @@ use miracl_core::rand::RAND;
 use rand_chacha::rand_core::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-#[cfg(test)]
-mod tests;
-
 /// Order of the prime order subgroup of curve BLS12_381.
 pub(crate) fn curve_order() -> BIG {
     BIG::new_ints(&CURVE_ORDER)
