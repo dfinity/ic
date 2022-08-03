@@ -242,19 +242,47 @@ impl TransportImpl {
                                     return;
                                 }
                             };
-                            if let Ok(()) = arc_self.try_transition_to_connected(
+
+                            let peer_map = arc_self.peer_map.read().await;
+                            let peer_state = match peer_map.get(&peer_id) {
+                                Some(peer_state) => peer_state,
+                                None => return,
+                            };
+                            let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
+                                Some(flow_state) => flow_state,
+                                None => return,
+                            };
+                            let mut flow_state = flow_state_mu.write().await;
+                            if flow_state.get_connected().is_some() {
+                                // TODO: P2P-516
+                                return;
+                            }
+                            let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
+                                Some(event_handler) => event_handler.clone(),
+                                None => return,
+                            };
+                            let connected_state = arc_self.create_connected_state(
                                 peer_id,
-                                ConnectionRole::Server,
                                 flow_tag,
+                                flow_state.flow_label.clone(),
+                                flow_state.send_queue.get_reader(),
+                                ConnectionRole::Server,
                                 peer_addr,
                                 tls_stream,
-                            )
-                            .await {
-                                arc_self.control_plane_metrics
-                                    .tcp_accept_conn_success
-                                    .with_label_values(&[&flow_tag.to_string()])
-                                        .inc()
-                            }
+                                event_handler.clone(),
+                            );
+
+                            let _ = event_handler
+                                // Notify the client that peer flow is up.
+                                .call(TransportEvent::StateChange(
+                                    TransportStateChange::PeerFlowUp(peer_id),
+                                ))
+                                .await;
+                            flow_state.update(ConnectionState::Connected(connected_state));
+                            arc_self.control_plane_metrics
+                                .tcp_accept_conn_success
+                                .with_label_values(&[&flow_tag.to_string()])
+                                    .inc()
                         });
                     }
                     Err(err) => {
