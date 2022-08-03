@@ -3,7 +3,7 @@
   a CatchUpPackageShare.
 
   Relevant events:
-  - p2p__originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
   - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
   - replica_diverged(node_id:string, subnet_id:string, height:int)
@@ -11,6 +11,6 @@
   - end_test()
 *)
 
-LET relevant_node(node, subnet) = ONCE (p2p__originally_in_subnet(node, _, subnet) OR registry__node_added_to_subnet(node, _, subnet) OR p2p__node_added(_, subnet, node)) IN
+LET relevant_node(node, subnet) = ONCE (originally_in_subnet(node, _, subnet) OR registry__node_added_to_subnet(node, _, subnet) OR p2p__node_added(_, subnet, node)) IN
 end_test() AND relevant_node(node, subnet) AND
 ((NOT CUP_share_proposed(node, subnet)) SINCE replica_diverged(node, subnet, _))

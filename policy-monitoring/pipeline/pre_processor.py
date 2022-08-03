@@ -14,10 +14,7 @@ from util.print import eprint
 
 from .es_doc import EsDoc
 from .event import ConsensusFinalizedEvent
-from .event import ControlePlaneAcceptAbortedEvent
-from .event import ControlePlaneAcceptErrorEvent
-from .event import ControlePlaneSpawnAcceptTaskEvent
-from .event import ControlePlaneTlsServerHandshakeFailedEvent
+from .event import ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent
 from .event import CupShareProposedEvent
 from .event import DeliverBatchEvent
 from .event import Event
@@ -171,10 +168,7 @@ class DeclarativePreProcessor(PreProcessor):
             "deliver_batch",
             "consensus_finalized",
             "move_block_proposal",
-            "ControlPlane_accept_error",
-            "ControlPlane_accept_aborted",
-            "ControlPlane_spawn_accept_task",
-            "ControlPlane_tls_server_handshake_failed",
+            "ControlPlane__spawn_accept_task__tls_server_handshake_failed",
             "registry__node_added_to_subnet",
             "registry__node_removed_from_subnet",
             "CUP_share_proposed",
@@ -238,14 +232,8 @@ class DeclarativePreProcessor(PreProcessor):
             return ConsensusFinalizedEvent(doc)
         if pred == "move_block_proposal":
             return MoveBlockProposalEvent(doc)
-        if pred == "ControlPlane_accept_error":
-            return ControlePlaneAcceptErrorEvent(doc)
-        if pred == "ControlPlane_spawn_accept_task":
-            return ControlePlaneSpawnAcceptTaskEvent(doc)
-        if pred == "ControlPlane_accept_aborted":
-            return ControlePlaneAcceptAbortedEvent(doc)
-        if pred == "ControlPlane_tls_server_handshake_failed":
-            return ControlePlaneTlsServerHandshakeFailedEvent(doc)
+        if pred == "ControlPlane__spawn_accept_task__tls_server_handshake_failed":
+            return ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(doc)
         if pred == "registry__subnet_created":
             return RegistrySubnetCreatedEvent(doc)
         if pred == "registry__subnet_updated":
@@ -329,10 +317,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             ),
             "dependencies": frozenset(
                 [
-                    "ControlPlane_accept_error",
-                    "ControlPlane_accept_aborted",
-                    "ControlPlane_spawn_accept_task",
-                    "ControlPlane_tls_server_handshake_failed",
+                    "ControlPlane__spawn_accept_task__tls_server_handshake_failed",
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                 ]

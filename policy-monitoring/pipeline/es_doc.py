@@ -386,80 +386,36 @@ class ReplicaDoc(EsDoc):
         else:
             return ReplicaDoc.CatchUpPackageShare(height=int(m.group(1)))
 
-    class ControlPlaneAcceptParams:
-        """Data class"""
-
-        def __init__(self, local_addr: str, flow: str, error: Optional[str] = None):
-            self.local_addr = local_addr
-            self.flow = flow
-            self.error = error
-
-    def get_control_plane_accept_params(self) -> Optional[ControlPlaneAcceptParams]:
-
-        m = re.match(
-            r"ControlPlane::accept\(\): local_addr = (.*?), flow_tag = (.*?), error = (.*)", self.get_message()
-        )
-        if not m or len(m.groups()) != 3:
-            return None
-        else:
-            return ReplicaDoc.ControlPlaneAcceptParams(local_addr=m.group(1), flow=m.group(2), error=quoted(m.group(3)))
-
-    def get_control_plane_spawn_accept_task_params(self) -> Optional[ControlPlaneAcceptParams]:
-
-        m = re.match(r"ControlPlane::spawn_accept_task\(\): local_addr = (.*?), flow_tag = (.*)", self.get_message())
-        if not m or len(m.groups()) != 2:
-            return None
-        else:
-            return ReplicaDoc.ControlPlaneAcceptParams(
-                local_addr=m.group(1),
-                flow=m.group(2),
-            )
-
-    class ControlPlaneAcceptTaskAbortedParams:
-        """Data class"""
-
-        def __init__(self, flow: str):
-            self.flow = flow
-
-    def get_control_plane_accept_task_aborted_params(self) -> Optional[ControlPlaneAcceptTaskAbortedParams]:
-
-        m = re.match("ControlPlane: accept task aborted: flow_tag = (.*)", self.get_message())
-        if not m or len(m.groups()) != 1:
-            return None
-        else:
-            return ReplicaDoc.ControlPlaneAcceptTaskAbortedParams(flow=m.group(1))
-
     class ControlPlaneTlsServerHandshakeFailureParams:
         """Data class"""
 
-        def __init__(self, node_id: str, node_addr: str, peer_addr: str, flow: str, error: str):
-            self.node_id = node_id
+        def __init__(self, node_addr: str, peer_addr: str):
             self.node_addr = node_addr
             self.peer_addr = peer_addr
-            self.flow = flow
-            self.error = error
 
-    def get_control_plane_tls_server_handshake_failure_params(
+    # Warn "ControlPlane::spawn_accept_task(): tls_server_handshake failed: error = UnauthenticatedClient, local_addr = {:?}, peer_addr = {:?}"
+    def get_control_plane_spawn_accept_task_tls_server_handshake_failed_params(
         self,
     ) -> Optional[ControlPlaneTlsServerHandshakeFailureParams]:
 
         m = re.match(
-            r"ControlPlane::tls_server_handshake\(\) failed: "
-            r"node = (.*?)/(.*?), flow_tag = (.*?), peer_addr = (.*?), "
-            r"error = (.*)",
+            r"ControlPlane::spawn_accept_task\(\): tls_server_handshake failed: "
+            r"error = (.*?), local_addr = (.*?), peer_addr = (.*?)",
             self.get_message(),
         )
         if not m or len(m.groups()) != 5:
             return None
-        else:
-            # E.g., "ClientsEmpty" or
-            # "HandshakeError { internal_error: \"(.*?)\" }"
-            error_str = m.group(5)
-            error_str = quoted(error_str)
 
-            return ReplicaDoc.ControlPlaneTlsServerHandshakeFailureParams(
-                node_id=m.group(1), node_addr=m.group(2), flow=m.group(3), peer_addr=m.group(4), error=error_str
-            )
+        # E.g., "UnauthenticatedClient" or
+        # "HandshakeError { internal_error: \"(.*?)\" }"
+        error_str = m.group(1)
+        if error_str != "UnauthenticatedClient":
+            return None
+
+        return ReplicaDoc.ControlPlaneTlsServerHandshakeFailureParams(
+            node_addr=m.group(2),
+            peer_addr=m.group(3),
+        )
 
     class ProposalParams:
         """Data class"""
