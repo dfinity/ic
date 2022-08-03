@@ -3,11 +3,11 @@
 
 use dkg::forward_secure::*;
 use dkg::utils::RAND_ChaCha20;
-use ic_crypto_internal_bls12381_serde_miracl::*;
+use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_crypto_internal_fs_ni_dkg as dkg;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_sha::Sha256;
-use miracl_core::rand::RAND;
+use miracl_core::{bls12381::ecp2::ECP2, rand::RAND};
 
 #[test]
 fn output_of_mk_sys_params_is_expected_values() {
@@ -19,15 +19,19 @@ fn output_of_mk_sys_params_is_expected_values() {
     assert_eq!(sys.f.len(), sys.lambda_t);
     assert_eq!(sys.f_h.len(), sys.lambda_h);
 
-    assert_eq!(hex::encode(miracl_g2_to_bytes(&sys.f0).0),
-               "8422a9f8fdd31d70efea5a8fff9e0dab7707703cd0654d5b5c92a654b4cf60bbc74ea1b40b9eb6ef036f647ed196418c199c775a89be3e15c1df45cadd48e99e60ef0d7142132876eaf91c03c9f1fcabcec3a61b34e2341f38418d006e02f502");
+    fn assert_g2_equal(g2: &ECP2, expected: &'static str) {
+        assert_eq!(hex::encode(G2Affine::from_miracl(g2).serialize()), expected);
+    }
 
-    assert_eq!(hex::encode(miracl_g2_to_bytes(&sys.h).0),
-               "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6");
+    assert_g2_equal(&sys.f0,
+                    "8422a9f8fdd31d70efea5a8fff9e0dab7707703cd0654d5b5c92a654b4cf60bbc74ea1b40b9eb6ef036f647ed196418c199c775a89be3e15c1df45cadd48e99e60ef0d7142132876eaf91c03c9f1fcabcec3a61b34e2341f38418d006e02f502");
+
+    assert_g2_equal(&sys.h,
+                    "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6");
 
     let mut sha256 = Sha256::new();
     for val in sys.f {
-        sha256.write(&miracl_g2_to_bytes(&val).0);
+        sha256.write(&G2Affine::from_miracl(&val).serialize());
     }
     assert_eq!(
         hex::encode(sha256.finish()),
@@ -36,7 +40,7 @@ fn output_of_mk_sys_params_is_expected_values() {
 
     let mut sha256 = Sha256::new();
     for val in sys.f_h {
-        sha256.write(&miracl_g2_to_bytes(&val).0);
+        sha256.write(&G2Affine::from_miracl(&val).serialize());
     }
     assert_eq!(
         hex::encode(sha256.finish()),

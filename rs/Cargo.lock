@@ -4997,7 +4997,6 @@ version = "0.8.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
- "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "lazy_static",
