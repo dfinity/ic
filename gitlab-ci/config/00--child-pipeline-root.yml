@@ -21,7 +21,6 @@ include:
 - local: /gitlab-ci/config/52--host-os-build--host-os-updateimg.yml
 - local: /gitlab-ci/config/53--host-os-build--setupos-base-image.yml
 - local: /gitlab-ci/config/53--host-os-build--build-setupos.yml
-- local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
 - local: /gitlab-ci/config/55--determinism-test.yml
 
 .cargo-build-docker-protected:
