@@ -185,9 +185,8 @@ class DeclarativePreProcessor(PreProcessor):
 
     PREAMBLE_EVENTS = frozenset(
         [
-            "p2p__original_subnet_type",
-            "p2p__originally_in_subnet",
-            # "p2p__originally_unassigned"  TODO: not supported yet
+            "original_subnet_type",
+            "originally_in_subnet",
         ]
     )
 
@@ -195,9 +194,8 @@ class DeclarativePreProcessor(PreProcessor):
         [
             "reboot",
             "reboot_intent",
-            "p2p__original_subnet_type",
-            "p2p__originally_unassigned",
-            "p2p__originally_in_subnet",
+            "original_subnet_type",
+            "originally_in_subnet",
             "registry__node_added_to_subnet",
             "registry__node_removed_from_subnet",
         ]
@@ -268,16 +266,12 @@ class DeclarativePreProcessor(PreProcessor):
         raise DeclarativePreProcessor.UnknownPredicateError(pred)
 
     def preamble_builder(self, pred: str) -> Event:
-        if pred == "p2p__original_subnet_type":
+        if pred == "original_subnet_type":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
             return OriginalSubnetTypePreambleEvent(self._infra)
-        if pred == "p2p__originally_in_subnet":
+        if pred == "originally_in_subnet":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
             return OriginallyInSubnetPreambleEvent(self._infra)
-        if pred == "p2p__originally_unassigned":
-            assert self._infra is not None, f"{pred} preamble event requires global infra"
-            # TODO -- support class OriginallyUnassignedPreambleEvent(InfraEvent)
-            raise DeclarativePreProcessor.UnknownPreambleEventNameError(pred)
 
         raise DeclarativePreProcessor.UnknownPreambleEventNameError(pred)
 
@@ -313,7 +307,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         # "artifact_pool_latency": {
         #     "preambles": frozenset(
         #         [
-        #             "p2p__original_subnet_type",
+        #             "original_subnet_type",
         #         ]
         #     ),
         #     "dependencies": frozenset(
@@ -330,7 +324,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         "unauthorized_connections": {
             "preambles": frozenset(
                 [
-                    "p2p__originally_in_subnet",
+                    "originally_in_subnet",
                 ]
             ),
             "dependencies": frozenset(
