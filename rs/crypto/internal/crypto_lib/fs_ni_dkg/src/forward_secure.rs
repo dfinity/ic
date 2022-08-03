@@ -25,9 +25,6 @@ use miracl_core::bls12381::rom;
 use miracl_core::bls12381::{big, big::BIG};
 use miracl_core::rand::RAND;
 
-#[cfg(test)]
-mod tests;
-
 lazy_static! {
     static ref PRECOMP_SYS_H: G2Prepared = precomp_sys_h();
 }

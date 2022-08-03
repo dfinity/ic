@@ -1,11 +1,8 @@
 #![allow(clippy::unwrap_used)]
 //! Tests for combined forward secure encryption and ZK proofs
 
-use dkg::forward_secure::*;
-use dkg::utils::RAND_ChaCha20;
 use ic_crypto_internal_bls12_381_type::G2Affine;
-use ic_crypto_internal_fs_ni_dkg as dkg;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
+use ic_crypto_internal_fs_ni_dkg::{forward_secure::*, utils::RAND_ChaCha20, Epoch};
 use ic_crypto_sha::Sha256;
 use miracl_core::{bls12381::ecp2::ECP2, rand::RAND};
 

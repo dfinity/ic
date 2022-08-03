@@ -7,9 +7,6 @@ use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
 
-#[cfg(test)]
-mod tests;
-
 const DOMAIN_RO_INT: &str = "ic-random-oracle-integer";
 const DOMAIN_RO_STRING: &str = "ic-random-oracle-string";
 const DOMAIN_RO_SCALAR_ELEMENT: &str = "ic-random-oracle-bls12381-scalar";
@@ -254,7 +251,7 @@ impl UniqueHash for HashedMap {
 /// The digest is the hash of `domain` appended with the unique digest of
 /// `data`. A distinct `domain` should be used for each purpose of the random
 /// oracle.
-pub(crate) fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
+pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
     let mut hasher = new_hasher_with_domain(domain);
     hasher.write(&data.unique_hash());
     hasher.finish()

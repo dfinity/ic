@@ -1,8 +1,7 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for the POP of the Encryption Key
-use super::*;
-use crate::utils::*;
 use ic_crypto_internal_bls12_381_type::*;
+use ic_crypto_internal_fs_ni_dkg::{encryption_key_pop::*, utils::RAND_ChaCha20};
+use miracl_core::rand::RAND;
 
 fn setup_pop_instance_and_witness(rng: &mut impl RAND) -> (EncryptionKeyInstance, Scalar) {
     let g1 = G1Affine::generator();

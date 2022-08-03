@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use super::*;
+use ic_crypto_internal_fs_ni_dkg::{forward_secure::*, utils::RAND_ChaCha20, Epoch};
 use proptest::prelude::*;
 
 proptest! {
