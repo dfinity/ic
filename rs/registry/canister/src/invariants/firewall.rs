@@ -12,12 +12,15 @@ use std::{
 use ipnet::{Ipv4Net, Ipv6Net};
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleSet};
+use ic_protobuf::registry::firewall::v1::{
+    FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+};
 use ic_registry_keys::{
     get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
 };
 
 const COMMENT_SIZE: usize = 255;
+const USER_SIZE: usize = 255;
 
 /// Checks the firewall invariants:
 ///    * Principals refer to existing subnets and nodes
@@ -176,7 +179,8 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     }
 
     // check that action is not unspecified
-    if rule.action != (FirewallAction::Allow as i32) && rule.action != (FirewallAction::Deny as i32)
+    if FirewallAction::from_i32(rule.action).unwrap_or(FirewallAction::Unspecified)
+        == FirewallAction::Unspecified
     {
         return Err(InvariantCheckError {
             msg: format!("Action {:?} is unspecified", rule.action),
@@ -193,6 +197,28 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ),
             source: None,
         });
+    }
+
+    //Check that if a user is specified, it is not empty nor too long
+    if let Some(user) = &rule.user {
+        if user.is_empty() || user.len() > USER_SIZE {
+            return Err(InvariantCheckError {
+                msg: format!("User name {:?} is invalid", user),
+                source: None,
+            });
+        }
+    }
+
+    // Check that the direction is one of the existing enum values
+    if let Some(direction) = rule.direction {
+        if FirewallRuleDirection::from_i32(direction).unwrap_or(FirewallRuleDirection::Unspecified)
+            == FirewallRuleDirection::Unspecified
+        {
+            return Err(InvariantCheckError {
+                msg: format!("Direction {:?} is invalid", direction,),
+                source: None,
+            });
+        }
     }
 
     Ok(())
@@ -249,8 +275,8 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
 mod tests {
     use super::*;
     use ic_nns_common::registry::encode_or_panic;
-    use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+    use ic_protobuf::registry::{firewall::v1::FirewallRuleDirection, node::v1::NodeRecord};
     use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
 
     // helper function that returns a generic firewall rule for use in the tests.
@@ -269,6 +295,8 @@ mod tests {
             ports: vec![3012, 4704, 8192, 8180, 8051],
             action: FirewallAction::Allow as i32,
             comment: "COMMENT".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         }
     }
 
@@ -666,5 +694,33 @@ mod tests {
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id))
         );
         assert_eq!(actual_error, expected_error);
+    }
+
+    #[test]
+    fn test_validate_firewall_rule_user() {
+        let mut fw_rule = firewall_rule_builder();
+        fw_rule.user = None;
+        assert!(validate_firewall_rule(&fw_rule).is_ok());
+
+        fw_rule.user = Some("X".repeat(10));
+        assert!(validate_firewall_rule(&fw_rule).is_ok());
+
+        fw_rule.user = Some("X".repeat(300));
+        assert!(validate_firewall_rule(&fw_rule).is_err());
+    }
+
+    #[test]
+    fn test_validate_firewall_rule_direction() {
+        let mut fw_rule = firewall_rule_builder();
+        fw_rule.direction = None;
+        assert!(validate_firewall_rule(&fw_rule).is_ok());
+
+        fw_rule.direction = Some(FirewallRuleDirection::Inbound as i32);
+        assert!(validate_firewall_rule(&fw_rule).is_ok());
+        fw_rule.direction = Some(FirewallRuleDirection::Outbound as i32);
+        assert!(validate_firewall_rule(&fw_rule).is_ok());
+
+        fw_rule.direction = Some(FirewallRuleDirection::Unspecified as i32);
+        assert!(validate_firewall_rule(&fw_rule).is_err());
     }
 }

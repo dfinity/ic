@@ -108,7 +108,9 @@ type EcdsaKeyRequest = record {
 };
 type FirewallRule = record {
   ipv4_prefixes : vec text;
+  direction : opt int32;
   action : int32;
+  user : opt text;
   comment : text;
   ipv6_prefixes : vec text;
   ports : vec nat32;

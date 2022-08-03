@@ -334,12 +334,14 @@ pub const SAMPLE_CONFIG: &str = r#"
 
     firewall: {
         config_file: "/path/to/nftables/config",
-        
         file_template: "",
         ipv4_rule_template: "",
         ipv6_rule_template: "",
+        ipv4_user_output_rule_template: "",
+        ipv6_user_output_rule_template: "",
         default_rules: [],
         ports_for_node_whitelist: [],
+        ports_for_http_adapter_blacklist: [],
     },
 
     // =================================

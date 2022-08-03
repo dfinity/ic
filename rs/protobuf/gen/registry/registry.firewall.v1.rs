@@ -1,4 +1,4 @@
-/// Firewall configuration
+/// Firewall configuration - Deprecated
 #[derive(
     candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message,
 )]
@@ -27,6 +27,10 @@ pub struct FirewallRule {
     pub action: i32,
     #[prost(string, tag = "5")]
     pub comment: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "6")]
+    pub user: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "FirewallRuleDirection", optional, tag = "7")]
+    pub direction: ::core::option::Option<i32>,
 }
 #[derive(
     candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message,
@@ -53,6 +57,30 @@ pub struct FirewallRuleSet {
 #[repr(i32)]
 pub enum FirewallAction {
     Unspecified = 0,
+    /// Allow traffic
     Allow = 1,
+    /// Deny (drop) traffic
     Deny = 2,
+    /// Reject traffic (send ICMP error back)
+    Reject = 3,
+}
+#[derive(
+    candid::CandidType,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum FirewallRuleDirection {
+    Unspecified = 0,
+    Inbound = 1,
+    Outbound = 2,
 }

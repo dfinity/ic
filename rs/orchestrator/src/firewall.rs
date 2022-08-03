@@ -5,7 +5,7 @@ use crate::{
 };
 use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
 use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule};
+use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::NodeId;
 use ic_types::RegistryVersion;
@@ -172,15 +172,37 @@ impl Firewall {
 
         // Build a single rule to whitelist all v4 and v6 IP addresses of nodes
         let node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: node_ipv4s,
-            ipv6_prefixes: node_ipv6s,
+            ipv4_prefixes: node_ipv4s.clone(),
+            ipv6_prefixes: node_ipv6s.clone(),
             ports: self.configuration.ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         };
 
         // Insert the whitelisting rule at the top of the list (highest priority)
         rules.insert(0, node_whitelisting_rule);
+
+        // Blacklisting for Canister HTTP requests
+        // In addition to any explicit firewall rules we might apply, we also ALWAYS blacklist the ic-http-adapter used from accessing
+        // all nodes in the registry on specific ports defined in the config file.
+        // (Currently, this code does not support ranges so we cannot have 1-19999 blocked nicely)
+
+        // Build a single rule to blacklist v4 and v6 IP addresses
+        // that are not supposed to be used by ic-http-adapter.
+        let ic_http_adapter_rule = FirewallRule {
+            ipv4_prefixes: node_ipv4s,
+            ipv6_prefixes: node_ipv6s,
+            ports: self.configuration.ports_for_http_adapter_blacklist.clone(),
+            action: FirewallAction::Reject as i32,
+            comment: "Automatic blacklisting for ic-http-adapter".to_string(),
+            user: Some("ic-http-adapter".to_string()),
+            direction: Some(FirewallRuleDirection::Outbound as i32),
+        };
+
+        // Insert the ic-http-adapter rule at the top of the list (highest priority)
+        rules.insert(0, ic_http_adapter_rule);
 
         // Generate the firewall file content
         let content = Self::generate_firewall_file_content_full(&self.configuration, rules);
@@ -238,11 +260,41 @@ impl Firewall {
             .file_template
             .replace(
                 "<<IPv4_RULES>>",
-                &Self::compile_rules(&config.ipv4_rule_template, &rules),
+                &Self::compile_rules(
+                    &config.ipv4_rule_template,
+                    &rules,
+                    vec![
+                        FirewallRuleDirection::Inbound,
+                        FirewallRuleDirection::Unspecified,
+                    ],
+                ),
             )
             .replace(
                 "<<IPv6_RULES>>",
-                &Self::compile_rules(&config.ipv6_rule_template, &rules),
+                &Self::compile_rules(
+                    &config.ipv6_rule_template,
+                    &rules,
+                    vec![
+                        FirewallRuleDirection::Inbound,
+                        FirewallRuleDirection::Unspecified,
+                    ],
+                ),
+            )
+            .replace(
+                "<<IPv4_OUTBOUND_RULES>>",
+                &Self::compile_rules(
+                    &config.ipv4_user_output_rule_template,
+                    &rules,
+                    vec![FirewallRuleDirection::Outbound],
+                ),
+            )
+            .replace(
+                "<<IPv6_OUTBOUND_RULES>>",
+                &Self::compile_rules(
+                    &config.ipv6_user_output_rule_template,
+                    &rules,
+                    vec![FirewallRuleDirection::Outbound],
+                ),
             )
     }
 
@@ -252,6 +304,7 @@ impl Firewall {
         if let Some(real_action) = action {
             match real_action {
                 FirewallAction::Allow => "accept".to_string(),
+                FirewallAction::Reject => "reject".to_string(),
                 _ => default,
             }
         } else {
@@ -260,18 +313,43 @@ impl Firewall {
     }
 
     /// Compiles the entire list of rules using the templates
-    fn compile_rules(template: &str, rules: &[FirewallRule]) -> String {
+    fn compile_rules(
+        template: &str,
+        rules: &[FirewallRule],
+        directions: Vec<FirewallRuleDirection>,
+    ) -> String {
         rules
             .iter()
             .filter_map(|rule| -> Option<String> {
+                let rule_direction = rule
+                    .direction
+                    .map(|v| {
+                        FirewallRuleDirection::from_i32(v)
+                            .unwrap_or(FirewallRuleDirection::Unspecified)
+                    })
+                    .unwrap_or(FirewallRuleDirection::Unspecified);
+                if !directions.contains(&rule_direction) {
+                    // Only produce rules with the requested direction
+                    return None;
+                }
                 if (!template.contains("<<IPv4_PREFIXES>>") || rule.ipv4_prefixes.is_empty())
                     && (!template.contains("<<IPv6_PREFIXES>>") || rule.ipv6_prefixes.is_empty())
                 {
                     // Do not produce rules with empty prefix list
                     return None;
                 }
+                if template.contains("<<USER>>")
+                    && (rule.user.is_none() || rule.user.as_ref().unwrap().is_empty())
+                {
+                    // Do not produce rules with empty user
+                    return None;
+                }
                 Some(
                     template
+                        .replace(
+                            "<<USER>>",
+                            rule.user.as_ref().unwrap_or(&"".to_string()).as_str(),
+                        )
                         .replace("<<IPv4_PREFIXES>>", rule.ipv4_prefixes.join(",").as_str())
                         .replace("<<IPv6_PREFIXES>>", rule.ipv6_prefixes.join(",").as_str())
                         .replace(
@@ -338,6 +416,8 @@ fn test_firewall_rule_compilation() {
             ports: vec![1, 2, 3],
             action: 1,
             comment: "comment1".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         },
         FirewallRule {
             ipv4_prefixes: vec!["test_ipv4_2".to_string()],
@@ -345,6 +425,8 @@ fn test_firewall_rule_compilation() {
             ports: vec![4, 5, 6],
             action: 2,
             comment: "comment2".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         },
         FirewallRule {
             ipv4_prefixes: vec![],
@@ -352,6 +434,8 @@ fn test_firewall_rule_compilation() {
             ports: vec![7, 8, 9],
             action: 2,
             comment: "comment3".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         },
         FirewallRule {
             ipv4_prefixes: vec![],
@@ -359,6 +443,8 @@ fn test_firewall_rule_compilation() {
             ports: vec![10, 11, 12],
             action: 1,
             comment: "comment4".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
         },
     ];
 
@@ -381,8 +467,11 @@ fn test_firewall_rule_compilation() {
         file_template,
         ipv4_rule_template,
         ipv6_rule_template,
+        ipv4_user_output_rule_template: "".to_string(),
+        ipv6_user_output_rule_template: "".to_string(),
         default_rules: vec![],
         ports_for_node_whitelist: vec![],
+        ports_for_http_adapter_blacklist: vec![],
     };
 
     assert_eq!(

@@ -26,9 +26,12 @@ pub struct Config {
     pub file_template: String,
     pub ipv4_rule_template: String,
     pub ipv6_rule_template: String,
+    pub ipv4_user_output_rule_template: String,
+    pub ipv6_user_output_rule_template: String,
     #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(|_x| vec![])"))]
     pub default_rules: Vec<FirewallRule>,
     pub ports_for_node_whitelist: Vec<u32>,
+    pub ports_for_http_adapter_blacklist: Vec<u32>,
 }
 
 impl Default for Config {
@@ -38,8 +41,11 @@ impl Default for Config {
             file_template: "".to_string(),
             ipv4_rule_template: "".to_string(),
             ipv6_rule_template: "".to_string(),
+            ipv4_user_output_rule_template: "".to_string(),
+            ipv6_user_output_rule_template: "".to_string(),
             default_rules: vec![],
             ports_for_node_whitelist: vec![],
+            ports_for_http_adapter_blacklist: vec![],
         }
     }
 }
