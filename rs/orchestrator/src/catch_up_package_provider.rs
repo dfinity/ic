@@ -97,10 +97,7 @@ impl CatchUpPackageProvider {
             // Note: None is < Some(_)
             if peer_cup.as_ref().map(CatchUpPackageParam::from) > param {
                 return peer_cup;
-            } else if param.is_some() {
-                // There is a local CUP. Do not keep trying.
-                return None;
-            } // There is no local CUP
+            }
         }
         None
     }
