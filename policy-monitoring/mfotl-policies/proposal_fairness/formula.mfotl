@@ -12,7 +12,7 @@
     the creator itself?
 
   Relevant events:
-  - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
+  - originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_removed_from_subnet(node_id:string, node_addr:string)
   - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
@@ -32,7 +32,7 @@
     into a bound of ~500 seconds between creation and delivery.
 *)
 
-LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
 LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
 LET num_subnet_nodes(subnet, n) = n <- CNT node; subnet subnet_map(node, subnet) IN
 

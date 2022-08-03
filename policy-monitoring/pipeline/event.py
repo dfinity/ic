@@ -333,68 +333,24 @@ class MoveBlockProposalEvent(ReplicaEvent):
             return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash, params.signer)]
 
 
-class ControlePlaneAcceptErrorEvent(ReplicaEvent):
-    def __init__(self, doc: EsDoc):
-        super().__init__(name="ControlPlane_accept_error", doc=doc, crate='ic_transport"', module="control_plane")
-
-    def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_control_plane_accept_params()
-        if not params:
-            return []
-        else:
-            if params.error is None:
-                return [(params.local_addr, params.flow)]
-            else:
-                return [(params.local_addr, params.flow, params.error)]
-
-
-class ControlePlaneSpawnAcceptTaskEvent(ReplicaEvent):
-    def __init__(self, doc: EsDoc):
-        super().__init__(name="ControlPlane_spawn_accept_task", doc=doc, crate="ic_transport", module="control_plane")
-
-    def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_control_plane_spawn_accept_task_params()
-        if not params:
-            return []
-        else:
-            return [
-                (
-                    params.local_addr,
-                    params.flow,
-                )
-            ]
-
-
-class ControlePlaneAcceptAbortedEvent(ReplicaEvent):
-    def __init__(self, doc: EsDoc):
-        super().__init__(name="ControlPlane_accept_aborted", doc=doc, crate="ic_transport", module="control_plane")
-
-    def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_control_plane_accept_task_aborted_params()
-        if not params:
-            return []
-        else:
-            return [(params.flow,)]  # careful with the comma!
-
-
-class ControlePlaneTlsServerHandshakeFailedEvent(ReplicaEvent):
+class ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(ReplicaEvent):
     def __init__(self, doc: EsDoc):
         super().__init__(
-            name="ControlPlane_tls_server_handshake_failed", doc=doc, crate="ic_transport", module="control_plane"
+            name="ControlPlane__spawn_accept_task__tls_server_handshake_failed",
+            doc=doc,
+            crate="ic_transport",
+            module="control_plane",
         )
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_control_plane_tls_server_handshake_failure_params()
+        params = self.doc.get_control_plane_spawn_accept_task_tls_server_handshake_failed_params()
         if not params:
             return []
         else:
             return [
                 (
-                    params.node_id,
                     params.node_addr,
                     params.peer_addr,
-                    params.flow,
-                    params.error,
                 )
             ]
 
