@@ -27,6 +27,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
+    "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",

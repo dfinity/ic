@@ -7737,6 +7737,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-ic00-types",
+ "ic-icrc1",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",

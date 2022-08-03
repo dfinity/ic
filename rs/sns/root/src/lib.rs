@@ -7,13 +7,18 @@ use crate::pb::v1::{
 };
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize};
-use dfn_core::api::call;
-use dfn_core::CanisterId;
+use dfn_core::{api::call, CanisterId};
 use ic_base_types::{NumBytes, PrincipalId};
+use ic_icrc1::endpoints::ArchiveInfo;
 use ic_nervous_system_root::LOG_PREFIX;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use num_traits::cast::ToPrimitive;
-use std::{cell::RefCell, thread::LocalKey};
+use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
+
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
+
+const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 
 /// Begin Local Copy of Various Candid Type definitions from ic00_types
 ///
@@ -204,7 +209,7 @@ impl From<(Option<i32>, String)> for CanisterCallError {
     }
 }
 
-/// The managment (virtual) canister, also known as IC_00.
+/// The management (virtual) canister, also known as IC_00.
 /// Reference: https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-management-canister
 #[async_trait]
 pub trait ManagementCanisterClient {
@@ -219,6 +224,13 @@ pub trait ManagementCanisterClient {
         &mut self,
         settings: &UpdateSettingsArgs,
     ) -> Result<EmptyBlob, CanisterCallError>;
+}
+
+// TODO NNS1-1593: Use a common icrc1 trait
+/// A trait for querying the icrc1 ledger from SNS Root.
+#[async_trait]
+pub trait LedgerCanisterClient {
+    async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError>;
 }
 
 fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
@@ -294,17 +306,17 @@ impl CanisterSummary {
 }
 
 impl SnsRootCanister {
-    fn governance_canister_id(&self) -> PrincipalId {
+    pub fn governance_canister_id(&self) -> PrincipalId {
         self.governance_canister_id
             .expect("Invalid root canister state: missing governance_canister_id.")
     }
 
-    fn ledger_canister_id(&self) -> PrincipalId {
+    pub fn ledger_canister_id(&self) -> PrincipalId {
         self.ledger_canister_id
             .expect("Invalid root canister state: missing ledger_canister_id.")
     }
 
-    fn swap_canister_id(&self) -> PrincipalId {
+    pub fn swap_canister_id(&self) -> PrincipalId {
         self.swap_canister_id
             .expect("Invalid root canister state: missing swap_canister_id.")
     }
@@ -318,16 +330,22 @@ impl SnsRootCanister {
         own_canister_id: CanisterId,
     ) -> GetSnsCanistersSummaryResponse {
         // Get ID of other canisters.
-        let (governance_canister_id, ledger_canister_id, swap_canister_id, dapp_canister_ids) =
-            self_ref.with(|self_ref| {
-                let self_ref = self_ref.borrow();
-                (
-                    self_ref.governance_canister_id(),
-                    self_ref.ledger_canister_id(),
-                    self_ref.swap_canister_id(),
-                    self_ref.dapp_canister_ids.clone(),
-                )
-            });
+        let (
+            governance_canister_id,
+            ledger_canister_id,
+            swap_canister_id,
+            dapp_canister_ids,
+            archive_canister_ids,
+        ) = self_ref.with(|self_ref| {
+            let self_ref = self_ref.borrow();
+            (
+                self_ref.governance_canister_id(),
+                self_ref.ledger_canister_id(),
+                self_ref.swap_canister_id(),
+                self_ref.dapp_canister_ids.clone(),
+                self_ref.archive_canister_ids.clone(),
+            )
+        });
 
         // Get our status.
         let root_status = get_root_status(governance_canister_id).await;
@@ -373,6 +391,7 @@ impl SnsRootCanister {
             status: swap_status,
         });
 
+        // TODO NNS1-1584 - get_sns_canisters_summary should not panic if canisters don't return status
         // Get status of dapp canister(s).
         let mut dapp_canister_summaries = vec![];
         for dapp_canister_id in dapp_canister_ids {
@@ -401,13 +420,39 @@ impl SnsRootCanister {
             });
         }
 
+        // TODO NNS1-1584 - get_sns_canisters_summary should not panic if canisters don't return status
+        // Get status of archive canister(s).
+        let mut archive_canister_summaries = vec![];
+        for archive_canister_id in archive_canister_ids {
+            let archive_status = management_canister_client
+                .canister_status(&CanisterIdRecord::from(
+                    CanisterId::try_from(archive_canister_id).unwrap_or_else(|e| {
+                        panic!(
+                            "Could not convert from the recorded principal ID of (one of) the \
+                         archive canisters ({archive_canister_id}) to a canister ID: {e:#?}"
+                        )
+                    }),
+                ))
+                .await
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Unable to get the status of one of the archive canisters \
+                     ({archive_canister_id}): {e:#?}"
+                    )
+                });
+            archive_canister_summaries.push(CanisterSummary {
+                canister_id: Some(archive_canister_id),
+                status: Some(archive_status),
+            });
+        }
+
         GetSnsCanistersSummaryResponse {
             root: root_canister_summary,
             governance: governance_canister_summary,
             ledger: ledger_canister_summary,
             swap: swap_canister_summary,
             dapps: dapp_canister_summaries,
-            archives: vec![],
+            archives: archive_canister_summaries,
         }
     }
 
@@ -421,8 +466,7 @@ impl SnsRootCanister {
             ledger: self.ledger_canister_id,
             swap: self.swap_canister_id,
             dapps: self.dapp_canister_ids.clone(),
-            // TODO NNS1-1488 Add archive canister ids to root
-            archives: vec![],
+            archives: self.archive_canister_ids.clone(),
         }
     }
 
@@ -447,14 +491,16 @@ impl SnsRootCanister {
             .canister_id
             .expect("Invalid RegisterDappCanisterRequest: canister_id field must be populated.");
         // Reject if canister_id is one of the distinguished canisters in the SNS.
-        // TODO: Include ledger archive in this list: https://dfinity.atlassian.net/browse/NNS1-1488
-        let sns_canister_ids = self_ref.with(|s| {
+        let sns_canister_ids: Vec<PrincipalId> = self_ref.with(|s| {
             let s = s.borrow();
-            [
+            vec![
                 s.governance_canister_id.unwrap(),
                 s.ledger_canister_id.unwrap(),
                 own_canister_id.into(),
             ]
+            .into_iter()
+            .chain(s.archive_canister_ids.clone())
+            .collect()
         });
         if sns_canister_ids.contains(&query_canister_id) {
             panic!(
@@ -527,7 +573,7 @@ impl SnsRootCanister {
 
         // A pre-flight check: Assert that we still control all canisters
         // referenced in dapp_canister_ids. This way, we minimize that chance of
-        // failing half way through controllership changes, since changing the
+        // failing half way through controller changes, since changing the
         // controllers of many canisters cannot be done atomically.
         for dapp_canister_id in &dapp_canister_ids {
             let dapp_canister_id = CanisterId::try_from(*dapp_canister_id).unwrap_or_else(|err| {
@@ -556,7 +602,7 @@ impl SnsRootCanister {
 
         // Set controller(s) of dapp canisters.
         //
-        // From now on, we should avoid panicing, because we'll be making
+        // From now on, we should avoid panicking, because we'll be making
         // changes to external state, and we want to stay abreast of those
         // changes by not rolling back due to panic.
         let mut failed_updates = vec![];
@@ -605,6 +651,125 @@ impl SnsRootCanister {
         // Report what happened.
         SetDappControllersResponse { failed_updates }
     }
+
+    /// Runs periodic tasks that are not directly triggered by user input.
+    pub async fn run_periodic_tasks(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        ledger_client: &mut impl LedgerCanisterClient,
+        current_timestamp_seconds: u64,
+    ) {
+        let should_poll_archives = self_ref.with(|state| {
+            let latest_poll_timestamp = state.borrow().latest_ledger_archive_poll_timestamp_seconds;
+            Self::should_poll_for_new_archive_canisters(
+                latest_poll_timestamp,
+                current_timestamp_seconds,
+            )
+        });
+
+        if should_poll_archives {
+            SnsRootCanister::poll_for_new_archive_canisters(
+                self_ref,
+                ledger_client,
+                current_timestamp_seconds,
+            )
+            .await;
+        }
+    }
+
+    /// Polls for new archives canisters from the
+    async fn poll_for_new_archive_canisters(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        ledger_client: &mut impl LedgerCanisterClient,
+        current_timestamp_seconds: u64,
+    ) {
+        println!("{}Polling for new archive canisters", LOG_PREFIX);
+
+        // Set the latest_ledger_archive_poll_timestamp_seconds so that if the call fails,
+        // we won't retry on every heartbeat
+        self_ref.with(|state| {
+            state
+                .borrow_mut()
+                .latest_ledger_archive_poll_timestamp_seconds = Some(current_timestamp_seconds);
+        });
+
+        let archives_result = ledger_client.archives().await;
+
+        let archive_infos: Vec<ArchiveInfo> = match archives_result {
+            Ok(archives) => archives,
+            Err(canister_call_error) => {
+                // TODO NNS1-1595 - Export metrics if this call fails
+                // Log the error and do nothing (return).
+                println!(
+                    "{}ERROR: Unable to get the Ledger Archives: {:?}",
+                    LOG_PREFIX, canister_call_error
+                );
+                return;
+            }
+        };
+
+        let archive_principals_ids: Vec<PrincipalId> = archive_infos
+            .iter()
+            .map(|archive| archive.canister_id.get())
+            .collect();
+
+        self_ref.with(|state| {
+            let defects = Self::compare_archives_responses(
+                &state.borrow().archive_canister_ids,
+                &archive_principals_ids,
+            );
+
+            if !defects.is_empty() {
+                // TODO NNS1-1595 - Export metrics if defects are detected
+                // Log the error and do nothing (return)
+                println!(
+                    "{}ERROR: Defects detected between polls of archive canisters: {}",
+                    LOG_PREFIX, defects
+                );
+                return;
+            }
+
+            state.borrow_mut().archive_canister_ids = archive_principals_ids;
+        });
+    }
+
+    /// Determine if SNS Root should poll for new SNS Ledger archive canisters.
+    ///
+    /// Poll if:
+    ///    - The latest_ledger_archive_poll_timestamp_seconds field is unset
+    ///    - It has been more than one day since the last poll
+    fn should_poll_for_new_archive_canisters(
+        latest_ledger_archive_poll_timestamp_seconds: Option<u64>,
+        current_timestamp_seconds: u64,
+    ) -> bool {
+        if let Some(latest_poll_timestamp_seconds) = latest_ledger_archive_poll_timestamp_seconds {
+            // If the difference between current time and the last poll is less than one day,
+            // don't poll for archives
+            if (current_timestamp_seconds - latest_poll_timestamp_seconds) < ONE_DAY_SECONDS {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Compare two responses from the Ledger Canister's archives() API. Detect if any
+    /// archive CanisterIds previously tracked are no longer in the more recent response.
+    fn compare_archives_responses(
+        old_archive_canisters: &[PrincipalId],
+        new_archive_canisters: &[PrincipalId],
+    ) -> String {
+        let mut defects = Vec::new();
+
+        let new_archive_set: BTreeSet<PrincipalId> =
+            new_archive_canisters.iter().cloned().collect();
+        old_archive_canisters.iter().for_each(|principal_id| {
+            if !new_archive_set.contains(principal_id) {
+                defects.push(format!("Previous archive_canister_ids PrincipalId {} is missing from response of new poll", principal_id))
+            }
+        });
+
+        defects.join("\n")
+    }
 }
 
 /// Get the canister status of the Root canister controlled by the given Governance canister.
@@ -648,8 +813,9 @@ async fn get_swap_status(swap_id: PrincipalId) -> Option<CanisterStatusResultV2>
 mod tests {
     use super::*;
     use crate::pb::v1::ListSnsCanistersResponse;
-    use ic_base_types::NumBytes;
+    use dfn_core::api::now;
     use std::collections::VecDeque;
+    use std::time::SystemTime;
 
     #[derive(Debug)]
     enum ManagementCanisterClientCall {
@@ -726,20 +892,67 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone)]
+    enum LedgerCanisterClientCall {
+        Archives {
+            result: Result<Vec<ArchiveInfo>, CanisterCallError>,
+        },
+    }
+
+    #[derive(Debug, Clone)]
+    struct MockLedgerCanisterClient {
+        calls: VecDeque<LedgerCanisterClientCall>,
+    }
+
+    #[async_trait]
+    impl LedgerCanisterClient for MockLedgerCanisterClient {
+        async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
+            match self.calls.pop_front().unwrap() {
+                LedgerCanisterClientCall::Archives { result } => result,
+            }
+        }
+    }
+
+    fn build_test_sns_root_canister() -> SnsRootCanister {
+        SnsRootCanister {
+            governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+            ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+            swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
+            dapp_canister_ids: vec![],
+            archive_canister_ids: vec![],
+            latest_ledger_archive_poll_timestamp_seconds: None,
+        }
+    }
+
+    // Helper function to assert state changes after polling for archive canisters
+    fn assert_archive_poll_state_change(
+        root_state: &'static LocalKey<RefCell<SnsRootCanister>>,
+        expected_canister_ids: &[CanisterId],
+        expected_timestamp: u64,
+    ) {
+        let expected_principal_ids: Vec<PrincipalId> = expected_canister_ids
+            .iter()
+            .map(|canister_id| canister_id.get())
+            .collect();
+
+        root_state.with(|state| {
+            assert_eq!(*state.borrow().archive_canister_ids, expected_principal_ids);
+            assert_eq!(
+                state.borrow().latest_ledger_archive_poll_timestamp_seconds,
+                Some(expected_timestamp)
+            )
+        });
+    }
+
     #[tokio::test]
     async fn register_dapp_canister_happy() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
-                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
-                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
-                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
-                dapp_canister_ids: vec![],
-            });
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
-        let sns_root_canister_id = PrincipalId::new_user_test_id(3);
-        let dapp_canister_id = PrincipalId::new_user_test_id(4);
+        let sns_root_canister_id = PrincipalId::new_user_test_id(4);
+        let dapp_canister_id = PrincipalId::new_user_test_id(5);
 
         let mut management_canister_client = MockManagementCanisterClient {
             calls: vec![ManagementCanisterClientCall::CanisterStatus {
@@ -797,15 +1010,10 @@ mod tests {
     async fn register_dapp_canister_sad() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
-                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
-                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
-                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
-                dapp_canister_ids: vec![],
-            });
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
         }
-        let sns_root_canister_id = PrincipalId::new_user_test_id(3);
-        let dapp_canister_id = PrincipalId::new_user_test_id(4);
+        let sns_root_canister_id = PrincipalId::new_user_test_id(4);
+        let dapp_canister_id = PrincipalId::new_user_test_id(5);
 
         let mut management_canister_client = MockManagementCanisterClient {
             calls: vec![ManagementCanisterClientCall::CanisterStatus {
@@ -846,6 +1054,8 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
                 dapp_canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
+                archive_canister_ids: vec![],
+                ..Default::default()
             });
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
@@ -905,6 +1115,8 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
                 dapp_canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
+                archive_canister_ids: vec![],
+                ..Default::default()
             });
         }
         let sns_root_canister_id = PrincipalId::new_user_test_id(3);
@@ -961,6 +1173,8 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
                 dapp_canister_ids: vec![PrincipalId::new_user_test_id(3)],
+                archive_canister_ids: vec![],
+                ..Default::default()
             });
         }
         let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
@@ -1038,6 +1252,8 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
                 dapp_canister_ids: vec![PrincipalId::new_user_test_id(3)],
+                archive_canister_ids: vec![],
+                ..Default::default()
             });
         }
         let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
@@ -1072,6 +1288,8 @@ mod tests {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
                 dapp_canister_ids: vec![PrincipalId::new_user_test_id(3)],
+                archive_canister_ids: vec![],
+                ..Default::default()
             });
         }
         let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
@@ -1157,6 +1375,8 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
             swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
             dapp_canister_ids: vec![PrincipalId::new_user_test_id(4)],
+            archive_canister_ids: vec![PrincipalId::new_user_test_id(5)],
+            ..Default::default()
         };
         let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(5)).unwrap();
 
@@ -1170,8 +1390,488 @@ mod tests {
                 ledger: state.ledger_canister_id,
                 swap: state.swap_canister_id,
                 dapps: state.dapp_canister_ids,
-                archives: vec![],
+                archives: state.archive_canister_ids,
             }
         )
+    }
+
+    #[tokio::test]
+    async fn poll_for_archives_single_archive() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_id = CanisterId::from_u64(99);
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![LedgerCanisterClientCall::Archives {
+                result: Ok(vec![ArchiveInfo {
+                    canister_id: expected_archive_canister_id,
+                    block_range_start: Default::default(),
+                    block_range_end: Default::default(),
+                }]),
+            }]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now,
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(&SNS_ROOT_CANISTER, &[expected_archive_canister_id], now);
+    }
+
+    #[tokio::test]
+    async fn poll_for_archives_multiple_archives() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_ids =
+            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            }]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now,
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            expected_archive_canister_ids.as_slice(),
+            now,
+        );
+    }
+
+    #[tokio::test]
+    async fn poll_for_archives_multiple_polls() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_ids =
+            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    }]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[1],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+            ]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now,
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + ONE_DAY_SECONDS,
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids,
+            now + ONE_DAY_SECONDS,
+        );
+    }
+
+    #[tokio::test]
+    async fn poll_for_archives_multiple_polls_with_call_errors() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_ids = vec![
+            CanisterId::from_u64(99),
+            CanisterId::from_u64(100),
+            CanisterId::from_u64(101),
+            CanisterId::from_u64(102),
+        ];
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[1],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[2],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[3],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+            ]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now,
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..2],
+            now,
+        );
+
+        // This should produce an error since the newly polled archives are not a superset of
+        // the previous archive canisters.
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + ONE_DAY_SECONDS,
+        )
+        .await;
+
+        // Since the error happens in canister_heartbeat, this should result in a 'do nothing'
+        // operation. The latest_ledger_archive_poll_timestamp_seconds should be updated,
+        // and the canisters should be the same as before
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..2],
+            now + ONE_DAY_SECONDS,
+        );
+    }
+
+    #[tokio::test]
+    async fn poll_for_archives_multiple_polls_missing_canisters() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_ids =
+            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    }]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Err(CanisterCallError {
+                        code: None,
+                        description: "This is an error".to_string(),
+                    }),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[1],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Err(CanisterCallError {
+                        code: None,
+                        description: "This is also an error".to_string(),
+                    }),
+                },
+            ]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+
+        // The first call should result in new archives being returned
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now,
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        // The second call is set to return an error, and should result in an updated to
+        // latest_ledger_archive_poll_timestamp_seconds, but no new archive canisters
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + ONE_DAY_SECONDS,
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now + ONE_DAY_SECONDS,
+        );
+
+        // The third call is set to succeed and should result in an update to
+        // latest_ledger_archive_poll_timestamp_seconds as well as tracking new archive
+        // canisters
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + (2 * ONE_DAY_SECONDS),
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..2],
+            now + (2 * ONE_DAY_SECONDS),
+        );
+
+        // The fourth call is set to return an error, and should result in an updated to
+        // latest_ledger_archive_poll_timestamp_seconds, but no new archive canisters
+        SnsRootCanister::poll_for_new_archive_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + (3 * ONE_DAY_SECONDS),
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..2],
+            now + (3 * ONE_DAY_SECONDS),
+        );
+    }
+
+    #[test]
+    fn test_should_poll_for_new_archive_canisters() {
+        let mut latest_ledger_archive_poll_timestamp_seconds = None;
+        let mut current_timestamp_seconds = 0;
+
+        assert!(SnsRootCanister::should_poll_for_new_archive_canisters(
+            latest_ledger_archive_poll_timestamp_seconds,
+            current_timestamp_seconds
+        ));
+
+        latest_ledger_archive_poll_timestamp_seconds = Some(0);
+        assert!(!SnsRootCanister::should_poll_for_new_archive_canisters(
+            latest_ledger_archive_poll_timestamp_seconds,
+            current_timestamp_seconds
+        ));
+
+        current_timestamp_seconds = ONE_DAY_SECONDS / 2;
+        assert!(!SnsRootCanister::should_poll_for_new_archive_canisters(
+            latest_ledger_archive_poll_timestamp_seconds,
+            current_timestamp_seconds
+        ));
+
+        current_timestamp_seconds = ONE_DAY_SECONDS;
+        assert!(SnsRootCanister::should_poll_for_new_archive_canisters(
+            latest_ledger_archive_poll_timestamp_seconds,
+            current_timestamp_seconds
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_run_periodic_tasks() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let expected_archive_canister_ids =
+            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    }]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[1],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+            ]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &mut ledger_canister_client, now)
+            .await;
+
+        // Step 3: Inspect results.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        // Running periodic tasks one second in the future should
+        // result in no change to state.
+        SnsRootCanister::run_periodic_tasks(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + 1,
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        // Running periodic tasks one dat in the future should
+        // result in a new poll.
+        SnsRootCanister::run_periodic_tasks(
+            &SNS_ROOT_CANISTER,
+            &mut ledger_canister_client,
+            now + ONE_DAY_SECONDS,
+        )
+        .await;
+
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids,
+            now + ONE_DAY_SECONDS,
+        );
     }
 }
