@@ -66,20 +66,21 @@ sys.excepthook = sns_except_hook
 
 
 def send_slack(message: dict):
-    if "SLACK_WEBHOOK" in os.environ.copy():
-        print("Sending Slack message .. ")
-        subprocess.check_output(
-            [
-                "curl",
-                "-X",
-                "POST",
-                "-H",
-                "Content-type: application/json",
-                "--data",
-                json.dumps(message),
-                os.environ["SLACK_WEBHOOK"],
-            ]
-        )
+    print("Not sending Slack messages at the moment .. ")
+    # if "SLACK_WEBHOOK" in os.environ.copy():
+    #    print("Sending Slack message .. ")
+    #    subprocess.check_output(
+    #        [
+    #            "curl",
+    #            "-X",
+    #            "POST",
+    #            "-H",
+    #            "Content-type: application/json",
+    #            "--data",
+    #            json.dumps(message),
+    #            os.environ["SLACK_WEBHOOK"],
+    #        ]
+    #    )
 
 
 def send_slackmessage(mst: str):
