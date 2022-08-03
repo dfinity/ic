@@ -1,6 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -88,7 +89,7 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_binary(
+rust_canister(
     name = "sns-swap-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,

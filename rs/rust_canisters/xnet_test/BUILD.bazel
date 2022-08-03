@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,4 +27,10 @@ rust_library(
 rust_doc_test(
     name = "xnet_test_doc_test",
     crate = ":xnet_test",
+)
+
+rust_canister(
+    name = "xnet-test-canister",
+    srcs = ["src/main.rs"],
+    deps = DEPENDENCIES + [":xnet_test"],
 )
