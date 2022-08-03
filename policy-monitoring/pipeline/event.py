@@ -399,7 +399,7 @@ class FinalizedEvent(ReplicaEvent):
             ]
 
 
-class UnusualLogEvent(ReplicaEvent):
+class GenericLogEvent(ReplicaEvent):
     def __init__(self, doc: EsDoc):
         super().__init__(name="log", doc=doc, crate=ReplicaEvent.WILDCARD, module=ReplicaEvent.WILDCARD)
 
@@ -408,4 +408,14 @@ class UnusualLogEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.level, params.message)]
+            crate, module = self.doc.get_crate_module()
+            return [
+                (
+                    self.doc.get_host_principal(),
+                    self.doc.get_subnet_principal(),
+                    crate,
+                    module,
+                    params.level,
+                    params.message,
+                )
+            ]
