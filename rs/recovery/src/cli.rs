@@ -7,6 +7,7 @@ use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFa
 use crate::nns_recovery_same_nodes;
 use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use crate::steps::Step;
+use crate::util::subnet_id_from_str;
 use crate::{app_subnet_recovery, util};
 use crate::{NeuronArgs, RecoveryArgs};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -87,6 +88,28 @@ pub fn app_subnet_recovery(
                         &logger,
                         "Enter space separated list of replacement nodes: ",
                     );
+                }
+                if subnet_recovery.params.ecdsa_subnet_id.is_none() {
+                    let is_ecdsa_subnet = match subnet_recovery
+                        .get_recovery_api()
+                        .get_ecdsa_config(subnet_recovery.params.subnet_id)
+                    {
+                        Ok(Some(_)) => true,
+                        Ok(None) => false,
+                        Err(err) => {
+                            warn!(
+                                logger,
+                                "Failed to determine if broken subnet has ECDSA key: {:?}", err
+                            );
+                            false
+                        }
+                    };
+                    if is_ecdsa_subnet {
+                        subnet_recovery.params.ecdsa_subnet_id = read_optional_subnet_id(
+                            &logger,
+                            "Enter ID of subnet to reshare ECDSA key from: ",
+                        );
+                    }
                 }
             }
 
@@ -345,6 +368,10 @@ pub fn read_optional_url(logger: &Logger, prompt: &str) -> Option<Url> {
     read_optional_type(logger, prompt, |input| {
         Url::parse(&input).map_err(|e| e.to_string())
     })
+}
+
+pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
+    read_optional_type(logger, prompt, |input| subnet_id_from_str(&input))
 }
 
 /// Optionally read an input of the generic type by applying the given deserialization function.

@@ -6817,6 +6817,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
  "ic-replay",
  "ic-types 0.8.0",
  "reqwest",

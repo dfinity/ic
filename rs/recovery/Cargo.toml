@@ -13,6 +13,7 @@ ic-http-utils = { path = "../http_utils" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-replay = { path = "../replay" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }

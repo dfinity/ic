@@ -185,6 +185,7 @@ pub fn test(env: TestEnv) {
         pub_key: Some(pub_key),
         download_node: Some(app_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
+        ecdsa_subnet_id: None,
     };
 
     let mut subnet_recovery =

@@ -52,6 +52,10 @@ pub struct AppSubnetRecoveryArgs {
     /// IP address of the node to upload the new subnet state to
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
+
+    /// Id of the ecdsa subnet used for resharing ecdsa key of subnet to be recovered
+    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    pub ecdsa_subnet_id: Option<SubnetId>,
 }
 
 pub struct AppSubnetRecovery {
@@ -167,6 +171,7 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
+                    self.params.ecdsa_subnet_id,
                 )?))
             }
 
