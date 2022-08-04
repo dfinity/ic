@@ -1,4 +1,5 @@
 use crate::pb::v1::governance_error::ErrorType;
+use crate::pb::v1::governance_error::ErrorType::InvalidProposal;
 use crate::pb::v1::GovernanceError;
 use crate::types::Environment;
 use candid::{Decode, Encode};
@@ -10,16 +11,95 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 // the type definitions.  They are only that way to avoid leaking the types as they are not intended
 // to be exposed beyond our workaround implementation.
 
-/// Takes the sns_canisters along with the current version and next version and returns the canister
-/// to be upgraded and the WASM it should receive.
+/// Takes the list_sns_canisters_response along with the current SnsVersion and target SnsVersion
+/// and returns the CanisterId to be upgraded along with the WASM bytes to install
 ///
 /// Returns Err when more than one canister is eligible to be upgraded, or the WASM cannot be obtained
-pub(crate) async fn get_upgrade_info(
+pub(crate) async fn get_upgrade_target_canister_id_and_wasm(
     env: &dyn Environment,
-    sns_canisters: &ListSnsCanistersResponse,
+    list_sns_canisters_response: &ListSnsCanistersResponse,
     current_version: &SnsVersion,
     next_version: &SnsVersion,
-) -> Result<(CanisterId, Vec<u8>), GovernanceError> {
+) -> Result<(CanisterId, /* wasm */ Vec<u8>), GovernanceError> {
+    let (canister_type_to_upgrade, wasm_hash) =
+        canister_type_and_wasm_hash_for_upgrade(current_version, next_version).map_err(
+            |error_message| GovernanceError::new_with_message(InvalidProposal, error_message),
+        )?;
+
+    let canister_id =
+        get_canister_to_upgrade(canister_type_to_upgrade, list_sns_canisters_response).map_err(
+            |error_message| GovernanceError::new_with_message(InvalidProposal, error_message),
+        )?;
+
+    let response = env
+        .call_canister(
+            SNS_WASM_CANISTER_ID,
+            "get_wasm",
+            Encode!(&GetWasmRequest { hash: wasm_hash }).expect("Could not encode"),
+        )
+        .await
+        .map_err(|(code, message)| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Call to get_wasm failed: {} {}",
+                    code.unwrap_or_default(),
+                    message
+                ),
+            )
+        })?;
+
+    let response = Decode!(&response, GetWasmResponse).expect("Decoding GetWasmResponse failed");
+    let wasm = response.wasm.ok_or_else(|| {
+        GovernanceError::new_with_message(
+            ErrorType::External,
+            "No WASM found using hash returned from SNS-WASM canister.",
+        )
+    })?;
+
+    let returned_canister_type = SnsCanisterType::from_i32(wasm.canister_type)
+        .expect("Could not convert response from SNS-WASM to valid SnsCanisterType");
+
+    if returned_canister_type != canister_type_to_upgrade {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!(
+                "WASM returned from SNS-WASM is not intended for the same canister type. \
+            Expected: {:?}.  Received: {:?}.",
+                canister_type_to_upgrade, returned_canister_type
+            ),
+        ));
+    }
+
+    Ok((canister_id, wasm.wasm))
+}
+
+pub(crate) fn get_canister_to_upgrade(
+    canister_type: SnsCanisterType,
+    list_sns_canisters_response: &ListSnsCanistersResponse,
+) -> Result<CanisterId, String> {
+    let (maybe_principal, label) = match canister_type {
+        SnsCanisterType::Root => (list_sns_canisters_response.root, "Root"),
+        SnsCanisterType::Governance => (list_sns_canisters_response.governance, "Governance"),
+        SnsCanisterType::Ledger => (list_sns_canisters_response.ledger, "Ledger"),
+        SnsCanisterType::Swap => (list_sns_canisters_response.swap, "Swap"),
+        SnsCanisterType::Unspecified => panic!("SnsCanisterType cannot be unspecified"),
+    };
+    maybe_principal
+        .ok_or_else(|| {
+            format!(
+                "Did not receive {} CanisterId from list_sns_canisters call",
+                label
+            )
+        })
+        .and_then(|principal| CanisterId::new(principal).map_err(|e| format!("{}", e)))
+}
+
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
+    current_version: &SnsVersion,
+    next_version: &SnsVersion,
+) -> Result<(SnsCanisterType, Vec<u8>), String> {
+    // TODO(NNS1-1590) Make a method on SnsVersion to compute differences
     let mut differences = vec![];
     if current_version.root_wasm_hash != next_version.root_wasm_hash {
         differences.push(SnsCanisterType::Root);
@@ -36,80 +116,30 @@ pub(crate) async fn get_upgrade_info(
 
     // This should be impossible due to upstream constraints.
     if differences.is_empty() {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            "No difference was found between the current SNS version and the next SNS version",
-        ));
+        return Err(
+            "No difference was found between the current SNS version and the next SNS version"
+                .to_string(),
+        );
     }
 
     // This should also be impossible due to upstream constraints.
     if differences.len() > 1 {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  This is not currently supported."
-        ));
-    }
-
-    let get_canister_id = |maybe_canister_principal: Option<PrincipalId>, label: &str| {
-        CanisterId::new(maybe_canister_principal.unwrap_or_else(|| {
-            panic!(
-                "Did not receive {} CanisterId from list_sns_canisters",
-                label
-            )
-        }))
-        .unwrap()
-    };
-
-    let canister_type = differences.remove(0);
-
-    let (canister_id, wasm_hash) = match canister_type {
-        SnsCanisterType::Root => (
-            get_canister_id(sns_canisters.root, "Root"),
-            next_version.root_wasm_hash.clone(),
-        ),
-        SnsCanisterType::Governance => (
-            get_canister_id(sns_canisters.governance, "Governance"),
-            next_version.governance_wasm_hash.clone(),
-        ),
-        SnsCanisterType::Ledger => (
-            get_canister_id(sns_canisters.ledger, "Ledger"),
-            next_version.ledger_wasm_hash.clone(),
-        ),
-        SnsCanisterType::Swap => (
-            get_canister_id(sns_canisters.swap, "Swap"),
-            next_version.swap_wasm_hash.clone(),
-        ),
-        _ => {
-            panic!("Cannot get here, invalid value")
-        }
-    };
-
-    let response = env
-        .call_canister(
-            SNS_WASM_CANISTER_ID,
-            "get_wasm",
-            Encode!(&GetWasmRequest { hash: wasm_hash }).unwrap(),
-        )
-        .await
-        .expect("Call to get_wasm failed");
-
-    let response = Decode!(&response, GetWasmResponse).expect("Decoding GetWasmResponse failed");
-    let wasm = response
-        .wasm
-        .expect("No WASM found using hash returned from SNS-WASM canister.");
-
-    let returned_canister_type = SnsCanisterType::from_i32(wasm.canister_type).unwrap();
-
-    if returned_canister_type != canister_type {
-        panic!(
-            "WASM returned from SNS-WASM is not intended for the same canister type.  \
-            Expected: {:?}.  Received: {:?}.",
-            canister_type,
-            SnsCanisterType::from_i32(wasm.canister_type).unwrap()
+        return Err(
+            "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  This is not currently supported.".to_string()
         );
     }
 
-    Ok((canister_id, wasm.wasm))
+    let canister_type = differences.remove(0);
+
+    let hash = match canister_type {
+        SnsCanisterType::Root => next_version.root_wasm_hash.clone(),
+        SnsCanisterType::Governance => next_version.governance_wasm_hash.clone(),
+        SnsCanisterType::Ledger => next_version.ledger_wasm_hash.clone(),
+        SnsCanisterType::Swap => next_version.swap_wasm_hash.clone(),
+        SnsCanisterType::Unspecified => panic!("SnsCanisterType cannot be unspecified"),
+    };
+
+    Ok((canister_type, hash))
 }
 
 /// Get the current version of the SNS this SNS is using.

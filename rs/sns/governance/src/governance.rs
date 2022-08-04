@@ -59,7 +59,8 @@ use crate::proposal::{
 };
 
 use crate::sns_upgrade::{
-    get_all_sns_canisters, get_current_version, get_next_version, get_upgrade_info,
+    get_all_sns_canisters, get_current_version, get_next_version,
+    get_upgrade_target_canister_id_and_wasm,
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
@@ -1996,8 +1997,13 @@ impl Governance {
         let sns_canisters =
             get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic()).await;
 
-        let (target_canister_id, target_wasm) =
-            get_upgrade_info(&*self.env, &sns_canisters, &current_version, &next_version).await?;
+        let (target_canister_id, target_wasm) = get_upgrade_target_canister_id_and_wasm(
+            &*self.env,
+            &sns_canisters,
+            &current_version,
+            &next_version,
+        )
+        .await?;
 
         let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
         println!(
@@ -2087,6 +2093,7 @@ impl Governance {
                 .as_ref()
                 .expect("Governance must have NervousSystemParameters."),
             &self.proto.id_to_nervous_system_functions,
+            self.proto.root_canister_id_or_panic(),
         )
         .await
         .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
