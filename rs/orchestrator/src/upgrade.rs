@@ -11,12 +11,10 @@ use ic_interfaces::registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -252,51 +250,38 @@ impl Upgrade {
         &mut self,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<()> {
-        let registry_version = self.registry.get_latest_version();
-        let new_replica_version = self
-            .registry
-            .get_replica_version(subnet_id, registry_version)?;
-        if new_replica_version != self.replica_version {
+        let (expected_replica_version, registry_version) =
+            self.registry.get_expected_replica_version(subnet_id)?;
+        if expected_replica_version != self.replica_version {
             info!(
                 self.logger,
                 "Replica version upgrade detected at registry version {}: {} -> {}",
                 registry_version,
                 self.replica_version,
-                new_replica_version
+                expected_replica_version
             );
-            self.prepare_upgrade(&new_replica_version).await?
+            self.prepare_upgrade(&expected_replica_version).await?
         }
         Ok(())
     }
 
     async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
-        let registry = &self.registry.registry_client;
-        match registry.get_unassigned_nodes_config(registry.get_latest_version()) {
-            Ok(Some(record)) => {
-                let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
-                    .map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't parse the replica version: {}",
-                            err
-                        ))
-                    })?;
-                if self.replica_version == replica_version {
-                    return Ok(());
-                }
-                info!(
-                    self.logger,
-                    "Replica upgrade on unassigned node detected: old version {}, new version {}",
-                    self.replica_version,
-                    replica_version
-                );
-                self.execute_upgrade(&replica_version)
-                    .await
-                    .map_err(OrchestratorError::from)
-            }
-            _ => Err(OrchestratorError::UpgradeError(
-                "No replica version for unassigned nodes found".to_string(),
-            )),
+        let registry_version = self.registry.get_latest_version();
+        let replica_version = self
+            .registry
+            .get_unassigned_replica_version(registry_version)?;
+        if self.replica_version == replica_version {
+            return Ok(());
         }
+        info!(
+            self.logger,
+            "Replica upgrade on unassigned node detected: old version {}, new version {}",
+            self.replica_version,
+            replica_version
+        );
+        self.execute_upgrade(&replica_version)
+            .await
+            .map_err(OrchestratorError::from)
     }
 
     /// Stop the current replica process.

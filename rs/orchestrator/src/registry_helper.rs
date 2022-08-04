@@ -8,6 +8,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
@@ -168,5 +169,35 @@ impl RegistryHelper {
         let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
         ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
             .map_err(OrchestratorError::ReplicaVersionParseError)
+    }
+
+    pub(crate) fn get_expected_replica_version(
+        &self,
+        subnet_id: SubnetId,
+    ) -> OrchestratorResult<(ReplicaVersion, RegistryVersion)> {
+        let registry_version = self.get_latest_version();
+        let new_replica_version = self.get_replica_version(subnet_id, registry_version)?;
+        Ok((new_replica_version, registry_version))
+    }
+
+    pub(crate) fn get_unassigned_replica_version(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<ReplicaVersion> {
+        match self.registry_client.get_unassigned_nodes_config(version) {
+            Ok(Some(record)) => {
+                let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
+                    .map_err(|err| {
+                        OrchestratorError::UpgradeError(format!(
+                            "Couldn't parse the replica version: {}",
+                            err
+                        ))
+                    })?;
+                Ok(replica_version)
+            }
+            _ => Err(OrchestratorError::UpgradeError(
+                "No replica version for unassigned nodes found".to_string(),
+            )),
+        }
     }
 }
