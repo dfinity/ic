@@ -1,6 +1,10 @@
 common --experimental_allow_tags_propagation
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
 
+# default to optimized and stripped binaries. These greatly optimized rust test runtimes.
+build --compilation_mode=opt
+build --strip=always
+
 build --strategy_regexp=ic-os/guestos/.*=local
 
 build --remote_cache=buildfarm.dfinity.systems
@@ -17,6 +21,8 @@ build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build --cxxopt='-std=c++17'
+
+build:dev --compilation_mode=fastbuild
 
 build:lint --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:lint --output_groups=+clippy_checks
