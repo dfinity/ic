@@ -6,7 +6,7 @@ use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
-use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -29,7 +29,8 @@ use ic_sns_governance::{
         Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, ListNeurons,
         ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters,
         Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-        ProposalData, ProposalId, ProposalRewardStatus, RewardEvent, Vote, WaitForQuietState,
+        ProposalData, ProposalId, ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
+        WaitForQuietState,
     },
     types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
 };
@@ -40,7 +41,22 @@ use ic_sns_test_utils::itest_helpers::{
 use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
 use maplit::btreemap;
-use std::{collections::HashSet, convert::TryInto, iter::FromIterator};
+use rust_decimal_macros::dec;
+use std::{
+    collections::HashSet,
+    convert::TryInto,
+    iter::{zip, FromIterator},
+};
+
+const E8: u64 = 1_0000_0000;
+
+const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
+    round_duration_seconds: Some(14 * 24 * 60 * 60),
+    start_timestamp_seconds: Some(ic_sns_swap::swap::START_OF_2022_TIMESTAMP_SECONDS),
+    reward_rate_transition_duration_seconds: Some(1),
+    initial_reward_rate_basis_points: Some(200),
+    final_reward_rate_basis_points: Some(100),
+};
 
 // This tests the determinism of list_neurons, now that the subaccount is used for
 // the unique identifier of the Neuron.
@@ -515,6 +531,7 @@ fn test_neuron_action_is_not_authorized() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -566,9 +583,8 @@ fn test_neuron_action_is_not_authorized() {
     });
 }
 
-// TODO NNS1-925 - Re-enable tests when "Generic Voting Rewards" allow for maturity.
-#[allow(dead_code)]
-fn test_disburse_maturity() {
+#[test]
+fn test_disburse_maturity_a() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
@@ -580,6 +596,10 @@ fn test_disburse_maturity() {
         let sys_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
+            }),
+            voting_rewards_parameters: Some(VotingRewardsParameters {
+                round_duration_seconds: Some(10),
+                ..VOTING_REWARDS_PARAMETERS
             }),
             ..NervousSystemParameters::with_default_values()
         };
@@ -649,8 +669,7 @@ fn test_disburse_maturity() {
     });
 }
 
-// TODO NNS1-925 - Re-enable tests when "Generic Voting Rewards" allow for maturity.
-#[allow(dead_code)]
+#[test]
 fn test_disburse_maturity_to_different_account() {
     local_test_on_sns_subnet(|runtime| async move {
         let maturity_owner = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -665,6 +684,10 @@ fn test_disburse_maturity_to_different_account() {
         let sys_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
+            }),
+            voting_rewards_parameters: Some(VotingRewardsParameters {
+                round_duration_seconds: Some(10),
+                ..VOTING_REWARDS_PARAMETERS
             }),
             ..NervousSystemParameters::with_default_values()
         };
@@ -813,6 +836,13 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
     });
 }
 
+#[test]
+fn test_voting_rewards_parameters_is_valid() {
+    assert!(VOTING_REWARDS_PARAMETERS
+        .is_valid_and_in_normal_mode(governance::Mode::Normal)
+        .is_ok());
+}
+
 #[tokio::test]
 async fn zero_total_reward_shares() {
     // Step 1: Prepare the world.
@@ -878,6 +908,7 @@ async fn zero_total_reward_shares() {
             },
         },
         wait_for_quiet_state: Some(WaitForQuietState::default()),
+        is_eligible_for_rewards: true,
         ..Default::default()
     };
     assert_eq!(
@@ -892,7 +923,10 @@ async fn zero_total_reward_shares() {
         // These won't be used, so we use garbage values.
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
-        parameters: Some(NervousSystemParameters::with_default_values()),
+        parameters: Some(NervousSystemParameters {
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+            ..NervousSystemParameters::with_default_values()
+        }),
         mode: governance::Mode::Normal as i32,
 
         genesis_timestamp_seconds,
@@ -907,7 +941,7 @@ async fn zero_total_reward_shares() {
         // Last reward event was a "long time ago".
         // This should cause rewards to be distributed.
         latest_reward_event: Some(RewardEvent {
-            periods_since_genesis: 1,
+            round: 1,
             actual_timestamp_seconds: 1,
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
@@ -965,6 +999,233 @@ async fn zero_total_reward_shares() {
         "{:#?}",
         reward_event,
     );
+}
+
+#[tokio::test]
+async fn couple_of_neurons_who_voted_get_rewards() {
+    // Step 1: Prepare the world.
+
+    const TOTAL_SUPPLY: u64 = 42 * E8;
+
+    // Has nonzero supply, but does not support transfers.
+    struct StubLedger {}
+    #[async_trait]
+    impl Ledger for StubLedger {
+        async fn transfer_funds(
+            &self,
+            _amount_e8s: u64,
+            _fee_e8s: u64,
+            _from_subaccount: Option<Subaccount>,
+            _to: Account,
+            _memo: u64,
+        ) -> Result<u64, NervousSystemError> {
+            unimplemented!();
+        }
+
+        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+            Ok(Tokens::from_e8s(TOTAL_SUPPLY))
+        }
+
+        async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
+            unimplemented!();
+        }
+    }
+
+    let nervous_system_parameters = NervousSystemParameters {
+        voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+        ..NervousSystemParameters::with_default_values()
+    };
+
+    let environment = NativeEnvironment::default();
+    let now = environment.now();
+
+    let genesis_timestamp_seconds = 1;
+
+    let voting_power = |neuron: &Neuron| {
+        neuron.voting_power(
+            now,
+            *nervous_system_parameters
+                .max_dissolve_delay_seconds
+                .as_ref()
+                .unwrap(),
+            *nervous_system_parameters
+                .max_neuron_age_for_age_bonus
+                .as_ref()
+                .unwrap(),
+        )
+    };
+
+    // Step 1.1: Craft some neurons.
+    let neurons = vec![
+        Neuron {
+            id: Some(NeuronId { id: vec![1, 2, 3] }),
+            cached_neuron_stake_e8s: 2,
+            ..Default::default()
+        },
+        Neuron {
+            id: Some(NeuronId { id: vec![4, 5, 6] }),
+            cached_neuron_stake_e8s: 3,
+            ..Default::default()
+        },
+        // A neuron that will not vote.
+        Neuron {
+            id: Some(NeuronId { id: vec![7, 8, 9] }),
+            cached_neuron_stake_e8s: 4,
+            ..Default::default()
+        },
+    ];
+    // Assert that neurons have voting power; otherwise, they won't receive voting rewards.
+    for neuron in &neurons {
+        assert!(voting_power(neuron) > 0, "{:#?}", neuron);
+    }
+
+    // Step 1.2: Craft a ProposalData. The first neuron voted yes. The second
+    // voted no, and the third did not vote.
+    let proposal_id = 99;
+    let do_nothing_proposal = Proposal {
+        action: Some(Action::Motion(Motion {
+            motion_text: "For great justice.".to_string(),
+        })),
+        ..Default::default()
+    };
+    let ready_to_settle_proposal_data = ProposalData {
+        id: Some(ProposalId { id: proposal_id }),
+        proposal: Some(do_nothing_proposal),
+        ballots: zip([Vote::Yes, Vote::No, Vote::Unspecified], &neurons)
+            .map(|(vote, neuron)| {
+                let id = neuron.id.as_ref().unwrap().to_string();
+                let ballot = Ballot {
+                    vote: vote as i32,
+                    voting_power: voting_power(neuron),
+                    cast_timestamp_seconds: now,
+                };
+
+                (id, ballot)
+            })
+            .collect(),
+        wait_for_quiet_state: Some(WaitForQuietState::default()),
+        is_eligible_for_rewards: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        ready_to_settle_proposal_data.reward_status(now),
+        ProposalRewardStatus::ReadyToSettle,
+    );
+
+    // Step 1.3: Craft a governance.
+    let root_canister_id = [1; 29];
+    let ledger_canister_id = [2; 29];
+    let proto = GovernanceProto {
+        // These won't be used, so we use garbage values.
+        root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
+        ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        parameters: Some(nervous_system_parameters),
+        mode: governance::Mode::Normal as i32,
+
+        genesis_timestamp_seconds,
+
+        proposals: btreemap! {
+            ready_to_settle_proposal_data.id.unwrap().id => ready_to_settle_proposal_data,
+        },
+        neurons: neurons
+            .iter()
+            .map(|neuron| {
+                let id = neuron.id.as_ref().unwrap().to_string();
+                (id, neuron.clone())
+            })
+            .collect(),
+
+        // Last reward event was a "long time ago".
+        // This should cause rewards to be distributed.
+        latest_reward_event: Some(RewardEvent {
+            round: 1,
+            actual_timestamp_seconds: 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+        }),
+
+        sns_metadata: Some(SnsMetadata {
+            url: Some("foo bar baz".to_string()),
+            logo: Some("foo bar baz".to_string()),
+            name: Some("foo bar baz".to_string()),
+            description: Some("foo bar baz".to_string()),
+        }),
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        proto.try_into().unwrap(),
+        Box::new(environment),
+        Box::new(StubLedger {}),
+    );
+    // Prevent gc.
+    governance.latest_gc_timestamp_seconds = now;
+
+    // Step 2: Run code under test.
+    governance.run_periodic_tasks().await;
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Inspect the latest_reward_event.
+    let reward_event = governance.proto.latest_reward_event.as_ref().unwrap();
+    assert_eq!(
+        reward_event
+            .settled_proposals
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<_>>(),
+        vec![proposal_id],
+        "{:#?}",
+        reward_event,
+    );
+
+    let rewards_e8s = reward_event.distributed_e8s_equivalent;
+    assert!(rewards_e8s > 0, "{:#?}", reward_event,);
+    let observed_reward_rate_per_round = i2d(rewards_e8s) / i2d(TOTAL_SUPPLY);
+    let reward_rate_per_round_range = {
+        let round_duration = VOTING_REWARDS_PARAMETERS.round_duration();
+
+        // Why subtract 1: the previous RewardEvent covered round 1.
+        let round_count = i2d(reward_event.round - 1);
+
+        let epsilon = i2d(1) / i2d(1_000_000); // A bit of buffer to account for rounding down.
+        let max = VOTING_REWARDS_PARAMETERS.initial_reward_rate() * round_duration * round_count;
+        let min =
+            VOTING_REWARDS_PARAMETERS.final_reward_rate() * round_duration * round_count - epsilon;
+
+        min..=max
+    };
+    assert!(
+        reward_rate_per_round_range.contains(&observed_reward_rate_per_round),
+        "Observed reward rate not between the initial and final reward \
+         rate: rewards_e8s = {}, which gives an effective rate of {} vs. reward_rate_per_round_range = {:?}",
+        rewards_e8s, observed_reward_rate_per_round, reward_rate_per_round_range,
+    );
+
+    // Step 3.2: Inspect the neurons. In particular, look at their maturity to
+    // make sure that their propotion of the reward purse is proportional to
+    // their voting power/reward shares.
+    let mut neuron_total_maturity_e8s = 0;
+    for (neuron, weight) in zip(&neurons, [2, 3, 0]) {
+        let neuron = governance
+            .proto
+            .neurons
+            .get(&neuron.id.as_ref().unwrap().to_string())
+            .unwrap();
+        let expected_share = i2d(weight) / dec!(5);
+        let observed_share = i2d(neuron.maturity_e8s_equivalent) / i2d(rewards_e8s);
+        let delta = (observed_share - expected_share).abs();
+        let epsilon = i2d(1) / i2d(1_000_000);
+        assert!(
+            delta < epsilon,
+            "neuron = {:#?}, weight = {:#?} (out of 5), rewards_e8s = {:#?}, delta = {:#?}, epsilon = {:#?}",
+            neuron, weight, rewards_e8s, delta, epsilon,
+        );
+
+        neuron_total_maturity_e8s += neuron.maturity_e8s_equivalent;
+    }
+
+    // Assert that rewards add up.
+    assert_eq!(neuron_total_maturity_e8s, rewards_e8s);
 }
 
 async fn paginate_neurons(

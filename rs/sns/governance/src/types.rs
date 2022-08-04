@@ -305,17 +305,18 @@ impl NervousSystemParameters {
             max_followees_per_function: Some(15),
             max_dissolve_delay_seconds: Some(8 * ONE_YEAR_SECONDS), // 8y
             max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS), // 4y
-            reward_distribution_period_seconds: Some(ONE_DAY_SECONDS), // 1d
             max_number_of_proposals_with_ballots: Some(700),
             neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
             max_number_of_principals_per_neuron: Some(5),
+            voting_rewards_parameters: None,
         }
     }
 
     /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.
     pub fn inherit_from(&self, base: &Self) -> Self {
         let mut new_params = self.clone();
+
         new_params.reject_cost_e8s = self.reject_cost_e8s.or(base.reject_cost_e8s);
         new_params.neuron_minimum_stake_e8s = self
             .neuron_minimum_stake_e8s
@@ -347,9 +348,6 @@ impl NervousSystemParameters {
         new_params.max_neuron_age_for_age_bonus = self
             .max_neuron_age_for_age_bonus
             .or(base.max_neuron_age_for_age_bonus);
-        new_params.reward_distribution_period_seconds = self
-            .reward_distribution_period_seconds
-            .or(base.reward_distribution_period_seconds);
         new_params.max_number_of_proposals_with_ballots = self
             .max_number_of_proposals_with_ballots
             .or(base.max_number_of_proposals_with_ballots);
@@ -364,12 +362,14 @@ impl NervousSystemParameters {
         new_params.max_number_of_principals_per_neuron = self
             .max_number_of_principals_per_neuron
             .or(base.max_number_of_principals_per_neuron);
+        // No need to manipulate voting_rewards_parameters, because the default
+        // is None anyway.
 
         new_params
     }
 
     /// This validates that the `NervousSystemParameters` are well-formed.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self, mode: governance::Mode) -> Result<(), String> {
         self.validate_reject_cost_e8s()?;
         self.validate_neuron_minimum_stake_e8s()?;
         self.validate_transaction_fee_e8s()?;
@@ -382,11 +382,11 @@ impl NervousSystemParameters {
         self.validate_max_followees_per_function()?;
         self.validate_max_dissolve_delay_seconds()?;
         self.validate_max_neuron_age_for_age_bonus()?;
-        self.validate_reward_distribution_period_seconds()?;
         self.validate_max_number_of_proposals_with_ballots()?;
         self.validate_neuron_claimer_permissions()?;
         self.validate_neuron_grantable_permissions()?;
         self.validate_max_number_of_principals_per_neuron()?;
+        self.validate_voting_rewards_parameters(mode)?;
 
         Ok(())
     }
@@ -602,16 +602,6 @@ impl NervousSystemParameters {
         Ok(())
     }
 
-    /// Validates that the nervous system parameter reward_distribution_period_seconds
-    /// is well-formed.
-    fn validate_reward_distribution_period_seconds(&self) -> Result<(), String> {
-        self.reward_distribution_period_seconds.ok_or_else(|| {
-            "NervousSystemParameters.reward_distribution_period_seconds must be set".to_string()
-        })?;
-
-        Ok(())
-    }
-
     /// Validates that the nervous system parameter max_number_of_proposals_with_ballots
     /// is well-formed.
     fn validate_max_number_of_proposals_with_ballots(&self) -> Result<(), String> {
@@ -732,6 +722,16 @@ impl NervousSystemParameters {
         }
 
         Ok(())
+    }
+
+    /// The voting_rewards_parameters is considered valid if it is either
+    /// unpopulated, or if it is populated with a value that is itself valid
+    /// (according to VotingRewardsParameters::validate).
+    fn validate_voting_rewards_parameters(&self, mode: governance::Mode) -> Result<(), String> {
+        match &self.voting_rewards_parameters {
+            None => Ok(()),
+            Some(p) => p.is_valid_and_in_normal_mode(mode),
+        }
     }
 }
 
@@ -1144,9 +1144,9 @@ impl fmt::Display for RewardEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RewardEvent {{ periods_since_genesis: {} distributed_e8s_equivalent: {}\
+            "RewardEvent {{ round: {} distributed_e8s_equivalent: {}\
                    actual_timestamp_seconds: {} settled_proposals: <vec of size {}> }})",
-            self.periods_since_genesis,
+            self.round,
             self.distributed_e8s_equivalent,
             self.actual_timestamp_seconds,
             self.settled_proposals.len()
@@ -1443,7 +1443,7 @@ pub(crate) mod tests {
         governance::Mode::PreInitializationSwap,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::Followees,
-        ExecuteGenericNervousSystemFunction,
+        ExecuteGenericNervousSystemFunction, VotingRewardsParameters,
     };
     use ic_base_types::PrincipalId;
     use lazy_static::lazy_static;
@@ -1452,6 +1452,13 @@ pub(crate) mod tests {
 
     #[test]
     fn test_nervous_system_parameters_validate() {
+        assert!(NervousSystemParameters::with_default_values()
+            .validate(governance::Mode::Normal)
+            .is_ok());
+        assert!(NervousSystemParameters::with_default_values()
+            .validate(governance::Mode::PreInitializationSwap)
+            .is_ok());
+
         let invalid_params = vec![
             NervousSystemParameters {
                 neuron_minimum_stake_e8s: None,
@@ -1549,10 +1556,6 @@ pub(crate) mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                reward_distribution_period_seconds: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
                 max_number_of_proposals_with_ballots: None,
                 ..NervousSystemParameters::with_default_values()
             },
@@ -1588,15 +1591,18 @@ pub(crate) mod tests {
                 max_number_of_principals_per_neuron: Some(1000),
                 ..NervousSystemParameters::with_default_values()
             },
+            NervousSystemParameters {
+                voting_rewards_parameters: Some(VotingRewardsParameters {
+                    round_duration_seconds: None,
+                    ..Default::default()
+                }),
+                ..NervousSystemParameters::with_default_values()
+            },
         ];
 
         for params in invalid_params {
-            assert!(params.validate().is_err());
+            assert!(params.validate(governance::Mode::Normal).is_err());
         }
-
-        assert!(NervousSystemParameters::with_default_values()
-            .validate()
-            .is_ok());
     }
 
     #[test]

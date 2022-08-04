@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:num",
+    "@crate_index//:rust_decimal",
     "@crate_index//:serde",
 ]
 

@@ -62,3 +62,5 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"

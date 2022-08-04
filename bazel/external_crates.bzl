@@ -658,6 +658,12 @@ def external_crates_repository(name, annotations):
             "rusqlite": crate.spec(
                 version = "^0.25.3",
             ),
+            "rust_decimal": crate.spec(
+                version = "^1.25.0",
+            ),
+            "rust_decimal_macros": crate.spec(
+                version = "^1.25.0",
+            ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
             ),

@@ -340,6 +340,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cff77d8686867eceff3105329d4698d96c2391c176d5d03adc90c7389162b5b8"
 
 [[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+
+[[package]]
 name = "ascii"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6179,8 +6185,8 @@ dependencies = [
  "ic-ic00-types",
  "ic-nns-governance",
  "ledger-canister",
- "num",
  "prost",
+ "rust_decimal",
  "serde",
 ]
 
@@ -7597,7 +7603,6 @@ dependencies = [
  "lazy_static",
  "ledger-canister",
  "maplit",
- "num",
  "on_wire",
  "pretty_assertions 1.2.1",
  "proptest 1.0.0",
@@ -7605,6 +7610,8 @@ dependencies = [
  "prost-build",
  "rand 0.8.5",
  "registry-canister",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "strum 0.18.0",
  "strum_macros 0.18.0",
@@ -7708,6 +7715,8 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_core 0.6.2",
+ "rust_decimal",
+ "rust_decimal_macros",
  "tokio",
  "wabt",
 ]
@@ -11844,6 +11853,27 @@ dependencies = [
  "rand 0.4.6",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34a3bb58e85333f1ab191bf979104b586ebd77475bc6681882825f4532dfe87c"
+dependencies = [
+ "arrayvec 0.7.2",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "rust_decimal_macros"
+version = "1.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1467556c7c115165aa0346bcf45bc947203bcc880efad85a09ba24ea17926c4"
+dependencies = [
+ "quote 1.0.17",
+ "rust_decimal",
 ]
 
 [[package]]

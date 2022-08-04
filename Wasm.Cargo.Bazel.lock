@@ -1,5 +1,5 @@
 {
-  "checksum": "cee577b192cb943d3dc6bf4b98564d35d42ca51d218bb37981825ad773561af5",
+  "checksum": "92ad2aff5f6e29cf62db37c4f32248bc867b8c9da99edc7308f4e0dc1900bf34",
   "crates": {
     "cfg-if 1.0.0": {
       "name": "cfg-if",
@@ -118,7 +118,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.126",
+                "id": "libc 0.2.127",
                 "target": "libc"
               }
             ]
@@ -129,13 +129,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "libc 0.2.126": {
+    "libc 0.2.127": {
       "name": "libc",
-      "version": "0.2.126",
+      "version": "0.2.127",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libc/0.2.126/download",
-          "sha256": "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
+          "url": "https://crates.io/api/v1/crates/libc/0.2.127/download",
+          "sha256": "505e71a4706fa491e9b1b55f51b95d4037d0821ee40131190475f692b35b009b"
         }
       },
       "targets": [
@@ -172,14 +172,14 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.126",
+              "id": "libc 0.2.127",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.2.126"
+        "version": "0.2.127"
       },
       "build_script_attrs": {
         "data_glob": [
