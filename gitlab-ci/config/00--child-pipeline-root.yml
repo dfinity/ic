@@ -26,14 +26,14 @@ include:
 .cargo-build-docker-protected:
   needs: []  # don't wait on other jobs by default
   extends:
-    - .ubuntu-nix-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline
   stage: cargo-build
 
 .cargo-build-docker:
   needs: []  # don't wait on other jobs by default
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-parent-pipeline
   stage: cargo-build
 
@@ -46,7 +46,7 @@ include:
 
 .cargo-crate-test:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-parent-pipeline
   stage: cargo-test
   needs:

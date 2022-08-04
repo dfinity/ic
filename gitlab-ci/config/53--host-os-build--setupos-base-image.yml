@@ -1,6 +1,6 @@
 deploy-setup-os-baseimg:
   extends:
-    - .ubuntu-nix-docker-protected
+    - .ubuntu-docker-protected
     - .rules-protected-branch-manual
   stage: host-os-build
   needs: []

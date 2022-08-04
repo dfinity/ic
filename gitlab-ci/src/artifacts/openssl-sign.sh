@@ -21,6 +21,11 @@ rm -f SHA256SUMS sign-input.txt sign.sig sign.sig.bin
     sha256sum -b * | tee SHA256SUMS
 )
 
+if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ] && [ ! -e /openssl/private.pem ]; then
+    echo "Not doing anything as /openssl/private.pem doesn't exist. [NOT on protected branch]"
+    exit 0
+fi
+
 cp SHA256SUMS sign-input.txt
 VERSION="${VERSION:-$(git rev-parse --verify HEAD)}"
 echo "$VERSION" >>sign-input.txt
