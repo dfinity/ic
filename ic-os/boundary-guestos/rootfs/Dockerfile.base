@@ -25,10 +25,6 @@ ARG snp_kernel_pkg=linux-image-${snp_kernel_version_guest}_${snp_kernel_version_
 ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
 ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
-# Service worker version and sha256
-ARG sw_version=1.2.2
-ARG sw_sha256=a64e4b24346b0364baafc666a5ef1b02fd6eac4091343e02740fc94465b49e0b
-
 #
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
@@ -102,18 +98,6 @@ RUN \
 RUN \
    curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
    echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" | shasum -c
-
-# Download icx-proxy.deb 
-RUN \
-    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-dcaa135/icx-proxy.deb && \
-    echo "e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c  icx-proxy.deb" | shasum -c
-
-# Download and check service worker
-ARG sw_version
-ARG sw_sha256
-RUN \
-   curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
-   echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
 # Download and build sev-guest tool
 RUN \
@@ -273,16 +257,3 @@ RUN dpkg -i /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb &&\
 COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
 RUN dpkg -i /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb &&\
     rm /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
-
-# Install icx-proxy
-COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
-RUN dpkg -i /tmp/icx-proxy.deb &&\
-    rm /tmp/icx-proxy.deb
-
-# Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
-ARG sw_version
-COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
-RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
-    mkdir -p /var/www/html/ &&\
-    cp -rf /tmp/package/dist-prod/* /var/www/html/ &&\
-    rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz

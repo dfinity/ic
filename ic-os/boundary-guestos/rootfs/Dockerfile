@@ -8,11 +8,55 @@
 # argument MUST be given by the build script, otherwise build will fail.
 ARG BASE_IMAGE=
 
+
+# Service worker version and sha256
+ARG sw_version=1.2.3
+ARG sw_sha256=9a2c42ccb5ecf2fe7276c8c5f1765a0ac25f7f186978d1909f2b410ec1b4f95e
+
+# ICX proxy  version and sha256
+ARG icx_proxy_version=dcaa135
+ARG icx_proxy_sha256=e20c7f6dcbe438ef9ec7dbff7d88d88db4099cb2b8d6dc399f47856baf0e568c
+
 #
-# First build stage:
+# First build stage: download software (service worker and icx procxy) that frequently changes, build and verify it (such that it
+# does not change under our noses).
+#
+FROM $BASE_IMAGE AS download
+
+WORKDIR /tmp
+
+# Download icx-proxy.deb
+ARG icx_proxy_version
+ARG icx_proxy_sha256
+RUN \
+    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-${icx_proxy_version}/icx-proxy.deb && \
+    echo "${icx_proxy_sha256}  icx-proxy.deb" | shasum -c
+
+# Download and check service worker
+ARG sw_version
+ARG sw_sha256
+RUN \
+   curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
+   echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
+
+#
+# Second build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 #
 FROM $BASE_IMAGE
+
+# Install icx-proxy
+COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
+RUN dpkg -i /tmp/icx-proxy.deb &&\
+    rm /tmp/icx-proxy.deb
+
+# Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
+ARG sw_version
+COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
+RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
+    mkdir -p /var/www/html/ &&\
+    cp -rf /tmp/package/dist-prod/* /var/www/html/ &&\
+    rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
 
 RUN mkdir -p /boot/config \
              /boot/efi \
