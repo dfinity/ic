@@ -40,7 +40,7 @@ fn format_bn(bn: &BigUint) -> String {
 }
 
 fn assert_fe_eq(fe: &EccFieldElement, bn: &BigUint) {
-    assert_eq!(hex::encode(fe.as_bytes()), format_bn(&bn));
+    assert_eq!(hex::encode(fe.as_bytes()), format_bn(bn));
 }
 
 /*
@@ -57,7 +57,7 @@ need adjustment if other curves are added)
 fn check_field_inversion_and_sqrt(fe: &EccFieldElement) -> ThresholdEcdsaResult<()> {
     if !bool::from(fe.is_zero()) {
         let fe_inv = fe.invert();
-        let maybe_one = fe_inv.mul(&fe)?;
+        let maybe_one = fe_inv.mul(fe)?;
         assert_eq!(maybe_one, EccFieldElement::one(fe.curve_type()));
 
         let fe_sqrt = fe.sqrt();

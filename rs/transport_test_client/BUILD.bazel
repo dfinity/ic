@@ -1,0 +1,72 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/crypto/tls_interfaces",
+    "//rs/interfaces",
+    "//rs/interfaces/transport",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/transport",
+    "//rs/types/types",
+    "@crate_index//:clap",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:futures",
+    "@crate_index//:notify",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-openssl",
+    "@crate_index//:tower",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "transport_test_client",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_transport_test_client",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "transport_test_client_test",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_root = "src/main.rs",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -397,6 +397,9 @@ def external_crates_repository(name, annotations):
             "libflate": crate.spec(
                 version = "^1.1.2",
             ),
+            "libfuzzer-sys": crate.spec(
+                version = "^0.4",
+            ),
             "libsecp256k1": crate.spec(
                 version = "^0.5.0",
             ),
@@ -942,6 +945,9 @@ def external_crates_repository(name, annotations):
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",
+            ),
+            "wee_alloc": crate.spec(
+                version = "^0.4.3",
             ),
             "which": crate.spec(
                 version = "^4.2.2",
