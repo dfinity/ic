@@ -136,7 +136,7 @@ use super::test_setup::PotSetup;
 use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::export::Principal;
 use ic_agent::Agent;
@@ -706,6 +706,9 @@ pub trait HasPublicApiUrl {
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()>;
 
+    /// Waits until the is_healthy() returns an error
+    fn await_status_is_unavailable(&self) -> Result<()>;
+
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
     where
         F: FnOnce(Agent) -> Fut + 'static,
@@ -778,6 +781,18 @@ impl HasPublicApiUrl for IcNodeSnapshot {
             self.status_is_healthy()
                 .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
         })
+    }
+
+    fn await_status_is_unavailable(&self) -> Result<()> {
+        retry(
+            self.env.logger(),
+            RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || match self.status_is_healthy() {
+                Err(_) => Ok(()),
+                Ok(_) => Err(anyhow!("Status is still available")),
+            },
+        )
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
