@@ -5,11 +5,9 @@ After=syslog.target network.target
 [Service]
 User=node_exporter
 Group=node_exporter
-EnvironmentFile=/etc/default/node_exporter
-ExecStart=/usr/local/bin/node_exporter $OPTIONS
+Restart=always
+ExecStart=/usr/local/bin/node_exporter
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
