@@ -232,22 +232,9 @@ COPY opt /opt
 
 RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
 
-# Install cgi-scripts
-RUN mkdir -p /var/www/cgi-bin && \
-    chown www-data:www-data /var/www/cgi-bin
-COPY var/www/cgi-bin/* /var/www/cgi-bin/
-RUN mkdir -p /var/www/cgi-bin/artifacts && \
-    mkdir -p /var/www/cgi-bin/artifacts/certs && \
-    chown www-data:www-data /var/www/cgi-bin/artifacts && \
-    chown www-data:www-data /var/www/cgi-bin/artifacts/certs && \
-    touch /var/www/cgi-bin/cgi.log && \
-    chown www-data:www-data /var/www/cgi-bin/* && \
-    chmod 0755 /var/www/cgi-bin/*
-
 # Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
-
 # Install other files (e.g. the uninstall-script)
 COPY var/www/html /var/www/html
 
@@ -315,7 +302,3 @@ RUN rm -rf /etc/nginx/conf.d/nginx-global.conf
 RUN rm -rf /etc/nginx/conf.d/default.conf
 RUN rm -rf /etc/nginx/sites-enabled/default
 RUN rm -rf /etc/nginx/conf.d/default
-
-# Configure incron
-COPY etc/incron.tb /etc/incron.d/incron.tb
-RUN echo root >> /etc/incron.allow
