@@ -196,9 +196,13 @@ pub fn test(env: TestEnv) {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         info!(&logger, "Creating BN agent...");
-        let agent = create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into())
-            .await
-            .unwrap_or_else(|err| panic!("Failed to create agent for https://ic0.app/: {:?}", err));
+        let agent = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            match create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into()).await {
+                Ok(agent) => Ok(agent),
+                Err(e) => anyhow::bail!(e),
+            }
+        }).await
+        .expect("Failed to create agent for https://ic0.app/");
 
         info!(&logger, "Calling read...");
         // We must retry the first request to a canister.
