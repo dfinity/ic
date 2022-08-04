@@ -8,7 +8,7 @@ Download routing information from the NNS.
 
 ```
 cargo run -- \
-  --nns_url <NNS_URL_1> ... --nns_url <NNS_URL_N> \
+  --nns_urls <NNS_URL_1>,...,<NNS_URL_N> \
   --nns_public_key nns_public_key.pem \
   --routes_dir .
 ```
