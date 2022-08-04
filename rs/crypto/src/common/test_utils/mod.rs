@@ -19,6 +19,7 @@ pub use ic_crypto_internal_test_vectors::unhex::*;
 // Registry is a (key, value) store.
 // The structs below define the corresponding key and the value structures
 // used by the CryptoComponent.
+#[derive(Clone)]
 pub struct CryptoRegistryKey {
     pub node_id: NodeId,
     pub key_purpose: KeyPurpose,
@@ -26,6 +27,7 @@ pub struct CryptoRegistryKey {
 
 // An auxiliary structure for preparing records that initialize
 // a registry for testing purposes.
+#[derive(Clone)]
 pub struct CryptoRegistryRecord {
     pub key: CryptoRegistryKey,
     pub value: PublicKeyProto,

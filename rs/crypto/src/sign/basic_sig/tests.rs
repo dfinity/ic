@@ -93,7 +93,7 @@ mod test_basic_sig_verification {
     mod verify_common {
         use super::*;
         use crate::sign::tests::REG_V2;
-        use ic_types_test_utils::ids::NODE_1;
+        use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
         #[test]
         fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
@@ -120,6 +120,215 @@ mod test_basic_sig_verification {
             );
 
             assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
+        }
+
+        #[test]
+        fn should_correctly_combine_a_single_signature() {
+            let (_, pk, _, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+            let key_record = node_signing_record_with(
+                NODE_1,
+                pk.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID),
+                REG_V2,
+            );
+
+            let mut signatures = BTreeMap::new();
+            signatures.insert(NODE_1, &sig);
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store_panicking_on_usage(),
+            );
+
+            assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
+        }
+
+        #[test]
+        fn should_correctly_combine_multiple_signatures() {
+            let (_, pk_1, _, sig_1) = basic_sig::testvec(ED25519_STABILITY_1);
+            let (_, pk_2, _, sig_2) = basic_sig::testvec(ED25519_STABILITY_1);
+
+            let key_record_1 = node_signing_record_with(
+                NODE_1,
+                pk_1.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID_1),
+                REG_V2,
+            );
+            let key_record_2 = node_signing_record_with(
+                NODE_2,
+                pk_2.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID_2),
+                REG_V2,
+            );
+
+            let mut signatures = BTreeMap::new();
+            signatures.insert(NODE_1, &sig_1);
+            signatures.insert(NODE_2, &sig_2);
+            let crypto = crypto_component_with(
+                registry_with_records(vec![key_record_1, key_record_2]),
+                secret_key_store_panicking_on_usage(),
+            );
+
+            assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
+        }
+
+        #[test]
+        fn should_not_combine_zero_signatures() {
+            let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
+            let key_record = node_signing_record_with(
+                NODE_1,
+                pk.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID),
+                REG_V2,
+            );
+
+            let signatures: BTreeMap<NodeId, &BasicSigOf<SignableMock>> = BTreeMap::new();
+
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store_panicking_on_usage(),
+            );
+
+            assert!(matches!(
+                crypto.combine_basic_sig(signatures, REG_V2),
+                Err(CryptoError::InvalidArgument { message })
+                if message.contains("No signatures to combine in a batch. At least one signature is needed to create a batch")
+            ));
+        }
+
+        #[test]
+        fn should_correctly_verify_batch_with_single_signature() {
+            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+            let key_record = node_signing_record_with(
+                NODE_1,
+                pk.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID),
+                REG_V2,
+            );
+
+            let mut signatures = BTreeMap::new();
+            signatures.insert(NODE_1, &sig);
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store_panicking_on_usage(),
+            );
+
+            let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
+            assert!(sig_batch.is_ok());
+
+            assert!(crypto
+                .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
+                .is_ok());
+        }
+
+        #[test]
+        fn should_correctly_verify_batch_with_multiple_signatures() {
+            let (sk_1, pk_1, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
+            let (sk_2, pk_2, _, _) = basic_sig::testvec(ED25519_STABILITY_2);
+
+            let key_id_1 = public_key_hash_as_key_id(&pk_1);
+            let key_id_2 = public_key_hash_as_key_id(&pk_2);
+            let key_record_1 = node_signing_record_with(
+                NODE_1,
+                pk_1.ed25519_bytes().unwrap().to_vec(),
+                key_id_1.to_owned(),
+                REG_V2,
+            );
+            let key_record_2 = node_signing_record_with(
+                NODE_2,
+                pk_2.ed25519_bytes().unwrap().to_vec(),
+                key_id_2.to_owned(),
+                REG_V2,
+            );
+
+            let registry_records = vec![key_record_1, key_record_2];
+            let sks_1 = secret_key_store_with(key_id_1, sk_1);
+            let crypto_1 =
+                crypto_component_with(registry_with_records(registry_records.clone()), sks_1);
+            let sks_2 = secret_key_store_with(key_id_2, sk_2);
+            let crypto_2 = crypto_component_with(registry_with_records(registry_records), sks_2);
+
+            let mut signatures = BTreeMap::new();
+            let sig_1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+            let sig_2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
+
+            signatures.insert(NODE_1, &sig_1);
+            signatures.insert(NODE_2, &sig_2);
+
+            let sig_batch = crypto_1.combine_basic_sig(signatures, REG_V2);
+            assert!(sig_batch.is_ok());
+
+            assert!(crypto_1
+                .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
+                .is_ok());
+        }
+
+        #[test]
+        fn should_not_verify_batch_on_different_messages() {
+            let (_, pk_1, msg, sig_1) = basic_sig::testvec(ED25519_STABILITY_1);
+            let (_, pk_2, _, sig_2) = basic_sig::testvec(ED25519_STABILITY_2);
+
+            let key_record_1 = node_signing_record_with(
+                NODE_1,
+                pk_1.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID_1),
+                REG_V2,
+            );
+            let key_record_2 = node_signing_record_with(
+                NODE_2,
+                pk_2.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID_2),
+                REG_V2,
+            );
+
+            let registry_records = vec![key_record_1, key_record_2];
+            let crypto = crypto_component_with(
+                registry_with_records(registry_records),
+                secret_key_store_panicking_on_usage(),
+            );
+            let mut signatures = BTreeMap::new();
+            assert!(crypto
+                .verify_basic_sig(&sig_1, &msg, NODE_1, REG_V2)
+                .is_ok());
+            assert!(crypto
+                .verify_basic_sig(&sig_2, &msg, NODE_2, REG_V2)
+                .is_err());
+
+            signatures.insert(NODE_1, &sig_1);
+            signatures.insert(NODE_2, &sig_2);
+
+            let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
+            assert!(sig_batch.is_ok());
+
+            assert!(matches!(
+                crypto.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2),
+                Err(CryptoError::SignatureVerification { .. })
+            ));
+        }
+
+        #[test]
+        fn should_not_verify_an_empty_batch() {
+            let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
+            let key_record = node_signing_record_with(
+                NODE_1,
+                pk.ed25519_bytes().unwrap().to_vec(),
+                KeyId::from(KEY_ID),
+                REG_V2,
+            );
+
+            let empty_signatures: BTreeMap<NodeId, BasicSigOf<SignableMock>> = BTreeMap::new();
+            let empty_batch = BasicSignatureBatch {
+                signatures_map: empty_signatures,
+            };
+            let crypto = crypto_component_with(
+                registry_with(key_record),
+                secret_key_store_panicking_on_usage(),
+            );
+
+            assert!(matches!(
+                crypto.verify_basic_sig_batch(&empty_batch, &msg, REG_V2),
+                Err(CryptoError::InvalidArgument { message })
+                if message.contains("Empty BasicSignatureBatch. At least one signature should be included in the batch.")
+            ));
         }
     }
 

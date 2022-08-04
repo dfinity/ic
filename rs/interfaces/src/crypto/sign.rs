@@ -36,6 +36,7 @@ use ic_types::crypto::{
     SignedBytesWithoutDomainSeparator, UserPublicKey,
 };
 use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};
+use ic_types::signature::BasicSignatureBatch;
 use ic_types::{
     consensus::{
         certification::CertificationContent,
@@ -341,6 +342,50 @@ pub trait BasicSigVerifier<T: Signable> {
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()>;
+
+    /// Combines individual basic signatures.
+    ///
+    /// The registry version is not needed for the cryptographic scheme we use
+    /// currently/initially. Yet it is a parameter so that we can switch to
+    /// other schemes without affecting the API.
+    ///
+    /// Note that the resulting basic signature batch will only be valid if all the
+    /// individual signatures are valid, i.e. `verify_basic_sig`
+    /// returned `Ok`.
+    ///
+    /// the individual basic signatures passed as `signatures` must have been
+    ///   verified using `verify_basic_sig`.
+    ///
+    /// # Errors
+    /// * `CryptoError::InvalidArgument`: if `signatures` is empty.
+    fn combine_basic_sig(
+        &self,
+        signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSignatureBatch<T>>;
+
+    /// Verifies a basic signature batch.
+    ///
+    /// # Errors
+    /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
+    ///   `registry_version`.
+    /// * `CryptoError::PublicKeyNotFound`: if at least one of the signer's public key cannot
+    ///   be found at the given `registry_version`.
+    /// * `CryptoError::MalformedSignature`: if the signature is malformed.
+    /// * `CryptoError::AlgorithmNotSupported`: if the signature algorithm is
+    ///   not supported, or if one of the signer's public key obtained from the
+    ///   registry is for an unsupported algorithm.
+    /// * `CryptoError::MalformedPublicKey`: if the signer's public key
+    ///   obtained from the registry is malformed.
+    /// * `CryptoError::SignatureVerification`: if at least one signature in `signature_batch` could not be
+    ///   verified for the given message.
+    /// * `CryptoError::InvalidArgument`: if `signature` does not contain any signatures.
+    fn verify_basic_sig_batch(
+        &self,
+        signature_batch: &BasicSignatureBatch<T>,
+        message: &T,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()>;
 }
 
 /// A Crypto Component interface to verify basic signatures by public key.
@@ -481,9 +526,7 @@ pub trait MultiSigVerifier<T: Signable> {
     /// * `CryptoError::AlgorithmNotSupported`: if any of the public keys
     ///   obtained from the registry or a signature is for an unsupported
     ///   algorithm.
-    ///
-    /// # Panics
-    /// * if `signatures` is empty.
+    /// * `CryptoError::InvalidArgument`: if `signatures` is empty.
     fn combine_multi_sig_individuals(
         &self,
         signatures: BTreeMap<NodeId, IndividualMultiSigOf<T>>,
@@ -507,9 +550,7 @@ pub trait MultiSigVerifier<T: Signable> {
     ///   signature is for an unsupported algorithm.
     /// * `CryptoError::SignatureVerification`: if the combined multi-signature
     ///   could not be verified.
-    ///
-    /// # Panics
-    /// * if `signers` are empty.
+    /// * `CryptoError::InvalidArgument`: if `signers` is empty.
     fn verify_multi_sig_combined(
         &self,
         signature: &CombinedMultiSigOf<T>,

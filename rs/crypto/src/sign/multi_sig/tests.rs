@@ -47,6 +47,7 @@ mod test_multi_sig_verification {
         STABILITY_1, STABILITY_2,
     };
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
+    use ic_interfaces::crypto::SignableMock;
 
     #[test]
     fn should_correctly_verify_multi_sig_individual() {
@@ -103,6 +104,30 @@ mod test_multi_sig_verification {
     }
 
     #[test]
+    fn should_not_combine_zero_individual_sigs() {
+        let (_, pk_1, _, _, _) = multi_bls12_381::testvec(STABILITY_1);
+        let pk_rec_1 = committee_signing_record_with(
+            NODE_1,
+            pk_1.multi_bls12_381_bytes().unwrap().to_vec(),
+            KeyId::from(KEY_ID_1),
+            REG_V1,
+        );
+        let empty_signatures: BTreeMap<NodeId, IndividualMultiSigOf<SignableMock>> =
+            BTreeMap::new();
+
+        let crypto = crypto_component_with(
+            registry_with_records(vec![pk_rec_1]),
+            secret_key_store_panicking_on_usage(),
+        );
+
+        assert!(matches!(
+        crypto.combine_multi_sig_individuals(empty_signatures, REG_V1),
+        Err(CryptoError::InvalidArgument { message })
+            if message.contains("No signatures to combine. At least one signature is needed to combine a multi-signature")
+        ));
+    }
+
+    #[test]
     fn should_correctly_verify_multi_sig_combined() {
         let (_, pk_1, _, msg_1, _) = multi_bls12_381::testvec(STABILITY_1);
         let (_, pk_2, _, msg_2, _) = multi_bls12_381::testvec(STABILITY_2);
@@ -134,5 +159,38 @@ mod test_multi_sig_verification {
             .is_ok());
     }
 
+    #[test]
+    fn should_not_verify_with_empty_signers() {
+        let (_, pk_1, _, msg_1, _) = multi_bls12_381::testvec(STABILITY_1);
+        let (_, pk_2, _, msg_2, _) = multi_bls12_381::testvec(STABILITY_2);
+        assert_eq!(msg_1, msg_2);
+        let pk_rec_1 = committee_signing_record_with(
+            NODE_1,
+            pk_1.multi_bls12_381_bytes().unwrap().to_vec(),
+            KeyId::from(KEY_ID_1),
+            REG_V1,
+        );
+        let pk_rec_2 = committee_signing_record_with(
+            NODE_2,
+            pk_2.multi_bls12_381_bytes().unwrap().to_vec(),
+            KeyId::from(KEY_ID_2),
+            REG_V1,
+        );
+        let empty_nodes: BTreeSet<NodeId> = BTreeSet::new();
+        let combined_sig = CombinedMultiSigOf::new(CombinedMultiSig(hex_to_byte_vec(
+            TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2,
+        )));
+
+        let crypto = crypto_component_with(
+            registry_with_records(vec![pk_rec_1, pk_rec_2]),
+            secret_key_store_panicking_on_usage(),
+        );
+
+        assert!(matches!(
+        crypto.verify_multi_sig_combined(&combined_sig, &msg_1, empty_nodes, REG_V1),
+        Err(CryptoError::InvalidArgument { message })
+            if message.contains("Empty signers. At least one signer is needed to verify a combined multi-signature")
+        ));
+    }
     // TODO: DFN-1233 Add more tests in addition to the above happy-path test.
 }

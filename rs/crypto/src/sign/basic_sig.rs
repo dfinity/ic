@@ -25,6 +25,49 @@ impl BasicSigVerifierInternal {
 
         csp_signer.verify(&csp_sig, &message.as_signed_bytes(), algorithm_id, csp_pk)
     }
+
+    pub fn combine_basic_sig<H: Signable>(
+        signatures: BTreeMap<NodeId, &BasicSigOf<H>>,
+    ) -> CryptoResult<BasicSignatureBatch<H>> {
+        if signatures.is_empty() {
+            return Err(CryptoError::InvalidArgument {
+                message: "No signatures to combine in a batch. At least one signature is needed to create a batch"
+                    .to_string(),
+            });
+        };
+        let mut signatures_map = BTreeMap::new();
+        for (signer, signature) in signatures.into_iter() {
+            signatures_map.insert(signer, signature.clone());
+        }
+
+        Ok(BasicSignatureBatch { signatures_map })
+    }
+    pub fn verify_basic_sig_batch<S: CspSigner, H: Signable>(
+        csp_signer: &S,
+        registry: Arc<dyn RegistryClient>,
+        signature: &BasicSignatureBatch<H>,
+        message: &H,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        if signature.signatures_map.is_empty() {
+            return Err(CryptoError::InvalidArgument {
+                message: "Empty BasicSignatureBatch. At least one signature should be included in the batch."
+                    .to_string(),
+            });
+        };
+
+        for (signer, signature) in signature.signatures_map.iter() {
+            Self::verify_basic_sig(
+                csp_signer,
+                Arc::clone(&registry),
+                signature,
+                message,
+                *signer,
+                registry_version,
+            )?
+        }
+        Ok(())
+    }
 }
 
 pub struct BasicSignerInternal {}
