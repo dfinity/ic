@@ -408,14 +408,26 @@ wasm-generator-slo:
     cd_target_env: "SLO"
   timeout: 3 hours
 
-system-tests-nightly:
+system-tests-short-nightly:
   extends:
     - .system-tests
     - .with-monitoring
   variables:
-    SUITE_NAME: "nightly"
+    SUITE_NAME: "nightly_short_duration"
     cd_target_env: "NIGHTLY"
-    SYSTEM_TESTS_TIMEOUT: "30000" #8h 20min
+    SYSTEM_TESTS_TIMEOUT: "3000"  # 50 mins
+  timeout: 60 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
+  script:
+    - *run-farm-based-test
+
+system-tests-long-nightly:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "nightly_long_duration"
+    cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
   script:
     - *run-farm-based-test
