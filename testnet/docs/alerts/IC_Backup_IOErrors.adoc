@@ -39,3 +39,15 @@ However, it still makes sense to investigate and inform Consensus.
 5. If the error is either replicated or repeating and not related to the file system itself, inform Consensus immediately.
 
 6. If the error is replicated AND repeating, we might be losing backups. Raise a Sev3 with Priority 1 and inform Consensus immediately. While not user facing, this is a highly time sensitive issue.
+
+== Contacts
+
+The three backup nodes are owned by:
+
+- sf1-spm12 : PFOps: (Ian Blenke, Sam Howard)
+- zh1-pyr07 : Orchestrator team (Christian Muller, Egeyar Bagcioglu)
+- ip-10-31-0-141 : Consensus team (Leon Tan)
+
+Each of those teams only has access to their own backup instance and cannot help with the others.
+
+You can find all of the above contacts in the #backup-ops Slack channel.
