@@ -691,9 +691,7 @@ impl BatchProcessor for BatchProcessorImpl {
             self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, registry_version);
 
         let subnet_size = network_topology
-            .subnets
-            .get(&state.metadata.own_subnet_id)
-            .map(|subnet_topology| subnet_topology.nodes.len())
+            .get_subnet_size(&state.metadata.own_subnet_id)
             .unwrap_or_else(|| {
                 self.metrics.critical_error_missing_subnet_size.inc();
                 warn!(

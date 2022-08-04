@@ -1,6 +1,7 @@
 use super::*;
 
 use candid::Nat;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_ic00_types::{CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -139,7 +140,7 @@ fn induct_message_with_successful_history_update() {
             ReplicatedState::new_rooted_at(subnet_test_id(1), subnet_type, "NOT_USED".into());
         insert_canister(&mut state, canister_id);
 
-        valid_set_rule.induct_message(&mut state, msg);
+        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
         assert_eq!(ingress_queue_size(&state, canister_id), 1);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 1)]),
@@ -202,7 +203,7 @@ fn induct_message_fails_for_stopping_canister() {
         );
         state.put_canister_state(get_stopping_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, msg);
+        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPING)], 1)]),
@@ -263,7 +264,7 @@ fn induct_message_fails_for_stopped_canister() {
         );
         state.put_canister_state(get_stopped_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, msg);
+        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPED)], 1)]),
@@ -316,7 +317,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
-        valid_set_rule.induct_message(&mut state, msg);
+        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
     });
 }
 
@@ -367,7 +368,7 @@ fn update_history_if_induction_failed() {
         );
         // The induction is expected to fail because there is no canister 0 in the
         // ReplicatedState.
-        valid_set_rule.induct_message(&mut state, msg.clone());
+        valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
         assert!(state.canister_state(&canister_id).is_none());
         assert_eq!(state.get_ingress_status(&msg.id()), status_clone);
         assert_inducted_ingress_messages_eq(
@@ -504,7 +505,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .build()
         .into();
     let cost_of_ingress = cycles_account_manager
-        .ingress_induction_cost(&msg, None)
+        .ingress_induction_cost(&msg, None, SMALL_APP_SUBNET_MAX_SIZE)
         .cost();
 
     let ingress_history_writer = NoopIngressHistoryWriter;
@@ -615,7 +616,8 @@ fn ingress_to_stopping_canister_is_rejected() {
             SignedIngressBuilder::new()
                 .canister_id(canister_test_id(0))
                 .build()
-                .into()
+                .into(),
+            SMALL_APP_SUBNET_MAX_SIZE
         ),
         Err(StateError::CanisterStopping(canister_test_id(0)))
     );
@@ -648,7 +650,8 @@ fn ingress_to_stopped_canister_is_rejected() {
             SignedIngressBuilder::new()
                 .canister_id(canister_test_id(0))
                 .build()
-                .into()
+                .into(),
+            SMALL_APP_SUBNET_MAX_SIZE
         ),
         Err(StateError::CanisterStopped(canister_test_id(0)))
     );
@@ -686,9 +689,9 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         let effective_canister_id = None;
         let cost = CyclesAccountManagerBuilder::new()
             .build()
-            .ingress_induction_cost(&ingress, effective_canister_id)
+            .ingress_induction_cost(&ingress, effective_canister_id, SMALL_APP_SUBNET_MAX_SIZE)
             .cost();
-        valid_set_rule.induct_message(&mut state, ingress);
+        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -732,7 +735,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
-        valid_set_rule.induct_message(&mut state, ingress);
+        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -768,7 +771,7 @@ fn management_message_with_unknown_method_is_not_inducted() {
         .build()
         .into();
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress),
+        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
         Err(StateError::UnknownSubnetMethod(String::from("test")))
     );
 }
@@ -798,7 +801,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         .build()
         .into();
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress),
+        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
         Err(StateError::InvalidSubnetPayload)
     );
 }
@@ -840,7 +843,9 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
         .method_payload(payload)
         .build()
         .into();
-    assert!(valid_set_rule.enqueue(&mut state, ingress).is_ok());
+    assert!(valid_set_rule
+        .enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
+        .is_ok());
 
     let balance_after = state
         .canister_state(&canister_id)

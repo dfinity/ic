@@ -203,6 +203,13 @@ impl NetworkTopology {
             .map(|ids| &ids[..])
             .unwrap_or(&[])
     }
+
+    /// Returns the size of the given subnet.
+    pub fn get_subnet_size(&self, subnet_id: &SubnetId) -> Option<usize> {
+        self.subnets
+            .get(subnet_id)
+            .map(|subnet_topology| subnet_topology.nodes.len())
+    }
 }
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {

@@ -3698,7 +3698,7 @@ fn unfreezing_of_frozen_canister() {
     assert_eq!(
         balance_before - balance_after,
         test.cycles_account_manager()
-            .ingress_induction_cost_from_bytes(ingress_bytes)
+            .ingress_induction_cost_from_bytes(ingress_bytes, test.subnet_size())
     );
     // Now the canister works again.
     let result = test.ingress(canister_id, "update", wasm().reply().build());

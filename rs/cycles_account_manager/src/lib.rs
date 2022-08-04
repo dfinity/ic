@@ -359,6 +359,7 @@ impl CyclesAccountManager {
         &self,
         ingress: &SignedIngressContent,
         effective_canister_id: Option<CanisterId>,
+        subnet_size: usize,
     ) -> IngressInductionCost {
         let paying_canister = match ingress.is_addressed_to_subnet(self.own_subnet_id) {
             // If a subnet message, get effective canister id who will pay for the message.
@@ -381,8 +382,10 @@ impl CyclesAccountManager {
                 let bytes_to_charge = ingress.arg().len()
                     + ingress.method_name().len()
                     + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-                let cost =
-                    self.ingress_induction_cost_from_bytes(NumBytes::from(bytes_to_charge as u64));
+                let cost = self.ingress_induction_cost_from_bytes(
+                    NumBytes::from(bytes_to_charge as u64),
+                    subnet_size,
+                );
                 IngressInductionCost::Fee {
                     payer: paying_canister,
                     cost,
@@ -393,9 +396,12 @@ impl CyclesAccountManager {
     }
 
     /// Returns the cost of an ingress message based on the message size.
-    pub fn ingress_induction_cost_from_bytes(&self, bytes: NumBytes) -> Cycles {
-        self.config.ingress_message_reception_fee
-            + self.config.ingress_byte_reception_fee * bytes.get()
+    pub fn ingress_induction_cost_from_bytes(&self, bytes: NumBytes, subnet_size: usize) -> Cycles {
+        self.scale_cost(
+            self.config.ingress_message_reception_fee
+                + self.config.ingress_byte_reception_fee * bytes.get(),
+            subnet_size,
+        )
     }
 
     /// How often canisters should be charged for memory and compute allocation.
