@@ -1,6 +1,6 @@
 rosetta-api-docker-image:
   extends:
-    - .ubuntu-nix-docker-protected
+    - .ubuntu-docker-protected
     - .rules-protected-branch-manual
   stage: guest-os-build
   needs:

@@ -1,6 +1,6 @@
 host-os-updateimg:
   extends:
-    - .ubuntu-nix-docker-protected
+    - .ubuntu-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: host-os-build
   needs: []

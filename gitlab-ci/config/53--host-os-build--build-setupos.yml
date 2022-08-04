@@ -5,7 +5,7 @@ setup-os-diskimg:
     - job: host-os-diskimg
       artifacts: false
   extends:
-    - .ubuntu-nix-docker-protected
+    - .ubuntu-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: host-os-build
   script:

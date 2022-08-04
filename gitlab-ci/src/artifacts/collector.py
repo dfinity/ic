@@ -104,10 +104,8 @@ class Collector:
             if "malicious" in self.artifacts_dir:
                 return
 
-            if path.exists("/openssl/private.pem"):
+            if ENV.is_gitlab:
                 sh(local("openssl-sign.sh"), self.out_dir)
-            else:
-                logging.warn("/openssl/private.pem doesn't exist, so these artifacts won't be signed")
 
     def _process_one(self, binary: str):
         """
