@@ -579,7 +579,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )],
     ));
 
-    let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(
         suite(
             "staging", //runs nightly, allowed to fail
@@ -612,20 +611,46 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
+    // let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(suite(
-        "large_subnet_count_suite",
-        vec![pot(
-            "xnet_120_subnets_pot",
-            xnet_120_subnets.build(),
-            par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-        )],
+        "nightly_long_duration",
+        vec![
+            // Readiness of the node's status endpoint (after VM boot) is still an issue (VER-1791).
+            // Having that many nodes results in a substantial probability of the IC setup failure.
+            // TODO: Re-enable the test, once the issue is resolved.
+            /*
+            pot(
+                "xnet_120_subnets_pot",
+                xnet_120_subnets.build(),
+                par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+            ),
+            */
+            pot_with_setup(
+                "default_subnet_workload_pot",
+                networking::subnet_update_workload::default_config,
+                par(vec![
+                    sys_t(
+                        "default_subnet_query_workload_long_duration_test",
+                        networking::subnet_query_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_long_duration_test",
+                        networking::subnet_update_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_large_payload",
+                        networking::subnet_update_workload::large_payload_test,
+                    ),
+                ]),
+            ),
+        ],
     ));
 
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();
     m.add_suite(suite(
-        "nightly",
+        "nightly_short_duration",
         vec![
             pot(
                 "xnet_slo_3_subnets_pot",
@@ -658,24 +683,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "http_time_out",
                     canister_http::http_time_out::test,
                 )]),
-            ),
-            pot_with_setup(
-                "default_subnet_workload_pot",
-                networking::subnet_update_workload::default_config,
-                par(vec![
-                    sys_t(
-                        "default_subnet_query_workload_long_duration_test",
-                        networking::subnet_query_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_long_duration_test",
-                        networking::subnet_update_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_large_payload",
-                        networking::subnet_update_workload::large_payload_test,
-                    ),
-                ]),
             ),
             pot(
                 "two_third_latency_pot",
