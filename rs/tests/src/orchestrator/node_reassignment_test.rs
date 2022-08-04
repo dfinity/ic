@@ -116,6 +116,10 @@ pub fn test(env: TestEnv) {
     block_on(remove_nodes_via_endpoint(node3.get_public_url(), &node_ids)).unwrap();
     info!(log, "Removed node ids {:?} from the NNS subnet", node_ids);
 
+    // Wait until the nodes become unassigned.
+    node1.await_status_is_unavailable().unwrap();
+    node2.await_status_is_unavailable().unwrap();
+
     block_on(add_nodes_to_subnet(
         node3.get_public_url(),
         app_subnet.subnet_id,
@@ -137,7 +141,7 @@ pub fn test(env: TestEnv) {
         &node1.get_public_url(),
         app_can_id,
         app_msg,
-        50
+        100
     ));
     assert!(can_read_msg_with_retries(
         log,
