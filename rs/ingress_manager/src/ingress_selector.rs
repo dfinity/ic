@@ -3,7 +3,7 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::IngressManager;
-use ic_constants::MAX_INGRESS_TTL;
+use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     execution_environment::IngressHistoryReader,
@@ -334,10 +334,16 @@ impl IngressManager {
             extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
                 ValidationError::Permanent(IngressPermanentError::InvalidManagementMessage)
             })?;
-        match self
-            .cycles_account_manager
-            .ingress_induction_cost(msg, effective_canister_id)
-        {
+        let subnet_size = state
+            .metadata
+            .network_topology
+            .get_subnet_size(&state.metadata.own_subnet_id)
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        match self.cycles_account_manager.ingress_induction_cost(
+            msg,
+            effective_canister_id,
+            subnet_size,
+        ) {
             IngressInductionCost::Fee {
                 payer,
                 cost: ingress_cost,
@@ -1374,7 +1380,11 @@ mod tests {
                             // Enough cycles to induct only m1
                             .with_cycles(
                                 cycles_account_manager
-                                    .ingress_induction_cost(m1.content(), None)
+                                    .ingress_induction_cost(
+                                        m1.content(),
+                                        None,
+                                        SMALL_APP_SUBNET_MAX_SIZE,
+                                    )
                                     .cost(),
                             )
                             .build(),

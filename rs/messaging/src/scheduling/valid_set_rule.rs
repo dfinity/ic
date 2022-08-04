@@ -4,6 +4,7 @@
 #![allow(clippy::ptr_arg)]
 
 use ic_base_types::NumBytes;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
@@ -137,7 +138,12 @@ impl ValidSetRuleImpl {
     /// Tries to induct a single ingress message and sets the message status in
     /// `state` accordingly (to `Received` if successful; or to `Failed` with
     /// the relevant error code on failure).
-    fn induct_message(&self, state: &mut ReplicatedState, msg: SignedIngressContent) {
+    fn induct_message(
+        &self,
+        state: &mut ReplicatedState,
+        msg: SignedIngressContent,
+        subnet_size: usize,
+    ) {
         trace!(self.log, "induct_message");
         let message_id = msg.id();
         let source = msg.sender();
@@ -146,7 +152,7 @@ impl ValidSetRuleImpl {
         let time = state.time();
         let ingress_expiry = msg.ingress_expiry();
 
-        let status = match self.enqueue(state, msg) {
+        let status = match self.enqueue(state, msg, subnet_size) {
             Ok(()) => {
                 self.observe_inducted_ingress_payload_size(payload_bytes);
                 self.ingress_history_writer.set_status(
@@ -251,6 +257,7 @@ impl ValidSetRuleImpl {
         &self,
         state: &mut ReplicatedState,
         msg: SignedIngressContent,
+        subnet_size: usize,
     ) -> Result<(), StateError> {
         let effective_canister_id =
             match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
@@ -269,9 +276,11 @@ impl ValidSetRuleImpl {
             };
 
         // Compute the cost of induction.
-        let induction_cost = self
-            .cycles_account_manager
-            .ingress_induction_cost(&msg, effective_canister_id);
+        let induction_cost = self.cycles_account_manager.ingress_induction_cost(
+            &msg,
+            effective_canister_id,
+            subnet_size,
+        );
 
         let ingress = Ingress::from((msg, effective_canister_id));
         match induction_cost {
@@ -321,10 +330,15 @@ impl ValidSetRuleImpl {
 
 impl ValidSetRule for ValidSetRuleImpl {
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>) {
+        let subnet_size = state
+            .metadata
+            .network_topology
+            .get_subnet_size(&state.metadata.own_subnet_id)
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         for msg in msgs {
             let message_id = msg.id();
             if !self.is_duplicate(state, &msg) {
-                self.induct_message(state, msg);
+                self.induct_message(state, msg, subnet_size);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);

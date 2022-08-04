@@ -17,6 +17,7 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -469,9 +470,10 @@ impl ExecutionEnvironment {
                                     ingress.method_payload.len() + ingress.method_name.len();
                                 let induction_cost = self
                                     .cycles_account_manager
-                                    .ingress_induction_cost_from_bytes(NumBytes::from(
-                                        bytes_to_charge as u64,
-                                    ));
+                                    .ingress_induction_cost_from_bytes(
+                                        NumBytes::from(bytes_to_charge as u64),
+                                        registry_settings.subnet_size
+                                    );
                                 let memory_usage = canister.memory_usage(self.own_subnet_type);
                                 // This call may fail with `CanisterOutOfCyclesError`,
                                 // which is not actionable at this point.
@@ -1243,9 +1245,16 @@ impl ExecutionEnvironment {
         // if the canister's balance is too low. A more rigorous check happens later
         // in the ingress selector.
         {
-            let induction_cost = self
-                .cycles_account_manager
-                .ingress_induction_cost(ingress, effective_canister_id);
+            let subnet_size = state
+                .metadata
+                .network_topology
+                .get_subnet_size(&state.metadata.own_subnet_id)
+                .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+            let induction_cost = self.cycles_account_manager.ingress_induction_cost(
+                ingress,
+                effective_canister_id,
+                subnet_size,
+            );
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
                 let paying_canister = canister(payer)?;

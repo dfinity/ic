@@ -336,7 +336,11 @@ fn ingress_induction_cost_valid_subnet_message() {
         let num_bytes = msg.arg().len() + msg.method_name().len();
 
         assert_eq!(
-            cycles_account_manager.ingress_induction_cost(&msg, effective_canister_id),
+            cycles_account_manager.ingress_induction_cost(
+                &msg,
+                effective_canister_id,
+                SMALL_APP_SUBNET_MAX_SIZE
+            ),
             IngressInductionCost::Fee {
                 payer: canister_test_id(0),
                 cost: cycles_account_manager.ingress_message_received_fee()
