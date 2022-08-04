@@ -57,9 +57,15 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
     let mainnet_version =
         env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
-
     assert!(mainnet_version.len() >= 40);
     assert!(hex::decode(&mainnet_version).is_ok());
+
+    info!(logger, "Make sure all nodes are healty...");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 
     // choose a node from the nns subnet
     let nns_node = env
@@ -68,7 +74,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .nodes()
         .next()
         .unwrap();
-    nns_node.await_status_is_healthy().unwrap();
 
     nns_node
         .install_nns_canisters()

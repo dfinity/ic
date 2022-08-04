@@ -1039,6 +1039,37 @@ where
     }
 }
 
+pub fn retry_mut<F, R>(
+    log: slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    mut f: F,
+) -> Result<R>
+where
+    F: FnMut() -> Result<R>,
+{
+    let mut attempt = 1;
+    let start = Instant::now();
+    info!(
+        log,
+        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+    );
+    loop {
+        match f() {
+            Ok(v) => break Ok(v),
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    let err_msg = e.to_string();
+                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
+                }
+                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                std::thread::sleep(backoff);
+                attempt += 1;
+            }
+        }
+    }
+}
+
 pub async fn retry_async<F, Fut, R>(
     log: &slog::Logger,
     timeout: Duration,
