@@ -107,17 +107,51 @@ pub(crate) fn assert_assigned_replica_version(
     expected_version: &str,
     logger: Logger,
 ) {
-    retry(
-        logger,
-        secs(600),
-        secs(10),
-        || match get_assigned_replica_version(node) {
-            Ok(ver) if ver == expected_version => Ok(()),
-            Ok(ver) => bail!("Replica version: {:?}", ver),
-            Err(err) => bail!("Error reading replica version: {:?}", err),
-        },
-    )
-    .expect("Can't fetch expected replica version");
+    #[derive(PartialEq)]
+    enum State {
+        Uninitialized,
+        OldVersion,
+        Reboot,
+        OldVersionAgain,
+        Finished,
+    }
+    let mut state = State::Uninitialized;
+    let result =
+        retry_mut(
+            logger.clone(),
+            secs(600),
+            secs(10),
+            || match get_assigned_replica_version(node) {
+                Ok(ver) if ver == expected_version => {
+                    state = State::Finished;
+                    Ok(())
+                }
+                Ok(ver) => {
+                    if state == State::Uninitialized || state == State::OldVersion {
+                        state = State::OldVersion
+                    } else {
+                        state = State::OldVersionAgain
+                    }
+                    bail!("Replica version: {:?}", ver)
+                }
+                Err(err) => {
+                    state = State::Reboot;
+                    bail!("Error reading replica version: {:?}", err)
+                }
+            },
+        );
+    if let Err(error) = result {
+        info!(logger, "Error: {}", error);
+        match state {
+            State::Uninitialized => panic!("No version is fetched at all!"),
+            State::OldVersion => panic!("Replica was running the old version only!"),
+            State::Reboot => {
+                panic!("Replica did reboot, but never came back online!")
+            }
+            State::OldVersionAgain => panic!("Replica rebooted to a wrong version!"),
+            State::Finished => {} // All went well eventually
+        }
+    }
 }
 
 /// Gets the replica version from the node if it is healthy.
