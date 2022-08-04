@@ -1,10 +1,19 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["**"]),
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
 )
 
 DEPENDENCIES = [
@@ -33,6 +42,16 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
+    "@wabt_rs//:wabt",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_library(
@@ -43,4 +62,21 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "replica_controller_test",
+    aliases = ALIASES,
+    crate = ":replica_controller",
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    edition = "2018",
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
