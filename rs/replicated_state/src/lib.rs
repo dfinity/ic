@@ -11,11 +11,11 @@ pub mod testing {
 }
 pub use bitcoin_state::{BitcoinState, BitcoinStateError};
 pub use canister_state::{
-    execution_state::{ExecutionTask, Memory},
+    execution_state::Memory,
     num_bytes_try_from,
     system_state::{
         memory_required_to_push_request, CallContext, CallContextAction, CallContextManager,
-        CallOrigin, CanisterMetrics, CanisterStatus, SystemState,
+        CallOrigin, CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
     NumWasmPages, SchedulerState,

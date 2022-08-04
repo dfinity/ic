@@ -442,11 +442,10 @@ impl SchedulerImpl {
                 .start_timer();
             for canister in state.canisters_iter_mut() {
                 if canister.exports_heartbeat_method() {
-                    if let Some(execution_state) = canister.execution_state.as_mut() {
-                        execution_state
-                            .task_queue
-                            .push_back(ExecutionTask::Heartbeat);
-                    }
+                    canister
+                        .system_state
+                        .task_queue
+                        .push_front(ExecutionTask::Heartbeat);
                 }
             }
         }
@@ -551,15 +550,13 @@ impl SchedulerImpl {
             // Remove all remaining `Heartbeat` tasks because they will be added
             // again in the next round.
             for canister in state.canisters_iter_mut() {
-                if let Some(execution_state) = canister.execution_state.as_mut() {
-                    execution_state.task_queue.retain(|task| match task {
-                        ExecutionTask::Heartbeat => false,
-                        ExecutionTask::PausedExecution(..)
-                        | ExecutionTask::PausedInstallCode(..)
-                        | ExecutionTask::AbortedExecution(..)
-                        | ExecutionTask::AbortedInstallCode(..) => true,
-                    });
-                }
+                canister.system_state.task_queue.retain(|task| match task {
+                    ExecutionTask::Heartbeat => false,
+                    ExecutionTask::PausedExecution(..)
+                    | ExecutionTask::PausedInstallCode(..)
+                    | ExecutionTask::AbortedExecution(..)
+                    | ExecutionTask::AbortedInstallCode(..) => true,
+                });
             }
         }
 
