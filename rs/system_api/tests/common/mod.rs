@@ -89,6 +89,7 @@ impl ApiTypeBuilder {
             incoming_cycles,
             CallContextId::new(1),
             false,
+            ExecutionMode::Replicated,
         )
     }
 
@@ -99,6 +100,7 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             call_context_test_id(1),
             false,
+            ExecutionMode::Replicated,
         )
     }
 }

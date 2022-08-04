@@ -484,22 +484,6 @@ impl<'a> QueryContext<'a> {
         let time = self.state.time();
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
-        let api_type = match response.response_payload {
-            Payload::Data(payload) => ApiType::reply_callback(
-                time,
-                payload.to_vec(),
-                incoming_cycles,
-                call_context_id,
-                call_responded,
-            ),
-            Payload::Reject(context) => ApiType::reject_callback(
-                time,
-                context,
-                incoming_cycles,
-                call_context_id,
-                call_responded,
-            ),
-        };
 
         let instruction_limit = self.max_instructions_per_message.min(
             self.query_allocations_used
@@ -511,6 +495,24 @@ impl<'a> QueryContext<'a> {
         let instruction_limits =
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
+        let api_type = match response.response_payload {
+            Payload::Data(payload) => ApiType::reply_callback(
+                time,
+                payload.to_vec(),
+                incoming_cycles,
+                call_context_id,
+                call_responded,
+                execution_parameters.execution_mode.clone(),
+            ),
+            Payload::Reject(context) => ApiType::reject_callback(
+                time,
+                context,
+                incoming_cycles,
+                call_context_id,
+                call_responded,
+                execution_parameters.execution_mode.clone(),
+            ),
+        };
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
