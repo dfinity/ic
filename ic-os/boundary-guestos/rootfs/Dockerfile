@@ -211,9 +211,7 @@ RUN chown root:root /etc/journalbeat/*.yml \
 RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
-               /usr/local/bin/node_exporter && \
-    chmod 0644 /etc/default/node_exporter \
-               /etc/node_exporter/web.yml
+               /usr/local/bin/node_exporter
 
 # install nginx_exporter
 RUN \
