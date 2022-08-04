@@ -1,7 +1,9 @@
 #include "network_info.h"
 
 #include <arpa/inet.h>
+#include <chrono>
 #include <ifaddrs.h>
+#include <iomanip>
 #include <linux/if_packet.h>
 #include <linux/if_link.h>
 #include <linux/rtnetlink.h>
@@ -349,6 +351,10 @@ std::string
 format_network_info(const network_info& info)
 {
     std::stringstream ss;
+
+    const std::chrono::time_point now = std::chrono::system_clock::now();
+    const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    ss << std::put_time(std::gmtime(&now_time), "%F %T %Z\n");
 
     for (const auto& iface : info.ifaces) {
         ss << iface.first << (iface.second.up ? " up" : "") << (iface.second.running ? " running" : "");
