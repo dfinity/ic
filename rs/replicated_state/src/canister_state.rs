@@ -190,17 +190,21 @@ impl CanisterState {
             .and_then(|es| es.task_queue.pop_front())
     }
 
-    /// Returns true if the canister has a task to execute.  
-    pub fn has_task(&self) -> bool {
-        self.execution_state
+    /// Returns what the canister is going to execute next.
+    pub fn next_execution(&self) -> NextExecution {
+        let next_task = self
+            .execution_state
             .as_ref()
-            .map(|es| !es.task_queue.is_empty())
-            .unwrap_or(false)
-    }
-
-    /// Returns true if the canister has a task or an input message to execute.  
-    pub fn is_active(&self) -> bool {
-        self.has_task() || self.has_input()
+            .and_then(|es| es.task_queue.front());
+        match (next_task, self.has_input()) {
+            (None, false) => NextExecution::None,
+            (None, true) => NextExecution::StartNew,
+            (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
+            (Some(ExecutionTask::AbortedExecution(..)), _)
+            | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
+            (Some(ExecutionTask::AbortedInstallCode(..)), _)
+            | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
+        }
     }
 
     /// Returns true if there is at least one message in the canister's output
@@ -411,6 +415,22 @@ impl CanisterState {
             CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
         }
     }
+}
+
+/// The result of `next_execution()` function.
+/// Describes what the canister is going to execute next:
+/// - `None`: the canister is idle.
+/// - `StartNew`: the canister has a message or heartbeat to execute.
+/// - `ContinueLong`: the canister has a long-running execution and will
+///   continue it.
+/// - `ContinueInstallCode`: the canister has a long-running execution of
+/// `install_code` subnet message and will continue it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NextExecution {
+    None,
+    StartNew,
+    ContinueLong,
+    ContinueInstallCode,
 }
 
 pub struct NumWasmPagesTag;

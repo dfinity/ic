@@ -25,8 +25,9 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, ExecutionTask,
-    InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState,
+    canister_state::{NextExecution, QUEUE_INDEX_NONE},
+    CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -34,7 +35,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
-    NumBytes, NumInstructions, NumRounds, Randomness, SubnetId, Time,
+    NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -224,8 +225,12 @@ fn filter_canisters(
                 || rate_limiting_of_heap_delta == FlagStatus::Disabled;
             if !is_under_limit {
                 rate_limited_ids.insert(**canister_id);
+                return false;
             }
-            canister.is_active() && is_under_limit
+            match canister.next_execution() {
+                NextExecution::None | NextExecution::ContinueInstallCode => false,
+                NextExecution::StartNew | NextExecution::ContinueLong => true,
+            }
         })
         .cloned()
         .collect();
@@ -287,6 +292,48 @@ impl SchedulerImpl {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
         }
+    }
+
+    /// Makes progress in executing long-running `install_code` messages.
+    fn advance_long_running_install_code(
+        &self,
+        mut state: ReplicatedState,
+        round_limits: &mut RoundLimits,
+        long_running_canister_ids: &BTreeSet<CanisterId>,
+        measurement_scope: &MeasurementScope,
+    ) -> ReplicatedState {
+        // TODO(RUN-290): Fix the iteration order to guarantee progress of
+        // long-running execution and to respect the accumulated priority.
+        for canister_id in long_running_canister_ids.iter() {
+            match state.canister_state(canister_id) {
+                None => continue,
+                Some(canister) => match canister.next_execution() {
+                    NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
+                        continue
+                    }
+                    NextExecution::ContinueInstallCode => {}
+                },
+            }
+            let instruction_limits = InstructionLimits::new(
+                self.deterministic_time_slicing,
+                self.config.max_instructions_per_install_code,
+                self.config.max_instructions_per_slice,
+            );
+            let instructions_before = round_limits.instructions;
+            state = self.exec_env.resume_install_code(
+                state,
+                canister_id,
+                instruction_limits,
+                round_limits,
+            );
+            let instructions_executed =
+                as_num_instructions(instructions_before - round_limits.instructions);
+            measurement_scope.add(instructions_executed, NumMessages::from(0));
+            if round_limits.instructions <= RoundInstructions::from(0) {
+                break;
+            }
+        }
+        state
     }
 
     /// Drains the subnet queues, executing all messages not blocked by long executions.
@@ -508,7 +555,9 @@ impl SchedulerImpl {
                     execution_state.task_queue.retain(|task| match task {
                         ExecutionTask::Heartbeat => false,
                         ExecutionTask::PausedExecution(..)
-                        | ExecutionTask::AbortedExecution(..) => true,
+                        | ExecutionTask::PausedInstallCode(..)
+                        | ExecutionTask::AbortedExecution(..)
+                        | ExecutionTask::AbortedInstallCode(..) => true,
                     });
                 }
             }
@@ -957,14 +1006,18 @@ impl Scheduler for SchedulerImpl {
             );
             self.metrics.execute_round_called.inc();
             observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics, &round_log);
-
             long_running_canister_ids = match self.deterministic_time_slicing {
                 FlagStatus::Enabled => state
                     .canister_states
                     .iter()
-                    .filter(|(_, canister_state)| {
-                        canister_state.scheduler_state.long_execution_progress > NumRounds::new(0)
-                    })
+                    .filter(
+                        |(_, canister_state)| match canister_state.next_execution() {
+                            NextExecution::None => false,
+                            NextExecution::StartNew => false,
+                            NextExecution::ContinueLong => true,
+                            NextExecution::ContinueInstallCode => true,
+                        },
+                    )
                     .map(|(canister_id, _)| *canister_id)
                     .collect(),
                 // Don't iterate through canisters if DTS is not enabled.
@@ -1082,15 +1135,24 @@ impl Scheduler for SchedulerImpl {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
 
-            state = self.drain_subnet_queues(
+            state = self.advance_long_running_install_code(
                 state,
-                &mut csprng,
                 &mut round_limits,
-                &measurement_scope,
                 &long_running_canister_ids,
-                registry_settings,
-                &ecdsa_subnet_public_keys,
+                &measurement_scope,
             );
+
+            if round_limits.instructions > RoundInstructions::from(0) {
+                state = self.drain_subnet_queues(
+                    state,
+                    &mut csprng,
+                    &mut round_limits,
+                    &measurement_scope,
+                    &long_running_canister_ids,
+                    registry_settings,
+                    &ecdsa_subnet_public_keys,
+                );
+            }
         }
 
         // Reset the round limit after executing all subnet messages.
@@ -1348,8 +1410,16 @@ fn execute_canisters_on_thread(
 
         // Process all messages of the canister until
         // - it has not tasks and input messages to execute
+        // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
-        while canister.is_active() {
+        loop {
+            match canister.next_execution() {
+                NextExecution::None | NextExecution::ContinueInstallCode => {
+                    break;
+                }
+                NextExecution::StartNew | NextExecution::ContinueLong => {}
+            }
+
             if round_limits.instructions <= RoundInstructions::from(0) {
                 canister
                     .system_state
