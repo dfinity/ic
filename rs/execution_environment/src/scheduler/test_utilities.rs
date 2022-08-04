@@ -60,9 +60,15 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 
-use crate::{ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl};
+use crate::{
+    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
+};
 
 use super::SchedulerImpl;
+use crate::metrics::MeasurementScope;
+use ic_crypto::prng::Csprng;
+use ic_crypto::prng::RandomnessPurpose::ExecutionThread;
+use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
 /// fakes execution of Wasm code for performance, so it can process thousands
@@ -238,8 +244,8 @@ impl SchedulerTest {
         }
     }
 
-    /// Injects a call from `self.xnet_canister_id()` to the management
-    /// canister. Note that this function doesn't support `InstallCode`
+    /// Injects a call to the management canister.
+    /// Note that this function doesn't support `InstallCode`
     /// messages, because for such messages we additionally need to know
     /// how many instructions the corresponding Wasm execution needs.
     /// See `inject_install_code_call_to_ic00()`.
@@ -251,12 +257,14 @@ impl SchedulerTest {
         method_name: S,
         method_payload: Vec<u8>,
         payment: Cycles,
+        caller: CanisterId,
+        input_type: InputQueueType,
     ) {
         assert!(
             method_name.to_string() != Method::InstallCode.to_string(),
             "Use `inject_install_code_call_to_ic00()`."
         );
-        let caller = self.xnet_canister_id();
+
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
@@ -269,7 +277,7 @@ impl SchedulerTest {
                     .payment(payment)
                     .build()
                     .into(),
-                InputQueueType::RemoteSubnet,
+                input_type,
             )
             .unwrap();
     }
@@ -379,6 +387,37 @@ impl SchedulerTest {
         );
         self.state = Some(state);
         self.increment_round();
+    }
+
+    pub fn drain_subnet_messages(
+        &mut self,
+        long_running_canister_ids: &BTreeSet<CanisterId>,
+    ) -> ReplicatedState {
+        let state = self.state.take().unwrap();
+        let mut csprng = Csprng::from_seed_and_purpose(
+            &Randomness::from([0; 32]),
+            &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
+        );
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                self.scheduler.config.max_instructions_per_round / 16,
+            ),
+            subnet_available_memory: self
+                .scheduler
+                .exec_env
+                .subnet_available_memory(&state)
+                .into(),
+        };
+        let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
+        self.scheduler.drain_subnet_queues(
+            state,
+            &mut csprng,
+            &mut round_limits,
+            &measurements,
+            long_running_canister_ids,
+            &test_registry_settings(),
+            &BTreeMap::new(),
+        )
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {

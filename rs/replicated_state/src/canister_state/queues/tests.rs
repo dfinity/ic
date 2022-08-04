@@ -406,6 +406,163 @@ fn test_input_scheduling() {
     assert!(!queues.has_input());
 }
 
+#[test]
+fn test_peek_round_robin() {
+    let mut queues = CanisterQueues::default();
+    assert!(!queues.has_input());
+
+    let local_senders = vec![
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let remote_senders = vec![
+        canister_test_id(3),
+        canister_test_id(3),
+        canister_test_id(4),
+    ];
+
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+    let remote_requests = remote_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+
+    let ingress = Ingress {
+        source: user_test_id(77),
+        receiver: canister_test_id(13),
+        method_name: String::from("test"),
+        method_payload: Vec::new(),
+        effective_canister_id: None,
+        message_id: message_test_id(555),
+        expiry_time: current_time_and_expiry_time().1,
+    };
+    queues.push_ingress(ingress.clone());
+
+    assert!(queues.has_input());
+    /* Peek */
+    // Due to the round-robin across Local, Ingress, and Remote Subnet messages,
+    // the peek order should be:
+    // 1. Local Subnet request (index 0)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    // Peeking again the queues would return the same result.
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 2. Ingress message
+    let peeked_input = CanisterInputMessage::Ingress(Arc::new(ingress));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 3. Remote Subnet request (index 0)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 4. Local Subnet request (index 1)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 5. Remote Subnet request (index 2)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(2).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 6. Local Subnet request (index 2)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 7. Remote Subnet request (index 1)
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+    assert!(!queues.has_input());
+}
+
+#[test]
+fn test_skip_round_robin() {
+    let mut queues = CanisterQueues::default();
+    assert!(!queues.has_input());
+
+    let local_senders = vec![
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    let ingress = Ingress {
+        source: user_test_id(77),
+        receiver: canister_test_id(13),
+        method_name: String::from("test"),
+        method_payload: Vec::new(),
+        effective_canister_id: None,
+        message_id: message_test_id(555),
+        expiry_time: current_time_and_expiry_time().1,
+    };
+    queues.push_ingress(ingress.clone());
+    let ingress_input = CanisterInputMessage::Ingress(Arc::new(ingress));
+    assert!(queues.has_input());
+
+    // 1. Pop local subnet request (index 0)
+    // 2. Skip ingress message
+    // 3. Pop local subnet request (index 1)
+    // 4. Skip ingress message
+    // 5. Skip local subnet request (index 2)
+    // Loop detected.
+
+    let mut loop_detector = CanisterQueuesLoopDetector::default();
+
+    // Pop local queue.
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // Skip ingress.
+    assert_eq!(queues.peek_input().unwrap(), ingress_input);
+    queues.skip_input(&mut loop_detector);
+    assert!(loop_detector.skipped_ingress_queue);
+    assert!(!loop_detector.detected_loop(&queues));
+
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // Skip ingress
+    assert_eq!(queues.peek_input().unwrap(), ingress_input);
+    queues.skip_input(&mut loop_detector);
+    assert!(!loop_detector.detected_loop(&queues));
+
+    // Skip local.
+    let peeked_input =
+        CanisterInputMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    queues.skip_input(&mut loop_detector);
+    assert!(loop_detector.skipped_ingress_queue);
+    assert!(loop_detector.detected_loop(&queues));
+}
+
 /// Enqueues 6 output requests across 3 canisters and consumes them.
 #[test]
 fn test_output_into_iter() {
@@ -488,6 +645,132 @@ fn encode_roundtrip() {
     let decoded = encoded.try_into().unwrap();
 
     assert_eq!(queues, decoded);
+}
+
+fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
+    for req in requests {
+        queues
+            .push_input(QUEUE_INDEX_NONE, req.clone().into(), input_type)
+            .unwrap()
+    }
+}
+
+#[test]
+fn test_peek_canister_input_does_not_affect_schedule() {
+    let mut queues = CanisterQueues::default();
+    let local_senders = vec![
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+    let remote_requests = remote_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+
+    // Schedules before peek.
+    let before_local_schedule = queues.local_subnet_input_schedule.clone();
+    let before_remote_schedule = queues.remote_subnet_input_schedule.clone();
+
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+    );
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+    );
+
+    // Schedules are not changed.
+    assert_eq!(queues.local_subnet_input_schedule, before_local_schedule);
+    assert_eq!(queues.remote_subnet_input_schedule, before_remote_schedule);
+    assert_eq!(
+        queues
+            .canister_queues
+            .get(&canister_test_id(1))
+            .unwrap()
+            .0
+            .num_messages(),
+        2
+    );
+}
+
+#[test]
+fn test_skip_canister_input() {
+    let mut queues = CanisterQueues::default();
+    let local_senders = vec![
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+    ];
+    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+
+    let local_requests = local_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+    let remote_requests = remote_senders
+        .iter()
+        .map(|sender| RequestBuilder::default().sender(*sender).build())
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &local_requests);
+    push_requests(&mut queues, InputQueueType::RemoteSubnet, &remote_requests);
+
+    // Peek before skip.
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+    );
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+    );
+
+    queues.skip_canister_input(InputQueueType::RemoteSubnet);
+    queues.skip_canister_input(InputQueueType::LocalSubnet);
+
+    // Peek will return a different result.
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::RemoteSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
+    );
+    assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
+    assert_eq!(
+        queues
+            .peek_canister_input(InputQueueType::LocalSubnet)
+            .unwrap(),
+        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
+    );
+    assert_eq!(queues.local_subnet_input_schedule.len(), 2);
+    assert_eq!(
+        queues
+            .canister_queues
+            .get(&canister_test_id(1))
+            .unwrap()
+            .0
+            .num_messages(),
+        2
+    );
 }
 
 /// Enqueues requests and responses into input and output queues, verifying that
