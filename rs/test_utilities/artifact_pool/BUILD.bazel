@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/consensus",
+    "//rs/consensus/message",
+    "//rs/crypto",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/types/types",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "artifact_pool",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_test_artifact_pool",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "artifact_pool_test",
+    aliases = ALIASES,
+    crate = ":artifact_pool",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

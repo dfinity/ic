@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/monitoring/logger",
+    "//rs/prep",
+    "//rs/protobuf",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/subnet_type",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "ic-starter",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

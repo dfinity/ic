@@ -1,0 +1,66 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "@crate_index//:hex",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:num-bigint",
+    "@crate_index//:subtle",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "fe",
+    srcs = ["fuzz_targets/fe.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "scalar",
+    srcs = ["fuzz_targets/scalar.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "sqrt_ratio",
+    srcs = ["fuzz_targets/sqrt_ratio.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+sh_test(
+    name = "fuzz_test",
+    srcs = ["fuzz_test.sh"],
+    data = [
+        ":fe",
+        ":scalar",
+        ":sqrt_ratio",
+    ],
+)
