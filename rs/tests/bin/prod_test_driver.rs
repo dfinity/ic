@@ -543,13 +543,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )])
             ),
              */
-            pot_with_setup(
-                "canister_http",
-                canister_http::lib::config,
-                par(vec![
-                    sys_t("http_basic", canister_http::http_basic::test),
-                ]),
-            ),
         ],
     ).with_alert(TEST_FAILURE_CHANNEL));
 
@@ -583,6 +576,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
+                pot_with_setup(
+                    "canister_http",
+                    canister_http::lib::config,
+                    par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
+                ),
+                pot_with_setup(
+                    "canister_http_time_out",
+                    canister_http::lib::config,
+                    seq(vec![sys_t(
+                        "http_time_out",
+                        canister_http::http_time_out::test,
+                    )]),
+                ),
                 pot_with_setup(
                     "canister_http_fault_tolerance",
                     canister_http::lib::config,
@@ -675,6 +681,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "http_basic_remote",
                     canister_http::http_basic_remote::test,
                 )]),
+            ),
+            pot_with_setup(
+                "default_subnet_workload_pot",
+                networking::subnet_update_workload::default_config,
+                par(vec![
+                    sys_t(
+                        "default_subnet_query_workload_long_duration_test",
+                        networking::subnet_query_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_long_duration_test",
+                        networking::subnet_update_workload::long_duration_test,
+                    ),
+                    sys_t(
+                        "default_subnet_update_workload_large_payload",
+                        networking::subnet_update_workload::large_payload_test,
+                    ),
+                ]),
             ),
             pot_with_setup(
                 "canister_http_time_out",
