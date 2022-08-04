@@ -25,6 +25,8 @@ class EsException(Exception):
 
 class Es:
 
+    JOURNALBEAT_VERSION = "7.14.0"
+
     # This array represents a lexicographical order.
     # To scroll through ES pages, we need two factors:
     # 1. Timestamps, ascending (note that their order
@@ -121,9 +123,14 @@ class Es:
     def _is_index_relevant(index: str, dates: List[datetime]) -> bool:
         """Check if this index is relevant, i.e., it contains logs produced starting [minutes_ago] until now."""
         for date in dates:
-            # Example: journalbeat-guestos-journal-7.5.1-2022.05.23
-            m = re.match(r"journalbeat-guestos-journal-\d+\.\d+\.\d+-(\d\d\d\d\.\d\d\.\d\d)", index)
-            if m and len(m.groups()) == 1 and m.group(1) == date.strftime("%Y.%m.%d"):
+            # Example: journalbeat-guestos-journal-7.14.0-2022.05.23
+            m = re.match(r"journalbeat-guestos-journal-(\d+\.\d+\.\d+)-(\d\d\d\d\.\d\d\.\d\d)", index)
+            if (
+                m
+                and len(m.groups()) == 2
+                and m.group(1) == Es.JOURNALBEAT_VERSION
+                and m.group(2) == date.strftime("%Y.%m.%d")
+            ):
                 return True
 
         return False

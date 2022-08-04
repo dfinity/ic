@@ -186,8 +186,6 @@ class DeclarativePreProcessor(PreProcessor):
 
     GLOBAL_INFRA_BASED_EVENTS = frozenset(
         [
-            "reboot",
-            "reboot_intent",
             "original_subnet_type",
             "originally_in_subnet",
             "registry__node_added_to_subnet",
@@ -213,11 +211,9 @@ class DeclarativePreProcessor(PreProcessor):
         if pred == "log":
             return GenericLogEvent(doc)
         if pred == "reboot":
-            assert self._infra is not None, f"{pred} event requires global infra"
-            return RebootEvent(doc, self._infra)
+            return RebootEvent(doc)
         if pred == "reboot_intent":
-            assert self._infra is not None, f"{pred} event requires global infra"
-            return RebootIntentEvent(doc, self._infra)
+            return RebootIntentEvent(doc)
         if pred == "p2p__node_added":
             return NodeMembershipEvent(doc, verb="added")
         if pred == "p2p__node_removed":

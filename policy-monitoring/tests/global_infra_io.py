@@ -4,7 +4,6 @@ from typing import Set
 
 from pipeline.artifact_manager import ArtifactManager
 from pipeline.global_infra import GlobalInfra
-from pipeline.global_infra import rotate
 
 GLOBINFRA_DIR = Path(__file__).absolute().parent.joinpath("global_infra_resources")
 ORIGINAL_GLOBINFRA_FILE = GLOBINFRA_DIR.joinpath("mock_global_infra.yaml")
@@ -48,18 +47,6 @@ def assert_subset(A: Set, B: Set) -> None:
     assert A.issubset(
         B
     ), f"Set A with {len(A)} elements is not a subset of set B with {len(B)} elements. A\\B has {len(A.difference(B))} elements"
-
-
-# Test O: Helpers
-info = {"x": [(1, "A"), (2, "B")], "y": [(3, "C"), (4, "D")], "z": [(5, "B"), (6, "D")]}
-rotated_info = {
-    "A": [(1, "x")],
-    "B": [(2, "x"), (5, "z")],
-    "C": [(3, "y")],
-    "D": [(4, "y"), (6, "z")],
-}
-assert_eq(rotate(rotate(info)), info)
-assert_eq(rotate(info), rotated_info)
 
 
 # Test A: Global Infra Yaml I/O is idempotent
