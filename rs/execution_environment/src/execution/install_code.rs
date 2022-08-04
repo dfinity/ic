@@ -28,7 +28,7 @@ pub(crate) enum InstallCodeRoutineResult {
 
 /// Represents a paused execution of install code routine,
 /// that can be resumed or aborted.
-pub(crate) trait PausedInstallCodeRoutine: std::fmt::Debug {
+pub(crate) trait PausedInstallCodeRoutine: std::fmt::Debug + Send {
     /// Resumes a paused install code execution.
     fn resume(
         self: Box<Self>,

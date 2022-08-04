@@ -1843,8 +1843,7 @@ pub(crate) struct PausedInstallCodeExecution {
 }
 
 impl PausedInstallCodeExecution {
-    #[allow(dead_code)]
-    fn resume(
+    pub fn resume(
         self,
         canister: CanisterState,
         round: RoundContext,
@@ -1879,8 +1878,7 @@ impl PausedInstallCodeExecution {
         }
     }
 
-    #[allow(dead_code)]
-    fn abort(self) -> RequestOrIngress {
+    pub fn abort(self) -> RequestOrIngress {
         self.paused_routine.abort();
         self.message
     }

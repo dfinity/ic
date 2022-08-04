@@ -1,7 +1,7 @@
-use crate::canister_manager::{CanisterManagerError, DtsInstallCodeResult};
 use crate::{
     canister_manager::{
-        CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
+        CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
+        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
     execution::{
@@ -41,6 +41,7 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::PausedExecutionId;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
@@ -221,8 +222,11 @@ struct PausedExecutionRegistry {
     // more than 2^64 paused executions between two checkpoints.
     next_id: u64,
 
-    // All paused executions.
-    registry: HashMap<PausedExecutionId, Box<dyn PausedExecution>>,
+    // Paused executions of ordinary canister messages.
+    paused_execution: HashMap<PausedExecutionId, Box<dyn PausedExecution>>,
+
+    // Paused executions of `install_code` subnet messages.
+    paused_install_code: HashMap<PausedExecutionId, PausedInstallCodeExecution>,
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -1640,7 +1644,19 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    fn execute_install_code(
+    /// Starts execution of the given `install_code` subnet message.
+    /// With deterministic time slicing, the execution may be paused if it
+    /// exceeds the given slice limit.
+    ///
+    /// Precondition:
+    /// - The given message is an `install_code` message.
+    /// - The canister does not have any paused execution in its task queue.
+    ///
+    /// Postcondition:
+    /// - If the execution is finished, then it outputs the subnet response.
+    /// - Otherwise, a new paused `install_code` execution is registered and
+    ///   added to the task queue of the canister.
+    pub fn execute_install_code(
         &self,
         mut msg: RequestOrIngress,
         mut state: ReplicatedState,
@@ -1675,6 +1691,14 @@ impl ExecutionEnvironment {
                 return self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
             }
         };
+
+        // Check the precondition.
+        match old_canister.next_execution() {
+            NextExecution::None | NextExecution::StartNew => {}
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                panic!("Attempt to start a new `install_code` execution while the previous execution is still in progress.");
+            }
+        }
 
         let canister_id = old_canister.canister_id();
         let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
@@ -1717,7 +1741,7 @@ impl ExecutionEnvironment {
             round_limits,
             compilation_cost_handling,
         );
-        self.process_install_code_result(state, dts_result, timer, new_wasm_hash)
+        self.process_install_code_result(state, dts_result, timer)
     }
 
     /// Processes the result of install code message that was executed using
@@ -1732,7 +1756,6 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         dts_result: DtsInstallCodeResult,
         timer: Timer,
-        new_wasm_hash: WasmHash,
     ) -> ReplicatedState {
         let execution_duration = timer.elapsed();
         match dts_result {
@@ -1746,7 +1769,12 @@ impl ExecutionEnvironment {
                     Ok(result) => {
                         state.metadata.heap_delta_estimate += result.heap_delta;
                         if self.config.module_sharing == FlagStatus::Enabled {
-                            state.metadata.expected_compiled_wasms.insert(new_wasm_hash);
+                            if let Some(new_wasm_hash) = result.new_wasm_hash {
+                                state
+                                    .metadata
+                                    .expected_compiled_wasms
+                                    .insert(WasmHash::from(new_wasm_hash));
+                            }
                         }
                         info!(
                             self.log,
@@ -1773,11 +1801,72 @@ impl ExecutionEnvironment {
                 self.finish_subnet_message_execution(state, message, result, refund, timer)
             }
             DtsInstallCodeResult::Paused {
-                canister,
-                paused_execution: _,
+                mut canister,
+                paused_execution,
             } => {
+                let id = self.register_paused_install_code(paused_execution);
+                // TODO(RUN-283): Fix before enabling DTS. This panics if the
+                // very first `install_code` after canister creation is paused
+                // because `canister.execution_state` is empty until
+                // `install_code` finishes.
+                canister
+                    .execution_state
+                    .as_mut()
+                    .unwrap()
+                    .task_queue
+                    .push_front(ExecutionTask::PausedInstallCode(id));
                 state.put_canister_state(canister);
-                unimplemented!("Unexpected paused install_code: DTS is not enabled yet.")
+                state
+            }
+        }
+    }
+
+    /// Resumes a previously paused or aborted `install_code`.
+    ///
+    /// Precondition:
+    /// - The first task in the task queue is paused or aborted `install_code`.
+    ///
+    /// Postcondition:
+    /// - If the execution is finished, then it outputs the subnet response.
+    /// - Otherwise, a new paused `install_code` execution is registered and
+    ///   added to the task queue of the canister.
+    pub fn resume_install_code(
+        &self,
+        mut state: ReplicatedState,
+        canister_id: &CanisterId,
+        instruction_limits: InstructionLimits,
+        round_limits: &mut RoundLimits,
+    ) -> ReplicatedState {
+        let task = state
+            .canister_state_mut(canister_id)
+            .unwrap()
+            .pop_task()
+            .unwrap();
+        match task {
+            ExecutionTask::Heartbeat
+            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::AbortedExecution(_) => {
+                panic!(
+                    "Unexpected task {:?} in `resume_install_code` (broken precondition).",
+                    task
+                );
+            }
+            ExecutionTask::PausedInstallCode(id) => {
+                let timer = Timer::start();
+                let paused = self.take_paused_install_code(id).unwrap();
+                let canister = state.take_canister_state(canister_id).unwrap();
+                let round = RoundContext {
+                    network_topology: &state.metadata.network_topology,
+                    hypervisor: &self.hypervisor,
+                    cycles_account_manager: &self.cycles_account_manager,
+                    log: &self.log,
+                    time: state.metadata.time(),
+                };
+                let dts_result = paused.resume(canister, round, round_limits);
+                self.process_install_code_result(state, dts_result, timer)
+            }
+            ExecutionTask::AbortedInstallCode(msg) => {
+                self.execute_install_code(msg, state, instruction_limits, round_limits)
             }
         }
     }
@@ -1785,7 +1874,16 @@ impl ExecutionEnvironment {
     /// Returns the paused execution by its id.
     fn take_paused_execution(&self, id: PausedExecutionId) -> Option<Box<dyn PausedExecution>> {
         let mut guard = self.paused_execution_registry.lock().unwrap();
-        guard.registry.remove(&id)
+        guard.paused_execution.remove(&id)
+    }
+
+    /// Returns the paused `install_code` execution by its id.
+    fn take_paused_install_code(
+        &self,
+        id: PausedExecutionId,
+    ) -> Option<PausedInstallCodeExecution> {
+        let mut guard = self.paused_execution_registry.lock().unwrap();
+        guard.paused_install_code.remove(&id)
     }
 
     /// Registers the given paused execution and returns its id.
@@ -1793,7 +1891,19 @@ impl ExecutionEnvironment {
         let mut guard = self.paused_execution_registry.lock().unwrap();
         let id = PausedExecutionId(guard.next_id);
         guard.next_id += 1;
-        guard.registry.insert(id, paused);
+        guard.paused_execution.insert(id, paused);
+        id
+    }
+
+    /// Registers the given paused `install_code` execution and returns its id.
+    fn register_paused_install_code(
+        &self,
+        paused: PausedInstallCodeExecution,
+    ) -> PausedExecutionId {
+        let mut guard = self.paused_execution_registry.lock().unwrap();
+        let id = PausedExecutionId(guard.next_id);
+        guard.next_id += 1;
+        guard.paused_install_code.insert(id, paused);
         id
     }
 
@@ -1806,11 +1916,18 @@ impl ExecutionEnvironment {
                     execution_state.task_queue = task_queue
                         .into_iter()
                         .map(|task| match task {
-                            ExecutionTask::AbortedExecution(..) | ExecutionTask::Heartbeat => task,
+                            ExecutionTask::AbortedExecution(..)
+                            | ExecutionTask::AbortedInstallCode(..)
+                            | ExecutionTask::Heartbeat => task,
                             ExecutionTask::PausedExecution(id) => {
                                 let paused = self.take_paused_execution(id).unwrap();
                                 let message = paused.abort();
                                 ExecutionTask::AbortedExecution(message)
+                            }
+                            ExecutionTask::PausedInstallCode(id) => {
+                                let paused = self.take_paused_install_code(id).unwrap();
+                                let message = paused.abort();
+                                ExecutionTask::AbortedInstallCode(message)
                             }
                         })
                         .collect();
@@ -1975,14 +2092,18 @@ pub fn execute_canister(
     time: Time,
     round_limits: &mut RoundLimits,
 ) -> ExecuteCanisterResult {
-    if !canister.is_active() {
-        return ExecuteCanisterResult {
-            canister,
-            heap_delta: NumBytes::from(0),
-            ingress_status: None,
-            description: None,
-        };
+    match canister.next_execution() {
+        NextExecution::None | NextExecution::ContinueInstallCode => {
+            return ExecuteCanisterResult {
+                canister,
+                heap_delta: NumBytes::from(0),
+                ingress_status: None,
+                description: None,
+            };
+        }
+        NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
+
     match canister.pop_task() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
@@ -2028,6 +2149,9 @@ pub fn execute_canister(
                 time,
                 round_limits,
             ),
+            ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode(..) => {
+                unreachable!("The guard at the beginning filters these cases out")
+            }
         },
         None => {
             let message = canister.pop_input().unwrap();
