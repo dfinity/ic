@@ -24,8 +24,15 @@ impl Page {
     }
 
     pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, String> {
-        // The first 32 bytes represent the encoded `BlockHash`, the next 4 the
-        // `Height` and the remaining the encoded `OutPoint`.
+        // The page consists of 72 bytes and is the concatenation of the following:
+        //
+        //   1) A `BlockHash` (32 bytes)
+        //   2) A `Height` (4 bytes)
+        //   3) An `OutPoint` (36 bytes)
+        if bytes.len() != 72 {
+            return Err(format!("Invalid length {} != 72 for page", bytes.len()));
+        }
+
         let height_offset = 32;
         let outpoint_offset = 36;
         let outpoint_bytes = bytes.split_off(outpoint_offset);
@@ -200,4 +207,21 @@ impl Storable for (Height, OutPoint) {
             OutPoint::from_bytes(outpoint_bytes),
         )
     }
+}
+
+#[test]
+fn parsing_empty_page_fails() {
+    assert!(Page::from_bytes(vec![]).is_err());
+}
+
+#[test]
+fn parsing_page_with_invalid_length_fails() {
+    assert!(Page::from_bytes(vec![1, 2, 3, 4, 5]).is_err());
+    assert!(Page::from_bytes(vec![0; 71]).is_err());
+    assert!(Page::from_bytes(vec![0; 73]).is_err());
+}
+
+#[test]
+fn parsing_page_with_exact_length_succeeds() {
+    assert!(Page::from_bytes(vec![0; 72]).is_ok());
 }
