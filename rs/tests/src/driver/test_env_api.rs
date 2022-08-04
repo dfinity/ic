@@ -170,7 +170,7 @@ use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime as Rt;
 use url::Url;
 
-pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 

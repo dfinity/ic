@@ -716,16 +716,14 @@ pub(crate) async fn assert_endpoints_reachability(
         }
     };
 
-    const TIMEOUT: Duration = Duration::from_secs(500);
-    const DELAY: Duration = Duration::from_secs(20);
     let start = Instant::now();
-    while start.elapsed() < TIMEOUT {
+    while start.elapsed() < RETRY_TIMEOUT {
         if check_reachability().await {
             return;
         }
-        tokio::time::sleep(DELAY).await;
+        tokio::time::sleep(RETRY_BACKOFF).await;
     }
-    panic!("Not all endpoints have reached the desired reachability status {:?} within timeout {} sec.", status, TIMEOUT.as_secs());
+    panic!("Not all endpoints have reached the desired reachability status {:?} within timeout {} sec.", status, RETRY_TIMEOUT.as_secs());
 }
 
 pub(crate) fn assert_http_submit_fails(
