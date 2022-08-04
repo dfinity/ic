@@ -809,8 +809,9 @@ fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description()
-            .contains("\"ic0_msg_arg_data_size\" cannot be executed in reject callback mode"),
+        err.description().contains(
+            "\"ic0_msg_arg_data_size\" cannot be executed in replicated reject callback mode"
+        ),
         "Unexpected error message: {}",
         err.description()
     );
@@ -907,8 +908,9 @@ fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description()
-            .contains("\"ic0_msg_arg_data_copy\" cannot be executed in reject callback mode"),
+        err.description().contains(
+            "\"ic0_msg_arg_data_copy\" cannot be executed in replicated reject callback mode"
+        ),
         "Unexpected error message: {}",
         err.description()
     );
@@ -982,8 +984,9 @@ fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description()
-            .contains("\"ic0_msg_caller_size\" cannot be executed in reject callback mode"),
+        err.description().contains(
+            "\"ic0_msg_caller_size\" cannot be executed in replicated reject callback mode"
+        ),
         "Unexpected error message: {}",
         err.description()
     );
@@ -1007,8 +1010,9 @@ fn ic0_msg_caller_copy_is_not_available_in_reject_callback() {
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
-        err.description()
-            .contains("\"ic0_msg_caller_copy\" cannot be executed in reject callback mode"),
+        err.description().contains(
+            "\"ic0_msg_caller_copy\" cannot be executed in replicated reject callback mode"
+        ),
         "Unexpected error message: {}",
         err.description()
     );

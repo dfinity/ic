@@ -264,6 +264,7 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
+        execution_mode: ExecutionMode,
     },
 
     // For executing closures when a `Reject` is received
@@ -280,6 +281,7 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
+        execution_mode: ExecutionMode,
     },
 
     PreUpgrade {
@@ -407,6 +409,7 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
+        execution_mode: ExecutionMode,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -421,6 +424,7 @@ impl ApiType {
             },
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            execution_mode,
         }
     }
 
@@ -431,6 +435,7 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
+        execution_mode: ExecutionMode,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -445,6 +450,7 @@ impl ApiType {
             },
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            execution_mode,
         }
     }
 
@@ -502,8 +508,14 @@ impl ApiType {
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
             ApiType::NonReplicatedQuery { .. } => "non replicated query",
-            ApiType::ReplyCallback { .. } => "reply callback",
-            ApiType::RejectCallback { .. } => "reject callback",
+            ApiType::ReplyCallback { execution_mode, .. } => match execution_mode {
+                ExecutionMode::Replicated => "replicated reply callback",
+                ExecutionMode::NonReplicated => "non-replicated reply callback",
+            },
+            ApiType::RejectCallback { execution_mode, .. } => match execution_mode {
+                ExecutionMode::Replicated => "replicated reject callback",
+                ExecutionMode::NonReplicated => "non-replicated reject callback",
+            },
             ApiType::PreUpgrade { .. } => "pre upgrade",
             ApiType::InspectMessage { .. } => "inspect message",
             ApiType::Cleanup { .. } => "cleanup",

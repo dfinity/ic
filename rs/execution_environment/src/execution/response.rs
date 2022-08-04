@@ -242,6 +242,7 @@ pub fn execute_response(
             refunded_cycles,
             call_context_id,
             call_context.has_responded(),
+            execution_parameters.execution_mode.clone(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
@@ -249,6 +250,7 @@ pub fn execute_response(
             refunded_cycles,
             call_context_id,
             call_context.has_responded(),
+            execution_parameters.execution_mode.clone(),
         ),
     };
 
