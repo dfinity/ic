@@ -39,11 +39,12 @@ ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
-num = "0.4.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
 rand = "0.8"
 registry-canister = { path = "../../registry/canister" }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"
 serde = { version = "1.0", features = ["derive"] }
 strum = "0.18.0"
 strum_macros = "0.18.0"

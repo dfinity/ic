@@ -50,7 +50,7 @@ use std::future::Future;
 use std::path::Path;
 use std::thread;
 use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
 /// allows the testing environment to calculate what a given subaccount will
@@ -823,7 +823,20 @@ impl SnsCanisters<'_> {
         let mut proposal = self.get_proposal(proposal_id).await;
 
         // Wait for a canister heartbeat to allow this proposal to be rewarded
+        let start = Instant::now();
+        let waiting_for_minutes = || {
+            let d = Instant::now() - start;
+
+            d.as_secs_f64() / 60.0
+        };
         while proposal.reward_event_round == 0 {
+            const TIME_OUT_MINUTES: f64 = 10.0;
+            assert!(
+                waiting_for_minutes() < TIME_OUT_MINUTES,
+                "Rewards did not show up after {} minutes.",
+                TIME_OUT_MINUTES
+            );
+
             std::thread::sleep(std::time::Duration::from_millis(100));
             proposal = self.get_proposal(proposal_id).await;
         }
@@ -926,20 +939,17 @@ impl SnsCanisters<'_> {
     }
 
     /// Await a RewardEvent to be created.
-    pub async fn await_reward_event(&self, last_reward_period: u64) -> RewardEvent {
+    pub async fn await_reward_event(&self, last_round: u64) -> RewardEvent {
         for _ in 0..TIME_FOR_HEARTBEAT {
             let reward_event = self.get_latest_reward_event().await;
 
-            if reward_event.periods_since_genesis > last_reward_period {
+            if reward_event.round > last_round {
                 return reward_event;
             }
             sleep(Duration::from_millis(100));
         }
 
-        panic!(
-            "There was no RewardEvent greater than {:?}",
-            last_reward_period
-        )
+        panic!("There was no RewardEvent greater than {:?}", last_round)
     }
 
     /// Await a Proposal being rewarded via it's reward_event_round field.

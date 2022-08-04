@@ -558,7 +558,9 @@ pub struct ProposalData {
     /// Rounds start at one: a value of zero indicates that
     /// no reward event taking this proposal into consideration happened yet.
     ///
-    /// This field matches field periods_since_genesis in RewardEvent.
+    /// This field matches field round in RewardEvent.
+    ///
+    /// This field is invalid when .is_eligible_for_rewards is false.
     #[prost(uint64, tag = "13")]
     pub reward_event_round: u64,
     /// The proposal's wait-for-quiet state. This needs to be saved in stable memory.
@@ -568,6 +570,10 @@ pub struct ProposalData {
     /// This is set if the proposal is considered valid at time of submission.
     #[prost(string, optional, tag = "15")]
     pub payload_text_rendering: ::core::option::Option<::prost::alloc::string::String>,
+    /// True if NervousSystemParameters.voting_reward_parameters was set when the
+    /// proposal was made.
+    #[prost(bool, tag = "16")]
+    pub is_eligible_for_rewards: bool,
 }
 /// The nervous system's parameters, which are parameters that can be changed, via proposals,
 /// by each nervous system community.
@@ -661,17 +667,6 @@ pub struct NervousSystemParameters {
     /// The age of a neuron that saturates the age bonus for the voting power computation.
     #[prost(uint64, optional, tag = "12")]
     pub max_neuron_age_for_age_bonus: ::core::option::Option<u64>,
-    /// TODO: update after SNS rewards are enabled.
-    /// The desired period for reward distribution events.
-    ///
-    /// No two consecutive reward events will happen with less then this duration in
-    /// between. A reward distribution event will take place as soon as possible
-    /// once this duration has passed since the last one. Therefore, this is a
-    /// "desired" period: the actual distribution cannot be guaranteed to be
-    /// perfectly periodic, and inter-reward-events duration are expected to exceed
-    /// this desired period by a few seconds.
-    #[prost(uint64, optional, tag = "13")]
-    pub reward_distribution_period_seconds: ::core::option::Option<u64>,
     /// The max number of proposals for which ballots are still stored, i.e.,
     /// unsettled proposals. If this number of proposals is reached, new proposals
     /// can only be added in exceptional cases (for few proposals it is defined
@@ -695,6 +690,58 @@ pub struct NervousSystemParameters {
     /// The maximum number of principals that can have permissions for a neuron
     #[prost(uint64, optional, tag = "17")]
     pub max_number_of_principals_per_neuron: ::core::option::Option<u64>,
+    /// When this field is not populated, voting rewards are "disabled". Once this
+    /// is set, it probably should not be changed, because the results would
+    /// probably be pretty confusing.
+    #[prost(message, optional, tag = "19")]
+    pub voting_rewards_parameters: ::core::option::Option<VotingRewardsParameters>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VotingRewardsParameters {
+    /// The amount of time between reward events.
+    ///
+    /// Must be > 0.
+    ///
+    /// During such periods, proposals enter the ReadyToSettle state. Once the
+    /// round is over, voting for those proposals entitle voters to voting
+    /// rewards. Such rewards are calculated by the governance canister's
+    /// heartbeat.
+    ///
+    /// This is a nominal amount. That is, the actual time between reward
+    /// calculations and distribution cannot be guaranteed to be perfectly
+    /// periodic, but actual inter-reward periods are generally expected to be
+    /// within a few seconds of this.
+    ///
+    /// This supercedes super.reward_distribution_period_seconds.
+    #[prost(uint64, optional, tag = "1")]
+    pub round_duration_seconds: ::core::option::Option<u64>,
+    /// The beginning of the era when neurons are rewarded for voting.
+    ///
+    /// Corollary: The number of rounds that have occurred at time t is given by
+    /// (t - start_time) / round_duration.
+    #[prost(uint64, optional, tag = "2")]
+    pub start_timestamp_seconds: ::core::option::Option<u64>,
+    /// The amount of time that the growth rate changes (presumably, decreases)
+    /// from the initial growth rate to the final growth rate. (See the two
+    /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+    /// levels out at the end of the growth rate transition period.
+    #[prost(uint64, optional, tag = "3")]
+    pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
+    /// The amount of rewards is propotional to token_supply * current_rate. In
+    /// turn, current_rate is somewhere between these two values. In the first
+    /// reward period, it is the initial growth rate, and after the growth rate
+    /// transition period has elapsed, the growth rate becomes the final growth
+    /// rate, and remains at that value for the rest of time. The transition
+    /// between the initial and final growth rates is quadratic, and levels out at
+    /// the end of the growth rate transition period.
+    ///
+    /// (A basis point is one in ten thousand.)
+    #[prost(uint64, optional, tag = "4")]
+    pub initial_reward_rate_basis_points: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "5")]
+    pub final_reward_rate_basis_points: ::core::option::Option<u64>,
 }
 /// The set of default followees that every newly created neuron will follow per function.
 /// This is specified as a mapping of proposal functions to followees for that function.
@@ -719,24 +766,24 @@ pub struct NeuronPermissionList {
 #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RewardEvent {
-    /// This reward event corresponds to a time interval that ends at the end of
-    /// genesis + periods_since_genesis, where periods_since_genesis starts at canister install.
+    /// Rewards are (calculated and) distributed periodically in "rounds". Round 1
+    /// begins at start_time and ends at start_time + 1 * round_duration, where
+    /// start_time and round_duration are specified in VotingRewardsParameters.
+    /// Similarly, round 2 begins at the end of round number 1, and ends at
+    /// start_time + 2 * round_duration. Etc. There is no round 0.
     ///
-    /// For instance: when this is 0, this is for a period that ends at genesis -- there can
-    /// never be a reward for this.
+    /// In the context of rewards, SNS start_time is analogous to NNS genesis time.
     ///
-    /// When this is 1, this is for the first reward_distribution_period_seconds after genesis.
-    ///
-    /// On rare occasions, the reward event may cover several periods ending at genesis +
-    /// periods_since_genesis periods, when it was not possible to proceed to a reward
-    /// event for a while. This makes that periods_since_genesis does not have to be
-    /// consecutive.
+    /// On rare occasions, the reward event may cover several reward periods, when
+    /// it was not possible to process a reward event for a while. This means that
+    /// successive values in this field might not be consecutive, but they usually
+    /// are.
     #[prost(uint64, tag = "1")]
-    pub periods_since_genesis: u64,
+    pub round: u64,
     /// The timestamp at which this reward event took place, in seconds since the unix epoch.
     ///
     /// This does not match the date taken into account for reward computation, which
-    /// should always be an integer number of days after genesis.
+    /// should always be an (integer) multiple of round_duration after start_time.
     #[prost(uint64, tag = "2")]
     pub actual_timestamp_seconds: u64,
     /// The list of proposals that were taken into account during

@@ -3,7 +3,7 @@ use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
 use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    proposal, ExecuteGenericNervousSystemFunction, Motion, NervousSystemFunction,
+    governance, proposal, ExecuteGenericNervousSystemFunction, Motion, NervousSystemFunction,
     NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
     Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
@@ -67,7 +67,12 @@ impl Proposal {
 pub async fn validate_and_render_proposal(
     proposal: &Proposal,
     env: &dyn Environment,
-    parameters: &NervousSystemParameters,
+
+    // Only needed when validating ManageNervousSystemParameters.
+    mode: governance::Mode,
+    current_parameters: &NervousSystemParameters,
+
+    // Only needed when validating NervousSystemFunction-related proposals.
     functions: &BTreeMap<u64, NervousSystemFunction>,
     root_canister_id: CanisterId,
 ) -> Result<String, String> {
@@ -105,7 +110,8 @@ pub async fn validate_and_render_proposal(
     match validate_and_render_action(
         &proposal.action,
         env,
-        parameters,
+        mode,
+        current_parameters,
         functions,
         root_canister_id,
     )
@@ -138,7 +144,12 @@ pub async fn validate_and_render_proposal(
 pub async fn validate_and_render_action(
     action: &Option<proposal::Action>,
     env: &dyn Environment,
+
+    // Only needed when validating ManageNervousSystemParameters.
+    mode: governance::Mode,
     current_parameters: &NervousSystemParameters,
+
+    // Only needed when validating NervousSystemFunction-related actions.
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
     root_canister_id: CanisterId,
 ) -> Result<String, String> {
@@ -153,7 +164,7 @@ pub async fn validate_and_render_action(
         }
         proposal::Action::Motion(motion) => validate_and_render_motion(motion),
         proposal::Action::ManageNervousSystemParameters(manage) => {
-            validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
+            validate_and_render_manage_nervous_system_parameters(manage, mode, current_parameters)
         }
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
@@ -202,9 +213,12 @@ fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
 /// Validates and renders a proposal with action ManageNervousSystemParameters.
 fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
+    mode: governance::Mode,
     current_parameters: &NervousSystemParameters,
 ) -> Result<String, String> {
-    new_parameters.inherit_from(current_parameters).validate()?;
+    new_parameters
+        .inherit_from(current_parameters)
+        .validate(mode)?;
 
     Ok(format!(
         r"# Proposal to change nervous system parameters:
@@ -590,16 +604,24 @@ impl ProposalData {
     /// Returns the proposal's reward status. See [ProposalRewardStatus] in the SNS's
     /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
-        match self.reward_event_round {
-            0 => {
-                if self.accepts_vote(now_seconds) {
-                    ProposalRewardStatus::AcceptVotes
-                } else {
-                    ProposalRewardStatus::ReadyToSettle
-                }
-            }
-            _ => ProposalRewardStatus::Settled,
+        if self.reward_event_round > 0 {
+            debug_assert!(
+                self.is_eligible_for_rewards,
+                "Invalid ProposalData: {:#?}",
+                self
+            );
+            return ProposalRewardStatus::Settled;
         }
+
+        if self.accepts_vote(now_seconds) {
+            return ProposalRewardStatus::AcceptVotes;
+        }
+
+        if !self.is_eligible_for_rewards {
+            return ProposalRewardStatus::Settled;
+        }
+
+        ProposalRewardStatus::ReadyToSettle
     }
 
     /// Returns the proposal's current voting period deadline in seconds from the Unix epoch.
@@ -898,6 +920,7 @@ mod tests {
         validate_and_render_proposal(
             proposal,
             &**FAKE_ENV,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             CanisterId::ic_00(),
@@ -910,6 +933,7 @@ mod tests {
         validate_and_render_action(
             action,
             &**FAKE_ENV,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             CanisterId::ic_00(),
@@ -1531,6 +1555,7 @@ mod tests {
         let actual_text = validate_and_render_action(
             &Some(action),
             &env,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             root_canister_id,
@@ -1590,6 +1615,7 @@ SnsVersion {
         let err = validate_and_render_action(
             &Some(action),
             &env,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             root_canister_id,
@@ -1641,6 +1667,7 @@ SnsVersion {
         let err = validate_and_render_action(
             &Some(action),
             &env,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             root_canister_id,
@@ -1678,6 +1705,7 @@ SnsVersion {
         let err = validate_and_render_action(
             &Some(action),
             &env,
+            governance::Mode::Normal,
             &DEFAULT_PARAMS,
             &EMPTY_FUNCTIONS,
             root_canister_id,

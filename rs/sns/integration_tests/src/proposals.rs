@@ -19,13 +19,14 @@ use ic_sns_governance::pb::v1::{
     Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
     ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, Vote,
+    ProposalRewardStatus, Vote, VotingRewardsParameters,
 };
 use ic_sns_governance::proposal::{
     PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
     PROPOSAL_URL_CHAR_MAX,
 };
 use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_sns_swap::swap::START_OF_2022_TIMESTAMP_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
@@ -33,6 +34,14 @@ use ic_sns_test_utils::now_seconds;
 use on_wire::bytes;
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
+
+const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
+    round_duration_seconds: Some(2 * ONE_DAY_SECONDS),
+    start_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
+    reward_rate_transition_duration_seconds: Some(90 * ONE_DAY_SECONDS),
+    initial_reward_rate_basis_points: Some(200),
+    final_reward_rate_basis_points: Some(200),
+};
 
 /// Assert that Motion proposals can be submitted, voted on, and executed
 #[test]
@@ -1655,17 +1664,25 @@ fn test_intermittent_proposal_submission() {
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
 
-        // Set the reward_distribution_period_seconds to the double the initial_voting_period
+        // Set the reward_round_duration_seconds to the double the initial_voting_period
         // (initial_voting_period must be at least one day) so that proposals can be submitted and
         // settled within a single period.
-        let initial_voting_period = ONE_DAY_SECONDS;
-        let reward_distribution_period_seconds = 2 * initial_voting_period;
+        let reward_round_duration_seconds =
+            VOTING_REWARDS_PARAMETERS.round_duration_seconds.unwrap();
+        let initial_voting_period = reward_round_duration_seconds / 2;
 
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         let params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            reward_distribution_period_seconds: Some(reward_distribution_period_seconds),
+            voting_rewards_parameters: Some(VotingRewardsParameters {
+                start_timestamp_seconds: Some(now),
+                ..VOTING_REWARDS_PARAMETERS
+            }),
             initial_voting_period: Some(initial_voting_period),
             wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period / 4), // The default of one day is too short
             ..NervousSystemParameters::with_default_values()
@@ -1740,42 +1757,36 @@ fn test_intermittent_proposal_submission() {
         );
 
         // Since there hasn't been enough time since genesis for a reward period to complete,
-        // the periods_since_genesis of the latest reward event should be 0.
+        // the round of the latest reward event should be 0.
         let reward_event = sns_canisters.get_latest_reward_event().await;
-        let mut last_reward_period = reward_event.periods_since_genesis;
-        assert_eq!(last_reward_period, 0);
+        let mut last_reward_round = reward_event.round;
+        assert_eq!(last_reward_round, 0);
 
         // Warping time again should allow for a single reward period to complete.
-        delta_s = reward_distribution_period_seconds as i64;
+        delta_s = reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
         // RewardEvents occur on heartbeat. Allow some buffer for the heartbeat to occur to reduce
         // flakiness.
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
-        assert_eq!(
-            next_reward_event.periods_since_genesis,
-            last_reward_period + 1
-        );
-        last_reward_period = next_reward_event.periods_since_genesis;
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
+        assert_eq!(next_reward_event.round, last_reward_round + 1);
+        last_reward_round = next_reward_event.round;
 
         // Along with RewardEvents, the proposal should be updated with what RewardEvent
         // distributed its voting rewards.
         let reward_event_round = sns_canisters.await_proposal_rewarding(p1_id).await;
-        assert_eq!(reward_event_round, last_reward_period);
+        assert_eq!(reward_event_round, last_reward_round);
         assert_eq!(next_reward_event.settled_proposals, vec![p1_id]);
 
         // Phase 2: Test that reward periods can occur without any proposals, and RewardEvents
         // can still take place.
-        delta_s += reward_distribution_period_seconds as i64; // Add a reward_period to the running time warp
+        delta_s += reward_round_duration_seconds as i64; // Add a reward_round to the running time warp
         sns_canisters.set_time_warp(delta_s).await?;
 
         // Even though no proposals were submitted, a RewardEvent should have been created
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
-        assert_eq!(
-            next_reward_event.periods_since_genesis,
-            last_reward_period + 1
-        );
-        last_reward_period = next_reward_event.periods_since_genesis;
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
+        assert_eq!(next_reward_event.round, last_reward_round + 1);
+        last_reward_round = next_reward_event.round;
         assert_eq!(next_reward_event.settled_proposals, vec![]);
 
         // Phase 3: Given that no Proposals were submitted in the last reward period, all periodic
@@ -1807,20 +1818,17 @@ fn test_intermittent_proposal_submission() {
         );
 
         // Advance time well into the next reward period.
-        delta_s += reward_distribution_period_seconds as i64;
+        delta_s += reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
         // A new RewardEvent should have taken place
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
-        assert_eq!(
-            next_reward_event.periods_since_genesis,
-            last_reward_period + 1
-        );
-        last_reward_period = next_reward_event.periods_since_genesis;
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
+        assert_eq!(next_reward_event.round, last_reward_round + 1);
+        last_reward_round = next_reward_event.round;
 
         // And the last proposal should have been Rewarded.
         let reward_event_round = sns_canisters.await_proposal_rewarding(p2_id).await;
-        assert_eq!(reward_event_round, last_reward_period);
+        assert_eq!(reward_event_round, last_reward_round);
         assert_eq!(next_reward_event.settled_proposals, vec![p2_id]);
 
         // Now, adjust the garbage collection parameter via proposal to make sure
