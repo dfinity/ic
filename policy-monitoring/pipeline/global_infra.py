@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
-from typing import Optional
 from typing import Set
 from typing import Tuple
 
@@ -14,40 +13,12 @@ from util.yaml import yaml
 from .es_doc import ReplicaDoc
 
 
-def rotate(info: Dict[str, List[Tuple[int, str]]], sorted=True) -> Dict[str, List[Tuple[int, str]]]:
-    """
-    Take a dict [info] that maps, e.g., x, y, z to:
-       [(t1, A), (t2, B)],
-       [(t3, C), (t4, D)],
-       [(t3, B), (t4, D)], resp.
-    Return a new dict mapping A, B, C, D to:
-       [(t1, x)],
-       [(t3, x), (t4, z)],
-       [(t3, y)].
-       [(t3, y), (t4, z)].
-    If [sorted], then all list elements will be (ascendingly) sorted by ts.
-    """
-    res: Dict[str, List[Tuple[int, str]]] = dict()
-    for key, memberships in info.items():
-        for unix_ts, value in memberships:
-            if value in res:
-                res[value].append((unix_ts, key))
-            else:
-                res[value] = [(unix_ts, key)]
-    if sorted:
-        # Sort all members by the timestamps
-        for members in res.values():
-            members.sort(key=lambda m: m[0])
-    return res
-
-
 class GlobalInfra:
     class Error(Exception):
         """An exception while inferring GlobalInfra"""
 
         pass
 
-    prefixes: Optional[List[IPv6Network]]
     known_hosts: Set[IPv6Address]
     host_addr_to_node_id_map: Dict[IPv6Address, str]
     node_id_to_host_map: Dict[str, IPv6Address]
@@ -58,8 +29,6 @@ class GlobalInfra:
     def __init__(self, source: str):
         # original source of this Global Infra information
         self.source = source
-        # data center IPv6 network masks
-        self.prefixes = None
         # stores host_ipv6s
         self.known_hosts = set()
         # maps host_ipv6 to node_id
@@ -71,14 +40,10 @@ class GlobalInfra:
         # maps node_id to the very first subnet it reports being assigned to
         self.original_subnet_membership = dict()
 
-    def get_host_dc(self, host_ip_str: IPv6Address) -> IPv6Network:
+    @staticmethod
+    def get_host_dc(host_ip: IPv6Address) -> IPv6Network:
         """Maps host_ip to data center mask"""
-        assert self.prefixes is not None, "cannot call GlobalInfra.host_dc() as self.prefixes is None"
-        host_ip = IPv6Address(host_ip_str)
-        for prefix in self.prefixes:
-            if host_ip in prefix:
-                return prefix
-        raise KeyError("Could not identify data center for host %d" % host_ip)
+        return IPv6Network(f"{host_ip}/64", strict=False)
 
     def is_known_host(self, host_addr: IPv6Address) -> bool:
         return host_addr in self.known_hosts
@@ -93,21 +58,20 @@ class GlobalInfra:
     def get_original_subnet_membership(self) -> Dict[str, str]:
         return self.original_subnet_membership
 
-    def _get_dc_info(self) -> Optional[Dict[IPv6Network, Set[IPv6Address]]]:
-        """Returns a map from data center ipv6 to set of host ipv6s"""
-        if self.prefixes is None:
-            return None
-        dcs: Dict[IPv6Network, Set[IPv6Address]]
-        dcs = dict()
-        for host_addr in self.known_hosts:
-            host_ipv6 = IPv6Address(host_addr)
-            for prefix in self.prefixes:
-                if host_ipv6 in prefix:
-                    if prefix in dcs:
-                        dcs[prefix].add(host_ipv6)
-                    else:
-                        dcs[prefix] = set([host_ipv6])
+    @classmethod
+    def _get_dc_info_impl(Self, node_addrs: Set[IPv6Address]) -> Dict[IPv6Network, Set[IPv6Address]]:
+        dcs: Dict[IPv6Network, Set[IPv6Address]] = dict()
+        for addr in node_addrs:
+            dc = Self.get_host_dc(addr)
+            if dc in dcs:
+                dcs[dc].add(addr)
+            else:
+                dcs[dc] = set([addr])
         return dcs
+
+    def _get_dc_info(self) -> Dict[IPv6Network, Set[IPv6Address]]:
+        """Returns a map from data center ipv6 to set of host ipv6s"""
+        return self._get_dc_info_impl(self.known_hosts)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -122,7 +86,6 @@ class GlobalInfra:
     @classmethod
     def fromDict(Self, d: Dict[str, Any], source: str) -> "GlobalInfra":
         infra = GlobalInfra(source)
-        infra.prefixes = list(d["data_centers"].keys())
         infra.original_subnet_types = d["original_subnet_types"]
         infra.original_subnet_membership = d["original_subnet_membership"]
         infra.host_addr_to_node_id_map = d["host_addr_to_node_id_mapping"]
@@ -182,17 +145,7 @@ class GlobalInfra:
 
         host_ips = {IPv6Address(j[f"node_record_{node_id}"]["http"]["ip_addr"]): node_id for node_id in nodes}
         d["host_addr_to_node_id_mapping"] = host_ips
-
-        dcs: Dict[IPv6Network, Set[IPv6Address]] = dict()
-        for node_addr in host_ips.keys():
-            node_addr = IPv6Address(node_addr)
-            dc = IPv6Network(f"{node_addr}/64", strict=False)
-            if dc in dcs:
-                dcs[dc].add(node_addr)
-            else:
-                dcs[dc] = set([node_addr])
-
-        d["data_centers"] = dcs
+        d["data_centers"] = Self._get_dc_info_impl(set(host_ips.keys()))
 
         return GlobalInfra.fromDict(d, "<obtained_from_registry_snapshot>")
 
@@ -214,15 +167,15 @@ class GlobalInfra:
         infra = GlobalInfra(source="<inferred_from_replica_logs>")
         for doc in replica_docs:
             # Process all replica docs' node_id / subnet data
-            unix_ts, node_id, subnet_id, subnet_id_type = (
+            unix_ts, node_id, subnet_id, subnet_type = (
                 doc.unix_ts(),
                 doc.get_host_principal(),
                 doc.get_subnet_principal(),
                 doc.get_subnet_type(),
             )
 
-            if subnet_id_type is not None:
-                (sub_id, sub_type) = subnet_id_type
+            if subnet_type is not None:
+                (sub_id, sub_type) = subnet_type
                 if sub_id not in infra.original_subnet_types:
                     infra.original_subnet_types[sub_id] = sub_type
 
@@ -240,10 +193,6 @@ class GlobalInfra:
                     infra.original_subnet_membership[node_id] = subnet_id
                     infra.in_subnet_relations[node_id] = [(unix_ts, subnet_id)]
 
-            # Find a replica doc defining data center prefixes
-            if not infra.prefixes:
-                infra.prefixes = doc._get_ipv6_prefixes()
-
             host_addr = doc.host_addr()
             infra.known_hosts.add(host_addr)
 
@@ -255,11 +204,6 @@ class GlobalInfra:
                 ), f"Host {str(host_addr)} is mapped to more than one node ID, e.g., {old_node_id} and {node_id}"
             else:
                 infra.host_addr_to_node_id_map[host_addr] = node_id
-
-        if not infra.prefixes:
-            raise GlobalInfra.Error(
-                "Cannot find data center prefixes in ORCH logs. Consider downloading more ES logs.\n"
-            )
 
         infra.node_id_to_host_map = {
             node_id: host_addr for host_addr, node_id in infra.host_addr_to_node_id_map.items()

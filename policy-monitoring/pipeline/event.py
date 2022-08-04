@@ -62,6 +62,36 @@ class FinalEvent(Event):
         return [()]
 
 
+class RebootEvent(Event):
+    doc: EsDoc
+
+    def __init__(self, doc: EsDoc):
+        super().__init__(name="reboot", doc=doc)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        if not self.doc.is_host_reboot():
+            return []
+        else:
+            host_addr = self.doc.host_addr()
+            data_center_prefix = GlobalInfra.get_host_dc(host_addr)
+            return [(str(host_addr), str(data_center_prefix))]
+
+
+class RebootIntentEvent(Event):
+    doc: EsDoc
+
+    def __init__(self, doc: EsDoc):
+        super().__init__(name="reboot_intent", doc=doc)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        if not self.doc.is_host_reboot_intent():
+            return []
+        else:
+            host_addr = self.doc.host_addr()
+            data_center_prefix = GlobalInfra.get_host_dc(host_addr)
+            return [(str(host_addr), str(data_center_prefix))]
+
+
 class InfraEvent(Event):
     def __init__(self, name: str, doc: Optional[EsDoc], infra: GlobalInfra):
         super().__init__(name=name, doc=doc)
@@ -94,40 +124,6 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
         in_subnet_rel = self.infra.get_original_subnet_membership()
         return list(map(lambda p: (p[0], str(self.infra.get_host_ip_addr(p[0])), p[1]), in_subnet_rel.items()))
-
-
-class RebootEvent(InfraEvent):
-    doc: EsDoc
-
-    def __init__(self, doc: EsDoc, infra: GlobalInfra):
-        super().__init__(name="reboot", doc=doc, infra=infra)
-
-    def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot():
-            return []
-        else:
-            host_addr = self.doc.host_addr()
-            if not self.infra.is_known_host(host_addr):
-                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center")
-            data_center_prefix = self.infra.get_host_dc(host_addr)
-            return [(str(host_addr), str(data_center_prefix))]
-
-
-class RebootIntentEvent(InfraEvent):
-    doc: EsDoc
-
-    def __init__(self, doc: EsDoc, infra: GlobalInfra):
-        super().__init__(name="reboot_intent", doc=doc, infra=infra)
-
-    def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot_intent():
-            return []
-        else:
-            host_addr = self.doc.host_addr()
-            if not self.infra.is_known_host(host_addr):
-                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center")
-            data_center_prefix = self.infra.get_host_dc(host_addr)
-            return [(str(host_addr), str(data_center_prefix))]
 
 
 class RegistrySubnetEvent(Event):
