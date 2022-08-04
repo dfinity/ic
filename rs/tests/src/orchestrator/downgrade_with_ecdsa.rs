@@ -16,6 +16,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
+use crate::orchestrator::upgrade_downgrade::MIN_HASH_LENGTH;
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::*;
 use crate::tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet;
@@ -55,8 +56,8 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
     let mainnet_version =
         env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
-
-    assert!(mainnet_version.len() >= 40);
+    // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
+    assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
     assert!(hex::decode(&mainnet_version).is_ok());
 
     // choose a node from the nns subnet

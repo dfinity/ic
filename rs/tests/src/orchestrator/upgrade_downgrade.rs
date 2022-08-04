@@ -23,6 +23,8 @@ use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::env;
 
+pub const MIN_HASH_LENGTH: usize = 8; // in bytes
+
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 
@@ -57,7 +59,8 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
     let mainnet_version =
         env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
-    assert!(mainnet_version.len() >= 40);
+    // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
+    assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
     assert!(hex::decode(&mainnet_version).is_ok());
 
     info!(logger, "Make sure all nodes are healty...");
