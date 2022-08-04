@@ -177,8 +177,8 @@ impl TransportImpl {
         let rt_handle = self.rt_handle.clone();
         let async_tasks_gauge_vec = self.control_plane_metrics.async_tasks.clone();
         self.rt_handle.spawn(async move {
-            let gauge = async_tasks_gauge_vec.with_label_values(&[ACCEPT_TASK_NAME]);
-            let _raii_gauge = IntGaugeResource::new(gauge);
+            let task_gauge = async_tasks_gauge_vec.with_label_values(&[ACCEPT_TASK_NAME]);
+            let _gauge_guard = IntGaugeResource::new(task_gauge);
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
@@ -199,7 +199,7 @@ impl TransportImpl {
                                     arc_self.log,
                                     "ControlPlane::spawn_accept_task(): local_addr() and/or peer_addr() failed."
                                 );
-                                return;
+                                continue;
                             }
                         };
 
@@ -212,12 +212,12 @@ impl TransportImpl {
                                 local_addr,
                                 peer_addr,
                             );
-                            return;
+                            continue;
                         }
 
                         rt_handle.spawn(async move {
-                            let gauge = arc_self.control_plane_metrics.async_tasks.with_label_values(&[TRANSITION_FROM_ACCEPT_TASK_NAME]);
-                            let _raii_gauge = IntGaugeResource::new(gauge);
+                            let task_gauge = arc_self.control_plane_metrics.async_tasks.with_label_values(&[TRANSITION_FROM_ACCEPT_TASK_NAME]);
+                            let _gauge_guard = IntGaugeResource::new(task_gauge);
                             let (peer_id, tls_stream) = match arc_self.tls_server_handshake(stream).await {
                                 Ok((peer_id, tls_stream)) => {
                                     arc_self.control_plane_metrics
