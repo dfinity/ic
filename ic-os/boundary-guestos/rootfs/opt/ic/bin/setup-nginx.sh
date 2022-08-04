@@ -20,16 +20,12 @@ function copy_certs() {
         cp ${CERT_DIR}/fullchain.pem "${NGINX_RUN}"/certs/fullchain.pem
         cp ${CERT_DIR}/privkey.pem "${NGINX_RUN}"/keys/privkey.pem
         cp ${CERT_DIR}/chain.pem "${NGINX_RUN}"/certs/chain.pem
+
+        mount --bind "${NGINX_RUN}"/certs /etc/nginx/certs
+        mount --bind "${NGINX_RUN}"/keys /etc/nginx/keys
     else
-        echo "Not copying certificates from /boot/config."
-        cp /etc/nginx/certs/fullchain.pem "${NGINX_RUN}"/certs/fullchain.pem
-        cp /etc/nginx/certs/chain.pem "${NGINX_RUN}"/certs/chain.pem
-        cp /etc/nginx/keys/privkey.pem "${NGINX_RUN}"/keys/privkey.pem
+        echo "Not copying certificates"
     fi
-
-    mount --bind "${NGINX_RUN}"/certs /etc/nginx/certs
-    mount --bind "${NGINX_RUN}"/keys /etc/nginx/keys
-
 }
 
 function copy_deny_list() {
