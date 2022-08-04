@@ -700,14 +700,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            pot_with_setup(
-                "canister_http_time_out",
-                canister_http::lib::config,
-                seq(vec![sys_t(
-                    "http_time_out",
-                    canister_http::http_time_out::test,
-                )]),
-            ),
             pot(
                 "two_third_latency_pot",
                 workload_counter_canister_test::two_third_latency_config(),
