@@ -140,6 +140,7 @@ impl AdminHelper {
         ecdsa_key_ids: Vec<EcdsaKeyId>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
+        ecdsa_subnet_id: Option<SubnetId>,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
         ic_admin.push("propose-to-update-recovery-cup".to_string());
@@ -150,11 +151,15 @@ impl AdminHelper {
         ic_admin.push("--state-hash".to_string());
         ic_admin.push(state_hash);
 
+        let ecdsa_subnet = ecdsa_subnet_id
+            .map(|id| format!(r#", "subnet_id": "{}""#, id))
+            .unwrap_or_default();
+
         if !ecdsa_key_ids.is_empty() {
             ic_admin.push("--ecdsa-keys-to-request".to_string());
             let keys = ecdsa_key_ids
                 .iter()
-                .map(|e| format!(r#"{{ "key_id": "{}" }}"#, e))
+                .map(|k| format!(r#"{{ "key_id": "{}"{} }}"#, k, ecdsa_subnet))
                 .collect::<Vec<String>>()
                 .join(" , ");
             ic_admin.push(format!("'[ {} ]'", keys));

@@ -14,6 +14,7 @@ use ic_cup_explorer::get_catchup_content;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_nns_data_provider::create_nns_data_provider;
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
 use ic_replay::player::StateParams;
 use ic_types::messages::HttpStatusResponse;
@@ -465,6 +466,26 @@ impl Recovery {
         }
     }
 
+    pub fn get_ecdsa_config(&self, subnet_id: SubnetId) -> RecoveryResult<Option<EcdsaConfig>> {
+        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
+        rt.block_on(async {
+            let nns_data_provider = create_nns_data_provider(
+                tokio::runtime::Handle::current(),
+                vec![self.admin_helper.nns_url.clone()],
+                None,
+            );
+            let registry_client = RegistryClientImpl::new(nns_data_provider, None);
+            if let Err(err) = registry_client.poll_once() {
+                return Err(format!("couldn't poll the registry: {:?}", err));
+            };
+            let version = registry_client.get_latest_version();
+            registry_client
+                .get_ecdsa_config(subnet_id, version)
+                .map_err(|err| err.to_string())
+        })
+        .map_err(|err| RecoveryError::UnexpectedError(err))
+    }
+
     /// Return an [AdminStep] step updating the recovery CUP of the given
     /// subnet.
     pub fn update_recovery_cup(
@@ -474,27 +495,20 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
+        ecdsa_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-        let key_ids = rt
-            .block_on(async {
-                let nns_data_provider = create_nns_data_provider(
-                    tokio::runtime::Handle::current(),
-                    vec![self.admin_helper.nns_url.clone()],
-                    None,
+        let key_ids = match self.get_ecdsa_config(subnet_id) {
+            Ok(Some(config)) => config.key_ids,
+            Ok(None) => vec![],
+            Err(err) => {
+                warn!(
+                    self.logger,
+                    "{}",
+                    format!("Failed to get ECDSA config: {:?}", err)
                 );
-                let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-                if let Err(err) = registry_client.poll_once() {
-                    return Err(format!("couldn't poll the registry: {:?}", err));
-                };
-                let version = registry_client.get_latest_version();
-                match registry_client.get_ecdsa_config(subnet_id, version) {
-                    Ok(Some(config)) => Ok(config.key_ids),
-                    Ok(None) => Ok(vec![]),
-                    Err(err) => Err(format!("Failed to get ECDSA config: {:?}", err)),
-                }
-            })
-            .map_err(|err| RecoveryError::UnexpectedError(err))?;
+                vec![]
+            }
+        };
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
@@ -506,6 +520,7 @@ impl Recovery {
                     key_ids,
                     replacement_nodes,
                     registry_params,
+                    ecdsa_subnet_id,
                 ),
         })
     }
