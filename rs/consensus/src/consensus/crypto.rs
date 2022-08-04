@@ -302,23 +302,13 @@ impl<Message: Signable, C: BasicSigVerifier<Message>>
     fn aggregate(
         &self,
         shares: Vec<&BasicSignature<Message>>,
-        _selector: RegistryVersion,
+        selector: RegistryVersion,
     ) -> CryptoResult<BasicSignatureBatch<Message>> {
         let mut signatures_map = BTreeMap::new();
-        for share in shares {
-            if signatures_map
-                .insert(share.signer, share.signature.clone())
-                .is_some()
-            {
-                return Err(CryptoError::InvalidArgument {
-                    message: format!(
-                        "Multiple batch contributions from node ID: {:?}",
-                        share.signer
-                    ),
-                });
-            }
+        for share in shares.into_iter() {
+            signatures_map.insert(share.signer, &share.signature);
         }
-        Ok(BasicSignatureBatch { signatures_map })
+        self.combine_basic_sig(signatures_map, selector)
     }
 
     fn verify_aggregate(
@@ -326,10 +316,7 @@ impl<Message: Signable, C: BasicSigVerifier<Message>>
         message: &Signed<Message, BasicSignatureBatch<Message>>,
         selector: RegistryVersion,
     ) -> ValidationResult<CryptoError> {
-        for (signer, signature) in message.signature.signatures_map.iter() {
-            self.verify_basic_sig(signature, &message.content, *signer, selector)?
-        }
-        Ok(())
+        self.verify_basic_sig_batch(&message.signature, &message.content, selector)
     }
 }
 

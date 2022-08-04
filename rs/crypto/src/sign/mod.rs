@@ -51,6 +51,7 @@ mod tests;
 // TODO: Remove this indirection:
 pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_types::signature::BasicSignatureBatch;
 
 impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFatClient<C> {
     fn sign_basic(
@@ -113,6 +114,65 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::BasicSignature,
             "verify_basic_sig",
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn combine_basic_sig(
+        &self,
+        signatures: BTreeMap<NodeId, &BasicSigOf<H>>,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSignatureBatch<H>> {
+        let logger = new_logger!(&self.logger;
+            crypto.trait_name => "BasicSigVerifier",
+            crypto.method_name => "combine_basic_sig",
+            crypto.registry_version => registry_version.get(),
+        );
+        debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
+        let result = BasicSigVerifierInternal::combine_basic_sig(signatures);
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::BasicSignature,
+            "combine_basic_sig",
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn verify_basic_sig_batch(
+        &self,
+        signature: &BasicSignatureBatch<H>,
+        message: &H,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        let logger = new_logger!(&self.logger;
+            crypto.trait_name => "BasicSigVerifier",
+            crypto.method_name => "verify_basic_sig_batch",
+            crypto.registry_version => registry_version.get(),
+        );
+        debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
+        let result = BasicSigVerifierInternal::verify_basic_sig_batch(
+            &self.csp,
+            Arc::clone(&self.registry_client),
+            signature,
+            message,
+            registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::BasicSignature,
+            "verify_basic_sig_batch",
             start_time,
         );
         debug!(logger;
@@ -234,7 +294,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
     }
 
     /// Combines a non-empty collection of individual signatures into a combined
-    /// signature. Panics if called with zero signatures.
+    /// signature.
     fn combine_multi_sig_individuals(
         &self,
         signatures: BTreeMap<NodeId, IndividualMultiSigOf<H>>,

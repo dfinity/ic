@@ -25,7 +25,7 @@ impl MultiSigVerifierInternal {
     }
 
     /// Combines a non-empty collection of individual signatures into a combined
-    /// signature. Panics if called with zero signatures.
+    /// signature.
     pub fn combine_multi_sig_individuals<S: CspSigner, H: Signable>(
         csp_signer: &S,
         registry: Arc<dyn RegistryClient>,
@@ -33,7 +33,10 @@ impl MultiSigVerifierInternal {
         registry_version: RegistryVersion,
     ) -> CryptoResult<CombinedMultiSigOf<H>> {
         if signatures.is_empty() {
-            panic!("At least one signature required");
+            return Err(CryptoError::InvalidArgument {
+                message: "No signatures to combine. At least one signature is needed to combine a multi-signature"
+                    .to_string(),
+            });
         }
 
         let (pubkey_sig_pairs, algorithm) = node_sigs_to_pubkey_sig_pairs(
@@ -51,7 +54,6 @@ impl MultiSigVerifierInternal {
     }
 
     /// Verifies a combined signature from a non-empty set of signers.
-    /// Panics if called with zero signers.
     pub fn verify_multi_sig_combined<S: CspSigner, H: Signable>(
         csp_signer: &S,
         registry: Arc<dyn RegistryClient>,
@@ -61,7 +63,10 @@ impl MultiSigVerifierInternal {
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
         if signers.is_empty() {
-            panic!("At least one signer required");
+            return Err(CryptoError::InvalidArgument {
+                message: "Empty signers. At least one signer is needed to verify a combined multi-signature"
+                    .to_string()
+            });
         }
 
         let message_bytes = message.as_signed_bytes();

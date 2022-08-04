@@ -36,7 +36,7 @@ use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
     IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
-use ic_types::signature::BasicSignature;
+use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -261,6 +261,25 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
         _signature: &BasicSigOf<T>,
         _message: &T,
         _signer: NodeId,
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        Ok(())
+    }
+
+    fn combine_basic_sig(
+        &self,
+        _signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSignatureBatch<T>> {
+        Ok(BasicSignatureBatch {
+            signatures_map: BTreeMap::new(),
+        })
+    }
+
+    fn verify_basic_sig_batch(
+        &self,
+        _signature: &BasicSignatureBatch<T>,
+        _message: &T,
         _registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
         Ok(())

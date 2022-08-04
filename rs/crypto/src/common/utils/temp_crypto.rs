@@ -51,6 +51,7 @@ use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
     IndividualMultiSigOf, KeyPurpose, ThresholdSigShareOf, UserPublicKey,
 };
+use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand_chacha::ChaChaRng;
@@ -928,6 +929,25 @@ impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifier<T> for TempCryptoCo
     ) -> CryptoResult<()> {
         self.crypto_component
             .verify_basic_sig(signature, message, signer, registry_version)
+    }
+
+    fn combine_basic_sig(
+        &self,
+        signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSignatureBatch<T>> {
+        self.crypto_component
+            .combine_basic_sig(signatures, registry_version)
+    }
+
+    fn verify_basic_sig_batch(
+        &self,
+        signature: &BasicSignatureBatch<T>,
+        message: &T,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        self.crypto_component
+            .verify_basic_sig_batch(signature, message, registry_version)
     }
 }
 
