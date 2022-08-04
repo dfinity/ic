@@ -4,7 +4,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_execution_environment::CompilationCostHandling;
 use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, InstallCodeArgs, Method, Payload,
+    CanisterHttpResponsePayload, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -4084,59 +4084,56 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
 }
 
-// TODO(RUN-283): Enable after moving the task queue from the execution state to
-// the system state.
+const DTS_INSTALL_WAT: &str = r#"
+    (module
+        (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+        (import "ic0" "stable_read"
+            (func $stable_read (param $dst i32) (param $offset i32) (param $size i32))
+        )
+        (import "ic0" "stable_write"
+            (func $stable_write (param $offset i32) (param $src i32) (param $size i32))
+        )
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32))
+        )
+        (func (export "canister_query read")
+            (call $stable_read (i32.const 0) (i32.const 0) (i32.const 10))
+            (call $msg_reply_data_append
+                (i32.const 0) ;; the counter from heap[0]
+                (i32.const 10)) ;; length
+            (call $msg_reply)
+        )
+        (func $start
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 23) (i32.const 1000))
+        )
+        (func (export "canister_init")
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (drop (call $stable_grow (i32.const 1)))
+            (call $stable_write (i32.const 0) (i32.const 0) (i32.const 1000))
+        )
+        (start $start)
+        (memory 0 20)
+    )"#;
+
 #[test]
-#[ignore]
-fn dts_abort_works_in_install_code() {
+fn dts_resume_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(1_000_000)
         .with_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let wat = r#"
-        (module
-            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-            (import "ic0" "stable_read"
-                (func $stable_read (param $dst i32) (param $offset i32) (param $size i32))
-            )
-            (import "ic0" "stable_write"
-                (func $stable_write (param $offset i32) (param $src i32) (param $size i32))
-            )
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32))
-            )
-            (func (export "canister_query read")
-                (call $stable_read (i32.const 0) (i32.const 0) (i32.const 10))
-                (call $msg_reply_data_append
-                    (i32.const 0) ;; the counter from heap[0]
-                    (i32.const 10)) ;; length
-                (call $msg_reply)
-            )
-            (func $steps (param $value i32)
-                (drop (memory.grow (i32.const 1)))
-                (memory.fill (i32.const 0) (local.get $value) (i32.const 1000))
-                (drop (call $stable_grow (i32.const 1)))
-                (call $stable_write (i32.const 0) (i32.const 0) (i32.const 1000))
-            )
-            (func $start
-                (call $steps (i32.const 21))
-            )
-            (func (export "canister_init")
-                (call $steps (i32.const 42))
-            )
-            (start $start)
-            (memory 0 20)
-        )"#;
     let mut features = wabt::Features::new();
     features.enable_bulk_memory();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(wat, features).unwrap(),
+        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -4156,5 +4153,54 @@ fn dts_abort_works_in_install_code() {
     );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+}
+
+#[test]
+fn dts_abort_works_in_install_code() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let mut features = wabt::Features::new();
+    features.enable_bulk_memory();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+    };
+    let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
+    for _ in 0..3 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        test.execute_slice(canister_id);
+    }
+
+    test.abort_paused_executions();
+
+    for _ in 0..5 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        test.execute_slice(canister_id);
+    }
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
 }

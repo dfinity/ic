@@ -5,8 +5,8 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{CanisterStatus, SystemState};
-use crate::{ExecutionTask, InputQueueType, StateError};
+use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
+use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -183,19 +183,9 @@ impl CanisterState {
         self.system_state.has_input()
     }
 
-    /// Returns the first task from the task queue.  
-    pub fn pop_task(&mut self) -> Option<ExecutionTask> {
-        self.execution_state
-            .as_mut()
-            .and_then(|es| es.task_queue.pop_front())
-    }
-
     /// Returns what the canister is going to execute next.
     pub fn next_execution(&self) -> NextExecution {
-        let next_task = self
-            .execution_state
-            .as_ref()
-            .and_then(|es| es.task_queue.front());
+        let next_task = self.system_state.task_queue.front();
         match (next_task, self.has_input()) {
             (None, false) => NextExecution::None,
             (None, true) => NextExecution::StartNew,

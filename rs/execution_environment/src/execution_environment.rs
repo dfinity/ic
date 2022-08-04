@@ -41,7 +41,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
@@ -1814,14 +1814,8 @@ impl ExecutionEnvironment {
                 paused_execution,
             } => {
                 let id = self.register_paused_install_code(paused_execution);
-                // TODO(RUN-283): Fix before enabling DTS. This panics if the
-                // very first `install_code` after canister creation is paused
-                // because `canister.execution_state` is empty until
-                // `install_code` finishes.
                 canister
-                    .execution_state
-                    .as_mut()
-                    .unwrap()
+                    .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedInstallCode(id));
                 state.put_canister_state(canister);
@@ -1849,7 +1843,9 @@ impl ExecutionEnvironment {
         let task = state
             .canister_state_mut(canister_id)
             .unwrap()
-            .pop_task()
+            .system_state
+            .task_queue
+            .pop_front()
             .unwrap();
         match task {
             ExecutionTask::Heartbeat
@@ -1919,29 +1915,27 @@ impl ExecutionEnvironment {
     /// Aborts all paused execution in the given state.
     pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
         for canister in state.canisters_iter_mut() {
-            if let Some(execution_state) = canister.execution_state.as_mut() {
-                if !execution_state.task_queue.is_empty() {
-                    let task_queue = std::mem::take(&mut execution_state.task_queue);
-                    execution_state.task_queue = task_queue
-                        .into_iter()
-                        .map(|task| match task {
-                            ExecutionTask::AbortedExecution(..)
-                            | ExecutionTask::AbortedInstallCode(..)
-                            | ExecutionTask::Heartbeat => task,
-                            ExecutionTask::PausedExecution(id) => {
-                                let paused = self.take_paused_execution(id).unwrap();
-                                let message = paused.abort();
-                                ExecutionTask::AbortedExecution(message)
-                            }
-                            ExecutionTask::PausedInstallCode(id) => {
-                                let paused = self.take_paused_install_code(id).unwrap();
-                                let message = paused.abort();
-                                ExecutionTask::AbortedInstallCode(message)
-                            }
-                        })
-                        .collect();
-                };
-            }
+            if !canister.system_state.task_queue.is_empty() {
+                let task_queue = std::mem::take(&mut canister.system_state.task_queue);
+                canister.system_state.task_queue = task_queue
+                    .into_iter()
+                    .map(|task| match task {
+                        ExecutionTask::AbortedExecution(..)
+                        | ExecutionTask::AbortedInstallCode(..)
+                        | ExecutionTask::Heartbeat => task,
+                        ExecutionTask::PausedExecution(id) => {
+                            let paused = self.take_paused_execution(id).unwrap();
+                            let message = paused.abort();
+                            ExecutionTask::AbortedExecution(message)
+                        }
+                        ExecutionTask::PausedInstallCode(id) => {
+                            let paused = self.take_paused_install_code(id).unwrap();
+                            let message = paused.abort();
+                            ExecutionTask::AbortedInstallCode(message)
+                        }
+                    })
+                    .collect();
+            };
         }
     }
 
@@ -1978,11 +1972,8 @@ impl ExecutionEnvironment {
                 paused_execution,
             } => {
                 let id = self.register_paused_execution(paused_execution);
-                // The execution state is guaranteed to exist because we have a paused execution.
                 canister
-                    .execution_state
-                    .as_mut()
-                    .unwrap()
+                    .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedExecution(id));
                 (canister, NumBytes::from(0), None)
@@ -2113,7 +2104,7 @@ pub fn execute_canister(
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
 
-    match canister.pop_task() {
+    match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::Heartbeat => {
                 let (canister, result) = exec_env.execute_canister_heartbeat(

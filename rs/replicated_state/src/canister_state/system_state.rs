@@ -6,7 +6,7 @@ pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::{CanisterQueues, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -20,12 +20,12 @@ use ic_types::{
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
 };
 use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::VecDeque, str::FromStr};
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
@@ -92,6 +92,10 @@ pub struct SystemState {
     ///     2. executing the operation and return `cycles_spent`
     ///     3. reimburse the canister with `cycles_reserved` - `cycles_spent`
     cycles_balance: Cycles,
+
+    /// Tasks to execute before processing input messages.
+    /// Currently the task queue is empty outside of execution rounds.
+    pub task_queue: VecDeque<ExecutionTask>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -175,6 +179,41 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     }
 }
 
+/// The id of a paused execution stored in the execution environment.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct PausedExecutionId(pub u64);
+
+/// Represents a task that needs to be executed before processing canister
+/// inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExecutionTask {
+    // A heartbeat task exists only within an execution round. It is never
+    // serialized.
+    Heartbeat,
+
+    // A paused execution task exists only within an epoch (between
+    // checkpoints). It is never serialized and turns into `AbortedExecution`
+    // before the checkpoint.
+    PausedExecution(PausedExecutionId),
+
+    // A paused `install_code` task exists only within an epoch (between
+    // checkpoints). It is never serialized and turns into `AbortedInstallCode`
+    // before the checkpoint.
+    PausedInstallCode(PausedExecutionId),
+
+    // Any paused execution that doesn't finish until the next checkpoint
+    // becomes an aborted execution that should be retried after the checkpoint.
+    // A paused execution can also be aborted to keep the memory usage low if
+    // there are too many long-running executions.
+    AbortedExecution(CanisterInputMessage),
+
+    // Any paused `install_code` that doesn't finish until the next checkpoint
+    // becomes an aborted `install_code` that should be retried after the
+    // checkpoint. A paused execution can also be aborted to keep the memory
+    // usage low if there are too many long-running executions.
+    AbortedInstallCode(RequestOrIngress),
+}
+
 impl SystemState {
     pub fn new_running(
         canister_id: CanisterId,
@@ -241,6 +280,7 @@ impl SystemState {
             status,
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
+            task_queue: Default::default(),
         }
     }
 
@@ -282,6 +322,7 @@ impl SystemState {
             certified_data,
             canister_metrics,
             cycles_balance,
+            task_queue: Default::default(),
         }
     }
 

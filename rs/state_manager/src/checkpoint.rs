@@ -511,7 +511,6 @@ pub fn load_canister_state<P: ReadPolicy>(
                 exports: execution_state_bits.exports,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
-                task_queue: Default::default(),
             })
         }
         None => None,
@@ -836,7 +835,6 @@ mod tests {
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 metadata: WasmMetadata::default(),
                 last_executed_round: ExecutionRound::from(0),
-                task_queue: Default::default(),
             };
             canister_state.execution_state = Some(execution_state);
 

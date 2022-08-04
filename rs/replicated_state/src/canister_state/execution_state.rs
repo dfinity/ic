@@ -1,6 +1,5 @@
 use super::SessionNonce;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
-use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -10,7 +9,7 @@ use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::{
     collections::BTreeSet,
@@ -319,39 +318,6 @@ impl SandboxMemoryHandle {
         self.0.get_id()
     }
 }
-
-/// The id of a paused execution stored in the execution environment.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct PausedExecutionId(pub u64);
-
-/// Represents a task that needs to be executed before processing canister
-/// inputs.
-#[derive(Clone, Debug)]
-pub enum ExecutionTask {
-    // A heartbeat task exists only within an execution round. It is never
-    // serialized.
-    Heartbeat,
-
-    // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedExecution`
-    // before the checkpoint.
-    PausedExecution(PausedExecutionId),
-
-    // A paused `install_code` task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedInstallCode`
-    // before the checkpoint.
-    PausedInstallCode(PausedExecutionId),
-
-    // Any paused execution that doesn't finish until the next checkpoint
-    // becomes an aborted execution that should be retried after the checkpoint.
-    AbortedExecution(CanisterInputMessage),
-
-    // Any paused `install_code` that doesn't finish until the next checkpoint
-    // becomes an aborted `install_code` that should be retried after the
-    // checkpoint.
-    AbortedInstallCode(RequestOrIngress),
-}
-
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -408,10 +374,6 @@ pub struct ExecutionState {
     /// Round number at which canister executed
     /// update type operation.
     pub last_executed_round: ExecutionRound,
-
-    /// Tasks to execute before processing input messages.
-    /// Currently the task queue is empty outside of execution rounds.
-    pub task_queue: VecDeque<ExecutionTask>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -455,7 +417,6 @@ impl ExecutionState {
             exported_globals,
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
-            task_queue: Default::default(),
         }
     }
 
