@@ -1026,25 +1026,3 @@ pub fn verify_bls_signature(
     let pub_key_prepared = G2Prepared::from(public_key);
     Gt::multipairing(&[(signature, &g2_gen), (message, &pub_key_prepared)]).is_identity()
 }
-
-/*
-The following is to work around a problem with getrandom 0.2 which
-is a dependency of the bls12_381 crate.
-
-For wasm32-unknown-unknown target, getrandom 0.2 will refuse to compile. This is
-an intentional policy decision on the part of the getrandom developers. As a
-consequence, it would not be possible to compile the crypto component into wasm
-for use in canister code.
-
-Convert the compile time error into a runtime error, by registering a custom
-getrandom implementation which always fails.
-*/
-
-#[cfg(target_arch = "wasm32")]
-/// A getrandom implementation that always fails
-pub fn always_fail(_buf: &mut [u8]) -> Result<(), getrandom::Error> {
-    Err(getrandom::Error::UNSUPPORTED)
-}
-
-#[cfg(target_arch = "wasm32")]
-getrandom::register_custom_getrandom!(always_fail);

@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "getrandom_for_wasm",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_getrandom_for_wasm",
+    edition = "2021",
+    deps = select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
+        "//conditions:default": ["@crate_index//:getrandom"],
+    }),
+)

@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-getrandom-for-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
+
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies]
+getrandom = { version = "0.2" }

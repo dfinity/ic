@@ -66,6 +66,7 @@ members = [
   "crypto/internal/logmon",
   "crypto/internal/test_vectors",
   "crypto/node_key_validation",
+  "crypto/getrandom_for_wasm",
   "crypto/sha",
   "crypto/test_utils",
   "crypto/test_utils/threshold_sigs",
