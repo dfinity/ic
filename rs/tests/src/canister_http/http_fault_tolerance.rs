@@ -98,7 +98,7 @@ pub fn test(env: TestEnv) {
                     >,
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
-                            url: format!("https://[{webserver_ipv6}]:443"),
+                            url: format!("https://[{webserver_ipv6}]:20443"),
                             headers: vec![],
                             http_method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
@@ -163,7 +163,7 @@ pub fn test(env: TestEnv) {
                             Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
                             String,
                         >,
-                        format!("https://[{webserver_ipv6}]:443"),
+                        format!("https://[{webserver_ipv6}]:20443"),
                     )
                     .await;
 

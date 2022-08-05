@@ -966,7 +966,17 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
         ],
     ));
-    m.add_suite(suite("manual", vec![]));
+    m.add_suite(suite(
+        "manual",
+        vec![pot_with_setup(
+            "canister_http_correctness",
+            canister_http::lib::config,
+            par(vec![sys_t(
+                "http_correctness",
+                canister_http::http_correctness::test,
+            )]),
+        )],
+    ));
     m
 }
 
