@@ -729,15 +729,26 @@ impl Step for DownloadRegistryStoreStep {
             self.logger,
             "Waiting until subnet with original NNS id is up."
         );
-        for i in 0..50 {
+        let tries = 50;
+        let backoff = 10;
+        let mut child_subnet_found = false;
+        for i in 0..tries {
             if let Err(e) = ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
             {
                 info!(self.logger, "Try {}: {}", i, e);
             } else {
                 info!(self.logger, "Found subnet with original NNS id!");
+                child_subnet_found = true;
                 break;
             }
-            thread::sleep(time::Duration::from_secs(10));
+            thread::sleep(time::Duration::from_secs(backoff));
+        }
+
+        if !child_subnet_found {
+            return Err(RecoveryError::UnexpectedError(format!(
+                "Child subnet didn't come up within {} seconds.",
+                tries * backoff
+            )));
         }
 
         let data_src = format!(
