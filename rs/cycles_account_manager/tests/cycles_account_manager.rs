@@ -100,6 +100,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 system_state.balance_mut(),
                 amount,
+                SMALL_APP_SUBNET_MAX_SIZE
             ),
             Ok(())
         );
@@ -108,6 +109,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            SMALL_APP_SUBNET_MAX_SIZE,
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -129,6 +131,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 system_state.balance_mut(),
                 amount,
+                SMALL_APP_SUBNET_MAX_SIZE
             ),
             Ok(())
         );
@@ -138,6 +141,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            SMALL_APP_SUBNET_MAX_SIZE,
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -161,6 +165,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     ComputeAllocation::default(),
                     system_state.balance_mut(),
                     amount,
+                    SMALL_APP_SUBNET_MAX_SIZE
                 ),
             Ok(())
         );
@@ -169,6 +174,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             system_state.memory_allocation,
             memory_usage,
             ComputeAllocation::default(),
+            SMALL_APP_SUBNET_MAX_SIZE,
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -190,6 +196,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 system_state.balance_mut(),
                 amount,
+                SMALL_APP_SUBNET_MAX_SIZE
             ),
             Err(CanisterOutOfCyclesError {
                 canister_id: canister_test_id(1),
@@ -200,6 +207,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     system_state.memory_allocation,
                     memory_usage,
                     ComputeAllocation::default(),
+                    SMALL_APP_SUBNET_MAX_SIZE
                 )
             })
         );
@@ -244,6 +252,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             NumInstructions::from(1_000_000),
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
@@ -271,6 +280,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             initial_instructions_charged_for,
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
 
@@ -509,15 +519,28 @@ fn cycles_withdraw_for_execution() {
         system_state.memory_allocation,
         memory_usage,
         compute_allocation,
+        SMALL_APP_SUBNET_MAX_SIZE,
     );
 
     let amount = Cycles::from(initial_amount / 2);
     assert!(cycles_account_manager
-        .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
+        .consume_cycles(
+            &mut system_state,
+            memory_usage,
+            compute_allocation,
+            amount,
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
         .is_ok());
     assert_eq!(system_state.balance(), initial_cycles - amount);
     assert!(cycles_account_manager
-        .consume_cycles(&mut system_state, memory_usage, compute_allocation, amount)
+        .consume_cycles(
+            &mut system_state,
+            memory_usage,
+            compute_allocation,
+            amount,
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
         .is_err());
 
     let exec_cycles_max = system_state.balance() - freeze_threshold_cycles;
@@ -528,6 +551,7 @@ fn cycles_withdraw_for_execution() {
             exec_cycles_max,
             memory_usage,
             compute_allocation,
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_ok());
     assert!(cycles_account_manager
@@ -535,7 +559,8 @@ fn cycles_withdraw_for_execution() {
             &mut system_state,
             memory_usage,
             compute_allocation,
-            exec_cycles_max
+            exec_cycles_max,
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_ok());
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
@@ -544,7 +569,8 @@ fn cycles_withdraw_for_execution() {
             &system_state,
             Cycles::new(10),
             memory_usage,
-            compute_allocation
+            compute_allocation,
+            SMALL_APP_SUBNET_MAX_SIZE
         ),
         Err(CanisterOutOfCyclesError {
             canister_id,
@@ -560,7 +586,8 @@ fn cycles_withdraw_for_execution() {
             &mut system_state,
             memory_usage,
             compute_allocation,
-            exec_cycles_max
+            exec_cycles_max,
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_err());
     assert!(cycles_account_manager
@@ -568,7 +595,8 @@ fn cycles_withdraw_for_execution() {
             &mut system_state,
             memory_usage,
             compute_allocation,
-            Cycles::new(10)
+            Cycles::new(10),
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_err());
     assert!(cycles_account_manager
@@ -576,7 +604,8 @@ fn cycles_withdraw_for_execution() {
             &mut system_state,
             memory_usage,
             compute_allocation,
-            Cycles::new(1)
+            Cycles::new(1),
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_err());
     assert!(cycles_account_manager
@@ -584,7 +613,8 @@ fn cycles_withdraw_for_execution() {
             &mut system_state,
             memory_usage,
             compute_allocation,
-            Cycles::zero()
+            Cycles::zero(),
+            SMALL_APP_SUBNET_MAX_SIZE
         )
         .is_ok());
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
@@ -606,6 +636,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             NumInstructions::from(1_000_000),
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
     let consumed_cycles_after = system_state
@@ -633,6 +664,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             ComputeAllocation::default(),
             system_state.balance_mut(),
             Cycles::new(1_000_000),
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
     let consumed_cycles_after = system_state
@@ -659,6 +691,7 @@ fn consume_cycles_updates_consumed_cycles() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
     let consumed_cycles_after = system_state

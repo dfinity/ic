@@ -19,6 +19,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/canister_sandbox/common",
     "//rs/config",
+    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/interfaces",

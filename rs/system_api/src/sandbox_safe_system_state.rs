@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
@@ -203,6 +204,7 @@ pub struct SandboxSafeSystemState {
     pub(super) controller: PrincipalId,
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
+    pub(super) subnet_size: usize,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
     initial_cycles_balance: Cycles,
@@ -234,12 +236,14 @@ impl SandboxSafeSystemState {
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
+        subnet_size: usize,
     ) -> Self {
         Self {
             canister_id,
             controller,
             status,
             subnet_type: cycles_account_manager.subnet_type(),
+            subnet_size,
             freeze_threshold,
             memory_allocation,
             system_state_changes: SystemStateChanges::default(),
@@ -286,6 +290,9 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
+        let subnet_size = network_topology
+            .get_subnet_size(&cycles_account_manager.get_subnet_id())
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         Self::new_internal(
             system_state.canister_id,
@@ -302,6 +309,7 @@ impl SandboxSafeSystemState {
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
+            subnet_size,
         )
     }
 
@@ -455,6 +463,7 @@ impl SandboxSafeSystemState {
                 compute_allocation,
                 &mut new_balance,
                 amount,
+                self.subnet_size,
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -478,6 +487,7 @@ impl SandboxSafeSystemState {
                 canister_current_memory_usage,
                 compute_allocation,
                 &msg,
+                self.subnet_size,
             )
             .is_err()
         {

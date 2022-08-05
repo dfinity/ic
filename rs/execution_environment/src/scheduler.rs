@@ -301,6 +301,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         long_running_canister_ids: &BTreeSet<CanisterId>,
         measurement_scope: &MeasurementScope,
+        subnet_size: usize,
     ) -> ReplicatedState {
         // TODO(RUN-290): Fix the iteration order to guarantee progress of
         // long-running execution and to respect the accumulated priority.
@@ -325,6 +326,7 @@ impl SchedulerImpl {
                 canister_id,
                 instruction_limits,
                 round_limits,
+                subnet_size,
             );
             let instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
@@ -425,6 +427,7 @@ impl SchedulerImpl {
         current_round: ExecutionRound,
         measurement_scope: &MeasurementScope<'a>,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, measurement_scope);
@@ -495,6 +498,7 @@ impl SchedulerImpl {
                     Arc::new(state.metadata.network_topology.clone()),
                     &measurement_scope,
                     round_limits,
+                    subnet_size,
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
 
@@ -617,6 +621,7 @@ impl SchedulerImpl {
         network_topology: Arc<NetworkTopology>,
         measurement_scope: &MeasurementScope,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
@@ -685,6 +690,7 @@ impl SchedulerImpl {
                         rate_limiting_of_heap_delta,
                         deterministic_time_slicing,
                         round_limits,
+                        subnet_size,
                     );
                 });
             }
@@ -1206,6 +1212,7 @@ impl Scheduler for SchedulerImpl {
                 &mut round_limits,
                 &long_running_canister_ids,
                 &measurement_scope,
+                registry_settings.subnet_size,
             );
 
             if round_limits.instructions > RoundInstructions::from(0) {
@@ -1269,6 +1276,7 @@ impl Scheduler for SchedulerImpl {
             current_round,
             &measurement_scope,
             &mut round_limits,
+            registry_settings.subnet_size,
         );
 
         let mut final_state;
@@ -1428,6 +1436,7 @@ fn execute_canisters_on_thread(
     rate_limiting_of_heap_delta: FlagStatus,
     deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
+    subnet_size: usize,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1494,6 +1503,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
+                subnet_size,
             );
             ingress_results.extend(ingress_status);
             let instructions_executed =

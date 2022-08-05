@@ -318,6 +318,7 @@ impl ValidSetRuleImpl {
                     memory_usage,
                     compute_allocation,
                     cost,
+                    subnet_size,
                 ) {
                     return Err(StateError::CanisterOutOfCycles(err));
                 }

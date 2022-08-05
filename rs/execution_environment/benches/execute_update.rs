@@ -6,6 +6,7 @@ mod common_wat;
 
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionResponse,
@@ -389,6 +390,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 time,
                 network_topology,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             );
             let executed_instructions =
                 as_num_instructions(instructions_before - round_limits.instructions);
