@@ -42,7 +42,7 @@ deploy-guest-os-baseimg:
 
 build-guest-os-baseimg:
   extends:
-    - .cargo-build-docker
+    - .ubuntu-nix-docker
     - .rules-dockerfile-base-changes
   stage: guest-os-build
   needs: []

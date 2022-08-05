@@ -20,7 +20,7 @@ deploy-setup-os-baseimg:
 
 build-setup-os-baseimg:
   extends:
-    - .cargo-build-docker
+    - .ubuntu-nix-docker
     - .rules-dockerfile-base-changes
   stage: host-os-build
   needs: []
