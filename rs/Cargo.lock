@@ -4702,6 +4702,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-getrandom-for-wasm"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.2",
+]
+
+[[package]]
 name = "ic-crypto-hash"
 version = "0.8.0"
 dependencies = [
@@ -4852,8 +4859,8 @@ version = "0.1.0"
 dependencies = [
  "bls12_381",
  "criterion",
- "getrandom 0.2.2",
  "hex",
+ "ic-crypto-getrandom-for-wasm",
  "ic-crypto-internal-types",
  "lazy_static",
  "miracl_core_bls12381",

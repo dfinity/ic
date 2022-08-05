@@ -15,12 +15,7 @@ rand = "0.8"
 rand_chacha = "0.3"
 lazy_static = "1.4"
 zeroize = { version = "1", features = ["zeroize_derive"] }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["custom"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-getrandom = { version = "0.2" }
+ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }

@@ -17,6 +17,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//rs/crypto/getrandom_for_wasm",
     "@crate_index//:bls12_381",
     "@crate_index//:lazy_static",
     "@crate_index//:miracl_core_bls12381",
@@ -26,10 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:subtle",
     "@crate_index//:zeroize",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
-    "//conditions:default": ["@crate_index//:getrandom"],
-})
+]
 
 MACRO_DEPENDENCIES = []
 
