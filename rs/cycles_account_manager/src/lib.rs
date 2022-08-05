@@ -129,28 +129,35 @@ impl CyclesAccountManager {
     }
 
     /// Returns the fee for receiving an ingress message in [`Cycles`].
-    pub fn ingress_message_received_fee(&self) -> Cycles {
-        self.config.ingress_message_reception_fee
+    pub fn ingress_message_received_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.ingress_message_reception_fee, subnet_size)
     }
 
     /// Returns the fee for storing a GiB of data per second.
-    pub fn gib_storage_per_second_fee(&self) -> Cycles {
-        self.config.gib_storage_per_second_fee
+    pub fn gib_storage_per_second_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.gib_storage_per_second_fee, subnet_size)
     }
 
     /// Returns the fee per byte of ingress message received in [`Cycles`].
-    pub fn ingress_byte_received_fee(&self) -> Cycles {
-        self.config.ingress_byte_reception_fee
+    pub fn ingress_byte_received_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.ingress_byte_reception_fee, subnet_size)
     }
 
     /// Returns the fee for performing a xnet call in [`Cycles`].
-    pub fn xnet_call_performed_fee(&self) -> Cycles {
-        self.config.xnet_call_fee
+    pub fn xnet_call_performed_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.xnet_call_fee, subnet_size)
     }
 
     /// Returns the fee per byte of transmitted xnet call in [`Cycles`].
-    pub fn xnet_call_bytes_transmitted_fee(&self, payload_size: NumBytes) -> Cycles {
-        self.config.xnet_byte_transmission_fee * payload_size.get()
+    pub fn xnet_call_bytes_transmitted_fee(
+        &self,
+        payload_size: NumBytes,
+        subnet_size: usize,
+    ) -> Cycles {
+        self.scale_cost(
+            self.config.xnet_byte_transmission_fee * payload_size.get(),
+            subnet_size,
+        )
     }
 
     // Returns the idle resource consumption rate in cycles per day.
@@ -299,7 +306,7 @@ impl CyclesAccountManager {
         num_instructions: NumInstructions,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_to_withdraw = self.execution_cost(num_instructions);
+        let cycles_to_withdraw = self.execution_cost(num_instructions, subnet_size);
         self.consume_with_threshold(
             system_state,
             cycles_to_withdraw,
@@ -514,7 +521,7 @@ impl CyclesAccountManager {
                 + self.config.xnet_byte_transmission_fee
                     * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
             subnet_size,
-        ) + self.execution_cost(self.max_num_instructions);
+        ) + self.execution_cost(self.max_num_instructions, subnet_size);
         self.withdraw_with_threshold(
             canister_id,
             cycles_balance,
@@ -707,9 +714,12 @@ impl CyclesAccountManager {
     /// Note that this function is made public to facilitate some logistic in
     /// tests.
     #[doc(hidden)]
-    pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        self.config.update_message_execution_fee
-            + self.convert_instructions_to_cycles(num_instructions)
+    pub fn execution_cost(&self, num_instructions: NumInstructions, subnet_size: usize) -> Cycles {
+        self.scale_cost(
+            self.config.update_message_execution_fee
+                + self.convert_instructions_to_cycles(num_instructions),
+            subnet_size,
+        )
     }
 
     /// Charges a canister for its resource allocation and usage for the
@@ -766,6 +776,7 @@ impl CyclesAccountManager {
         &self,
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
+        subnet_size: usize,
     ) -> Cycles {
         let response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
@@ -773,7 +784,11 @@ impl CyclesAccountManager {
             None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
         };
         let total_bytes = response_size + request_size.get();
-        self.config.http_request_baseline_fee + self.config.http_request_per_byte_fee * total_bytes
+        self.scale_cost(
+            self.config.http_request_baseline_fee
+                + self.config.http_request_per_byte_fee * total_bytes,
+            subnet_size,
+        )
     }
 }
 

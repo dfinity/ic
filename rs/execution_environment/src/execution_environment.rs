@@ -605,6 +605,7 @@ impl ExecutionEnvironment {
                                         self.cycles_account_manager.http_request_fee(
                                             request.payload_size_bytes(),
                                             canister_http_request_context.max_response_bytes,
+                                            registry_settings.subnet_size
                                         );
                                     if request.payment < http_request_fee {
                                         let err = Err(UserError::new(

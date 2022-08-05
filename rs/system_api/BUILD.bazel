@@ -52,6 +52,7 @@ rust_test(
 INTEGRATION_TEST_DEPS = [
     ":system_api",
     "//rs/config",
+    "//rs/constants",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/registry/subnet_type",

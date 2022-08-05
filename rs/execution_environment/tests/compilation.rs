@@ -258,7 +258,7 @@ mod execution_tests {
             initial_balance
                 - test
                     .cycles_account_manager()
-                    .execution_cost(wat_compilation_cost(WAT_EMPTY))
+                    .execution_cost(wat_compilation_cost(WAT_EMPTY), test.subnet_size())
         );
     }
 

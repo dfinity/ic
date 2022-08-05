@@ -1,4 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -36,8 +37,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let request_payload_cost =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(request.payload_size_bytes());
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
 
     // Set cycles balance low enough that not even the cost for transferring
     // the request is covered.
@@ -74,15 +75,17 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let xnet_cost = cycles_account_manager.xnet_call_performed_fee();
-    let request_payload_cost =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(request.payload_size_bytes());
-    let response_reservation =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
+    let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
+    let response_reservation = cycles_account_manager.xnet_call_bytes_transmitted_fee(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        SMALL_APP_SUBNET_MAX_SIZE,
+    );
     let total_cost = xnet_cost
         + request_payload_cost
         + response_reservation
-        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS);
+        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS, SMALL_APP_SUBNET_MAX_SIZE);
 
     // Set cycles balance to a number that is enough to cover for the request
     // transfer but not to cover the cost of processing the expected response.
@@ -167,16 +170,18 @@ fn correct_charging_source_canister_for_a_request() {
         .receiver(canister_test_id(1))
         .build();
 
-    let xnet_cost = cycles_account_manager.xnet_call_performed_fee();
-    let request_payload_cost =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(request.payload_size_bytes());
+    let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
     // Which should result in refunding everything except the response payload cost
-    let response_reservation =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
+    let response_reservation = cycles_account_manager.xnet_call_bytes_transmitted_fee(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        SMALL_APP_SUBNET_MAX_SIZE,
+    );
     let total_cost = xnet_cost
         + request_payload_cost
         + response_reservation
-        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS);
+        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS, SMALL_APP_SUBNET_MAX_SIZE);
 
     // Enqueue the Request.
     sandbox_safe_system_state
@@ -215,7 +220,8 @@ fn correct_charging_source_canister_for_a_request() {
     assert_eq!(
         initial_cycles_balance - total_cost
             + cycles_account_manager.xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes()
+                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes(),
+                SMALL_APP_SUBNET_MAX_SIZE
             ),
         system_state.balance()
     );
