@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,38 +7,69 @@ filegroup(
     name = "sources",
     srcs = glob(
         ["**"],
-        exclude = ["target/**"],
-    ),
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
 )
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "dfn_candid",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "dfn_candid",
     edition = "2018",
-    deps = [
-        "//rs/rust_canisters/dfn_core",
-        "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
-        "@crate_index//:candid",
-        "@crate_index//:serde",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
     name = "candid-test-canister",
     srcs = ["test/wasm.rs"],
+    aliases = ALIASES,
     edition = "2018",
-    deps = [
-        ":dfn_candid",
-        "//rs/rust_canisters/dfn_core",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":dfn_candid"],
 )
 
-# Blocked on Bazelization of `canister_test` crate.
-#
-# rust_test(
-#     name = "dfn_candid_test",
-#     srcs = ["test/test.rs"],
-#     crate = ":dfn_candid",
-#     deps = ["//rs/rust_canisters/canister_test""],
-# )
+rust_test(
+    name = "dfn_candid_test",
+    srcs = ["test/test.rs"],
+    aliases = ALIASES,
+    crate_root = "test/test.rs",
+    data = [
+        ":candid-test-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    edition = "2018",
+    env = {
+        "CANDID_TEST_CANISTER_WASM_PATH": "$(rootpath :candid-test-canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + ["dfn_candid"],
+)
