@@ -137,9 +137,10 @@ use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
 use anyhow::{anyhow, bail, Result};
+use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::export::Principal;
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_canister_client::Agent as InternalAgent;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
@@ -163,7 +164,7 @@ use ssh2::Session;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
@@ -695,68 +696,55 @@ impl HasMetricsUrl for IcNodeSnapshot {
 
 /// Any entity (boundary node or IC node) that exposes a public API over http
 /// implements this trait.
-pub trait HasPublicApiUrl {
+#[async_trait]
+pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn get_public_url(&self) -> Url;
 
-    fn status(&self) -> Result<HttpStatusResponse>;
+    /// The ip address the domain in `get_public_url` should resolve to
+    fn get_public_addr(&self) -> SocketAddr;
 
-    /// The status-endpoint reports `healthy`.
-    fn status_is_healthy(&self) -> Result<bool>;
-
-    /// Waits until the is_healthy() returns true
-    fn await_status_is_healthy(&self) -> Result<()>;
-
-    /// Waits until the is_healthy() returns an error
-    fn await_status_is_unavailable(&self) -> Result<()>;
-
-    fn with_default_agent<F, Fut, R>(&self, op: F) -> R
-    where
-        F: FnOnce(Agent) -> Fut + 'static,
-        Fut: Future<Output = R>;
-
-    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
-    /// install it on the target node.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the canister `name` could not be loaded, is not
-    /// a wasm module or the installation fails.
-    fn create_and_install_canister_with_arg(&self, name: &str, arg: Option<Vec<u8>>) -> Principal;
-
-    fn build_default_agent(&self) -> Agent;
-}
-
-impl HasPublicApiUrl for IcNodeSnapshot {
-    fn get_public_url(&self) -> Url {
-        let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+    /// Should return `true` to signal that invalid TLS certs will be used
+    fn uses_snake_oil_certs(&self) -> bool {
+        false
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
-        let response = reqwest::blocking::Client::builder()
-            .timeout(READY_RESPONSE_TIMEOUT)
+        let url = self.get_public_url();
+        let addr = self.get_public_addr();
+        let client = reqwest::blocking::Client::builder()
+            .danger_accept_invalid_certs(self.uses_snake_oil_certs())
+            .timeout(READY_RESPONSE_TIMEOUT);
+        let client = if let Some(domain) = url.domain() {
+            client.resolve(domain, addr)
+        } else {
+            client
+        };
+        let response = client
             .build()
             .expect("cannot build a reqwest client")
-            .get(
-                self.get_public_url()
-                    .join("api/v2/status")
-                    .expect("failed to join URLs"),
-            )
+            .get(url.join("api/v2/status").expect("failed to join URLs"))
             .send()?;
 
-        let cbor_response = serde_cbor::from_slice(
-            &response
-                .bytes()
-                .expect("failed to convert a response to bytes")
-                .to_vec(),
-        )
-        .expect("response is not encoded as cbor");
+        let status = response.status();
+        let body = response
+            .bytes()
+            .expect("failed to convert a response to bytes")
+            .to_vec();
+        if status.is_client_error() || status.is_server_error() {
+            bail!(
+                "status check failed with {status}: `{}`",
+                String::from_utf8_lossy(&body)
+            );
+        }
+
+        let cbor_response = serde_cbor::from_slice(&body).expect("response is not encoded as cbor");
         Ok(
             serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
                 .expect("failed to deserialize a response to HttpStatusResponse"),
         )
     }
 
+    /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
         match self.status() {
             Ok(s) if s.replica_health_status.is_some() => {
@@ -764,28 +752,38 @@ impl HasPublicApiUrl for IcNodeSnapshot {
             }
             Ok(_) => {
                 warn!(
-                    self.env.logger(),
+                    self.test_env().logger(),
                     "Health status not set in status response!"
                 );
                 Ok(false)
             }
             Err(e) => {
-                warn!(self.env.logger(), "Could not fetch status response: {}", e);
+                warn!(
+                    self.test_env().logger(),
+                    "Could not fetch status response: {}", e
+                );
                 Err(e)
             }
         }
     }
 
+    /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.status_is_healthy()
-                .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
-        })
+        retry(
+            self.test_env().logger(),
+            RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                self.status_is_healthy()
+                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            },
+        )
     }
 
+    /// Waits until the is_healthy() returns an error
     fn await_status_is_unavailable(&self) -> Result<()> {
         retry(
-            self.env.logger(),
+            self.test_env().logger(),
             RETRY_TIMEOUT,
             RETRY_BACKOFF,
             || match self.status_is_healthy() {
@@ -795,19 +793,13 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         )
     }
 
-    fn with_default_agent<F, Fut, R>(&self, op: F) -> R
-    where
-        F: FnOnce(Agent) -> Fut + 'static,
-        Fut: Future<Output = R>,
-    {
-        let url = self.get_public_url().to_string();
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
-            let agent = create_agent(&url).await.expect("Could not create agent");
-            op(agent).await
-        })
-    }
-
+    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
+    /// install it on the target node.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the canister `name` could not be loaded, is not
+    /// a wasm module or the installation fails.
     fn create_and_install_canister_with_arg(&self, name: &str, arg: Option<Vec<u8>>) -> Principal {
         let canister_bytes = self.test_env().load_wasm(name);
 
@@ -836,9 +828,50 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let url = self.get_public_url().to_string();
         let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { create_agent(&url).await.expect("Could not create agent") })
+        rt.block_on(async move { self.build_default_agent_async().await })
+    }
+
+    fn with_default_agent<F, Fut, R>(&self, op: F) -> R
+    where
+        F: FnOnce(Agent) -> Fut + 'static,
+        Fut: Future<Output = R>,
+    {
+        let rt = Rt::new().expect("Could not create runtime");
+        rt.block_on(async move {
+            let agent = self.build_default_agent_async().await;
+            op(agent).await
+        })
+    }
+
+    async fn build_default_agent_async(&self) -> Agent {
+        self.try_build_default_agent_async()
+            .await
+            .expect("Could not create agent")
+    }
+
+    async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError>;
+}
+
+#[async_trait]
+impl HasPublicApiUrl for IcNodeSnapshot {
+    fn get_public_url(&self) -> Url {
+        let node_record = self.raw_node_record();
+        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+    }
+
+    fn get_public_addr(&self) -> SocketAddr {
+        let node_record = self.raw_node_record();
+        let connection_endpoint = node_record.http.expect("Node doesn't have URL");
+        SocketAddr::new(
+            IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
+            connection_endpoint.port as u16,
+        )
+    }
+
+    async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
+        let url = self.get_public_url().to_string();
+        create_agent(&url).await
     }
 }
 
@@ -1140,7 +1173,7 @@ pub fn install_nns_canisters(
     ic_prep_state_dir: &IcPrepStateDir,
     nns_test_neurons_present: bool,
 ) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."

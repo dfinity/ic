@@ -1,5 +1,19 @@
 /* tag::catalog[]
 Title:: Boundary nodes integration test
+
+Goal:: Test if the Boundary handles raw and non-raw traffic as expected.
+
+Runbook::
+. Setup:
+    . A running BN VM.
+    . A subnet with 1 HTTP canister and 1 non-HTTP canister, both counters.
+. Call into the non-HTTP canister, expecting the counter to increment.
+. Call into the HTTP canister, expecting the counter to increment.
+. Update the denylist to block the HTTP canister.
+. Call into the HTTP canister again, but expecting a 451.
+
+Success::
+. The calls succeed with the expected values.
 end::catalog[] */
 
 use crate::{
@@ -13,7 +27,7 @@ use crate::{
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
         },
     },
-    util::{assert_create_agent, create_agent_mapping, delay},
+    util::{assert_create_agent, delay},
 };
 use anyhow::bail;
 use ic_agent::{export::Principal, Agent};
@@ -106,20 +120,21 @@ pub fn test(env: TestEnv) {
 
     let logger = env.logger();
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-    let boundary_node_vm = deployed_boundary_node.get_vm().unwrap();
+    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     info!(
         &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv6: {:?}", boundary_node_vm.ipv6
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv6: {:?}",
+        boundary_node_vm.ipv6()
     );
 
-    let boundary_node_ipv4: Ipv4Addr = deployed_boundary_node.block_on_ipv4().unwrap();
+    let boundary_node_ipv4: Ipv4Addr = boundary_node_vm.block_on_ipv4().unwrap();
     info!(
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}", boundary_node_ipv4
     );
 
     // Example of SSH access to Boundary Nodes:
-    let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+    let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
     let mut uname = String::new();
@@ -135,10 +150,11 @@ pub fn test(env: TestEnv) {
     let panic_struct = {
         let logger = env.logger();
         let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+        let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
         PanicStruct(Some(move || {
             std::thread::sleep(Duration::from_secs(60));
 
-            let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+            let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
             let mut channel = sess.channel_session().unwrap();
             channel.exec("systemctl status journalbeat").unwrap();
             let mut journalbeat = String::new();
@@ -156,7 +172,8 @@ pub fn test(env: TestEnv) {
     let mut install_url = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
-            node.await_status_is_healthy().unwrap();
+            node.await_status_is_healthy()
+                .expect("Replica did not come up healthy.");
 
             // Example of SSH access to IC nodes:
             let sess = node.block_on_ssh_session(ADMIN).unwrap();
@@ -174,6 +191,9 @@ pub fn test(env: TestEnv) {
             channel.wait_close().unwrap();
         }
     }
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
@@ -197,12 +217,10 @@ pub fn test(env: TestEnv) {
 
         info!(&logger, "Creating BN agent...");
         let agent = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
-            match create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into()).await {
-                Ok(agent) => Ok(agent),
-                Err(e) => anyhow::bail!(e),
-            }
-        }).await
-        .expect("Failed to create agent for https://ic0.app/");
+            Ok(boundary_node_vm.try_build_default_agent_async().await?)
+        })
+        .await
+        .expect("Failed to create agent.");
 
         info!(&logger, "Calling read...");
         // We must retry the first request to a canister.
@@ -221,11 +239,11 @@ pub fn test(env: TestEnv) {
             .danger_accept_invalid_certs(true)
             .resolve(
                 "invalid-canister-id.raw.ic0.app",
-                SocketAddrV6::new(boundary_node_vm.ipv6, 443, 0, 0).into(),
+                SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
             )
             .resolve(
                 &host,
-                SocketAddrV6::new(boundary_node_vm.ipv6, 443, 0, 0).into(),
+                SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
             )
             .build()
             .unwrap();
@@ -272,7 +290,7 @@ pub fn test(env: TestEnv) {
 
         // Update the denylist and reload nginx
         let denylist_command = format!(r#"printf "ryjl3-tyaaa-aaaaa-aaaba-cai 1;\n{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, http_counter_canister_id);
-        let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+        let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
         let mut channel = sess.channel_session().unwrap();
         channel.exec(denylist_command.as_str()).unwrap();
         let mut output = String::new();
@@ -324,9 +342,10 @@ end::catalog[] */
 pub fn nginx_test(env: TestEnv) {
     let logger = env.logger();
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
 
     // SSH into Boundary Nodes:
-    let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+    let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("sudo nginx -t 2>&1").unwrap();
     let mut nginx_result = String::new();

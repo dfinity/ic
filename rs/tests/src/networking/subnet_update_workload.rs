@@ -30,10 +30,7 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
     SubnetSnapshot,
 };
-use crate::util::{
-    agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
-    create_agent_mapping,
-};
+use crate::util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on};
 use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
 use anyhow::bail;
 use ic_agent::{export::Principal, Agent};
@@ -392,21 +389,14 @@ fn create_agents_for_subnet(
 ) -> Vec<Agent> {
     if use_boundary_node {
         let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-        let boundary_node_vm = deployed_boundary_node.get_vm().unwrap();
+        let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
         info!(
             &env.logger(),
             "Agent for the boundary node with name={:?} will be used for the {:?} subnet workload.",
-            deployed_boundary_node.vm_name(),
+            boundary_node_vm.vm_name(),
             subnet.subnet_type()
         );
-        let agent = block_on(async {
-            create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into())
-                .await
-                .unwrap_or_else(|err| {
-                    panic!("Failed to create agent for https://ic0.app/: {:?}", err)
-                })
-        });
-        vec![agent]
+        vec![boundary_node_vm.build_default_agent()]
     } else {
         subnet
             .nodes()
@@ -417,7 +407,7 @@ fn create_agents_for_subnet(
                     node.node_id,
                     subnet.subnet_type()
                 );
-                node.with_default_agent(|agent| async move { agent })
+                node.build_default_agent()
             })
             .collect::<_>()
     }
