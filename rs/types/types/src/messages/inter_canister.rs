@@ -1,5 +1,9 @@
 use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
 use ic_error_types::{RejectCode, TryFromError, UserError};
+use ic_ic00_types::{
+    CanisterIdRecord, InstallCodeArgs, Method, Payload as _, ProvisionalTopUpCanisterArgs,
+    SetControllerArgs, UpdateSettingsArgs,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::v1 as pb_queues,
@@ -11,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -56,6 +61,55 @@ impl Request {
     pub fn payload_size_bytes(&self) -> NumBytes {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
+    }
+
+    /// Helper function to extract the effective canister id from the payload.
+    pub fn extract_effective_canister_id(&self) -> Option<CanisterId> {
+        match Method::from_str(&self.method_name) {
+            Ok(Method::ProvisionalCreateCanisterWithCycles) => None,
+            Ok(Method::StartCanister)
+            | Ok(Method::CanisterStatus)
+            | Ok(Method::DeleteCanister)
+            | Ok(Method::UninstallCode)
+            | Ok(Method::DepositCycles)
+            | Ok(Method::StopCanister) => match CanisterIdRecord::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::SetController) => match SetControllerArgs::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::InstallCode) => match InstallCodeArgs::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::ProvisionalTopUpCanister) => {
+                match ProvisionalTopUpCanisterArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::CreateCanister)
+            | Ok(Method::SetupInitialDKG)
+            | Ok(Method::HttpRequest)
+            | Ok(Method::RawRand)
+            | Ok(Method::ECDSAPublicKey)
+            | Ok(Method::SignWithECDSA)
+            | Ok(Method::ComputeInitialEcdsaDealings)
+            | Ok(Method::BitcoinGetBalance)
+            | Ok(Method::BitcoinGetUtxos)
+            | Ok(Method::BitcoinSendTransaction)
+            | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
+                // No effective canister id.
+                None
+            }
+            Err(_) => None,
+        }
     }
 }
 

@@ -14,8 +14,7 @@ use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method,
-    Method, Payload as _, SetControllerArgs, UpdateSettingsArgs,
+    CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
 };
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
@@ -1680,62 +1679,14 @@ fn observe_replicated_state_metrics(
         .set(canisters_not_in_routing_table);
 }
 
-fn extract_effective_canister_id(method_name: &str, payload: &[u8]) -> Option<CanisterId> {
-    match Method::from_str(method_name) {
-        Ok(Method::ProvisionalCreateCanisterWithCycles) | Ok(Method::ProvisionalTopUpCanister) => {
-            None
-        }
-        Ok(Method::StartCanister)
-        | Ok(Method::CanisterStatus)
-        | Ok(Method::DeleteCanister)
-        | Ok(Method::UninstallCode)
-        | Ok(Method::StopCanister) => match CanisterIdRecord::decode(payload) {
-            Ok(record) => Some(record.get_canister_id()),
-            Err(_) => None,
-        },
-        Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(payload) {
-            Ok(record) => Some(record.get_canister_id()),
-            Err(_) => None,
-        },
-        Ok(Method::SetController) => match SetControllerArgs::decode(payload) {
-            Ok(record) => Some(record.get_canister_id()),
-            Err(_) => None,
-        },
-        Ok(Method::InstallCode) => match InstallCodeArgs::decode(payload) {
-            Ok(record) => Some(record.get_canister_id()),
-            Err(_) => None,
-        },
-        Ok(Method::CreateCanister)
-        | Ok(Method::SetupInitialDKG)
-        | Ok(Method::DepositCycles)
-        | Ok(Method::HttpRequest)
-        | Ok(Method::RawRand)
-        | Ok(Method::ECDSAPublicKey)
-        | Ok(Method::SignWithECDSA)
-        | Ok(Method::ComputeInitialEcdsaDealings)
-        | Ok(Method::BitcoinGetBalance)
-        | Ok(Method::BitcoinGetUtxos)
-        | Ok(Method::BitcoinSendTransaction)
-        | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
-            // Subnet method not allowed for ingress.
-            None
-        }
-        Err(_) => None,
-    }
-}
-
 /// Verifies if a message is not blocked due to long-running execution.
 fn can_execute_msg(
     msg: &CanisterInputMessage,
     long_running_canister_ids: &BTreeSet<CanisterId>,
 ) -> bool {
     let effective_canister_id: Option<CanisterId> = match msg {
-        CanisterInputMessage::Ingress(ingress) => {
-            extract_effective_canister_id(&ingress.method_name, ingress.method_payload.as_slice())
-        }
-        CanisterInputMessage::Request(request) => {
-            extract_effective_canister_id(&request.method_name, request.method_payload.as_slice())
-        }
+        CanisterInputMessage::Ingress(ingress) => ingress.effective_canister_id,
+        CanisterInputMessage::Request(request) => request.extract_effective_canister_id(),
         CanisterInputMessage::Response(_) => None,
     };
 
