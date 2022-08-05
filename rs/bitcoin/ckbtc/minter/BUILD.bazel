@@ -17,7 +17,6 @@ filegroup(
 )
 
 DEPENDENCIES = [
-    "//rs/bitcoin/library",
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/rust_canisters/dfn_http_metrics",
