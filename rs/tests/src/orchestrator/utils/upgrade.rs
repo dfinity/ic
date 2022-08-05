@@ -119,30 +119,29 @@ pub(crate) fn assert_assigned_replica_version(
         Finished,
     }
     let mut state = State::Uninitialized;
-    let result =
-        retry_mut(
-            logger.clone(),
-            secs(600),
-            secs(10),
-            || match get_assigned_replica_version(node) {
-                Ok(ver) if ver == expected_version => {
-                    state = State::Finished;
-                    Ok(())
+    let result = retry(
+        logger.clone(),
+        secs(600),
+        secs(10),
+        || match get_assigned_replica_version(node) {
+            Ok(ver) if ver == expected_version => {
+                state = State::Finished;
+                Ok(())
+            }
+            Ok(ver) => {
+                if state == State::Uninitialized || state == State::OldVersion {
+                    state = State::OldVersion
+                } else {
+                    state = State::OldVersionAgain
                 }
-                Ok(ver) => {
-                    if state == State::Uninitialized || state == State::OldVersion {
-                        state = State::OldVersion
-                    } else {
-                        state = State::OldVersionAgain
-                    }
-                    bail!("Replica version: {:?}", ver)
-                }
-                Err(err) => {
-                    state = State::Reboot;
-                    bail!("Error reading replica version: {:?}", err)
-                }
-            },
-        );
+                bail!("Replica version: {:?}", ver)
+            }
+            Err(err) => {
+                state = State::Reboot;
+                bail!("Error reading replica version: {:?}", err)
+            }
+        },
+    );
     if let Err(error) = result {
         info!(logger, "Error: {}", error);
         match state {
