@@ -22,19 +22,31 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
 use ic_sns_init::SnsCanisterInitPayloads;
-use ic_sns_root::pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse};
+use ic_sns_root::{
+    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse},
+    CanisterIdRecord, CanisterStatusResultV2,
+};
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, RefreshSnsTokensRequest, SetOpenTimeWindowRequest, TimeWindow,
+    self as swap_pb, set_dapp_controllers_call_result, RefreshSnsTokensRequest,
+    SetDappControllersCallResult, SetDappControllersResponse, SetOpenTimeWindowRequest, TimeWindow,
 };
 use ic_sns_test_utils::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
+use lazy_static::lazy_static;
 use ledger_canister::{
     AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, Memo, TransferArgs,
     DEFAULT_TRANSFER_FEE,
 };
 
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+
+/// 10^8
+const E8: u64 = 1_0000_0000;
+
+lazy_static! {
+    static ref TEST_USER2_ORIGINAL_BALANCE_ICP: Tokens = Tokens::from_tokens(100).unwrap();
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SnsCanisterType {
@@ -110,6 +122,24 @@ fn set_controllers(
     state_machine
         .execute_ingress_as(sender, CanisterId::ic_00(), "update_settings", request)
         .unwrap();
+}
+
+fn canister_status(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    request: &CanisterIdRecord,
+) -> CanisterStatusResultV2 {
+    let request = Encode!(&request).unwrap();
+    let result = state_machine
+        .execute_ingress_as(sender, CanisterId::ic_00(), "canister_status", request)
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+        }
+    };
+    Decode!(&result, CanisterStatusResultV2).unwrap()
 }
 
 struct Scenario {
@@ -237,19 +267,24 @@ impl Scenario {
     }
 }
 
-/// 10^8
-const E8: u64 = 1_0000_0000;
-
-#[test]
-fn swap_lifecycle_happy() {
-    let mut state_machine = StateMachine::new();
-
+/// Serves as a fixture (factory) for the tests in this file. (The previous
+/// stuff is generic to any SNS test; whereas, this is specifc to swap.)
+///
+/// Configures, creates, and inits the following canisters:
+///   1. NNS
+///   2. SNS
+///   3. dapp
+///
+/// Begins a swap.
+///
+/// TEST_USER2 has 100 ICP that he can use to buy into the swap.
+fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
     // Give TEST_USER2 some ICP so that he can buy into the swap.
     let test_user2_principal_id: PrincipalId = *TEST_USER2_PRINCIPAL;
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_account(
             test_user2_principal_id.into(),
-            Tokens::from_tokens(100).unwrap(),
+            *TEST_USER2_ORIGINAL_BALANCE_ICP,
         )
         .with_test_neurons()
         .build();
@@ -265,33 +300,42 @@ fn swap_lifecycle_happy() {
         "{:#?}",
         neuron_id_to_principal_id
     );
-    setup_nns_canisters(&state_machine, nns_init_payloads);
+    setup_nns_canisters(state_machine, nns_init_payloads);
 
     // Create, configure, and init canisters.
-    let mut scenario = Scenario::new(&mut state_machine);
+    let mut scenario = Scenario::new(state_machine);
     // Fill in more swap parameters.
     {
         let swap = &mut scenario.configuration.swap;
+
+        // Succeed as soon as 10 ICP has been raised.
         swap.max_icp_e8s = 10 * E8;
+        // Still succeed if 2 ICP has been raised, but only after the open time
+        // window has passed.
+        swap.min_icp_e8s = 2 * E8;
+
+        // We need at least one participant, but they can contribute whatever
+        // amount they want (subject to max_icp_e8s for the whole swap).
         swap.min_participants = 1;
         swap.min_participant_icp_e8s = 1;
         swap.max_participant_icp_e8s = swap.max_icp_e8s;
-        swap.min_icp_e8s = 0;
+
+        // In case of failure, restore TEST_USER1 as the controller of the dapp.
         swap.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
 
         assert!(swap.is_valid(), "{:#?}", swap);
     }
-    scenario.init_all_canisters(&mut state_machine);
+    scenario.init_all_canisters(state_machine);
 
     // TEST_USER1 relinquishes control of the dapp to SNS root (and tells SNS root about it).
     set_controllers(
-        &mut state_machine,
+        state_machine,
         *TEST_USER1_PRINCIPAL,
         scenario.dapp_canister_id,
         vec![scenario.root_canister_id.into()],
     );
     sns_root_register_dapp_canister(
-        &mut state_machine,
+        state_machine,
         scenario.root_canister_id,
         &RegisterDappCanisterRequest {
             canister_id: Some(scenario.dapp_canister_id.into()),
@@ -307,18 +351,24 @@ fn swap_lifecycle_happy() {
         )
         .unwrap();
 
-    // Propose that a swap be scheduled.
+    // Propose that a swap be scheduled to start 3 days from now, and last for
+    // 10 days.
     let start_timestamp_seconds = state_machine
         .time()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs()
         + 3 * SECONDS_PER_DAY;
+    let end_timestamp_seconds = start_timestamp_seconds + 10 * SECONDS_PER_DAY;
+    let open_time_window = TimeWindow {
+        start_timestamp_seconds,
+        end_timestamp_seconds,
+    };
     let neuron_id = nns_common_pb::NeuronId {
         id: TEST_NEURON_1_ID,
     };
     let response = nns_governance_make_proposal(
-        &mut state_machine,
+        state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL, // sender
         neuron_id,
         &Proposal {
@@ -329,10 +379,7 @@ fn swap_lifecycle_happy() {
                 SetSnsTokenSwapOpenTimeWindow {
                     swap_canister_id: Some(scenario.swap_canister_id.into()),
                     request: Some(SetOpenTimeWindowRequest {
-                        open_time_window: Some(TimeWindow {
-                            start_timestamp_seconds,
-                            end_timestamp_seconds: start_timestamp_seconds + 10 * SECONDS_PER_DAY,
-                        }),
+                        open_time_window: Some(open_time_window),
                     }),
                 },
             )),
@@ -375,7 +422,7 @@ fn swap_lifecycle_happy() {
     // Make sure that the swap is now open.
     {
         let result = swap_get_state(
-            &mut state_machine,
+            state_machine,
             scenario.swap_canister_id,
             &swap_pb::GetStateRequest {},
         )
@@ -392,40 +439,26 @@ fn swap_lifecycle_happy() {
         );
     }
 
+    (scenario, open_time_window)
+}
+
+#[test]
+fn swap_lifecycle_happy() {
+    // Step 1: Prepare the world.
+    let mut state_machine = StateMachine::new();
+    let (scenario, _open_time_window) = begin_swap(&mut state_machine);
+
+    // Step 2: Run code under test.
+
     // Make the swap an immediate success by having TEST_USER2 participate.
     // First, they must transfer funds to the swap canister under the
     // appropriate subaccount...
-    let subaccount = ledger_canister::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
-        &*TEST_USER2_PRINCIPAL,
-    ));
-    state_machine
-        .execute_ingress_as(
-            *TEST_USER2_PRINCIPAL,
-            ICP_LEDGER_CANISTER_ID,
-            "transfer",
-            Encode!(&TransferArgs {
-                memo: Memo(0),
-                amount: Tokens::from_tokens(10).unwrap(),
-                fee: DEFAULT_TRANSFER_FEE,
-                from_subaccount: None,
-                to: AccountIdentifier::new(scenario.swap_canister_id.into(), Some(subaccount))
-                    .to_address(),
-                created_at_time: None,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-    // ... then, swap must be notified about that transfer.
-    state_machine
-        .execute_ingress(
-            scenario.swap_canister_id,
-            "refresh_buyer_tokens",
-            Encode!(&swap_pb::RefreshBuyerTokensRequest {
-                buyer: (*TEST_USER2_PRINCIPAL).to_string(),
-            })
-            .unwrap(),
-        )
-        .unwrap();
+    participate_in_swap(
+        &mut state_machine,
+        scenario.swap_canister_id,
+        *TEST_USER2_PRINCIPAL,
+        Tokens::from_tokens(10).unwrap(),
+    );
 
     // Make sure the swap reached the Committed state.
     {
@@ -465,6 +498,8 @@ fn swap_lifecycle_happy() {
         };
         Decode!(&result, swap_pb::FinalizeSwapResponse).unwrap()
     };
+
+    // Step 3: Inspect results.
 
     assert_eq!(
         finalize_swap_response,
@@ -539,6 +574,192 @@ fn swap_lifecycle_happy() {
         );
         assert_eq!(observed_neuron.neuron_fees_e8s, 0, "{:#?}", observed_neuron);
     }
+}
+
+#[test]
+fn swap_lifecycle_sad() {
+    // Step 1: Prepare the world.
+    let mut state_machine = StateMachine::new();
+    let (scenario, open_time_window) = begin_swap(&mut state_machine);
+
+    // Step 2: Run code under test.
+
+    // TEST_USER2 participates, but not enough for the swap to succeed, even
+    // after the open time window has passed.  First, they must transfer funds
+    // to the swap canister under the appropriate subaccount...
+    participate_in_swap(
+        &mut state_machine,
+        scenario.swap_canister_id,
+        *TEST_USER2_PRINCIPAL,
+        Tokens::from_tokens(1).unwrap(),
+    );
+
+    // Make sure the swap is still in the Open state.
+    {
+        let result = swap_get_state(
+            &mut state_machine,
+            scenario.swap_canister_id,
+            &swap_pb::GetStateRequest {},
+        )
+        .swap
+        .unwrap()
+        .state
+        .unwrap();
+
+        assert_eq!(
+            result.lifecycle(),
+            swap_pb::Lifecycle::Open,
+            "{:#?}",
+            result
+        );
+    }
+
+    // Advance time well into the future so that the swap fails due to no participants.
+    state_machine.set_time(
+        std::time::UNIX_EPOCH
+            + std::time::Duration::from_secs(open_time_window.end_timestamp_seconds + 1),
+    );
+
+    // Make sure the swap reached the Aborted state.
+    {
+        let result = swap_get_state(
+            &mut state_machine,
+            scenario.swap_canister_id,
+            &swap_pb::GetStateRequest {},
+        )
+        .swap
+        .unwrap()
+        .state
+        .unwrap();
+
+        assert_eq!(
+            result.lifecycle(),
+            swap_pb::Lifecycle::Aborted,
+            "{:#?}",
+            result
+        );
+    }
+
+    // Execute the swap.
+    let finalize_swap_response = {
+        let result = state_machine
+            .execute_ingress(
+                scenario.swap_canister_id,
+                "finalize_swap",
+                Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap(),
+            )
+            .unwrap();
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(reply) => reply,
+            WasmResult::Reject(reject) => panic!(
+                "finalize_swap call was rejected by swap canister: {:#?}",
+                reject
+            ),
+        };
+        Decode!(&result, swap_pb::FinalizeSwapResponse).unwrap()
+    };
+
+    // Step 3: Inspect results.
+
+    assert_eq!(
+        finalize_swap_response,
+        swap_pb::FinalizeSwapResponse {
+            sweep_icp: Some(swap_pb::SweepResult {
+                success: 1,
+                failure: 0,
+                skipped: 0,
+            }),
+            sweep_sns: None,
+            create_neuron: None,
+            sns_governance_normal_mode_enabled: None,
+            set_dapp_controllers_result: Some(SetDappControllersCallResult {
+                possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                    SetDappControllersResponse {
+                        failed_updates: vec![],
+                    }
+                )),
+            }),
+        }
+    );
+
+    // TEST_USER2 (the participant) should get their ICP back (less two transfer fees).
+    {
+        let observed_balance = ledger_account_balance(
+            &mut state_machine,
+            ICP_LEDGER_CANISTER_ID,
+            &AccountBalanceArgs {
+                account: AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None).to_address(),
+            },
+        );
+        let expected_balance = ((*TEST_USER2_ORIGINAL_BALANCE_ICP - DEFAULT_TRANSFER_FEE).unwrap()
+            - DEFAULT_TRANSFER_FEE)
+            .unwrap();
+        assert_eq!(observed_balance, expected_balance);
+    }
+
+    // There should be no SNS neurons.
+    {
+        let observed_neurons = sns_governance_list_neurons(
+            &mut state_machine,
+            scenario.governance_canister_id,
+            &ListNeurons::default(),
+        )
+        .neurons;
+        assert_eq!(observed_neurons, vec![]);
+    }
+
+    // Finally, dapp should once again return to the (exclusive) control of TEST_USER1.
+    {
+        let dapp_canister_status = canister_status(
+            &mut state_machine,
+            *TEST_USER1_PRINCIPAL,
+            &scenario.dapp_canister_id.into(),
+        );
+        assert_eq!(
+            dapp_canister_status.controllers(),
+            vec![*TEST_USER1_PRINCIPAL],
+        );
+    }
+}
+
+fn participate_in_swap(
+    state_machine: &mut StateMachine,
+    swap_canister_id: CanisterId,
+    participant_principal_id: PrincipalId,
+    amount: Tokens,
+) {
+    // First, transfer ICP to swap. Needs to go into a special subaccount...
+    let subaccount = ledger_canister::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
+        &participant_principal_id,
+    ));
+    let request = Encode!(&TransferArgs {
+        memo: Memo(0),
+        amount,
+        fee: DEFAULT_TRANSFER_FEE,
+        from_subaccount: None,
+        to: AccountIdentifier::new(swap_canister_id.into(), Some(subaccount)).to_address(),
+        created_at_time: None,
+    })
+    .unwrap();
+    state_machine
+        .execute_ingress_as(
+            participant_principal_id,
+            ICP_LEDGER_CANISTER_ID,
+            "transfer",
+            request,
+        )
+        .unwrap();
+    // ... then, swap must be notified about that transfer.
+    state_machine
+        .execute_ingress(
+            swap_canister_id,
+            "refresh_buyer_tokens",
+            Encode!(&swap_pb::RefreshBuyerTokensRequest {
+                buyer: participant_principal_id.to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
 }
 
 fn nns_governance_make_proposal(
