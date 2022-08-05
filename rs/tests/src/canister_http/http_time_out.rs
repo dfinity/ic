@@ -36,7 +36,7 @@ pub fn test(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
-        let url_to_succeed = format!("https://[{webserver_ipv6}]:443");
+        let url_to_succeed = format!("https://[{webserver_ipv6}]:20443");
         let mut request = RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: url_to_succeed.clone(),
