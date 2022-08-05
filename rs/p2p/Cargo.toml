@@ -9,7 +9,6 @@ bincode = "1.2.1"
 futures = "0.3.10"
 rand = "0.8"
 ic-artifact-manager = { path = "../artifact_manager" }
-ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-config = { path = "../config" }
 ic-crypto-hash = { path = "../crypto/hash" }
 ic-interfaces = { path = "../interfaces" }
@@ -35,6 +34,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 tower = "0.4.12"
 
 [dev-dependencies]
+ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-consensus-message = { path = "../consensus/message" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
