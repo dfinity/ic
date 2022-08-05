@@ -72,8 +72,9 @@ pub fn snp_kernel_test(env: TestEnv) {
     let deployed_boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_SNP_NAME)
         .unwrap();
+    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     // SSH into Boundary Nodes and execute "uname -a"
-    let result = deployed_boundary_node
+    let result = boundary_node_vm
         .block_on_bash_script(ADMIN, KERNEL_TEST_BASH)
         .unwrap();
     info!(logger, "kernel test result = '{}'", result.trim(),);

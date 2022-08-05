@@ -2,12 +2,18 @@ use std::{
     env,
     fs::File,
     io::{self, Write},
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::PathBuf,
     process::Command,
 };
 
-use crate::driver::driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use crate::{
+    driver::{
+        driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR},
+        test_setup::PotSetup,
+    },
+    util::create_agent_mapping,
+};
 
 use super::{
     farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse},
@@ -15,13 +21,14 @@ use super::{
     resource::{DiskImage, ImageType},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
-        get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
-        ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
+        get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasVmName, RetrieveIpv4Addr,
+        SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
     },
 };
-use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
+use async_trait::async_trait;
 use flate2::{write::GzEncoder, Compression};
+use ic_agent::{Agent, AgentError};
 use reqwest::Url;
 use slog::info;
 use ssh2::Session;
@@ -300,23 +307,74 @@ impl HasVmName for DeployedBoundaryNode {
 }
 
 impl DeployedBoundaryNode {
-    pub fn get_vm(&self) -> Result<VMCreateResponse> {
+    fn get_vm(&self) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
         self.env
             .read_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
     }
+    pub fn get_snapshot(self) -> Result<BoundaryNodeSnapshot> {
+        Ok(BoundaryNodeSnapshot {
+            vm: self.get_vm()?,
+            env: self.env,
+            name: self.name,
+        })
+    }
 }
 
-impl SshSession for DeployedBoundaryNode {
+pub struct BoundaryNodeSnapshot {
+    env: TestEnv,
+    name: String,
+    vm: VMCreateResponse,
+}
+
+impl BoundaryNodeSnapshot {
+    const URL: &'static str = "https://ic0.app";
+
+    pub fn ipv6(&self) -> Ipv6Addr {
+        self.vm.ipv6
+    }
+}
+
+impl HasTestEnv for BoundaryNodeSnapshot {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl HasVmName for BoundaryNodeSnapshot {
+    fn vm_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl SshSession for BoundaryNodeSnapshot {
     fn get_ssh_session(&self, user: &str) -> Result<Session> {
-        let vm = self.get_vm()?;
-        get_ssh_session_from_env(&self.env, user, IpAddr::V6(vm.ipv6))
+        get_ssh_session_from_env(&self.env, user, IpAddr::V6(self.vm.ipv6))
     }
 
     fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
         retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session(user)
         })
+    }
+}
+
+#[async_trait]
+impl HasPublicApiUrl for BoundaryNodeSnapshot {
+    fn get_public_url(&self) -> Url {
+        Url::parse(Self::URL).expect("failed to parse url")
+    }
+
+    fn get_public_addr(&self) -> SocketAddr {
+        SocketAddr::new(self.ipv6().into(), 443)
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        true
+    }
+
+    async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
+        create_agent_mapping(Self::URL, self.ipv6().into()).await
     }
 }
 
@@ -337,7 +395,7 @@ done
 echo "$ipv4"
 "#;
 
-impl RetrieveIpv4Addr for DeployedBoundaryNode {
+impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
         let ipv4_string = self.block_on_bash_script(ADMIN, IPV4_RETRIEVE_SH_SCRIPT)?;
