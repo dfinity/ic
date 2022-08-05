@@ -28,7 +28,6 @@ use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
     FlowTag, TransportEvent, TransportEventHandler, TransportMessage, TransportPayload,
-    TransportStateChange,
 };
 use ic_logger::warn;
 use std::convert::TryInto;
@@ -70,68 +69,65 @@ enum ReadError {
     SocketReadTimeOut,
 }
 
-/// Implementation for the transport data plane
-impl TransportImpl {
-    /// Create header bytes to send with payload.
-    fn pack_header(payload: Option<&TransportPayload>, heartbeat: bool) -> Vec<u8> {
-        let mut result = Vec::<u8>::new();
-        let mut header = TransportHeader {
-            version: 0,
-            flags: 0,
-            reserved: 0,
-            payload_length: match payload {
-                Some(data) => data.0.len() as u32,
-                None => 0,
-            },
-        };
-        if heartbeat {
-            header.flags |= TRANSPORT_FLAGS_IS_HEARTBEAT;
-        }
-        result.append(&mut header.version.to_le_bytes().to_vec());
-        result.append(&mut header.flags.to_le_bytes().to_vec());
-        result.append(&mut header.reserved.to_le_bytes().to_vec());
-        result.append(&mut header.payload_length.to_le_bytes().to_vec());
-
-        assert_eq!(result.len(), TRANSPORT_HEADER_SIZE);
-
-        result
+/// Create header bytes to send with payload.
+fn pack_header(payload: Option<&TransportPayload>, heartbeat: bool) -> Vec<u8> {
+    let mut result = Vec::<u8>::new();
+    let mut header = TransportHeader {
+        version: 0,
+        flags: 0,
+        reserved: 0,
+        payload_length: match payload {
+            Some(data) => data.0.len() as u32,
+            None => 0,
+        },
+    };
+    if heartbeat {
+        header.flags |= TRANSPORT_FLAGS_IS_HEARTBEAT;
     }
+    result.append(&mut header.version.to_le_bytes().to_vec());
+    result.append(&mut header.flags.to_le_bytes().to_vec());
+    result.append(&mut header.reserved.to_le_bytes().to_vec());
+    result.append(&mut header.payload_length.to_le_bytes().to_vec());
 
-    /// Read header bytes received in payload.
-    fn unpack_header(data: Vec<u8>) -> TransportHeader {
-        let mut header = TransportHeader {
-            version: 0,
-            flags: 0,
-            reserved: 0,
-            payload_length: 0,
-        };
-        let (version_byte, rest) = data.split_at(std::mem::size_of::<u8>());
-        header.version = u8::from_le_bytes(version_byte.try_into().unwrap());
-        let (flags_byte, rest) = rest.split_at(std::mem::size_of::<u8>());
-        header.flags = u8::from_le_bytes(flags_byte.try_into().unwrap());
-        let (reserved_bytes, rest) = rest.split_at(std::mem::size_of::<u16>());
-        header.reserved = u16::from_le_bytes(reserved_bytes.try_into().unwrap());
-        let (payload_length_bytes, _rest) = rest.split_at(std::mem::size_of::<u32>());
-        header.payload_length = u32::from_le_bytes(payload_length_bytes.try_into().unwrap());
+    assert_eq!(result.len(), TRANSPORT_HEADER_SIZE);
 
-        header
-    }
+    result
+}
 
-    /// Per-flow send task. Reads the requests from the send queue and writes to
-    /// the socket.
-    fn spawn_write_task(
-        peer_id: NodeId,
-        flow_tag: FlowTag,
-        flow_label: String,
-        mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-        mut writer: Box<TlsWriteHalf>,
-        event_handler: TransportEventHandler,
-        data_plane_metrics: DataPlaneMetrics,
-        weak_self: Weak<TransportImpl>,
-        rt_handle: tokio::runtime::Handle,
-    ) -> JoinHandle<()> {
-        let flow_tag_str = flow_tag.to_string();
-        rt_handle.spawn(async move  {
+/// Read header bytes received in payload.
+fn unpack_header(data: Vec<u8>) -> TransportHeader {
+    let mut header = TransportHeader {
+        version: 0,
+        flags: 0,
+        reserved: 0,
+        payload_length: 0,
+    };
+    let (version_byte, rest) = data.split_at(std::mem::size_of::<u8>());
+    header.version = u8::from_le_bytes(version_byte.try_into().unwrap());
+    let (flags_byte, rest) = rest.split_at(std::mem::size_of::<u8>());
+    header.flags = u8::from_le_bytes(flags_byte.try_into().unwrap());
+    let (reserved_bytes, rest) = rest.split_at(std::mem::size_of::<u16>());
+    header.reserved = u16::from_le_bytes(reserved_bytes.try_into().unwrap());
+    let (payload_length_bytes, _rest) = rest.split_at(std::mem::size_of::<u32>());
+    header.payload_length = u32::from_le_bytes(payload_length_bytes.try_into().unwrap());
+
+    header
+}
+
+/// Per-flow send task. Reads the requests from the send queue and writes to
+/// the socket.
+fn spawn_write_task(
+    peer_id: NodeId,
+    flow_tag: FlowTag,
+    flow_label: String,
+    mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
+    mut writer: Box<TlsWriteHalf>,
+    data_plane_metrics: DataPlaneMetrics,
+    weak_self: Weak<TransportImpl>,
+    rt_handle: tokio::runtime::Handle,
+) -> JoinHandle<()> {
+    let flow_tag_str = flow_tag.to_string();
+    rt_handle.spawn(async move  {
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
             loop {
                 let loop_start_time = Instant::now();
@@ -151,7 +147,7 @@ impl TransportImpl {
                 let mut to_send = Vec::<u8>::new();
                 if dequeued.is_empty() {
                     // There is nothing to send, so issue a heartbeat message
-                    to_send.append(&mut Self::pack_header(None, true));
+                    to_send.append(&mut pack_header(None, true));
                     arc_self
                         .data_plane_metrics
                         .heart_beats_sent
@@ -159,7 +155,7 @@ impl TransportImpl {
                         .inc();
                 } else {
                     for mut payload in dequeued {
-                        to_send.append(&mut Self::pack_header(
+                        to_send.append(&mut pack_header(
                             Some(&payload),
                             false,
                         ));
@@ -182,7 +178,7 @@ impl TransportImpl {
                         flow_tag,
                         e,
                     );
-                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    arc_self.on_disconnect(peer_id, flow_tag).await;
                     return;
                 }
                 // Flush the write
@@ -191,7 +187,7 @@ impl TransportImpl {
                         arc_self.log,
                         "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, flow_tag: {:?}, {:?}", peer_id, flow_tag, e,
                     );
-                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    arc_self.on_disconnect(peer_id, flow_tag).await;
                     return;
                 }
 
@@ -212,23 +208,23 @@ impl TransportImpl {
                     .observe(to_send.len() as f64);
             }
         })
-    }
+}
 
-    /// Per-flow receive task. Reads the messages from the socket and passes to
-    /// the client.
-    fn spawn_read_task(
-        peer_id: NodeId,
-        flow_tag: FlowTag,
-        flow_label: String,
-        mut event_handler: TransportEventHandler,
-        mut reader: Box<TlsReadHalf>,
-        data_plane_metrics: DataPlaneMetrics,
-        weak_self: Weak<TransportImpl>,
-        rt_handle: tokio::runtime::Handle,
-    ) -> JoinHandle<()> {
-        let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
-        let flow_tag_str = flow_tag.to_string();
-        rt_handle.spawn(async move {
+/// Per-flow receive task. Reads the messages from the socket and passes to
+/// the client.
+fn spawn_read_task(
+    peer_id: NodeId,
+    flow_tag: FlowTag,
+    flow_label: String,
+    mut event_handler: TransportEventHandler,
+    mut reader: Box<TlsReadHalf>,
+    data_plane_metrics: DataPlaneMetrics,
+    weak_self: Weak<TransportImpl>,
+    rt_handle: tokio::runtime::Handle,
+) -> JoinHandle<()> {
+    let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
+    let flow_tag_str = flow_tag.to_string();
+    rt_handle.spawn(async move {
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
             loop {
                 // If the TransportImpl has been deleted, abort.
@@ -238,7 +234,7 @@ impl TransportImpl {
                 };
 
                 // Read the next message from the socket
-                let ret = Self::read_one_message(&mut reader, heartbeat_timeout).await;
+                let ret = read_one_message(&mut reader, heartbeat_timeout).await;
                 if ret.is_err() {
                     warn!(
                         arc_self.log,
@@ -254,7 +250,7 @@ impl TransportImpl {
                             .with_label_values(&[&flow_label, &flow_tag_str])
                             .inc();
                     }
-                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    arc_self.on_disconnect(peer_id, flow_tag).await;
                     return;
                 }
 
@@ -290,137 +286,102 @@ impl TransportImpl {
                     .observe(start_time.elapsed().as_millis() as f64);
             }
         })
+}
+
+/// Reads and returns the next <message hdr, message payload> from the
+/// socket. The timeout is for each socket read (header, payload chunks)
+/// and not the full message.
+async fn read_one_message(
+    reader: &mut Box<TlsReadHalf>,
+    timeout: Duration,
+) -> Result<(TransportHeader, Option<TransportPayload>), ReadError> {
+    // Read the hdr
+    let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
+    read_from_socket(reader, &mut header_buffer, timeout).await?;
+
+    let header = unpack_header(header_buffer);
+    if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
+        return Ok((header, None));
     }
 
-    /// Reads and returns the next <message hdr, message payload> from the
-    /// socket. The timeout is for each socket read (header, payload chunks)
-    /// and not the full message.
-    async fn read_one_message(
-        reader: &mut Box<TlsReadHalf>,
-        timeout: Duration,
-    ) -> Result<(TransportHeader, Option<TransportPayload>), ReadError> {
-        // Read the hdr
-        let mut header_buffer = vec![0u8; TRANSPORT_HEADER_SIZE];
-        Self::read_from_socket(reader, &mut header_buffer, timeout).await?;
+    // Read the payload in chunks
+    let mut payload_buffer = vec![0u8; header.payload_length as usize];
+    let mut remaining = header.payload_length as usize;
+    let mut cur_offset = 0;
+    while remaining > 0 {
+        let cur_chunk_size = std::cmp::min(remaining, SOCKET_READ_CHUNK_SIZE);
+        assert!(cur_chunk_size <= remaining);
+        read_from_socket(
+            reader,
+            &mut payload_buffer[cur_offset..(cur_offset + cur_chunk_size)],
+            timeout,
+        )
+        .await?;
 
-        let header = Self::unpack_header(header_buffer);
-        if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-            return Ok((header, None));
-        }
-
-        // Read the payload in chunks
-        let mut payload_buffer = vec![0u8; header.payload_length as usize];
-        let mut remaining = header.payload_length as usize;
-        let mut cur_offset = 0;
-        while remaining > 0 {
-            let cur_chunk_size = std::cmp::min(remaining, SOCKET_READ_CHUNK_SIZE);
-            assert!(cur_chunk_size <= remaining);
-            Self::read_from_socket(
-                reader,
-                &mut payload_buffer[cur_offset..(cur_offset + cur_chunk_size)],
-                timeout,
-            )
-            .await?;
-
-            remaining -= cur_chunk_size;
-            cur_offset += cur_chunk_size;
-        }
-
-        let payload = TransportPayload(payload_buffer);
-        Ok((header, Some(payload)))
+        remaining -= cur_chunk_size;
+        cur_offset += cur_chunk_size;
     }
 
-    /// Reads the requested bytes from the socket with a timeout
-    async fn read_from_socket(
-        reader: &mut Box<TlsReadHalf>,
-        buf: &mut [u8],
-        timeout: Duration,
-    ) -> Result<(), ReadError> {
-        let read_future = reader.read_exact(buf);
-        match tokio::time::timeout(timeout, read_future).await {
-            Err(_) => Err(ReadError::SocketReadTimeOut),
-            Ok(Ok(_)) => Ok(()),
-            Ok(Err(e)) => Err(ReadError::SocketReadFailed(e)),
-        }
+    let payload = TransportPayload(payload_buffer);
+    Ok((header, Some(payload)))
+}
+
+/// Reads the requested bytes from the socket with a timeout
+async fn read_from_socket(
+    reader: &mut Box<TlsReadHalf>,
+    buf: &mut [u8],
+    timeout: Duration,
+) -> Result<(), ReadError> {
+    let read_future = reader.read_exact(buf);
+    match tokio::time::timeout(timeout, read_future).await {
+        Err(_) => Err(ReadError::SocketReadTimeOut),
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(ReadError::SocketReadFailed(e)),
     }
+}
 
-    /// Handle peer disconnect.
-    async fn on_disconnect(
-        &self,
-        peer_id: NodeId,
-        flow_tag: FlowTag,
-        mut event_handler: TransportEventHandler,
-    ) {
-        let peer_map = self.peer_map.read().await;
-        let peer_state = match peer_map.get(&peer_id) {
-            Some(peer_state) => peer_state,
-            None => return,
-        };
-        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-            Some(flow_state) => flow_state,
-            None => return,
-        };
-        let mut flow_state = flow_state_mu.write().await;
-        let connected = match flow_state.get_connected() {
-            Some(connected) => connected,
-            // Flow is already disconnected/reconnecting, skip reconnect processing
-            None => return,
-        };
+/// Handle connection setup. Starts flow read and write tasks.
+pub(crate) fn create_connected_state(
+    peer_id: NodeId,
+    flow_tag: FlowTag,
+    flow_label: String,
+    send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
+    role: ConnectionRole,
+    peer_addr: SocketAddr,
+    tls_stream: TlsStream,
+    event_handler: TransportEventHandler,
+    data_plane_metrics: DataPlaneMetrics,
+    weak_self: Weak<TransportImpl>,
+    rt_handle: tokio::runtime::Handle,
+) -> Connected {
+    let (tls_reader, tls_writer) = tls_stream.split();
+    // Spawn write task
+    let write_task = spawn_write_task(
+        peer_id,
+        flow_tag,
+        flow_label.clone(),
+        send_queue_reader,
+        Box::new(tls_writer),
+        data_plane_metrics.clone(),
+        weak_self.clone(),
+        rt_handle.clone(),
+    );
 
-        let connection_state = self
-            .retry_connection(peer_id, flow_tag, connected.peer_addr)
-            .await;
-        let _ = event_handler
-            .call(TransportEvent::StateChange(
-                TransportStateChange::PeerFlowDown(peer_id),
-            ))
-            .await;
-        flow_state.update(connection_state);
-    }
+    let read_task = spawn_read_task(
+        peer_id,
+        flow_tag,
+        flow_label,
+        event_handler,
+        Box::new(tls_reader),
+        data_plane_metrics,
+        weak_self,
+        rt_handle,
+    );
 
-    /// Handle connection setup. Starts flow read and write tasks.
-    pub(crate) fn create_connected_state(
-        &self,
-        peer_id: NodeId,
-        flow_tag: FlowTag,
-        flow_label: String,
-        send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-        role: ConnectionRole,
-        peer_addr: SocketAddr,
-        tls_stream: TlsStream,
-        event_handler: TransportEventHandler,
-    ) -> Connected {
-        let (tls_reader, tls_writer) = tls_stream.split();
-        // Spawn write task
-        let event_handler_cl = event_handler.clone();
-        let write_task = Self::spawn_write_task(
-            peer_id,
-            flow_tag,
-            flow_label.clone(),
-            send_queue_reader,
-            Box::new(tls_writer),
-            event_handler_cl,
-            self.data_plane_metrics.clone(),
-            self.weak_self.read().unwrap().clone(),
-            self.rt_handle.clone(),
-        );
-
-        let read_task = Self::spawn_read_task(
-            peer_id,
-            flow_tag,
-            flow_label,
-            event_handler,
-            Box::new(tls_reader),
-            self.data_plane_metrics.clone(),
-            self.weak_self.read().unwrap().clone(),
-            self.rt_handle.clone(),
-        );
-
-        Connected {
-            peer_addr,
-            read_task,
-            write_task,
-            role,
-        }
+    Connected {
+        peer_addr,
+        read_task,
+        write_task,
+        role,
     }
 }
