@@ -353,8 +353,10 @@ fn ingress_induction_cost_valid_subnet_message() {
             ),
             IngressInductionCost::Fee {
                 payer: canister_test_id(0),
-                cost: cycles_account_manager.ingress_message_received_fee()
-                    + cycles_account_manager.ingress_byte_received_fee() * num_bytes
+                cost: cycles_account_manager
+                    .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE)
+                    + cycles_account_manager.ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE)
+                        * num_bytes
             }
         );
     }

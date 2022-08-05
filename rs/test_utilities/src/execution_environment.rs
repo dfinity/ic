@@ -229,23 +229,25 @@ impl ExecutionTest {
     }
 
     pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
-        self.cycles_account_manager.xnet_call_performed_fee()
-            + self
-                .cycles_account_manager
-                .xnet_call_bytes_transmitted_fee(NumBytes::from(
-                    (payload.len() + method_name.to_string().len()) as u64,
-                ))
+        self.cycles_account_manager
+            .xnet_call_performed_fee(self.subnet_size())
+            + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+                NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
+                self.subnet_size(),
+            )
     }
 
     pub fn reply_fee(&self, payload: &[u8]) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(NumBytes::from(payload.len() as u64))
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(payload.len() as u64),
+            self.subnet_size(),
+        )
     }
 
     pub fn reject_fee<S: ToString>(&self, reject_message: S) -> Cycles {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
         self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(NumBytes::from(bytes as u64))
+            .xnet_call_bytes_transmitted_fee(NumBytes::from(bytes as u64), self.subnet_size())
     }
 
     pub fn canister_creation_fee(&self) -> Cycles {
@@ -258,8 +260,11 @@ impl ExecutionTest {
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
     ) -> Cycles {
-        self.cycles_account_manager
-            .http_request_fee(request_size, response_size_limit)
+        self.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+        )
     }
 
     pub fn subnet_available_memory(&self) -> AvailableMemory {
@@ -947,8 +952,9 @@ impl ExecutionTest {
             .or_insert(NumInstructions::new(0)) += limit - left;
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(NumInstructions::from(0));
-        let instruction_cost = mgr.execution_cost(limit) - mgr.execution_cost(left);
+        let fixed_cost = mgr.execution_cost(NumInstructions::from(0), self.subnet_size());
+        let instruction_cost = mgr.execution_cost(limit, self.subnet_size())
+            - mgr.execution_cost(left, self.subnet_size());
         *self
             .execution_cost
             .entry(canister_id)

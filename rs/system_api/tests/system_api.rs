@@ -1,4 +1,5 @@
 use ic_base_types::NumSeconds;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     AvailableMemory, CanisterOutOfCyclesError, HypervisorError, HypervisorResult,
@@ -1442,7 +1443,8 @@ fn call_perform_not_enough_cycles_resets_state() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee() - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();

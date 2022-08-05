@@ -706,7 +706,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee()
+                .gib_storage_per_second_fee(test.subnet_size())
                 .get()
             + one_gib
             - 1)
@@ -1871,9 +1871,9 @@ fn execute_response_refunds_cycles() {
     // the execution cost refund and the refunded transmission fee.
     // Compute the response transmission refund.
     let mgr = test.cycles_account_manager();
-    let response_transmission_refund =
-        mgr.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
-    mgr.xnet_call_bytes_transmitted_fee(response_payload_size);
+    let response_transmission_refund = mgr
+        .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
+    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
     let execution_refund = mgr.convert_instructions_to_cycles(instructions_left);
     assert_eq!(
