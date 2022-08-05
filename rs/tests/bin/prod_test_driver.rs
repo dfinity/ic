@@ -682,24 +682,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     canister_http::http_basic_remote::test,
                 )]),
             ),
-            pot_with_setup(
-                "default_subnet_workload_pot",
-                networking::subnet_update_workload::default_config,
-                par(vec![
-                    sys_t(
-                        "default_subnet_query_workload_long_duration_test",
-                        networking::subnet_query_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_long_duration_test",
-                        networking::subnet_update_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_large_payload",
-                        networking::subnet_update_workload::large_payload_test,
-                    ),
-                ]),
-            ),
             pot(
                 "two_third_latency_pot",
                 workload_counter_canister_test::two_third_latency_config(),
