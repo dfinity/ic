@@ -100,6 +100,7 @@ pub fn execute_call(
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     let is_query_call = canister.exports_query_method(req.method_name().to_string());
     if is_query_call {
@@ -120,6 +121,7 @@ pub fn execute_call(
         memory_usage,
         compute_allocation,
         execution_parameters.instruction_limits.message(),
+        subnet_size,
     ) {
         let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
         return early_error_to_result(user_error, canister, req, time);

@@ -224,6 +224,7 @@ impl ExecutionTest {
             memory_allocation,
             memory_usage,
             compute_allocation,
+            self.subnet_size(),
         )
     }
 
@@ -594,6 +595,7 @@ impl ExecutionTest {
             network_topology,
             self.time,
             &mut round_limits,
+            self.subnet_size(),
         );
         let instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
@@ -814,6 +816,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.subnet_size(),
                 );
                 let instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
@@ -873,6 +876,7 @@ impl ExecutionTest {
                     &canister_id,
                     self.install_code_instruction_limits.clone(),
                     &mut round_limits,
+                    self.subnet_size(),
                 );
                 let instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);
@@ -897,6 +901,7 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
+                    self.subnet_size(),
                 );
                 let instructions_executed =
                     as_num_instructions(instructions_before - round_limits.instructions);

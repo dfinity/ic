@@ -46,6 +46,7 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
@@ -174,11 +175,16 @@ impl<'a> QueryContext<'a> {
         debug!(self.log, "Executing query for {}", canister_id);
         let old_canister = self.state.get_active_canister(&canister_id)?;
 
+        let subnet_size = self
+            .network_topology
+            .get_subnet_size(&cycles_account_manager.get_subnet_id())
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         if cycles_account_manager.freeze_threshold_cycles(
             old_canister.system_state.freeze_threshold,
             old_canister.system_state.memory_allocation,
             old_canister.memory_usage(self.own_subnet_type),
             old_canister.scheduler_state.compute_allocation,
+            subnet_size,
         ) > old_canister.system_state.balance()
         {
             return Err(UserError::new(

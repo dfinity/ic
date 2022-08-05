@@ -8,6 +8,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-canister-sandbox-common  = { path = "../common" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-config = { path = "../../config" }
+ic-constants = { path = "../../constants" }
 ic-embedders = { path = "../../embedders" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-types = { path = "../../types/types" }

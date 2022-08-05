@@ -146,6 +146,7 @@ mod tests {
     };
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, HypervisorError};
     use ic_logger::replica_logger::no_op_logger;
@@ -204,6 +205,7 @@ mod tests {
             BTreeMap::new(),
             0,
             ic00_aliases,
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
     }
 

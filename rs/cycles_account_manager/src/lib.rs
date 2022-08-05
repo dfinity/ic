@@ -159,6 +159,7 @@ impl CyclesAccountManager {
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
+        subnet_size: usize,
     ) -> Cycles {
         let one_gib: u128 = 1 << 30;
         let seconds_per_day = 24 * 60 * 60;
@@ -186,7 +187,7 @@ impl CyclesAccountManager {
                 * self.config.compute_percent_allocated_per_second_fee.get(),
         );
 
-        memory_fee + compute_fee
+        self.scale_cost(memory_fee + compute_fee, subnet_size)
     }
 
     /// Returns the freezing threshold for this canister in Cycles.
@@ -196,9 +197,15 @@ impl CyclesAccountManager {
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
+        subnet_size: usize,
     ) -> Cycles {
         let idle_cycles_burned_rate: u128 = self
-            .idle_cycles_burned_rate(memory_allocation, memory_usage, compute_allocation)
+            .idle_cycles_burned_rate(
+                memory_allocation,
+                memory_usage,
+                compute_allocation,
+                subnet_size,
+            )
             .get();
         let seconds_per_day = 24 * 60 * 60;
 
@@ -225,6 +232,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles_balance: &mut Cycles,
         cycles: Cycles,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             canister_id,
@@ -235,6 +243,7 @@ impl CyclesAccountManager {
                 memory_allocation,
                 canister_current_memory_usage,
                 canister_compute_allocation,
+                subnet_size,
             ),
         )
     }
@@ -255,12 +264,14 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_compute_allocation,
+            subnet_size,
         );
         self.consume_with_threshold(system_state, cycles, threshold)
     }
@@ -286,6 +297,7 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let cycles_to_withdraw = self.execution_cost(num_instructions);
         self.consume_with_threshold(
@@ -296,6 +308,7 @@ impl CyclesAccountManager {
                 system_state.memory_allocation,
                 canister_current_memory_usage,
                 canister_compute_allocation,
+                subnet_size,
             ),
         )
     }
@@ -489,15 +502,19 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         // The total amount charged is the fee to do the xnet call (request +
         // response) + the fee to send the request + the fee for the largest
         // possible response + the fee for executing the largest allowed
         // response when it eventually arrives.
-        let fee = self.config.xnet_call_fee
-            + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get()
-            + self.config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get()
-            + self.execution_cost(self.max_num_instructions);
+        let fee = self.scale_cost(
+            self.config.xnet_call_fee
+                + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get()
+                + self.config.xnet_byte_transmission_fee
+                    * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
+            subnet_size,
+        ) + self.execution_cost(self.max_num_instructions);
         self.withdraw_with_threshold(
             canister_id,
             cycles_balance,
@@ -507,6 +524,7 @@ impl CyclesAccountManager {
                 memory_allocation,
                 canister_current_memory_usage,
                 canister_compute_allocation,
+                subnet_size,
             ),
         )
     }
@@ -562,12 +580,14 @@ impl CyclesAccountManager {
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
+        subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_compute_allocation,
+            subnet_size,
         );
 
         if threshold + requested > system_state.balance() {

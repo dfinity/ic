@@ -356,6 +356,7 @@ impl IngressManager {
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(state.metadata.own_subnet_type),
                         canister.scheduler_state.compute_allocation,
+                        subnet_size,
                     ) {
                         return Err(ValidationError::Permanent(
                             IngressPermanentError::InsufficientCycles(err),

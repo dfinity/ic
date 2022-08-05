@@ -115,6 +115,7 @@ pub fn execute_heartbeat(
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> HeartbeatResult {
     let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
     let memory_usage = canister.memory_usage(own_subnet_type);
@@ -136,6 +137,7 @@ pub fn execute_heartbeat(
         memory_usage,
         compute_allocation,
         message_instruction_limit,
+        subnet_size,
     ) {
         return HeartbeatResult::new(
             CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),

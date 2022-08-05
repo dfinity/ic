@@ -17,6 +17,7 @@ rust_library(
     edition = "2018",
     deps = [
         "//rs/config",
+        "//rs/constants",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
         "//rs/monitoring/logger",

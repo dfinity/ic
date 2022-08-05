@@ -432,7 +432,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
-                return self.execute_install_code(msg, state, instruction_limits, round_limits);
+                return self.execute_install_code(msg, state, instruction_limits, round_limits, registry_settings.subnet_size);
             }
 
             Ok(Ic00Method::UninstallCode) => {
@@ -486,6 +486,7 @@ impl ExecutionEnvironment {
                                     memory_usage,
                                     canister.scheduler_state.compute_allocation,
                                     induction_cost,
+                                    registry_settings.subnet_size
                                 );
                             }
                         }
@@ -523,7 +524,7 @@ impl ExecutionEnvironment {
                 let res = match CanisterIdRecord::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
-                        self.get_canister_status(*msg.sender(), args.get_canister_id(), &mut state)
+                        self.get_canister_status(*msg.sender(), args.get_canister_id(), &mut state, registry_settings.subnet_size)
                     }
                 };
                 Some((res, msg.take_cycles()))
@@ -926,6 +927,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         let req = match msg {
             CanisterInputMessage::Response(response) => {
@@ -960,6 +962,7 @@ impl ExecutionEnvironment {
             time,
             round,
             round_limits,
+            subnet_size,
         )
     }
 
@@ -971,6 +974,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         time: Time,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> (CanisterState, Result<NumBytes, CanisterHeartbeatError>) {
         // A heartbeat is expected to finish quickly, so DTS is not supported for it.
         let instruction_limits = InstructionLimits::new(
@@ -989,6 +993,7 @@ impl ExecutionEnvironment {
             &self.hypervisor,
             &self.cycles_account_manager,
             round_limits,
+            subnet_size,
         )
         .into_parts();
         if let Err(err) = &result {
@@ -1143,11 +1148,12 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister_mut(canister_id, state)?;
 
         self.canister_manager
-            .get_canister_status(sender, canister)
+            .get_canister_status(sender, canister, subnet_size)
             .map(|status| status.encode())
             .map_err(|err| err.into())
     }
@@ -1267,6 +1273,7 @@ impl ExecutionEnvironment {
                     cost,
                     paying_canister.memory_usage(self.own_subnet_type),
                     paying_canister.scheduler_state.compute_allocation,
+                    subnet_size,
                 ) {
                     return Err(UserError::new(
                         ErrorCode::CanisterOutOfCycles,
@@ -1671,6 +1678,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ReplicatedState {
         let compute_allocation_used = state.total_compute_allocation();
         let total_memory_taken = state.total_memory_taken();
@@ -1750,6 +1758,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             round_limits,
             compilation_cost_handling,
+            subnet_size,
         );
         self.process_install_code_result(state, dts_result, timer)
     }
@@ -1840,6 +1849,7 @@ impl ExecutionEnvironment {
         canister_id: &CanisterId,
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ReplicatedState {
         let task = state
             .canister_state_mut(canister_id)
@@ -1872,7 +1882,7 @@ impl ExecutionEnvironment {
                 self.process_install_code_result(state, dts_result, timer)
             }
             ExecutionTask::AbortedInstallCode(msg) => {
-                self.execute_install_code(msg, state, instruction_limits, round_limits)
+                self.execute_install_code(msg, state, instruction_limits, round_limits, subnet_size)
             }
         }
     }
@@ -2064,6 +2074,7 @@ fn execute_message(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteCanisterResult {
     let msg_info = message.to_string();
     let result = exec_env.execute_canister_message(
@@ -2073,6 +2084,7 @@ fn execute_message(
         time,
         network_topology,
         round_limits,
+        subnet_size,
     );
     let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
     ExecuteCanisterResult {
@@ -2092,6 +2104,7 @@ pub fn execute_canister(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteCanisterResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -2114,6 +2127,7 @@ pub fn execute_canister(
                     network_topology,
                     time,
                     round_limits,
+                    subnet_size,
                 );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
@@ -2149,6 +2163,7 @@ pub fn execute_canister(
                 network_topology,
                 time,
                 round_limits,
+                subnet_size,
             ),
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode(..) => {
                 unreachable!("The guard at the beginning filters these cases out")
@@ -2164,6 +2179,7 @@ pub fn execute_canister(
                 network_topology,
                 time,
                 round_limits,
+                subnet_size,
             )
         }
     }

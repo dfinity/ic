@@ -551,6 +551,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
         Option<CanisterState>,
@@ -582,6 +583,7 @@ impl CanisterManager {
             execution_parameters,
             round_limits,
             CompilationCostHandling::CountFullAmount,
+            subnet_size,
         );
         match dts_result {
             DtsInstallCodeResult::Finished {
@@ -635,6 +637,7 @@ impl CanisterManager {
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
+        subnet_size: usize,
     ) -> DtsInstallCodeResult {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
 
@@ -710,6 +713,7 @@ impl CanisterManager {
             memory_usage,
             compute_allocation,
             message_instruction_limit,
+            subnet_size,
         ) {
             return DtsInstallCodeResult::Finished {
                 canister,
@@ -935,6 +939,7 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
+        subnet_size: usize,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         self.validate_controller(canister, &sender)?;
 
@@ -968,6 +973,7 @@ impl CanisterManager {
                     memory_allocation,
                     canister_memory_usage,
                     compute_allocation,
+                    subnet_size,
                 )
                 .get(),
         ))
