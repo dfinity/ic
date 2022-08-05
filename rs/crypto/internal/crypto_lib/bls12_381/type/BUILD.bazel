@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -6,37 +6,72 @@ filegroup(
     name = "sources",
     srcs = glob(
         ["**"],
-        exclude = ["target/**"],
-    ),
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
     visibility = ["//visibility:public"],
 )
+
+DEPENDENCIES = [
+    "@crate_index//:bls12_381",
+    "@crate_index//:lazy_static",
+    "@crate_index//:miracl_core_bls12381",
+    "@crate_index//:pairing",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:sha2",
+    "@crate_index//:subtle",
+    "@crate_index//:zeroize",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
+    "//conditions:default": ["@crate_index//:getrandom"],
+})
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/types",
+    "@crate_index//:criterion",
+    "@crate_index//:hex",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {
+    "@crate_index//:miracl_core_bls12381": "miracl_core_bls12381",
+}
 
 rust_library(
     name = "type",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_bls12_381_type",
     edition = "2021",
-    deps = [
-        "@crate_index//:bls12_381",
-        "@crate_index//:miracl_core_bls12381",
-        "@crate_index//:lazy_static",
-        "@crate_index//:pairing",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:sha2",
-        "@crate_index//:subtle",
-        "@crate_index//:zeroize",
-    ] + select({
-        "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
-        "//conditions:default": ["@crate_index//:getrandom"],
-    }),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
-rust_test(
-    name = "ic_crypto_internal_bls12_381_type_tests",
-    crate = ":type",
-    deps = [
-        "//rs/crypto/internal/crypto_lib/types",
-        "@crate_index//:hex",
+rust_binary(
+    name = "type_bench",
+    srcs = ["benches/ops.rs"],
+    crate_root = "benches/ops.rs",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        "@crate_index//:criterion",
+        ":type",
     ],
+)
+
+rust_test_suite(
+    name = "type_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":type"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
