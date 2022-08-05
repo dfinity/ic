@@ -33,22 +33,19 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     match image_type {
         UpdateImageType::Image => {
             format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.gz",
-                // "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.gz",
                 git_revision
             )
         }
         UpdateImageType::ImageTest => {
             format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz",
-                // "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.gz",
                 git_revision
             )
         }
         UpdateImageType::Sha256 => {
             format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/SHA256SUMS",
-                // "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
                 git_revision
             )
         }
