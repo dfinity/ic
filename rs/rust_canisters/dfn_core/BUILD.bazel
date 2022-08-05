@@ -1,5 +1,5 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,24 +7,77 @@ filegroup(
     name = "sources",
     srcs = glob(
         ["**"],
-        exclude = ["target/**"],
-    ),
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
 )
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_json",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "dfn_core",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "dfn_core",
     edition = "2018",
-    deps = [
-        "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "test_canister",
+    name = "wasm",
     srcs = ["test/wasm.rs"],
-    deps = [":dfn_core"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":dfn_core"],
 )
 
-# TODO(IC-1207): add dfn_core_test once the test dependencies are bazelized
+rust_test(
+    name = "dfn_core_test",
+    aliases = ALIASES,
+    crate = ":dfn_core",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "dfn_core_integration_test",
+    srcs = ["test/test.rs"],
+    aliases = ALIASES,
+    crate_root = "test/test.rs",
+    data = [
+        ":wasm",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/dfn_core",
+        "WASM_WASM_PATH": "$(rootpath :wasm)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":dfn_core"],
+)
