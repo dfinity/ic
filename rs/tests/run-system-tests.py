@@ -296,17 +296,14 @@ def main(
         )
     TEST_ES_HOSTNAMES = replace_symbols(text=TEST_ES_HOSTNAMES, symbols_to_replace=["`", "'", " "], replace_with="")
 
-    IC_OS_DEV_IMG_SHA256, IC_OS_DEV_IMG_URL = get_ic_os_image_sha(
-        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/disk-img-dev/"
-    )
-    BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(
-        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-dev/"
-    )
+    IMG_BASE_URL = f"http://download.proxy-global.dfinity.network:8080/ic/{IC_VERSION_ID}"
+    IC_OS_DEV_IMG_SHA256, IC_OS_DEV_IMG_URL = get_ic_os_image_sha(f"{IMG_BASE_URL}/guest-os/disk-img-dev/")
+    BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(f"{IMG_BASE_URL}/boundary-os/disk-img-dev/")
     BOUNDARY_NODE_SNP_IMG_SHA256, BOUNDARY_NODE_SNP_IMG_URL = get_ic_os_image_sha(
-        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-snp-dev/"
+        f"{IMG_BASE_URL}/boundary-os/disk-img-snp-dev/"
     )
     IC_OS_UPD_DEV_IMG_SHA256, IC_OS_UPD_DEV_IMG_URL = get_ic_os_image_sha(
-        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/update-img-dev/", filename="update-img.tar.zst"
+        f"{IMG_BASE_URL}/guest-os/update-img-dev/", filename="update-img.tar.zst"
     )
 
     if SSH_KEY_DIR is None:
