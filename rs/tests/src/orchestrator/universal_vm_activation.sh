@@ -11,4 +11,4 @@ chmod -R 755 ./
 docker run -d \
     -v "$(pwd)":/web \
     -p 80:8080 \
-    halverneus/static-file-server:latest
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/halverneus/static-file-server:latest
