@@ -11,6 +11,8 @@ date
 end=$(date +%s)
 export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
 
+ENG_OR_CHANNEL="eng-orchestrator"
+NNS_STATE_TEST_NAME="nns-state-deployment-test-nightly"
 CARGO_TEST_JSON="${CI_PROJECT_DIR}/rs/ci_output.json"
 CARGO_TEST_JUNIT_XML="${CI_PROJECT_DIR}/test_report.xml"
 PREFIX="${CI_PROJECT_DIR}/gitlab-ci/src"
@@ -44,11 +46,14 @@ if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" 
     debug=""
     [ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
     IFS=',' read -ra CHANNELS <<<"$SLACK_CHANNEL"
+    MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
     for channel in "${CHANNELS[@]}"; do
-        notify_slack/notify_slack.py \
-            "Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>." \
-            --channel "$channel" || true
+        notify_slack/notify_slack.py "$MESSAGE" --channel "$channel" || true
     done
+    # and old bash-test that was introduced with OR-187, failures are dispatched to OR-team directly
+    if [[ "$CI_JOB_NAME" == "$NNS_STATE_TEST_NAME" ]]; then
+        notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_OR_CHANNEL" || true
+    fi
 fi
 
 # Export additional honeycomb metrics.
