@@ -7932,6 +7932,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-ic00-types",
+ "ic-interfaces",
  "ic-logger",
  "ic-protobuf",
  "ic-replicated-state",

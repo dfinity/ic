@@ -971,6 +971,80 @@ impl SchedulerImpl {
         }
         true
     }
+
+    // Code that must be executed unconditionally after each round.
+    fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+        match current_round_type {
+            ExecutionRoundType::CheckpointRound => {
+                state.metadata.heap_delta_estimate = NumBytes::from(0);
+                // `expected_compiled_wasms` will be cleared upon store and load
+                // of a checkpoint because it doesn't exist in the protobuf
+                // metadata, but we make it explicit here anyway.
+                state.metadata.expected_compiled_wasms.clear();
+
+                if self.deterministic_time_slicing == FlagStatus::Enabled {
+                    // Abort all paused execution before the checkpoint.
+                    self.exec_env.abort_paused_executions(state);
+                }
+            }
+            ExecutionRoundType::OrdinaryRound => {}
+        }
+        self.check_dts_invariants(state, current_round_type);
+    }
+
+    /// Checks the deterministic time slicing invariant after round execution.
+    fn check_dts_invariants(
+        &self,
+        state: &ReplicatedState,
+        current_round_type: ExecutionRoundType,
+    ) {
+        let canisters_with_tasks = state
+            .canister_states
+            .iter()
+            .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
+
+        // 1. Heartbeat tasks exist only during the round and must not exist after the round.
+        // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
+        // 3. If deterministic time slicing is disabled, then neither paused nor
+        //    aborted tasks can exists.
+        for (id, canister) in canisters_with_tasks {
+            for task in canister.system_state.task_queue.iter() {
+                match task {
+                    ExecutionTask::AbortedExecution(_) | ExecutionTask::AbortedInstallCode(_) => {
+                        assert_eq!(
+                            self.deterministic_time_slicing,
+                            FlagStatus::Enabled,
+                            "Unexpected aborted execution {:?} with disabled DTS in canister: {:?}",
+                            task,
+                            id
+                        );
+                    }
+                    ExecutionTask::Heartbeat => {
+                        panic!(
+                            "Unexpected heartbeat task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                        assert_eq!(
+                            self.deterministic_time_slicing,
+                            FlagStatus::Enabled,
+                            "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
+                            task,
+                            id
+                        );
+                        assert_eq!(
+                            current_round_type,
+                            ExecutionRoundType::OrdinaryRound,
+                            "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                            task,
+                            id
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Scheduler for SchedulerImpl {
@@ -1037,12 +1111,7 @@ impl Scheduler for SchedulerImpl {
                     state.metadata.heap_delta_estimate,
                     self.config.subnet_heap_delta_capacity
                 );
-                match current_round_type {
-                    ExecutionRoundType::CheckpointRound => {
-                        state.metadata.heap_delta_estimate = NumBytes::from(0);
-                    }
-                    ExecutionRoundType::OrdinaryRound => {}
-                }
+                self.finish_round(&mut state, current_round_type);
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
@@ -1202,14 +1271,6 @@ impl Scheduler for SchedulerImpl {
             &mut round_limits,
         );
 
-        // Abort all paused execution before the checkpoint.
-        match current_round_type {
-            ExecutionRoundType::OrdinaryRound => {}
-            ExecutionRoundType::CheckpointRound => {
-                self.exec_env.abort_paused_executions(&mut state);
-            }
-        }
-
         let mut final_state;
         {
             let mut cycles_out_sum = Cycles::zero();
@@ -1308,17 +1369,7 @@ impl Scheduler for SchedulerImpl {
                 );
             }
         }
-        match current_round_type {
-            ExecutionRoundType::CheckpointRound => {
-                final_state.metadata.heap_delta_estimate = NumBytes::from(0);
-                // `expected_compiled_wasms` will be cleared upon store and load
-                // of a checkpoint because it doesn't exist in the protobuf
-                // metadata, but we make it explicit here anyway.
-                final_state.metadata.expected_compiled_wasms.clear();
-            }
-            ExecutionRoundType::OrdinaryRound => {}
-        }
-
+        self.finish_round(&mut final_state, current_round_type);
         final_state
     }
 }
