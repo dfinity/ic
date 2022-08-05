@@ -38,7 +38,7 @@ docker run \
     -d \
     -p 20080:80 \
     --name httpbin \
-    kennethreitz/httpbin
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/kennethreitz/httpbin
 
 # 3 - generate ipv6 service cert with root cert and key, using `minica`
 mkdir certs
@@ -50,7 +50,7 @@ chmod -R 755 ./
 echo "Making certs directory in $(pwd)"
 docker run \
     -v "$(pwd)":/output \
-    ryantk/minica \
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/ryantk/minica \
     -ip-addresses="$ipv6"
 
 mv $ipv6 ipv6 # updateing service certificate folder name so it can be fed to ssl-proxy container
@@ -69,4 +69,4 @@ docker run \
     -e TARGET_PORT="80" \
     -e SSL_PORT="443" \
     -e DOMAIN="[$ipv6]" \
-    fsouza/docker-ssl-proxy
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/fsouza/docker-ssl-proxy

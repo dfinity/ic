@@ -84,7 +84,7 @@ command:
 IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern basic_health_test
 ```
 
-If your test is supposed to run for more than 50min, you need to set the 
+If your test is supposed to run for more than 50min, you need to set the
 `SYSTEM_TESTS_TIMEOUT` environment variable to a suitable value in seconds.
 
 Changing the replica log level for system test runs, e.g., to facilitate debugging, can
@@ -162,7 +162,7 @@ The module
 contains traits and functions to access the information contained in the test
 environment in a structured way. For example,
 the above call (1), initializes the IC and stores the initial registry (and
-further config data) under `<test_env>/ic_prep`. 
+further config data) under `<test_env>/ic_prep`.
 
 The call in (2), in turn, reads this information to construct a data structure
 that reflects the initial topology. So, e.g., the call (3) returns a data
@@ -219,15 +219,15 @@ When writing your test, please keep in mind a few important things:
 
 * Make sure to add a ASCIIDOC description to the beginning of your file, just
 like `basic_health_test`.
-* Keep reproducibility in mind. For example, if you use a RNG in the test, make 
+* Keep reproducibility in mind. For example, if you use a RNG in the test, make
   sure the seed is fixed (or at least logged).
 * Refrain from `println!` and use the logging primitives of the test environment instead.
 * In general, do not make too many environment assumptions. For example, never access
   the file system directory or only through information available through the test environment.
 * Put your test in a suitable folder in the src directory or create a new
   sub-directory. Don't forget to modify CODEOWNERS accordingly.
-* Add your test to a suitable suite in `rs/tests/bin/prod-test-driver.rs`. 
-  If your test takes more than 50min, it must only run nightly and the pipeline 
+* Add your test to a suitable suite in `rs/tests/bin/prod-test-driver.rs`.
+  If your test takes more than 50min, it must only run nightly and the pipeline
   might need to be adjusted in `testnet/tests/pipeline/pipeline.yml`.
 
 ### A note on the CLI
@@ -320,6 +320,38 @@ names:
 ```
 $ ./setup-and-cargo-test.sh -- --skip delete basic
 ```
+### Running Docker Containers in system-tests
+
+Docker containers can be run in Universal VMs. Search for calls of "UniversalVm::new" to see examples on how to set that up.
+
+Note that Universal VMs are created afresh for each pot. This means that if it runs a docker container the container's image needs to be fetched from the registry each time.
+
+Docker Hub has a rate limit which makes it is unsuitable for system-tests. Instead, please use the registry:
+
+https://gitlab.com/dfinity-lab/open/public-docker-registry/container_registry
+
+In order to fetch images from this registry you first need to ensure your image is pushed there. In order to do that first login using:
+
+```
+docker login registry.gitlab.com
+```
+
+Then push your image using the following shell function:
+
+```
+push_to_gitlab() {
+  image="$1"
+  docker pull --platform linux/amd64 "$image"
+  docker tag "$image" "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
+  docker image push "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
+}
+```
+
+You can then run this image in your Universal VM activation script as follows:
+
+```
+docker run "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
+```
 
 ### Known Issues
 
@@ -344,4 +376,4 @@ might hit a global timeout configured in the test runner
 (`rs/tests/src/main.rs`). *It is suggested to adjust such timeouts to mitigate
 this issue.*
 
-On CI, the issue is mitigated as the canisters are built in a separate stage. 
+On CI, the issue is mitigated as the canisters are built in a separate stage.
