@@ -63,21 +63,35 @@ pub fn two_third_latency_config() -> InternetComputer {
 /// Default test installing two canisters and sending 60 requests per second for 30 seconds
 /// This test is run in hourly jobs.
 pub fn short_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let is_install_nns_canisters = false;
     let canister_count: usize = 2;
     let rps: usize = 60;
     let duration: Duration = Duration::from_secs(30);
-    test(handle, ctx, canister_count, rps, duration);
+    test(
+        handle,
+        ctx,
+        canister_count,
+        rps,
+        duration,
+        is_install_nns_canisters,
+    );
 }
 
 /// SLO test installing two canisters and sending 200 requests per second for 500 seconds.
 /// This test is run nightly.
 pub fn two_third_latency_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
+    let is_install_nns_canisters = true;
     let canister_count: usize = 2;
     let rps: usize = 200;
     let duration: Duration = Duration::from_secs(500);
-    test(handle, ctx, canister_count, rps, duration);
+    test(
+        handle,
+        ctx,
+        canister_count,
+        rps,
+        duration,
+        is_install_nns_canisters,
+    );
 }
 
 fn test(
@@ -86,15 +100,24 @@ fn test(
     canister_count: usize,
     rps: usize,
     duration: Duration,
+    is_install_nns_canisters: bool,
 ) {
     let mut rng = ctx.rng.clone();
     let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
+
     block_on(async move {
         // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
+    });
 
+    if is_install_nns_canisters {
+        info!(&ctx.logger, "Installing NNS canisters...");
+        ctx.install_nns_canisters(&handle, true);
+    }
+
+    block_on(async move {
         info!(
             ctx.logger,
             "Step 1: Install {} canisters on the subnet..", canister_count
@@ -152,11 +175,22 @@ fn test(
         );
         let requests_count = rps * duration.as_secs() as usize;
         // 1/2 requests are query (failure) and 1/2 are update (success).
-        let expected_failure_calls = requests_count / 2;
-        let expected_success_calls = requests_count / 2;
-        let errors = metrics.errors();
-        assert!(errors.len() < 4, "More errors than expected: {:?}", errors);
+        let min_expected_failure_calls = (SUCCESS_THRESHOLD * requests_count as f32 / 2.0) as usize;
+        let min_expected_success_calls = min_expected_failure_calls;
+        info!(
+            ctx.logger,
+            "Min expected number of success calls {}, failure calls {}",
+            min_expected_success_calls,
+            min_expected_failure_calls
+        );
+        info!(
+            ctx.logger,
+            "Actual number of success calls {}, failure calls {}",
+            metrics.success_calls(),
+            metrics.failure_calls()
+        );
         // Error messages should contain the name of failed method call.
+        let errors = metrics.errors();
         assert!(
             errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)),
             "Missing error key {}",
@@ -168,30 +202,21 @@ fn test(
             NON_EXISTING_METHOD_B
         );
         assert!(
-            errors
-                .values()
-                .all(|k| *k == expected_failure_calls / canister_count),
-            "Observed number of failure calls is not {}",
-            expected_failure_calls / canister_count
-        );
-        assert_eq!(
+            metrics.failure_calls() >= min_expected_failure_calls,
+            "Observed failure calls {} is at least min expected failure calls {}",
             metrics.failure_calls(),
-            expected_failure_calls,
-            "Observed failure calls {}, expected failure calls {}",
-            metrics.failure_calls(),
-            expected_failure_calls
+            min_expected_failure_calls
         );
         assert!(
-            metrics.success_calls()
-                > (SUCCESS_THRESHOLD * (expected_success_calls as f32)) as usize,
-            "Observed success calls {}, expected success calls {}",
+            metrics.success_calls() >= min_expected_success_calls,
+            "Observed success calls {} is at least min expected success calls {}",
             metrics.success_calls(),
-            expected_success_calls
+            min_expected_success_calls
         );
         assert_eq!(
             requests_count,
             metrics.total_calls(),
-            "Sent requests {}, recorded number of total calls {}",
+            "Expected requests count {}, recorded number of total calls {}",
             requests_count,
             metrics.total_calls()
         );
@@ -199,15 +224,18 @@ fn test(
             ctx.logger,
             "Step 4: Assert the expected number of update calls on each canister.."
         );
-        let expected_canister_counter =
-            (SUCCESS_THRESHOLD * (expected_success_calls as f32)) as usize / canister_count;
+        let min_expected_canister_counter = min_expected_success_calls / canister_count;
+        info!(
+            ctx.logger,
+            "Min expected counter value on canisters {}", min_expected_canister_counter
+        );
         for canister in canisters.iter() {
             assert_canister_counter_with_retries(
                 &ctx.logger,
                 &install_agent,
                 canister,
                 payload.clone(),
-                expected_canister_counter,
+                min_expected_canister_counter,
                 MAX_RETRIES,
                 RETRY_WAIT,
             )
