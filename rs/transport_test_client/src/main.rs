@@ -39,8 +39,7 @@ use ic_config::{
     transport::{TransportConfig, TransportFlowConfig},
 };
 use ic_interfaces_transport::{
-    FlowTag, SendError, Transport, TransportErrorCode, TransportEvent, TransportPayload,
-    TransportStateChange,
+    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportPayload, TransportStateChange,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -375,7 +374,7 @@ impl TestClientEventHandler {
 }
 
 impl Service<TransportEvent> for TestClientEventHandler {
-    type Response = Result<(), SendError>;
+    type Response = ();
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
@@ -396,7 +395,7 @@ impl Service<TransportEvent> for TestClientEventHandler {
                     Self::on_state_change(active_flows, state_change)
                 }
             }
-            Ok(Ok(()))
+            Ok(())
         })
     }
 }

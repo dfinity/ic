@@ -274,12 +274,13 @@ fn spawn_read_task(
                     .with_label_values(&[&flow_label, &flow_tag_str])
                     .inc_by(payload.0.len() as u64);
                 let start_time = Instant::now();
-                let _ = event_handler
+                event_handler
                     .call(TransportEvent::Message(TransportMessage {
                         peer_id,
                         payload,
                     }))
-                    .await;
+                    .await
+                    .expect("Can't panic on infallible");
                 arc_self.data_plane_metrics
                     .client_send_time_msec
                     .with_label_values(&[&flow_label, &flow_tag_str])

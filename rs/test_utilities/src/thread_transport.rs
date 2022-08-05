@@ -147,7 +147,6 @@ impl ThreadPort {
                 payload: message,
             }))
             .await
-            .expect("send message failed")
             .expect("send message failed");
         Ok(())
     }
