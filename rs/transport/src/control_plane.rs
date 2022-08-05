@@ -276,12 +276,13 @@ impl TransportImpl {
                                 arc_self.rt_handle.clone(),
                             );
 
-                            let _ = event_handler
+                            event_handler
                                 // Notify the client that peer flow is up.
                                 .call(TransportEvent::StateChange(
                                     TransportStateChange::PeerFlowUp(peer_id),
                                 ))
-                                .await;
+                                .await
+                                .expect("Can't panic on infallible");
                             flow_state.update(ConnectionState::Connected(connected_state));
                             arc_self.control_plane_metrics
                                 .tcp_accept_conn_success
@@ -395,12 +396,13 @@ impl TransportImpl {
                             arc_self.rt_handle.clone(),
 
                         );
-                        let _ = event_handler
+                        event_handler
                             // Notify the client that peer flow is up.
                             .call(TransportEvent::StateChange(
                                 TransportStateChange::PeerFlowUp(peer_id),
                             ))
-                            .await;
+                            .await
+                            .expect("Can't panic on infallible");
                         flow_state.update(ConnectionState::Connected(connected_state));
                         arc_self.control_plane_metrics
                             .tcp_conn_to_server_success
@@ -504,11 +506,12 @@ impl TransportImpl {
             );
                 ConnectionState::Connecting(connecting_state)
             };
-        let _ = event_handler
+        event_handler
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowDown(peer_id),
             ))
-            .await;
+            .await
+            .expect("Can't panic on infallible");
         flow_state.update(connection_state);
     }
 
@@ -640,7 +643,7 @@ mod tests {
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces_transport::{SendError, TransportEvent, TransportStateChange};
+    use ic_interfaces_transport::{TransportEvent, TransportStateChange};
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
@@ -683,7 +686,7 @@ mod tests {
 
     #[async_trait]
     impl Service<TransportEvent> for FakeEventHandler {
-        type Response = Result<(), SendError>;
+        type Response = ();
         type Error = Infallible;
         #[allow(clippy::type_complexity)]
         type Future =
@@ -702,7 +705,7 @@ mod tests {
                         Self::on_state_change(connected, state_change)
                     }
                 };
-                Ok(Ok(()))
+                Ok(())
             })
         }
     }

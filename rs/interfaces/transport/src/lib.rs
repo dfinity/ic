@@ -71,14 +71,12 @@ pub trait Transport: Send + Sync {
     fn clear_send_queues(&self, peer_id: &NodeId);
 }
 
-#[derive(Debug)]
-pub enum SendError {
-    DeserializationFailed,
-    EndpointClosed,
-    EndpointNotFound,
-}
-
-pub type TransportEventHandler = BoxCloneService<TransportEvent, Result<(), SendError>, Infallible>;
+/// The transport layer has the responsibility of passing the payload to the caller.
+/// If the event handler can't process the payload for some reason it is the caller's
+/// responsibility to handle the error.
+/// Currently there are no caller errors that make sense to be handled by the lower level
+/// transport implementation.
+pub type TransportEventHandler = BoxCloneService<TransportEvent, (), Infallible>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FlowTagType;

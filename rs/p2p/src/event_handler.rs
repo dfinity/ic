@@ -75,8 +75,8 @@ use crate::{
     },
     metrics::FlowWorkerMetrics,
 };
-use ic_interfaces_transport::{SendError, TransportEvent, TransportMessage};
-use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
+use ic_interfaces_transport::{TransportEvent, TransportMessage};
+use ic_logger::{debug, info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_types::{artifact::AdvertClass, p2p::GossipAdvert, NodeId};
@@ -329,7 +329,7 @@ impl AsyncTransportEventHandlerImpl {
 }
 
 impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
-    type Response = Result<(), SendError>;
+    type Response = ();
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
@@ -350,10 +350,8 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     {
                         Ok(msg) => msg,
                         Err(err) => {
-                            trace!(self.log, "Deserialization failed {}", err);
-                            return Box::pin(
-                                async move { Ok(Err(SendError::DeserializationFailed)) },
-                            );
+                            warn!(self.log, "Deserialization failed {}", err);
+                            return Box::pin(async { Ok(()) });
                         }
                     };
                 match gossip_message {
@@ -364,7 +362,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         let advert = self.advert.clone();
                         Box::pin(async move {
                             advert.execute(peer_id, msg, consume_fn).await;
-                            Ok(Ok(()))
+                            Ok(())
                         })
                     }
                     GossipMessage::ChunkRequest(msg) => {
@@ -374,7 +372,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         let request = self.request.clone();
                         Box::pin(async move {
                             request.execute(peer_id, msg, consume_fn).await;
-                            Ok(Ok(()))
+                            Ok(())
                         })
                     }
                     GossipMessage::Chunk(msg) => {
@@ -384,7 +382,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         let chunk = self.chunk.clone();
                         Box::pin(async move {
                             chunk.execute(peer_id, msg, consume_fn).await;
-                            Ok(Ok(()))
+                            Ok(())
                         })
                     }
                     GossipMessage::RetransmissionRequest(msg) => {
@@ -394,7 +392,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         let retransmission = self.retransmission.clone();
                         Box::pin(async move {
                             retransmission.execute(peer_id, msg, consume_fn).await;
-                            Ok(Ok(()))
+                            Ok(())
                         })
                     }
                 }
@@ -407,7 +405,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                 let transport = self.transport.clone();
                 Box::pin(async move {
                     transport.execute(node_id, state_change, consume_fn).await;
-                    Ok(Ok(()))
+                    Ok(())
                 })
             }
         }
