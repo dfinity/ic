@@ -14,7 +14,7 @@ use ic_protobuf::{
 };
 use ic_replicated_state::{
     bitcoin_state, canister_state::execution_state::WasmMetadata, CallContextManager,
-    CanisterStatus, ExportedFunctions, Global, NumWasmPages,
+    CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
@@ -188,6 +188,7 @@ pub struct CanisterStateBits {
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
+    pub task_queue: Vec<ExecutionTask>,
 }
 
 /// This struct contains bits of the `BitcoinState` that are not already
@@ -1071,6 +1072,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
+            task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
         }
     }
 }
@@ -1104,6 +1106,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let cycles_balance =
             try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
 
+        let task_queue = value
+            .task_queue
+            .into_iter()
+            .map(|v| v.try_into())
+            .collect::<Result<_, _>>()?;
+
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -1136,6 +1144,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
+            task_queue,
         })
     }
 }
@@ -1296,12 +1305,14 @@ mod test {
     use super::*;
 
     use ic_ic00_types::IC_00;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
+    use ic_test_utilities::types::{
+        ids::canister_test_id,
+        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
+    };
 
-    #[test]
-    fn test_encode_decode_empty_controllers() {
-        // A canister state with empty controllers.
-        let canister_state_bits = CanisterStateBits {
+    fn default_canister_state_bits() -> CanisterStateBits {
+        CanisterStateBits {
             controllers: BTreeSet::new(),
             last_full_execution_round: ExecutionRound::from(0),
             call_context_manager: None,
@@ -1321,7 +1332,14 @@ mod test {
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
             install_code_debit: NumInstructions::from(0),
-        };
+            task_queue: vec![],
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_empty_controllers() {
+        // A canister state with empty controllers.
+        let canister_state_bits = default_canister_state_bits();
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
@@ -1336,27 +1354,10 @@ mod test {
         controllers.insert(IC_00.into());
         controllers.insert(canister_test_id(0).get());
 
-        // A canister state with empty controllers.
+        // A canister state with non-empty controllers.
         let canister_state_bits = CanisterStateBits {
             controllers,
-            last_full_execution_round: ExecutionRound::from(0),
-            call_context_manager: None,
-            compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-            accumulated_priority: AccumulatedPriority::from(0),
-            execution_state_bits: None,
-            memory_allocation: MemoryAllocation::default(),
-            freeze_threshold: NumSeconds::from(0),
-            cycles_balance: Cycles::zero(),
-            status: CanisterStatus::Stopped,
-            scheduled_as_first: 0,
-            skipped_round_due_to_no_messages: 0,
-            executed: 0,
-            interruped_during_execution: 0,
-            certified_data: vec![],
-            consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages::from(0),
-            heap_delta_debit: NumBytes::from(0),
-            install_code_debit: NumInstructions::from(0),
+            ..default_canister_state_bits()
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
@@ -1366,5 +1367,31 @@ mod test {
         expected_controllers.insert(canister_test_id(0).get());
         expected_controllers.insert(IC_00.into());
         assert_eq!(canister_state_bits.controllers, expected_controllers);
+    }
+
+    #[test]
+    fn test_encode_decode_task_queue() {
+        let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
+        let request = Arc::new(RequestBuilder::new().method_name("test_request").build());
+        let response = Arc::new(
+            ResponseBuilder::new()
+                .respondent(canister_test_id(42))
+                .build(),
+        );
+        let task_queue = vec![
+            ExecutionTask::AbortedInstallCode(RequestOrIngress::Ingress(Arc::clone(&ingress))),
+            ExecutionTask::AbortedExecution(CanisterInputMessage::Request(Arc::clone(&request))),
+            ExecutionTask::AbortedInstallCode(RequestOrIngress::Request(request)),
+            ExecutionTask::AbortedExecution(CanisterInputMessage::Response(response)),
+            ExecutionTask::AbortedExecution(CanisterInputMessage::Ingress(ingress)),
+        ];
+        let canister_state_bits = CanisterStateBits {
+            task_queue: task_queue.clone(),
+            ..default_canister_state_bits()
+        };
+
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+        assert_eq!(canister_state_bits.task_queue, task_queue);
     }
 }

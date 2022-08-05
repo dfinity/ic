@@ -2,6 +2,7 @@ syntax = "proto3";
 package state.canister_state_bits.v1;
 import "types/v1/types.proto";
 import "state/queues/v1/queues.proto";
+import "state/ingress/v1/ingress.proto";
 
 message CallContext {
   message Ingress {
@@ -145,6 +146,28 @@ message CanisterStatusStopping {
 
 message CanisterStatusStopped {}
 
+message ExecutionTask {
+  message AbortedExecution {
+    oneof message {
+      state.queues.v1.Request request = 1;
+      state.queues.v1.Response response = 2;
+      ingress.v1.Ingress ingress = 3;
+    }
+  }
+
+  message AbortedInstallCode {
+    oneof message {
+      state.queues.v1.Request request = 1;
+      ingress.v1.Ingress ingress = 2;
+    }
+  }
+
+  oneof task {
+    AbortedExecution aborted_execution = 1;
+    AbortedInstallCode aborted_install_code = 2;
+  }
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -191,4 +214,7 @@ message CanisterStateBits {
   // The instruction debit for install_code messages of this canister. This is
   // tracked for the purposes of rate limiting the install_code messages.
   uint64 install_code_debit = 29;
+  // Contains tasks that need to be executed before processing any input of the
+  // canister.
+  repeated ExecutionTask task_queue = 30;
 }

@@ -222,6 +222,53 @@ pub struct CanisterStatusStopping {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStatusStopped {}
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExecutionTask {
+    #[prost(oneof = "execution_task::Task", tags = "1, 2")]
+    pub task: ::core::option::Option<execution_task::Task>,
+}
+/// Nested message and enum types in `ExecutionTask`.
+pub mod execution_task {
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct AbortedExecution {
+        #[prost(oneof = "aborted_execution::Message", tags = "1, 2, 3")]
+        pub message: ::core::option::Option<aborted_execution::Message>,
+    }
+    /// Nested message and enum types in `AbortedExecution`.
+    pub mod aborted_execution {
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum Message {
+            #[prost(message, tag = "1")]
+            Request(super::super::super::super::queues::v1::Request),
+            #[prost(message, tag = "2")]
+            Response(super::super::super::super::queues::v1::Response),
+            #[prost(message, tag = "3")]
+            Ingress(super::super::super::super::ingress::v1::Ingress),
+        }
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct AbortedInstallCode {
+        #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
+        pub message: ::core::option::Option<aborted_install_code::Message>,
+    }
+    /// Nested message and enum types in `AbortedInstallCode`.
+    pub mod aborted_install_code {
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum Message {
+            #[prost(message, tag = "1")]
+            Request(super::super::super::super::queues::v1::Request),
+            #[prost(message, tag = "2")]
+            Ingress(super::super::super::super::ingress::v1::Ingress),
+        }
+    }
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Task {
+        #[prost(message, tag = "1")]
+        AbortedExecution(AbortedExecution),
+        #[prost(message, tag = "2")]
+        AbortedInstallCode(AbortedInstallCode),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -266,6 +313,10 @@ pub struct CanisterStateBits {
     /// tracked for the purposes of rate limiting the install_code messages.
     #[prost(uint64, tag = "29")]
     pub install_code_debit: u64,
+    /// Contains tasks that need to be executed before processing any input of the
+    /// canister.
+    #[prost(message, repeated, tag = "30")]
+    pub task_queue: ::prost::alloc::vec::Vec<ExecutionTask>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

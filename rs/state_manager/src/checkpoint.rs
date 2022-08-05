@@ -217,6 +217,12 @@ fn serialize_canister_to_tip(
                     .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
                 install_code_debit: canister_state.scheduler_state.install_code_debit,
+                task_queue: canister_state
+                    .system_state
+                    .task_queue
+                    .clone()
+                    .into_iter()
+                    .collect(),
             }
             .into(),
         )
@@ -545,6 +551,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.certified_data,
         canister_metrics,
         canister_state_bits.cycles_balance,
+        canister_state_bits.task_queue.into_iter().collect(),
     );
 
     let canister_state = CanisterState {

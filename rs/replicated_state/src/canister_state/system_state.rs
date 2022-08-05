@@ -214,6 +214,83 @@ pub enum ExecutionTask {
     AbortedInstallCode(RequestOrIngress),
 }
 
+impl From<&ExecutionTask> for pb::ExecutionTask {
+    fn from(item: &ExecutionTask) -> Self {
+        match item {
+            ExecutionTask::Heartbeat
+            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedInstallCode(_) => {
+                panic!("Attempt to serialize ephemeral task: {:?}.", item);
+            }
+            ExecutionTask::AbortedExecution(message) => {
+                use pb::execution_task::aborted_execution::Message;
+                let message = match message {
+                    CanisterInputMessage::Response(v) => Message::Response(v.as_ref().into()),
+                    CanisterInputMessage::Request(v) => Message::Request(v.as_ref().into()),
+                    CanisterInputMessage::Ingress(v) => Message::Ingress(v.as_ref().into()),
+                };
+                Self {
+                    task: Some(pb::execution_task::Task::AbortedExecution(
+                        pb::execution_task::AbortedExecution {
+                            message: Some(message),
+                        },
+                    )),
+                }
+            }
+            ExecutionTask::AbortedInstallCode(message) => {
+                use pb::execution_task::aborted_install_code::Message;
+                let message = match message {
+                    RequestOrIngress::Request(v) => Message::Request(v.as_ref().into()),
+                    RequestOrIngress::Ingress(v) => Message::Ingress(v.as_ref().into()),
+                };
+                Self {
+                    task: Some(pb::execution_task::Task::AbortedInstallCode(
+                        pb::execution_task::AbortedInstallCode {
+                            message: Some(message),
+                        },
+                    )),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<pb::ExecutionTask> for ExecutionTask {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
+        let task = value
+            .task
+            .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
+        let task = match task {
+            pb::execution_task::Task::AbortedExecution(aborted) => {
+                use pb::execution_task::aborted_execution::Message;
+                let message = aborted
+                    .message
+                    .ok_or(ProxyDecodeError::MissingField("AbortedExecution::message"))?;
+                let message = match message {
+                    Message::Request(v) => CanisterInputMessage::Request(Arc::new(v.try_into()?)),
+                    Message::Response(v) => CanisterInputMessage::Response(Arc::new(v.try_into()?)),
+                    Message::Ingress(v) => CanisterInputMessage::Ingress(Arc::new(v.try_into()?)),
+                };
+                ExecutionTask::AbortedExecution(message)
+            }
+            pb::execution_task::Task::AbortedInstallCode(aborted) => {
+                use pb::execution_task::aborted_install_code::Message;
+                let message = aborted.message.ok_or(ProxyDecodeError::MissingField(
+                    "AbortedInstallCode::message",
+                ))?;
+                let message = match message {
+                    Message::Request(v) => RequestOrIngress::Request(Arc::new(v.try_into()?)),
+                    Message::Ingress(v) => RequestOrIngress::Ingress(Arc::new(v.try_into()?)),
+                };
+                ExecutionTask::AbortedInstallCode(message)
+            }
+        };
+        Ok(task)
+    }
+}
+
 impl SystemState {
     pub fn new_running(
         canister_id: CanisterId,
@@ -311,6 +388,7 @@ impl SystemState {
         certified_data: Vec<u8>,
         canister_metrics: CanisterMetrics,
         cycles_balance: Cycles,
+        task_queue: VecDeque<ExecutionTask>,
     ) -> Self {
         Self {
             controllers,
@@ -322,7 +400,7 @@ impl SystemState {
             certified_data,
             canister_metrics,
             cycles_balance,
-            task_queue: Default::default(),
+            task_queue,
         }
     }
 
