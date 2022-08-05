@@ -21,8 +21,9 @@ pub struct GetBtcAddressResult {
 ///
 /// See [`derivation_path_schema()`] for the possible panics.
 fn account_derivation_path(principal: Principal, subaccount: Option<Subaccount>) -> Vec<Vec<u8>> {
-    let bytes = derivation_path_schema(principal, subaccount);
-    ic_btc_library::address_management::get_derivation_path(&bytes)
+    let _bytes = derivation_path_schema(principal, subaccount);
+    //ic_btc_library::address_management::get_derivation_path(&bytes)
+    todo!()
 }
 
 /// Return a blob containing principal and subaccount.

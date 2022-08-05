@@ -81,7 +81,6 @@
 /rs/bitcoin/ckbtc/                      @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
-/rs/bitcoin/library/                    @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/types/                      @dfinity-lab/teams/execution-owners
 /rs/boundary_node/                      @dfinity-lab/teams/boundarynode-team
