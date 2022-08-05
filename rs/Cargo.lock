@@ -4702,6 +4702,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-extended-bip32"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ic-crypto-internal-threshold-sig-ecdsa",
+]
+
+[[package]]
 name = "ic-crypto-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [

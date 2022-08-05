@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-extended-bip32"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-crypto-internal-threshold-sig-ecdsa = { path = "../internal/crypto_lib/threshold_sig/tecdsa" }
+
+[dev-dependencies]
+hex = "0.4"

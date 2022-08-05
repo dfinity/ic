@@ -40,6 +40,7 @@ members = [
   "constants",
   "criterion_time",
   "crypto",
+  "crypto/extended_bip32",
   "crypto/hash",
   "crypto/internal/crypto_lib/basic_sig/der_utils",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
