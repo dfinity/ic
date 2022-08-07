@@ -254,10 +254,12 @@ type ProposalData = record {
   failure_reason : opt GovernanceError;
   ballots : vec record { text; Ballot };
   reward_event_round : nat64;
+  initial_voting_period : nat64;
   failed_timestamp_seconds : nat64;
   proposal_creation_timestamp_seconds : nat64;
   reject_cost_e8s : nat64;
   latest_tally : opt Tally;
+  wait_for_quiet_deadline_increase_seconds : nat64;
   decided_timestamp_seconds : nat64;
   proposal : opt Proposal;
   proposer : opt NeuronId;
