@@ -583,6 +583,16 @@ message ProposalData {
   // True if NervousSystemParameters.voting_reward_parameters was set when the
   // proposal was made.
   bool is_eligible_for_rewards = 16;
+
+  // The initial voting period of the proposal, identical in meaning to the one in  
+  // NervousSystemParameters, and duplicated here so the parameters can be changed 
+  // without affecting existing proposals.
+  uint64 initial_voting_period = 17;
+
+  // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in 
+  // meaning to the one in NervousSystemParameters, and duplicated here so the 
+  // parameters can be changed without affecting existing proposals.
+  uint64 wait_for_quiet_deadline_increase_seconds = 18;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,

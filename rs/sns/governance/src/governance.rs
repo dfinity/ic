@@ -1498,22 +1498,10 @@ impl Governance {
         }
 
         ProposalData {
-            action: data.action,
-            id: data.id,
-            proposer: data.proposer.clone(),
-            reject_cost_e8s: data.reject_cost_e8s,
             proposal: new_proposal,
             proposal_creation_timestamp_seconds: data.proposal_creation_timestamp_seconds,
             ballots: BTreeMap::new(), // To reduce size of payload, exclude ballots
-            latest_tally: data.latest_tally.clone(),
-            decided_timestamp_seconds: data.decided_timestamp_seconds,
-            executed_timestamp_seconds: data.executed_timestamp_seconds,
-            failed_timestamp_seconds: data.failed_timestamp_seconds,
-            failure_reason: data.failure_reason.clone(),
-            reward_event_round: data.reward_event_round,
-            wait_for_quiet_state: data.wait_for_quiet_state.clone(),
-            payload_text_rendering: data.payload_text_rendering.clone(),
-            is_eligible_for_rewards: data.is_eligible_for_rewards,
+            ..data.clone()
         }
     }
 
@@ -1645,9 +1633,6 @@ impl Governance {
     /// If the proposal is adopted but not executed, attempts to execute it.
     pub fn process_proposal(&mut self, proposal_id: u64) {
         let now_seconds = self.env.now();
-        let initial_voting_period = self.initial_voting_period();
-        let wait_for_quiet_deadline_increase_seconds =
-            self.wait_for_quiet_deadline_increase_seconds();
 
         let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
             None => return,
@@ -1663,11 +1648,7 @@ impl Governance {
         // arrive after a decision has been made: such votes count
         // for voting rewards, but shall not make it into the
         // tally.
-        proposal_data.recompute_tally(
-            now_seconds,
-            initial_voting_period,
-            wait_for_quiet_deadline_increase_seconds,
-        );
+        proposal_data.recompute_tally(now_seconds);
         if !proposal_data.can_make_decision(now_seconds) {
             return;
         }
@@ -1731,16 +1712,21 @@ impl Governance {
             self.process_proposal(pid);
         }
 
-        let initial_voting_period = self.initial_voting_period();
-
         self.closest_proposal_deadline_timestamp_seconds = self
             .proto
             .proposals
             .values()
             .filter(|data| data.status() == ProposalDecisionStatus::Open)
-            .map(|data| {
-                data.proposal_creation_timestamp_seconds
-                    .saturating_add(initial_voting_period)
+            .map(|proposal_data| {
+                proposal_data
+                    .wait_for_quiet_state
+                    .clone()
+                    .map(|w| w.current_deadline_timestamp_seconds)
+                    .unwrap_or_else(|| {
+                        proposal_data
+                            .proposal_creation_timestamp_seconds
+                            .saturating_add(proposal_data.initial_voting_period)
+                    })
             })
             .min()
             .unwrap_or(u64::MAX);
@@ -2089,7 +2075,7 @@ impl Governance {
     ///
     /// This is a low-level function that makes no verification whatsoever.
     fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let initial_voting_period = self.initial_voting_period();
+        let initial_voting_period = data.initial_voting_period;
 
         self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
             data.proposal_creation_timestamp_seconds + initial_voting_period,
@@ -2264,6 +2250,8 @@ impl Governance {
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
         let initial_voting_period = self.initial_voting_period();
+        let wait_for_quiet_deadline_increase_seconds =
+            self.wait_for_quiet_deadline_increase_seconds();
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -2318,7 +2306,17 @@ impl Governance {
             ballots: electoral_roll,
             payload_text_rendering: Some(rendering),
             is_eligible_for_rewards,
-            ..Default::default()
+            initial_voting_period,
+            wait_for_quiet_deadline_increase_seconds,
+            // Writing these explicitly so that we have to make a consious decision
+            // about what to do when adding a new field to `ProposalData`.
+            latest_tally: ProposalData::default().latest_tally,
+            decided_timestamp_seconds: ProposalData::default().decided_timestamp_seconds,
+            executed_timestamp_seconds: ProposalData::default().executed_timestamp_seconds,
+            failed_timestamp_seconds: ProposalData::default().failed_timestamp_seconds,
+            failure_reason: ProposalData::default().failure_reason,
+            reward_event_round: ProposalData::default().reward_event_round,
+            wait_for_quiet_state: ProposalData::default().wait_for_quiet_state,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -4180,6 +4178,8 @@ mod tests {
                 wait_for_quiet_state: Some(WaitForQuietState {
                     current_deadline_timestamp_seconds: initial_voting_period,
                 }),
+                initial_voting_period,
+                wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
             let old_tally = Tally {
@@ -4196,8 +4196,6 @@ mod tests {
             };
             proposal.evaluate_wait_for_quiet(
                 now_seconds,
-                initial_voting_period,
-                wait_for_quiet_deadline_increase_seconds,
                 &old_tally,
                 &new_tally,
             );
@@ -4226,6 +4224,8 @@ mod tests {
                 wait_for_quiet_state: Some(WaitForQuietState {
                     current_deadline_timestamp_seconds: initial_voting_period,
                 }),
+                initial_voting_period,
+                wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
             let old_tally = Tally {
@@ -4242,8 +4242,6 @@ mod tests {
             };
             proposal.evaluate_wait_for_quiet(
                 now_seconds,
-                initial_voting_period,
-                wait_for_quiet_deadline_increase_seconds,
                 &old_tally,
                 &new_tally,
             );
@@ -4277,6 +4275,8 @@ mod tests {
                 wait_for_quiet_state: Some(WaitForQuietState {
                     current_deadline_timestamp_seconds: initial_voting_period,
                 }),
+                initial_voting_period,
+                wait_for_quiet_deadline_increase_seconds: adjusted_wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
             let old_tally = Tally {
@@ -4293,8 +4293,6 @@ mod tests {
             };
             proposal.evaluate_wait_for_quiet(
                 now_seconds,
-                initial_voting_period,
-                adjusted_wait_for_quiet_deadline_increase_seconds,
                 &old_tally,
                 &new_tally,
             );

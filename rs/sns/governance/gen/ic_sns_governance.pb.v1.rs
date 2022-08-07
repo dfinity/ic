@@ -574,6 +574,16 @@ pub struct ProposalData {
     /// proposal was made.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
+    /// The initial voting period of the proposal, identical in meaning to the one in  
+    /// NervousSystemParameters, and duplicated here so the parameters can be changed
+    /// without affecting existing proposals.
+    #[prost(uint64, tag = "17")]
+    pub initial_voting_period: u64,
+    /// The wait_for_quiet_deadline_increase_seconds of the proposal, identical in
+    /// meaning to the one in NervousSystemParameters, and duplicated here so the
+    /// parameters can be changed without affecting existing proposals.
+    #[prost(uint64, tag = "18")]
+    pub wait_for_quiet_deadline_increase_seconds: u64,
 }
 /// The nervous system's parameters, which are parameters that can be changed, via proposals,
 /// by each nervous system community.

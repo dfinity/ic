@@ -661,8 +661,6 @@ impl ProposalData {
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
-        voting_period_seconds: u64,
-        wait_for_quiet_deadline_increase_seconds: u64,
         old_tally: &Tally,
         new_tally: &Tally,
     ) {
@@ -728,8 +726,9 @@ impl ProposalData {
         // along the linear path that was determined by the starting
         // variables.
         let elapsed_seconds = now_seconds.saturating_sub(self.proposal_creation_timestamp_seconds);
-        let required_margin = wait_for_quiet_deadline_increase_seconds
-            .saturating_add(voting_period_seconds / 2)
+        let required_margin = self
+            .wait_for_quiet_deadline_increase_seconds
+            .saturating_add(self.initial_voting_period / 2)
             .saturating_sub(elapsed_seconds / 2);
         let new_deadline = std::cmp::max(
             current_deadline,
@@ -752,12 +751,7 @@ impl ProposalData {
 
     /// Recomputes the proposal's tally.
     /// This is an expensive operation.
-    pub fn recompute_tally(
-        &mut self,
-        now_seconds: u64,
-        voting_period_seconds: u64,
-        wait_for_quiet_deadline_increase_seconds: u64,
-    ) {
+    pub fn recompute_tally(&mut self, now_seconds: u64) {
         // Tally proposal
         let mut yes = 0;
         let mut no = 0;
@@ -796,13 +790,7 @@ impl ProposalData {
                 return;
             }
 
-            self.evaluate_wait_for_quiet(
-                now_seconds,
-                voting_period_seconds,
-                wait_for_quiet_deadline_increase_seconds,
-                &old_tally,
-                &new_tally,
-            );
+            self.evaluate_wait_for_quiet(now_seconds, &old_tally, &new_tally);
         }
 
         self.latest_tally = Some(new_tally);
