@@ -4,7 +4,7 @@ Before=systemd-networkd.target
 DefaultDependencies=no
 Before=systemd-networkd.service
 After=systemd-tmpfiles-setup.service
-Requires=dev-ipmi0.device
+Wants=dev-ipmi0.device
 After=dev-ipmi0.device
 
 [Service]
