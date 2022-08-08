@@ -106,7 +106,7 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
                     }
                 }
             };
-            test.result = test_result.result;
+            *test = test_result;
         }
     }
     // Recursively infer suite and pot level results from individual tests results.
