@@ -529,11 +529,11 @@ initial_token_distribution:
         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
           stake_e8s: 500000000
 
-max_icp_e8s: 10000
+max_icp_e8s: 200000000
 min_participants: 2
-min_participant_icp_e8s: 1
-max_participant_icp_e8s: 10000
-min_icp_e8s: 9000
+min_participant_icp_e8s: 100000000
+max_participant_icp_e8s: 100000000
+min_icp_e8s: 200000000
 fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
 logo: {}
 description: Launching an SNS

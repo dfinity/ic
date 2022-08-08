@@ -42,7 +42,7 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
 /// SNS parameters default values
-pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 1;
+pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 100_000_000;
 
 // Token Symbols that can not be used.
 lazy_static! {
@@ -443,10 +443,81 @@ impl SnsInitPayload {
     }
 
     fn validate_neuron_minimum_stake_e8s(&self) -> Result<(), String> {
-        match self.neuron_minimum_stake_e8s {
-            Some(_) => Ok(()),
-            None => Err("Error: neuron_minimum_stake must be specified.".to_string()),
+        let neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .expect("Error: neuron_minimum_stake_e8s must be specified.");
+        let initial_token_distribution = self
+            .initial_token_distribution
+            .as_ref()
+            .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
+
+        match initial_token_distribution {
+            FractionalDeveloperVotingPower(f) => {
+                let developer_distribution = f
+                    .developer_distribution
+                    .as_ref()
+                    .ok_or_else(|| "Error: developer_distribution must be specified".to_string())?;
+
+                let airdrop_distribution = f
+                    .airdrop_distribution
+                    .as_ref()
+                    .ok_or_else(|| "Error: airdrop_distribution must be specified".to_string())?;
+
+                let min_stake_infringing_developer_neurons: Vec<(PrincipalId, u64)> =
+                    developer_distribution
+                        .developer_neurons
+                        .iter()
+                        .filter_map(|neuron_distribution| {
+                            if neuron_distribution.stake_e8s < neuron_minimum_stake_e8s {
+                                // Safe to unwrap due to the checks done above
+                                Some((
+                                    neuron_distribution.controller.unwrap(),
+                                    neuron_distribution.stake_e8s,
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                if !min_stake_infringing_developer_neurons.is_empty() {
+                    return Err(format!(
+                        "Error: {} developer neurons have a stake below the minimum stake ({} e8s):  \n {:?}",
+                        min_stake_infringing_developer_neurons.len(),
+                        neuron_minimum_stake_e8s,
+                        min_stake_infringing_developer_neurons,
+                    ));
+                }
+
+                let min_stake_infringing_airdrop_neurons: Vec<(PrincipalId, u64)> =
+                    airdrop_distribution
+                        .airdrop_neurons
+                        .iter()
+                        .filter_map(|neuron_distribution| {
+                            if neuron_distribution.stake_e8s < neuron_minimum_stake_e8s {
+                                // Safe to unwrap due to the checks done above
+                                Some((
+                                    neuron_distribution.controller.unwrap(),
+                                    neuron_distribution.stake_e8s,
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                if !min_stake_infringing_airdrop_neurons.is_empty() {
+                    return Err(format!(
+                        "Error: {} airdrop neurons have a stake below the minimum stake ({} e8s):  \n {:?}",
+                        min_stake_infringing_airdrop_neurons.len(),
+                        neuron_minimum_stake_e8s,
+                        min_stake_infringing_airdrop_neurons,
+                    ));
+                }
+            }
         }
+
+        Ok(())
     }
 
     fn validate_icp_parameters(&self) -> Result<(), String> {
@@ -484,9 +555,35 @@ impl SnsInitPayload {
     }
 
     fn validate_min_participant_icp_e8s(&self) -> Result<(), String> {
-        match self.min_participant_icp_e8s {
-            Some(_) => Ok(()),
-            None => Err("Error: min_participant_icp_e8s must be specified.".to_string()),
+        let max_icp_e8s = self
+            .max_icp_e8s
+            .ok_or_else(|| "Error: max_icp_e8s must be specified.".to_string())?;
+        let min_participant_icp_e8s = self
+            .min_participant_icp_e8s
+            .ok_or_else(|| "Error: min_participant_icp_e8s must be specified.".to_string())?;
+        let initial_token_distribution = self
+            .initial_token_distribution
+            .as_ref()
+            .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
+        let sale_tokens = match initial_token_distribution {
+            FractionalDeveloperVotingPower(fractional_developer_voting_power) => {
+                let swap_distribution = fractional_developer_voting_power
+                    .swap_distribution
+                    .as_ref()
+                    .ok_or_else(|| "Error: swap_distribution must be specified".to_string())?;
+                swap_distribution.initial_swap_amount_e8s
+            }
+        };
+        let neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .ok_or_else(|| "Error: neuron_minimum_stake_e8s must be specified.".to_string())?;
+        let min_participant_token = min_participant_icp_e8s * sale_tokens / max_icp_e8s;
+        if min_participant_token < neuron_minimum_stake_e8s {
+            Err("Error: min_participant_icp_e8s is too small. If max_icp are obtained, a contribution \
+of min_participant_icp would result in a neuron with a stake smaller than \
+neuron_minimum_stake".to_string())
+        } else {
+            Ok(())
         }
     }
 
@@ -648,7 +745,7 @@ mod test {
             proposal_reject_cost_e8s: Some(100_000_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
             max_icp_e8s: Some(1_000_000_000),
-            min_participants: Some(1),
+            min_participants: Some(10),
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
@@ -763,6 +860,10 @@ mod test {
         sns_init_payload = get_sns_init_payload();
 
         sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.neuron_minimum_stake_e8s = Some(1_000_000_000);
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 

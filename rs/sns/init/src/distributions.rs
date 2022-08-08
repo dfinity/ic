@@ -824,6 +824,11 @@ mod test {
             }],
         });
         assert!(initial_token_distribution.validate().is_err());
+
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: Default::default(),
+        });
+        assert!(initial_token_distribution.validate().is_ok());
     }
 
     #[test]
