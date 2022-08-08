@@ -85,6 +85,9 @@ pub fn test(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+    topo_restore_ic.unassigned_nodes().for_each(|node| {
+        node.await_can_login_as_admin_via_ssh().unwrap();
+    });
 
     let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
     let ic_version_str = ic_version.to_string();

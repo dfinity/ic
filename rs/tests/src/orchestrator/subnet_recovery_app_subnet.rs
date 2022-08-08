@@ -74,6 +74,10 @@ pub fn test(env: TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 
+    env.topology_snapshot().unassigned_nodes().for_each(|node| {
+        node.await_can_login_as_admin_via_ssh().unwrap();
+    });
+
     let master_version = match env::var("IC_VERSION_ID") {
         Ok(ver) => ver,
         Err(_) => panic!("Environment variable $IC_VERSION_ID is not set!"),
