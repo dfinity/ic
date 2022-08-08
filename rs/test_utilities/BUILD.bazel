@@ -58,6 +58,7 @@ rust_library(
         "//rs/replicated_state",
         "//rs/sys",
         "//rs/system_api",
+        "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
         "//rs/types/base_types",
         "//rs/types/error_types",

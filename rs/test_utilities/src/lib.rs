@@ -25,10 +25,9 @@ pub mod wasmtime_instance;
 pub mod xnet_payload_builder;
 pub use ic_universal_canister as universal_canister;
 
-mod logger;
 mod util;
 
-pub use logger::{get_test_replica_logger, with_test_logger, with_test_replica_logger};
+pub use ic_test_utilities_logger::{with_test_logger, with_test_replica_logger};
 pub use util::mock_time;
 pub use util::with_timeout;
 pub use util::FastForwardTimeSource;

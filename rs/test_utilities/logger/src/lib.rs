@@ -41,7 +41,7 @@ where
     slog_scope::scope(&log, || f(&log))
 }
 
-pub fn get_test_replica_logger() -> ReplicaLogger {
+fn get_test_replica_logger() -> ReplicaLogger {
     use slog::Drain;
 
     let buf = Arc::new(Mutex::new(vec![]));
