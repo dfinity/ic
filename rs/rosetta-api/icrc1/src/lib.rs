@@ -19,7 +19,8 @@ use std::fmt;
 
 pub type Subaccount = [u8; 32];
 
-const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
+pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
+pub const MAX_MEMO_LENGTH: usize = 32;
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
 pub struct Account {
@@ -231,7 +232,7 @@ impl From<Operation> for CandidOperation {
 pub struct CandidTransaction {
     pub operation: CandidOperation,
     pub created_at_time: Option<u64>,
-    pub memo: Option<u64>,
+    pub memo: Option<Memo>,
 }
 
 impl From<Transaction> for CandidTransaction {
@@ -250,6 +251,72 @@ impl From<Transaction> for CandidTransaction {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct MemoTooLarge(usize);
+
+impl fmt::Display for MemoTooLarge {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Memo field is {} bytes long, max allowed length is {}",
+            self.0, MAX_MEMO_LENGTH
+        )
+    }
+}
+
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
+)]
+#[serde(transparent)]
+pub struct Memo(#[serde(deserialize_with = "deserialize_memo_bytes")] ByteBuf);
+
+fn deserialize_memo_bytes<'de, D>(d: D) -> Result<ByteBuf, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let bytes = ByteBuf::deserialize(d)?;
+    let memo = Memo::try_from(bytes).map_err(D::Error::custom)?;
+    Ok(memo.into())
+}
+
+impl From<[u8; MAX_MEMO_LENGTH]> for Memo {
+    fn from(memo: [u8; MAX_MEMO_LENGTH]) -> Self {
+        Self(ByteBuf::from(memo.to_vec()))
+    }
+}
+
+impl From<u64> for Memo {
+    fn from(num: u64) -> Self {
+        Self(ByteBuf::from(num.to_be_bytes().to_vec()))
+    }
+}
+
+impl TryFrom<ByteBuf> for Memo {
+    type Error = MemoTooLarge;
+
+    fn try_from(b: ByteBuf) -> Result<Self, MemoTooLarge> {
+        if b.len() > MAX_MEMO_LENGTH {
+            return Err(MemoTooLarge(b.len()));
+        }
+        Ok(Self(b))
+    }
+}
+
+impl TryFrom<Vec<u8>> for Memo {
+    type Error = MemoTooLarge;
+
+    fn try_from(v: Vec<u8>) -> Result<Self, MemoTooLarge> {
+        Self::try_from(ByteBuf::from(v))
+    }
+}
+
+impl From<Memo> for ByteBuf {
+    fn from(memo: Memo) -> Self {
+        memo.0
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Transaction {
     #[serde(flatten)]
@@ -262,7 +329,7 @@ pub struct Transaction {
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memo: Option<u64>,
+    pub memo: Option<Memo>,
 }
 
 impl LedgerTransaction for Transaction {
@@ -280,7 +347,7 @@ impl LedgerTransaction for Transaction {
                 amount: amount.get_e8s(),
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
-            memo,
+            memo: memo.map(Memo::from),
         }
     }
 
@@ -326,7 +393,7 @@ impl Transaction {
         to: Account,
         amount: Tokens,
         created_at_time: Option<TimeStamp>,
-        memo: Option<u64>,
+        memo: Option<Memo>,
     ) -> Self {
         Self {
             operation: Operation::Mint {
@@ -344,7 +411,7 @@ impl Transaction {
         amount: Tokens,
         fee: Tokens,
         created_at_time: Option<TimeStamp>,
-        memo: Option<u64>,
+        memo: Option<Memo>,
     ) -> Self {
         Self {
             operation: Operation::Transfer {

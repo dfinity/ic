@@ -5,11 +5,11 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
-    Account, Transaction,
+    Account, Operation, Transaction,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction,
+    apply_transaction, archive_blocks, LedgerAccess, LedgerData,
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
 use num_traits::ToPrimitive;
@@ -158,7 +158,15 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                     min_burn_amount: Nat::from(ledger.transfer_fee().get_e8s()),
                 });
             }
-            Transaction::burn(from_account, amount, created_at_time, arg.memo)
+
+            Transaction {
+                operation: Operation::Burn {
+                    from: from_account,
+                    amount: amount.get_e8s(),
+                },
+                created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+                memo: arg.memo,
+            }
         } else if &from_account == ledger.minting_account() {
             let expected_fee = Nat::from(0u64);
             if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {

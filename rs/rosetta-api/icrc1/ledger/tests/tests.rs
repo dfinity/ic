@@ -1,14 +1,14 @@
 use candid::types::number::Nat;
-use candid::{Decode, Encode};
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
     endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
-    Account, Block, CandidBlock, CandidOperation, Operation, Transaction,
+    Account, Block, CandidBlock, CandidOperation, Memo, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockHeight, BlockType, HashOf};
-use ic_state_machine_tests::{CanisterId, StateMachine};
+use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -362,7 +362,7 @@ fn test_tx_deduplication() {
             fee: None,
             amount: Nat::from(1_000_000),
             created_at_time: Some(now),
-            memo: Some(0),
+            memo: Some(Memo::default()),
         },
     )
     .expect("transfer failed");
@@ -383,7 +383,7 @@ fn test_tx_deduplication() {
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now),
-                memo: Some(0),
+                memo: Some(Memo::default()),
             }
         )
     );
@@ -527,6 +527,88 @@ fn test_account_canonicalization() {
             }
         )
     );
+}
+
+#[test]
+fn test_memo_validation() {
+    let env = StateMachine::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
+
+    // [ic_icrc1::endpoints::TransferArg] does not allow invalid memos by construction, we
+    // need another type to check invalid inputs.
+    #[derive(CandidType)]
+    struct TransferArg {
+        to_principal: PrincipalId,
+        amount: Nat,
+        memo: Option<Vec<u8>>,
+    }
+    type TxResult = Result<Nat, TransferError>;
+
+    // 8-byte memo should work
+    Decode!(
+        &env.execute_ingress_as(
+            p1,
+            canister_id,
+            "icrc1_transfer",
+            Encode!(&TransferArg {
+                to_principal: p2,
+                amount: Nat::from(10_000),
+                memo: Some(vec![1u8; 8]),
+            })
+            .unwrap()
+        )
+        .expect("failed to call transfer")
+        .bytes(),
+        TxResult
+    )
+    .unwrap()
+    .expect("transfer failed");
+
+    // 32-byte memo should work
+    Decode!(
+        &env.execute_ingress_as(
+            p1,
+            canister_id,
+            "icrc1_transfer",
+            Encode!(&TransferArg {
+                to_principal: p2,
+                amount: Nat::from(10_000),
+                memo: Some(vec![1u8; 32]),
+            })
+            .unwrap()
+        )
+        .expect("failed to call transfer")
+        .bytes(),
+        TxResult
+    )
+    .unwrap()
+    .expect("transfer failed");
+
+    // 33-byte memo should fail
+    match env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc1_transfer",
+        Encode!(&TransferArg {
+            to_principal: p2,
+            amount: Nat::from(10_000),
+            memo: Some(vec![1u8; 33]),
+        })
+        .unwrap(),
+    ) {
+        Err(user_error) => assert_eq!(
+            user_error.code(),
+            ErrorCode::CanisterCalledTrap,
+            "unexpected error: {}",
+            user_error
+        ),
+        Ok(result) => panic!(
+            "expected a reject for a 33-byte memo, got result {:?}",
+            result
+        ),
+    }
 }
 
 #[test]
@@ -693,13 +775,16 @@ fn arb_operation() -> impl Strategy<Value = Operation> {
 }
 
 fn arb_transaction() -> impl Strategy<Value = Transaction> {
-    (arb_operation(), any::<Option<u64>>(), any::<Option<u64>>()).prop_map(
-        |(operation, ts, memo)| Transaction {
+    (
+        arb_operation(),
+        any::<Option<u64>>(),
+        any::<Option<[u8; 32]>>(),
+    )
+        .prop_map(|(operation, ts, memo)| Transaction {
             operation,
             created_at_time: ts,
-            memo,
-        },
-    )
+            memo: memo.map(Memo::from),
+        })
 }
 
 fn arb_block() -> impl Strategy<Value = Block> {

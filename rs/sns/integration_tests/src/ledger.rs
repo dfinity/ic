@@ -4,7 +4,7 @@ use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::endpoints::TransferArg;
-use ic_icrc1::Account;
+use ic_icrc1::{Account, Memo};
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
@@ -82,7 +82,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
                     to_subaccount: Some(to_subaccount),
                     created_at_time: None,
-                    memo: Some(nonce),
+                    memo: Some(Memo::from(nonce)),
                 },
             )
             .await

@@ -50,5 +50,5 @@ Account = [1*2 bytes]
 
 Amount = uint
 Hash = bytes
-Memo = uint
+Memo = bytes
 Timestamp = uint
