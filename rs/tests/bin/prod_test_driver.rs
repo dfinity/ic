@@ -10,7 +10,9 @@ use ic_tests::driver::config::{
 };
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
-use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources};
+use ic_tests::driver::ic::{
+    AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources,
+};
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
@@ -600,7 +602,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 pot_with_setup(
                     "large_subnet_workload_pot",
                     networking::subnet_update_workload::large_config,
-                    par(vec![
+                    seq(vec![
                         sys_t(
                             "large_subnet_update_workload_test",
                             networking::subnet_update_workload::large_subnet_test,
@@ -610,7 +612,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             networking::subnet_query_workload::large_subnet_test,
                         ),
                     ]),
-                ),
+                )
+                .with_default_vm_resources(Some(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(16)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64GiB
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })),
                 //.with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
             ],
         )

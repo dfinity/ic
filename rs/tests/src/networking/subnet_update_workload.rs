@@ -272,6 +272,8 @@ pub fn test(
         &log,
         "Step 4: Collect metrics from the workloads and perform assertions ..."
     );
+    info!(&log, "System subnet metrics {:#?}", nns_metrics,);
+    info!(&log, "App subnet metrics {:#?}", app_metrics,);
     let nns_duration_bucket = nns_metrics
         .find_request_duration_bucket(NNS_DURATION_THRESHOLD)
         .unwrap();
