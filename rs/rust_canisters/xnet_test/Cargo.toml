@@ -8,6 +8,7 @@ name = "xnet-test-canister"
 path = "src/main.rs"
 
 [dependencies]
+ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 candid = "0.7.4"
 dfn_core = { path = "../dfn_core" }
 rand = "0.8"
