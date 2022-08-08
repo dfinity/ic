@@ -60,7 +60,7 @@ function read_variables() {
             "ipv6_prefix") ipv6_prefix="${value}" ;;
             "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv6_address") ipv6_address="${value}" ;;
+            "hostname") hostname="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -75,13 +75,14 @@ function generate_name_server_list() {
 
 # Convert MAC address to SLAAC compatible (EUI64) IPv6 address
 function generate_ipv6_address() {
-    if [ -z "${ipv6_address}" ]; then
+    if [ -z "${hostname}" ]; then
         NAME_SERVERS="$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})"
         MAC_6=$(/opt/ic/bin/generate-deterministic-mac.sh --version=6 --index=0)
         MAC_4=$(/opt/ic/bin/generate-deterministic-mac.sh --version=4 --index=0)
         IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=0)
     else
-        IPV6_ADDRESS="${ipv6_address}"
+        MINIMAL="true"
+        MAC_6=$(ip -o link show | grep 'enp' | cut -d ' ' -f 20)
     fi
 }
 
@@ -205,14 +206,11 @@ EOF
 
     # 20-bond6.netdev
     (
-        if [ "${MAC_4}" != "" ]; then
-            local MAC="MACAddress=${MAC_6}"
-        fi
         cat <<EOF
 [NetDev]
 Name=bond6
 Kind=bond
-$(echo ${MAC})
+MACAddress=$(echo ${MAC_6})
 
 [Bond]
 Mode=active-backup
@@ -248,16 +246,23 @@ EOF
 
     # 20-br6.network
     (
+        if [ "${MINIMAL}" == "" ]; then
+            local ADDRESS="Address=$(echo ${IPV6_ADDRESS})"
+            local GATEWAY="Gateway=$(echo ${ipv6_gateway})"
+            local RA="no"
+        else
+            local RA="yes"
+        fi
         cat <<EOF
 [Match]
 Name=br6
 
 [Network]
 DHCP=no
-IPv6AcceptRA=no
+IPv6AcceptRA=$(echo ${RA})
+$(echo ${ADDRESS})
+$(echo ${GATEWAY})
 LinkLocalAddressing=yes
-Address=$(echo ${IPV6_ADDRESS})
-Gateway=$(echo ${ipv6_gateway})
 EOF
         generate_name_server_list
     ) >"${OUTPUT}/20-br6.network"
