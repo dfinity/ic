@@ -1,10 +1,19 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["**"]),
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
 )
 
 DEPENDENCIES = [
@@ -25,13 +34,23 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
+    "@crate_index//:rayon",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:threadpool",
-    "@crate_index//:rayon",
 ]
 
 MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/test_utilities",
+    "@crate_index//:mockall_0_7_2",
+    "@wabt_rs//:wabt",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -43,4 +62,13 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "backend_lib_test",
+    aliases = ALIASES,
+    crate = ":backend_lib",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

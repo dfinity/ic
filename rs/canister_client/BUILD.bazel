@@ -1,43 +1,79 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["**"]) + ["//rs/canister_client/sender:sources"],
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
 )
+
+DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
+    "//rs/crypto/tree_hash",
+    "//rs/protobuf",
+    "//rs/tree_deserializer",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:backoff",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:futures-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-tls",
+    "@crate_index//:itertools",
+    "@crate_index//:native-tls",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "//rs/validator",
+    "@crate_index//:hex",
+    "@crate_index//:libsecp256k1",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:rand_core",
+    "@crate_index//:tokio-test",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
+}
 
 rust_library(
     name = "canister_client",
     srcs = glob(["src/**"]),
-    aliases = {
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
-    },
+    aliases = ALIASES,
     crate_name = "ic_canister_client",
     edition = "2018",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
-    deps = [
-        "//rs/canister_client/sender",
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-        "//rs/crypto/tree_hash",
-        "//rs/protobuf",
-        "//rs/tree_deserializer",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "@crate_index//:backoff",
-        "@crate_index//:ed25519-dalek",
-        "@crate_index//:futures-util",
-        "@crate_index//:hyper",
-        "@crate_index//:hyper-tls",
-        "@crate_index//:itertools",
-        "@crate_index//:native-tls",
-        "@crate_index//:prost",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:tokio",
-        "@crate_index//:url",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_client_test",
+    aliases = ALIASES,
+    crate = ":canister_client",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
