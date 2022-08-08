@@ -23,14 +23,13 @@ use ic_types::{
     CanisterId, UserId,
 };
 use ic_validator::CanisterIdSet;
-use std::convert::TryFrom;
+use std::convert::{Infallible, TryFrom};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder,
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
@@ -87,7 +86,7 @@ impl ReadStateService {
 
 impl Service<Vec<u8>> for ReadStateService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
