@@ -1,3 +1,6 @@
+use crate::consensus::metrics::{
+    PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
+};
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder, consensus::PayloadValidationError,
     ingress_manager::IngressSelector, messaging::XNetPayloadBuilder,
@@ -57,6 +60,7 @@ impl BatchPayloadSectionBuilder {
         validation_context: &ValidationContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
         match self {
@@ -72,9 +76,12 @@ impl BatchPayloadSectionBuilder {
                 {
                     error!(
                         logger,
-                        "IngressPayload did not pass validation, this is a bug. Error: {:?}", err
+                        "Ingress payload did not pass validation, this is a bug, {:?} @{}",
+                        err,
+                        CRITICAL_ERROR_VALIDATION_NOT_PASSED
                     );
 
+                    metrics.critical_error_validation_not_passed.inc();
                     payload.ingress = IngressPayload::default();
                     return NumBytes::new(0);
                 }
@@ -83,9 +90,11 @@ impl BatchPayloadSectionBuilder {
                 if size > max_size {
                     error!(
                         logger,
-                        "IngressPayload is larger than byte limits, this is a bug."
+                        "IngressPayload is larger than byte limits, this is a bug, @{}",
+                        CRITICAL_ERROR_PAYLOAD_TOO_LARGE
                     );
 
+                    metrics.cricital_error_payload_too_large.inc();
                     payload.ingress = IngressPayload::default();
                     return NumBytes::new(0);
                 }
@@ -109,13 +118,18 @@ impl BatchPayloadSectionBuilder {
                     max_size,
                 );
 
+                // NOTE: At the moment, the payload builder is calling it's own validator,
+                // so we don't have to do that here
+
                 // Check that the size limit is respected
                 if size > max_size {
                     error!(
                         logger,
-                        "SelfValidatingPayload is larger than byte_limit. This is a bug."
+                        "SelfValidatingPayload is larger than byte_limit. This is a bug, @{}",
+                        CRITICAL_ERROR_PAYLOAD_TOO_LARGE
                     );
 
+                    metrics.cricital_error_payload_too_large.inc();
                     payload.self_validating = SelfValidatingPayload::default();
                     NumBytes::new(0)
                 } else {
@@ -142,6 +156,20 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                 ) {
                     Ok(validation_size) => {
+                        if validation_size > size {
+                            error!(
+                                logger,
+                                "CanisterHttp is larger than byte_limit. This is a bug, @{}",
+                                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+                            );
+
+                            metrics.cricital_error_payload_too_large.inc();
+                            payload.canister_http = CanisterHttpPayload::default();
+                            return NumBytes::new(0);
+                        }
+
+                        // NOTE: This is not a critical error, since it does not break any invariants.
+                        // It is nice to know about it nonetheless
                         if validation_size < size {
                             warn!(
                                 logger,
@@ -155,10 +183,12 @@ impl BatchPayloadSectionBuilder {
                     Err(err) => {
                         error!(
                             logger,
-                            "CanisterHttp payload did not pass validation, this is a bug, {:?}",
-                            err
+                            "CanisterHttp payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
                         );
 
+                        metrics.critical_error_validation_not_passed.inc();
                         payload.canister_http = CanisterHttpPayload::default();
                         NumBytes::new(0)
                     }
