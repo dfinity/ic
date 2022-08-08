@@ -1,5 +1,5 @@
 {
-  "checksum": "b841e04fc54c0adaf836453938b43e3c1c6cfaa907a718de517e1e03183f5b0f",
+  "checksum": "4abb2187479b67ac70e6e03f57017cba02ae70df7c7bdd02b700544e1be37216",
   "crates": {
     "abnf 0.6.1": {
       "name": "abnf",
@@ -1368,13 +1368,13 @@
       },
       "license": "MIT"
     },
-    "anyhow 1.0.59": {
+    "anyhow 1.0.60": {
       "name": "anyhow",
-      "version": "1.0.59",
+      "version": "1.0.60",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/anyhow/1.0.59/download",
-          "sha256": "c91f1f46651137be86f3a2b9a8359f9ab421d04d941c62b5982e1ca21113adf9"
+          "url": "https://crates.io/api/v1/crates/anyhow/1.0.60/download",
+          "sha256": "c794e162a5eff65c72ef524dfe393eb923c354e350bb78b9c7383df13f3bc142"
         }
       },
       "targets": [
@@ -1415,14 +1415,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.59"
+        "version": "1.0.60"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2254,13 +2254,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "async-channel 1.6.1": {
+    "async-channel 1.7.0": {
       "name": "async-channel",
-      "version": "1.6.1",
+      "version": "1.7.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/async-channel/1.6.1/download",
-          "sha256": "2114d64672151c0c5eaa5e131ec84a74f06e1e559830dabba01ca30605d66319"
+          "url": "https://crates.io/api/v1/crates/async-channel/1.7.0/download",
+          "sha256": "4b31b87a3367ed04dbcbc252bce3f2a8172fef861d47177524c503c908dff2c6"
         }
       },
       "targets": [
@@ -2300,7 +2300,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.6.1"
+        "version": "1.7.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -4598,7 +4598,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -4618,7 +4618,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -4696,7 +4696,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -4762,7 +4762,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -4778,7 +4778,7 @@
               "target": "build_info_common"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -5206,7 +5206,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -5646,7 +5646,7 @@
               "target": "base64_url"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -5851,13 +5851,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "chrono 0.4.19": {
+    "chrono 0.4.20": {
       "name": "chrono",
-      "version": "0.4.19",
+      "version": "0.4.20",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/chrono/0.4.19/download",
-          "sha256": "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
+          "url": "https://crates.io/api/v1/crates/chrono/0.4.20/download",
+          "sha256": "6127248204b9aba09a362f6c930ef6a78f2c1b2215f8a7b398c06e1083f17af0"
         }
       },
       "targets": [
@@ -5883,7 +5883,6 @@
           "alloc",
           "clock",
           "default",
-          "libc",
           "oldtime",
           "serde",
           "std",
@@ -5892,10 +5891,6 @@
         ],
         "deps": {
           "common": [
-            {
-              "id": "libc 0.2.127",
-              "target": "libc"
-            },
             {
               "id": "num-integer 0.1.45",
               "target": "num_integer"
@@ -5914,6 +5909,16 @@
             }
           ],
           "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(any(target_os = \"emscripten\", target_os = \"wasi\"))))": [
+              {
+                "id": "js-sys 0.3.59",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.82",
+                "target": "wasm_bindgen"
+              }
+            ],
             "cfg(windows)": [
               {
                 "id": "winapi 0.3.9",
@@ -5922,8 +5927,8 @@
             ]
           }
         },
-        "edition": "2015",
-        "version": "0.4.19"
+        "edition": "2018",
+        "version": "0.4.20"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -6662,13 +6667,13 @@
       },
       "license": "MPL-2.0"
     },
-    "comparable 0.5.1": {
+    "comparable 0.5.2": {
       "name": "comparable",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/comparable/0.5.1/download",
-          "sha256": "4fe5347e39ce412b80c75b4f1e30d83bcf1cb8f9eb3f20b67dbda9aec70d06e5"
+          "url": "https://crates.io/api/v1/crates/comparable/0.5.2/download",
+          "sha256": "f589813d1fc1b885a5a1ba7733029f0b0d0a519849d3c878f4ad3d4f5b984291"
         }
       },
       "targets": [
@@ -6711,23 +6716,27 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "comparable_derive 0.5.1",
+              "id": "comparable_derive 0.5.2",
               "target": "comparable_derive"
+            },
+            {
+              "id": "comparable_helper 0.5.2",
+              "target": "comparable_helper"
             }
           ],
           "selects": {}
         },
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "comparable_derive 0.5.1": {
+    "comparable_derive 0.5.2": {
       "name": "comparable_derive",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/comparable_derive/0.5.1/download",
-          "sha256": "c2854fec5d6dfb82db58bcf74997ba7210b1aac35cfa736d8a12d870fb781bf9"
+          "url": "https://crates.io/api/v1/crates/comparable_derive/0.5.2/download",
+          "sha256": "8bc12149fd88e532dcab80fde98258ea960e8d9c3ea25b6f3ba30d204077d2b5"
         }
       },
       "targets": [
@@ -6771,7 +6780,61 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "comparable_helper 0.5.2": {
+      "name": "comparable_helper",
+      "version": "0.5.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/comparable_helper/0.5.2/download",
+          "sha256": "9334ba02eae005887d2d0670371a1f2ab90409aa641e6b884baac1ae445664ec"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "comparable_helper",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "comparable_helper",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "convert_case 0.4.0",
+              "target": "convert_case"
+            },
+            {
+              "id": "proc-macro2 1.0.43",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.21",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.99",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10534,7 +10597,7 @@
               "target": "actix_web"
             },
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -10650,7 +10713,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -10666,7 +10729,7 @@
               "target": "colored"
             },
             {
-              "id": "comparable 0.5.1",
+              "id": "comparable 0.5.2",
               "target": "comparable"
             },
             {
@@ -10870,7 +10933,7 @@
               "target": "indicatif"
             },
             {
-              "id": "insta 1.17.1",
+              "id": "insta 1.18.0",
               "target": "insta"
             },
             {
@@ -11200,7 +11263,7 @@
               "target": "rusqlite"
             },
             {
-              "id": "rust_decimal 1.25.0",
+              "id": "rust_decimal 1.26.1",
               "target": "rust_decimal"
             },
             {
@@ -11550,7 +11613,7 @@
               "target": "prost_derive"
             },
             {
-              "id": "rust_decimal_macros 1.25.0",
+              "id": "rust_decimal_macros 1.26.1",
               "target": "rust_decimal_macros"
             },
             {
@@ -13312,7 +13375,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -16813,11 +16876,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
-              "id": "async-channel 1.6.1",
+              "id": "async-channel 1.7.0",
               "target": "async_channel"
             },
             {
@@ -18125,7 +18188,7 @@
               "target": "paste"
             },
             {
-              "id": "strum_macros 0.24.2",
+              "id": "strum_macros 0.24.3",
               "target": "strum_macros"
             }
           ],
@@ -18184,7 +18247,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -18848,13 +18911,13 @@
       },
       "license": "ISC"
     },
-    "insta 1.17.1": {
+    "insta 1.18.0": {
       "name": "insta",
-      "version": "1.17.1",
+      "version": "1.18.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/insta/1.17.1/download",
-          "sha256": "1585a0f4924236ca3c8dac97bc6a3efaacc08b1ed9264ff2155ec7ab2906a8ea"
+          "url": "https://crates.io/api/v1/crates/insta/1.18.0/download",
+          "sha256": "49de01ff8a0781c5414e674b4469b81f6693d6bda6a4d405600c2acd06ebc6d3"
         }
       },
       "targets": [
@@ -18877,15 +18940,21 @@
           "**"
         ],
         "crate_features": [
+          "__private_legacy_default_serialization",
           "colors",
           "console",
-          "default"
+          "default",
+          "serde"
         ],
         "deps": {
           "common": [
             {
               "id": "console 0.15.1",
               "target": "console"
+            },
+            {
+              "id": "linked-hash-map 0.5.6",
+              "target": "linked_hash_map"
             },
             {
               "id": "once_cell 1.13.0",
@@ -18896,22 +18965,18 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.83",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_yaml 0.8.26",
-              "target": "serde_yaml"
-            },
-            {
               "id": "similar 2.2.0",
               "target": "similar"
+            },
+            {
+              "id": "yaml-rust 0.4.5",
+              "target": "yaml_rust"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.17.1"
+        "version": "1.18.0"
       },
       "license": "Apache-2.0"
     },
@@ -21825,7 +21890,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -21833,7 +21898,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -25505,7 +25570,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro-crate 1.2.0",
+              "id": "proc-macro-crate 1.2.1",
               "target": "proc_macro_crate"
             },
             {
@@ -29131,13 +29196,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "proc-macro-crate 1.2.0": {
+    "proc-macro-crate 1.2.1": {
       "name": "proc-macro-crate",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro-crate/1.2.0/download",
-          "sha256": "26d50bfb8c23f23915855a00d98b5a35ef2e0b871bb52937bacadb798fbb66c8"
+          "url": "https://crates.io/api/v1/crates/proc-macro-crate/1.2.1/download",
+          "sha256": "eda0fc3b0fb7c975631757e14d9049da17374063edb6ebbcbc54d880d4fe94e9"
         }
       },
       "targets": [
@@ -29177,7 +29242,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.2.0"
+        "version": "1.2.1"
       },
       "license": "Apache-2.0/MIT"
     },
@@ -30135,7 +30200,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -33355,13 +33420,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal 1.25.0": {
+    "rust_decimal 1.26.1": {
       "name": "rust_decimal",
-      "version": "1.25.0",
+      "version": "1.26.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal/1.25.0/download",
-          "sha256": "34a3bb58e85333f1ab191bf979104b586ebd77475bc6681882825f4532dfe87c"
+          "url": "https://crates.io/api/v1/crates/rust_decimal/1.26.1/download",
+          "sha256": "ee9164faf726e4f3ece4978b25ca877ddc6802fa77f38cdccb32c7f805ecd70c"
         }
       },
       "targets": [
@@ -33411,7 +33476,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rust_decimal 1.25.0",
+              "id": "rust_decimal 1.26.1",
               "target": "build_script_build"
             },
             {
@@ -33422,7 +33487,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.25.0"
+        "version": "1.26.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -33431,13 +33496,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal_macros 1.25.0": {
+    "rust_decimal_macros 1.26.1": {
       "name": "rust_decimal_macros",
-      "version": "1.25.0",
+      "version": "1.26.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.25.0/download",
-          "sha256": "d1467556c7c115165aa0346bcf45bc947203bcc880efad85a09ba24ea17926c4"
+          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.26.1/download",
+          "sha256": "4903d8db81d2321699ca8318035d6ff805c548868df435813968795a802171b2"
         }
       },
       "targets": [
@@ -33469,14 +33534,14 @@
               "target": "quote"
             },
             {
-              "id": "rust_decimal 1.25.0",
+              "id": "rust_decimal 1.26.1",
               "target": "rust_decimal"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.25.0"
+        "version": "1.26.1"
       },
       "license": "MIT"
     },
@@ -36682,7 +36747,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -36794,7 +36859,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
@@ -38208,13 +38273,13 @@
       },
       "license": "MIT"
     },
-    "strum_macros 0.24.2": {
+    "strum_macros 0.24.3": {
       "name": "strum_macros",
-      "version": "0.24.2",
+      "version": "0.24.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/strum_macros/0.24.2/download",
-          "sha256": "4faebde00e8ff94316c01800f9054fd2ba77d30d9e922541913051d1d978918b"
+          "url": "https://crates.io/api/v1/crates/strum_macros/0.24.3/download",
+          "sha256": "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
         }
       },
       "targets": [
@@ -38267,7 +38332,7 @@
           ],
           "selects": {}
         },
-        "version": "0.24.2"
+        "version": "0.24.3"
       },
       "license": "MIT"
     },
@@ -39090,7 +39155,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -43514,8 +43579,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43526,8 +43591,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -43687,7 +43752,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -44443,7 +44508,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -44586,7 +44651,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -44680,7 +44745,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -44770,7 +44835,7 @@
               "target": "addr2line"
             },
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -44938,7 +45003,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.59",
+              "id": "anyhow 1.0.60",
               "target": "anyhow"
             },
             {
@@ -46578,7 +46643,7 @@
               "target": "base64"
             },
             {
-              "id": "chrono 0.4.19",
+              "id": "chrono 0.4.20",
               "target": "chrono"
             },
             {
