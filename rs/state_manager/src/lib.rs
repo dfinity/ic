@@ -1617,9 +1617,9 @@ impl StateManagerImpl {
     fn latest_certified_state(
         &self,
     ) -> Option<(Arc<ReplicatedState>, Certification, Arc<HashTree>)> {
-        let (height, certification, hash_tree) = self
-            .states
-            .read()
+        let states = self.states.read();
+
+        let (height, certification, hash_tree) = states
             .certifications_metadata
             .iter()
             .rev()
@@ -1629,9 +1629,23 @@ impl StateManagerImpl {
                     .certification
                     .clone()
                     .map(|certification| (*height, certification, Arc::clone(hash_tree)))
+            })
+            .or_else(|| {
+                warn!(self.log, "No state available with certification.");
+                None
             })?;
-        let state = self.get_state_at(height).ok()?;
-        Some((state.take(), certification, hash_tree))
+        let state = states
+            .snapshots
+            .iter()
+            .find_map(|snapshot| (snapshot.height == height).then(|| Arc::clone(&snapshot.state)))
+            .or_else(|| {
+                warn!(
+                    self.log,
+                    "Certified state at height {} not available.", height
+                );
+                None
+            })?;
+        Some((state, certification, hash_tree))
     }
 
     /// Returns the manifest of the latest checkpoint on disk with its
@@ -2399,16 +2413,16 @@ impl StateManager for StateManagerImpl {
                 .set(latest_certified as i64);
 
             metadata.certification = Some(certification);
-        }
 
-        for (_, certification_metadata) in states
-            .certifications_metadata
-            .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
-        {
-            if let Some(tree) = certification_metadata.hash_tree.take() {
-                self.deallocation_sender
-                    .send(Box::new(tree))
-                    .expect("failed to send object to deallocation thread");
+            for (_, certification_metadata) in states
+                .certifications_metadata
+                .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
+            {
+                if let Some(tree) = certification_metadata.hash_tree.take() {
+                    self.deallocation_sender
+                        .send(Box::new(tree))
+                        .expect("failed to send object to deallocation thread");
+                }
             }
         }
     }
@@ -2853,14 +2867,9 @@ impl StateReader for StateManagerImpl {
         if self.latest_state_height() < height {
             return Err(StateManagerError::StateNotCommittedYet(height));
         }
-        match self
-            .states
-            .read()
-            .snapshots
-            .iter()
-            .find(|snapshot| snapshot.height == height)
-            .map(|snapshot| Labeled::new(height, snapshot.state.clone()))
-        {
+        match self.states.read().snapshots.iter().find_map(|snapshot| {
+            (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
+        }) {
             Some(state) => Ok(state),
             None => match load_checkpoint(
                 &self.state_layout,
