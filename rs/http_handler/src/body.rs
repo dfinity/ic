@@ -1,14 +1,16 @@
 use crate::{
-    common::make_plaintext_response, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES,
+    common::{make_plaintext_response, poll_ready},
+    MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES,
 };
 use byte_unit::Byte;
 use hyper::{Body, Response, StatusCode};
 use ic_async_utils::{receive_body, BodyReceiveError};
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tower::{Layer, Service};
+use tower::{BoxError, Layer, Service};
 
 pub(crate) struct BodyReceiverLayer {
     max_request_receive_duration: Duration,
@@ -49,23 +51,23 @@ pub(crate) struct BodyReceiverService<S> {
     inner: S,
 }
 
-impl<S, E> Service<Body> for BodyReceiverService<S>
+impl<S> Service<Body> for BodyReceiverService<S>
 where
     S: Service<
             Vec<u8>,
             Response = Response<Body>,
-            Error = E,
-            Future = Pin<Box<dyn Future<Output = Result<Response<Body>, E>> + Send>>,
+            Error = Infallible,
+            Future = Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>>,
         > + Clone
         + Send
         + 'static,
 {
     type Response = S::Response;
-    type Error = S::Error;
-    type Future = S::Future;
+    type Error = BoxError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
+        poll_ready(self.inner.poll_ready(cx))
     }
 
     fn call(&mut self, body: Body) -> Self::Future {
@@ -108,7 +110,7 @@ where
                         Ok(make_plaintext_response(StatusCode::BAD_REQUEST, e))
                     }
                 },
-                Ok(body) => inner.call(body).await,
+                Ok(body) => Ok(inner.call(body).await.expect("Can't panic on infallible.")),
             }
         })
     }

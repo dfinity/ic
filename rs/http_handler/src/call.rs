@@ -2,10 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{
-        get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
-        poll_ready,
-    },
+    common::{get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response},
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
@@ -24,14 +21,12 @@ use ic_types::{
     messages::{SignedIngress, SignedRequestBytes},
     CountBytes, RegistryVersion, SubnetId,
 };
-use std::convert::TryInto;
+use std::convert::{Infallible, TryInto};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{
-    load_shed::LoadShed, util::BoxCloneService, BoxError, Service, ServiceBuilder, ServiceExt,
-};
+use tower::{load_shed::LoadShed, util::BoxCloneService, Service, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
 pub(crate) struct CallService {
@@ -126,12 +121,12 @@ fn get_registry_data(
 /// Handles a call to /api/v2/canister/../call
 impl Service<Vec<u8>> for CallService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        poll_ready(self.ingress_sender.poll_ready(cx))
+        self.ingress_sender.poll_ready(cx)
     }
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {

@@ -10,13 +10,13 @@ use hyper::{Body, Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
 use prost::Message;
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder,
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
 const MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS: usize = 100;
@@ -70,7 +70,7 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
 
 impl Service<Vec<u8>> for CatchUpPackageService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
