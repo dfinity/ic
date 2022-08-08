@@ -8277,7 +8277,6 @@ name = "ic-transport"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "crossbeam-channel 0.5.6",
  "ic-base-types",
  "ic-config",
  "ic-crypto",
@@ -8289,7 +8288,8 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
- "ic-test-utilities",
+ "ic-test-utilities-logger",
+ "ic-types-test-utils",
  "phantom_newtype",
  "prometheus 0.12.0",
  "serde",

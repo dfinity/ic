@@ -27,7 +27,6 @@ rust_library(
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/types/base_types",
-        "@crate_index//:crossbeam-channel",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:slog",

@@ -5,14 +5,13 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.36"
-crossbeam-channel = "0.5.5"
+ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-base-types = { path = "../types/base_types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
@@ -27,4 +26,5 @@ ic-crypto = { path = "../crypto" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-types-test-utils = { path = "../types/types_test_utils"}
