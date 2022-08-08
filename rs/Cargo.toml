@@ -226,6 +226,7 @@ members = [
   "test_utilities/artifact_pool",
   "test_utilities/load_wasm",
   "test_utilities/compare_dirs",
+  "test_utilities/logger",
   "test_utilities/metrics",
   "test_utilities/registry",
   "tests",

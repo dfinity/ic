@@ -1,0 +1,11 @@
+[package]
+name = "ic-test-utilities-logger"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-logger = { path = "../../monitoring/logger" }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog-scope = "4.1.2"
+slog-term = "2.6.0"
+

@@ -8198,6 +8198,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-system-api",
+ "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "ic-types-test-utils",
@@ -8235,6 +8236,16 @@ version = "0.8.0"
 dependencies = [
  "cargo_metadata",
  "escargot",
+]
+
+[[package]]
+name = "ic-test-utilities-logger"
+version = "0.8.0"
+dependencies = [
+ "ic-logger",
+ "slog",
+ "slog-scope",
+ "slog-term",
 ]
 
 [[package]]
