@@ -639,12 +639,10 @@ impl TransportImpl {
 mod tests {
     use crate::transport::create_transport;
     use async_trait::async_trait;
-    use crossbeam_channel::{bounded, Sender};
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces_transport::{TransportEvent, TransportStateChange};
-    use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
         connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
@@ -652,16 +650,15 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_crypto_tls_cert_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2};
-    use ic_test_utilities::with_test_replica_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use std::convert::Infallible;
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Arc;
-    use std::task::Context;
-    use std::task::Poll;
-    use tower::util::BoxCloneService;
-    use tower::Service;
+    use std::task::{Context, Poll};
+    use tokio::sync::mpsc::{channel, Sender};
+    use tower::{util::BoxCloneService, Service};
 
     const NODE_ID_1: NodeId = NODE_1;
     const NODE_ID_2: NodeId = NODE_2;
@@ -671,17 +668,10 @@ mod tests {
 
     const PORT_1: u16 = 65001;
     const PORT_2: u16 = 65002;
+
     #[derive(Clone)]
     struct FakeEventHandler {
         connected: Sender<bool>,
-    }
-
-    impl FakeEventHandler {
-        fn on_state_change(connected: Sender<bool>, state_change: TransportStateChange) {
-            if let TransportStateChange::PeerFlowUp(_) = state_change {
-                connected.send(true).unwrap();
-            }
-        }
     }
 
     #[async_trait]
@@ -697,33 +687,24 @@ mod tests {
         }
 
         fn call(&mut self, event: TransportEvent) -> Self::Future {
-            let connected = self.connected.clone();
-            Box::pin(async move {
-                match event {
-                    TransportEvent::Message(_) => (),
-                    TransportEvent::StateChange(state_change) => {
-                        Self::on_state_change(connected, state_change)
-                    }
-                };
-                Ok(())
-            })
+            if let TransportEvent::StateChange(TransportStateChange::PeerFlowUp(_)) = event {
+                self.connected.try_send(true).unwrap()
+            }
+            Box::pin(async { Ok(()) })
         }
     }
 
     #[test]
-    fn should_handshake() {
-        let registry_version = REG_V1;
-        let (connected_1, done_1) = bounded(0);
-        let (connected_2, done_2) = bounded(0);
+    fn test_start_connection_between_two_peers() {
         with_test_replica_logger(|logger| {
+            let registry_version = REG_V1;
             // Setup registry and crypto component
-            let registry_and_data = empty_registry();
+            let registry_and_data = RegistryAndDataProvider::new();
             let crypto_1 =
                 temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_1);
             let crypto_2 =
                 temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
             registry_and_data.registry.update_to_latest_version();
-
             let rt = tokio::runtime::Runtime::new().unwrap();
 
             let mut client_config_1 = TransportConfig {
@@ -763,9 +744,10 @@ mod tests {
                 MetricsRegistry::new(),
                 Arc::new(crypto_2),
                 rt.handle().clone(),
-                logger.clone(),
+                logger,
             );
 
+            let (connected_1, mut done_1) = channel(1);
             let fake_event_handler_1 = BoxCloneService::new(FakeEventHandler {
                 connected: connected_1,
             });
@@ -783,6 +765,7 @@ mod tests {
                 .start_connections(&NODE_ID_2, &node_record_1, REG_V1)
                 .expect("start_connections");
 
+            let (connected_2, mut done_2) = channel(1);
             let fake_event_handler_2 = BoxCloneService::new(FakeEventHandler {
                 connected: connected_2,
             });
@@ -799,15 +782,25 @@ mod tests {
             control_plane_2
                 .start_connections(&NODE_ID_1, &node_record_2, REG_V1)
                 .expect("start_connections");
-            assert_eq!(done_1.recv(), Ok(true));
-            assert_eq!(done_2.recv(), Ok(true));
-            warn!(logger, "done");
+            assert_eq!(done_1.blocking_recv(), Some(true));
+            assert_eq!(done_2.blocking_recv(), Some(true));
         });
     }
 
     struct RegistryAndDataProvider {
         data_provider: Arc<ProtoRegistryDataProvider>,
         registry: Arc<FakeRegistryClient>,
+    }
+
+    impl RegistryAndDataProvider {
+        fn new() -> Self {
+            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+            let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
+            Self {
+                data_provider,
+                registry,
+            }
+        }
     }
 
     fn temp_crypto_component_with_tls_keys_in_registry(
@@ -827,14 +820,5 @@ mod tests {
             )
             .expect("failed to add TLS cert to registry");
         temp_crypto
-    }
-
-    fn empty_registry() -> RegistryAndDataProvider {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
-        RegistryAndDataProvider {
-            data_provider,
-            registry,
-        }
     }
 }
