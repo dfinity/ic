@@ -39,7 +39,7 @@ use std::{
 };
 
 // TODO: Make this amount configurable
-pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(5 * 60);
+pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 
 pub type CanisterHttpRequestId = CallbackId;
 
