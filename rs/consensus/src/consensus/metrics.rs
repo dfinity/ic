@@ -22,6 +22,10 @@ use std::sync::RwLock;
 // the range of ranks that are permitted to show up in metrics.
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 
+pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
+pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
+pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
+
 pub struct BlockMakerMetrics {
     pub get_payload_calls: IntCounterVec,
     pub block_size_bytes_estimate: IntGaugeVec,
@@ -370,6 +374,15 @@ pub struct PayloadBuilderMetrics {
     pub get_payload_duration: Histogram,
     pub validate_payload_duration: Histogram,
     pub past_payloads_length: Histogram,
+
+    /// Critical error for payloads above the maximum supported size
+    pub cricital_error_payload_too_large: IntCounter,
+
+    /// Critical error for newly created payloads that do not pass their own validation function
+    pub critical_error_validation_not_passed: IntCounter,
+
+    /// Critical error triggered if the subnet record contains entries that would not make sense to consensus
+    pub critical_error_subnet_record_data_issue: IntCounter,
 }
 
 impl PayloadBuilderMetrics {
@@ -394,6 +407,12 @@ impl PayloadBuilderMetrics {
                 "The length of past_payloads in payload selection",
                 linear_buckets(0.0, 1.0, 6),
             ),
+            cricital_error_payload_too_large: metrics_registry
+                .error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE),
+            critical_error_validation_not_passed: metrics_registry
+                .error_counter(CRITICAL_ERROR_VALIDATION_NOT_PASSED),
+            critical_error_subnet_record_data_issue: metrics_registry
+                .error_counter(CRITICAL_ERROR_SUBNET_RECORD_ISSUE),
         }
     }
 }

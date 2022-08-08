@@ -30,6 +30,9 @@ https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
  * `cycles_account_manager` and `scheduler`: Execution team, reachable at
  https://dfinity.slack.com/archives/CGZJ7G1J6[`#eng-execution`] or via
  `+@team-execution+`on Slack.
+ * `consensus`: Consensus team, reachable at
+ https://dfinity.slack.com/archives/CGZF2NKGT[`#eng-consensus`] or via
+ `+@team-consensus` on Slack.
 
 === `cycles_account_manager_response_cycles_refund_error`
 
@@ -167,3 +170,50 @@ that the State Sync implementation had assumed was already present locally.
 
 An occurrence would indicate either a random bit flip or, if this happens on
 multiple replicas, a bug that must be investigated immediately.
+
+
+=== `consensus_subnet_record_issue`
+
+The consensus component reads a number of values from the `SubnetRecord` for
+that particular subnet. It is possible, that these values are set up in a way
+that don't make sense to consensus, or that are obviously wrong, and would
+stall the subnet.
+
+In these cases, consenus internally replaces these values with sensible defaults
+and raises this critical error.
+
+The logs will contain information about which values are not set correctly.
+This is usually not an immediate problem.
+Use `ic-admin get-topology` to verify the invalid setting of the subnet record.
+Then, either submit a proposal to fix the value or contact the consensus team.
+
+=== `consensus_validation_not_passed`
+
+The consensus component constructs a payload as part of building a block.
+To defend against corrupt block makers, payloads are being validated on the
+receiving side, before being processed.
+In theory, a non-corrupt replica will always be able to build a valid response.
+In practice however, a bug either in the payload builder code or the payload
+validator code can lead to a situation where all non-corrupt replicas build
+invalid blocks too. If this happens the subnet would stall.
+
+To prevent this from happening, payload builders immediately run their own
+validation code against the freshly build payload.
+If the validation fails, the payload is replaced with an empty payload to not
+stall the subnet and this critical error is risen.
+
+This error indicates a critical bug in payload builder or validation code.
+Contact the consensus team as soon as possible about this occurence.
+
+=== `consensus_payload_too_large`
+
+This error is similar to `consensus_validation_not_passed`.
+Aside from validating the payload's content, the payload builder and
+validator also have to make sure that the block is not oversized.
+
+Similarly, a bug in either payload builder or validator can lead to a
+situation where the builder builds a payload that is considered oversized
+by the validator and is rejected.
+
+This error indicates a critical bug in payload builder or validation code.
+Contact the consensus team as soon as possible about this occurence.

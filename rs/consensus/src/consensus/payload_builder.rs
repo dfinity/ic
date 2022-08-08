@@ -1,7 +1,9 @@
 //! Payload creation/validation subcomponent
 
 use crate::consensus::{
-    block_maker::SubnetRecords, metrics::PayloadBuilderMetrics, payload::BatchPayloadSectionBuilder,
+    block_maker::SubnetRecords,
+    metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
+    payload::BatchPayloadSectionBuilder,
 };
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder,
@@ -130,6 +132,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                     context,
                     NumBytes::new(max_block_payload_size.saturating_sub(accumulated_size)),
                     past_payloads,
+                    &self.metrics,
                     &self.logger,
                 )
                 .get();
@@ -207,8 +210,9 @@ impl PayloadBuilderImpl {
             warn!(every_n_seconds => 300, self.logger,
                 "max_block_payload_size too small. current value: {}, required minimum: {}! \
                 max_block_payload_size must be larger than max_ingress_bytes_per_message \
-                and MAX_BITCOIN_BLOCK_SIZE. Update registry!",
-                max_block_payload_size, required_min_size);
+                and MAX_XNET_PAYLOAD_IN_BYTES. Update registry! @{}",
+                max_block_payload_size, required_min_size, CRITICAL_ERROR_SUBNET_RECORD_ISSUE);
+            self.metrics.critical_error_subnet_record_data_issue.inc();
             max_block_payload_size = required_min_size;
         }
 
