@@ -4,7 +4,7 @@ use candid::Principal;
 use dfn_candid::{ArgumentDecoder, ArgumentEncoder};
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
+use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
 use ic_icrc1_client::{ICRC1Client, Runtime};
 use ic_ledger_core::{block::BlockHeight, Tokens};
 use ic_nervous_system_common::ledger::Ledger as IcpLedger;
@@ -96,7 +96,7 @@ impl Ledger for LedgerCanister {
             fee: Some(Nat::from(fee_e8s)),
             created_at_time: None,
             amount: Nat::from(amount_e8s),
-            memo: Some(memo),
+            memo: Some(Memo::from(memo)),
         };
         let res = self.client.transfer(args).await
             .map_err(|(code, msg)| {

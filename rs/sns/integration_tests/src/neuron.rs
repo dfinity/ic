@@ -4,7 +4,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
+use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
@@ -1318,7 +1318,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
                 to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
                 to_subaccount: Some(to_subaccount),
                 created_at_time: None,
-                memo: Some(nonce),
+                memo: Some(Memo::from(nonce)),
             },
         )
         .await

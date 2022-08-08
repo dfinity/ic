@@ -1,3 +1,4 @@
+use crate::Memo;
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -60,7 +61,7 @@ pub struct TransferArg {
     #[serde(default)]
     pub created_at_time: Option<u64>,
     #[serde(default)]
-    pub memo: Option<u64>,
+    pub memo: Option<Memo>,
     pub amount: NumTokens,
 }
 
