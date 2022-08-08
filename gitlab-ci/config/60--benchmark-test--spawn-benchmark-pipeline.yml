@@ -56,7 +56,7 @@ maximum-capacity-canister-http:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --initial_rps=50 --increment_rps=50 --target_rps=200 --max_rps=500 --workload workloads/canister-http-benchmark.toml
+      $SHELL_WRAPPER pipenv run python3 experiments/run_mixed_workload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --initial_rps=50 --increment_rps=50 --target_rps=150 --max_rps=400 --workload workloads/canister-http-benchmark.toml
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
