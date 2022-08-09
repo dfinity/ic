@@ -17,7 +17,7 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use reqwest::Url;
 use ssh2::Session;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream};
 use std::path::Path;
 use std::time::Duration;
@@ -243,4 +243,15 @@ pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     .await;
 
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
+}
+
+pub(crate) fn execute_bash_command(sess: &Session, command: String) -> String {
+    let mut channel = sess.channel_session().unwrap();
+    channel.exec("bash").unwrap();
+    channel.write_all(command.as_bytes()).unwrap();
+    channel.flush().unwrap();
+    channel.send_eof().unwrap();
+    let mut out = String::new();
+    channel.read_to_string(&mut out).unwrap();
+    out
 }

@@ -842,6 +842,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot_with_setup(
+                    "subnet_recovery_app_same_nodes_no_upgrade",
+                    orchestrator::subnet_recovery_app_subnet_no_upgrade::setup,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes_no_upgrade",
+                        orchestrator::subnet_recovery_app_subnet_no_upgrade::test,
+                    )]),
+                ),
+                pot_with_setup(
                     "subnet_recovery_app_failover_nodes",
                     orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
                     par(vec![sys_t(

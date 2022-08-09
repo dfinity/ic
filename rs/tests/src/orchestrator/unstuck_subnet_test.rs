@@ -13,6 +13,7 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
+use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::UpdateImageType;
@@ -31,7 +32,6 @@ use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use ssh2::Session;
 use std::convert::TryFrom;
-use std::io::{Read, Write};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -178,15 +178,4 @@ fn have_sha_errors(sess: &Session) -> bool {
     let search_str = "FileHashMismatchError";
     let check_log_script = format!("journalctl | grep \"{}\"", search_str);
     execute_bash_command(sess, check_log_script).lines().count() != 0
-}
-
-fn execute_bash_command(sess: &Session, command: String) -> String {
-    let mut channel = sess.channel_session().unwrap();
-    channel.exec("bash").unwrap();
-    channel.write_all(command.as_bytes()).unwrap();
-    channel.flush().unwrap();
-    channel.send_eof().unwrap();
-    let mut out = String::new();
-    channel.read_to_string(&mut out).unwrap();
-    out
 }
