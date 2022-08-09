@@ -10,7 +10,7 @@ use regex::Regex;
 use std::{
     convert::TryFrom,
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Write},
     path::PathBuf,
     str::FromStr,
 };
@@ -135,14 +135,51 @@ impl SnsCliInitConfig {
     }
 }
 
-impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
-    type Error = anyhow::Error;
+/// Generates a logo data URL from a file.
+fn load_logo(logo_path: &PathBuf) -> Result<String, anyhow::Error> {
+    // Extensions and their corresponding mime types:
+    let supported_formats = [("svg", "image/svg+xml"), ("png", "image/png")];
+    // In error messages we provide the list of supported file extensions:
+    let supported_extensions = || -> String {
+        supported_formats
+            .iter()
+            .map(|extension| extension.0)
+            .collect::<Vec<&str>>()
+            .join(", ")
+    };
+    // Deduce the mime type from the extension:
+    let extension = logo_path
+        .extension()
+        .and_then(|extension| extension.to_str());
+    let mime_type = match extension {
+        Some(extension) => supported_formats
+            .iter()
+            .find_map(|(item_extension, suffix)| {
+                if *item_extension == extension {
+                    Some(suffix)
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                anyhow!(
+                    "Unsupported logo type ({:?}) not in: {}",
+                    extension,
+                    supported_extensions()
+                )
+            }),
+        None => Err(anyhow!(
+            "Logo file has no extension.  Supported extensions: {}",
+            supported_extensions()
+        )),
+    }?;
 
-    fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
-        let logo_path = sns_cli_init_config
-            .logo
-            .ok_or_else(|| anyhow!("The logo must be specified"))?;
+    // SVG data URL prefix:
+    let mut buffer: Vec<u8> = format!("data:{};base64,", mime_type).into_bytes();
 
+    // The image is base 64 encoded:
+    {
+        let mut writer = base64::write::EncoderWriter::new(&mut buffer, base64::STANDARD);
         let file = match File::open(&logo_path) {
             Ok(file) => file,
             Err(err) => {
@@ -156,19 +193,21 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
 
         let mut reader = BufReader::new(file);
 
-        let mut buffer: Vec<u8> = vec![];
-        match reader.read_to_end(&mut buffer) {
-            Ok(_) => (),
-            Err(err) => {
-                return Err(anyhow!(
-                    "Error encountered when reading the logo file: ({:?}): {}",
-                    logo_path,
-                    err
-                ))
-            }
-        };
+        std::io::copy(&mut reader, &mut writer)?;
+    }
+    let data_url: String = std::str::from_utf8(&buffer)
+        .expect("This should be impossible")
+        .to_owned();
+    Ok(data_url)
+}
 
-        let encoded_logo = base64::encode(&buffer);
+impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
+    type Error = anyhow::Error;
+
+    fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
+        let logo_path = sns_cli_init_config
+            .logo
+            .ok_or_else(|| anyhow!("The logo must be specified"))?;
 
         Ok(SnsInitPayload {
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
@@ -183,7 +222,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             min_icp_e8s: sns_cli_init_config.min_icp_e8s,
             fallback_controller_principal_ids: sns_cli_init_config
                 .fallback_controller_principal_ids,
-            logo: Some(encoded_logo),
+            logo: Some(load_logo(&logo_path)?),
             url: sns_cli_init_config.url,
             name: sns_cli_init_config.name,
             description: sns_cli_init_config.description,
@@ -639,7 +678,7 @@ url: https://internetcomputer.org/
         let mut reader = BufReader::new(file);
         let mut buffer: Vec<u8> = vec![];
         reader.read_to_end(&mut buffer).unwrap();
-        let encoded_logo = base64::encode(&buffer);
+        let encoded_logo = "data:image/png;base64,".to_owned() + &base64::encode(&buffer);
 
         assert_eq!(Some(encoded_logo), sns_init_payload.logo);
     }
