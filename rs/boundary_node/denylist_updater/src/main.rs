@@ -24,7 +24,9 @@ use nix::{
 use opentelemetry::{global, sdk::Resource, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
+use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
+use serde_json as json;
 use tokio::{
     fs::{self, File},
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -35,6 +37,9 @@ use tracing::info;
 mod metrics;
 use metrics::{MetricParams, WithMetrics};
 
+mod decode;
+use decode::{Decode, Decoder};
+
 const SERVICE_NAME: &str = "denylist-updater";
 
 const MINUTE: Duration = Duration::from_secs(60);
@@ -43,8 +48,11 @@ const MINUTE: Duration = Duration::from_secs(60);
 #[clap(name = SERVICE_NAME)]
 #[clap(author = "Boundary Node Team <boundary-nodes@dfinity.org>")]
 struct Cli {
-    #[clap(long, default_value = "http://localhost:8000/denylist.json")]
+    #[clap(long, default_value = "http://localhost:8000/denylist.tar.gz")]
     remote_url: String,
+
+    #[clap(long, default_value = "key.pem")]
+    private_key_path: PathBuf,
 
     #[clap(long, default_value = "/tmp/denylist.map")]
     local_path: PathBuf,
@@ -79,7 +87,11 @@ async fn main() -> Result<(), Error> {
 
     let http_client = reqwest::Client::builder().build()?;
 
-    let remote_lister = RemoteLister::new(http_client, cli.remote_url.clone());
+    let private_key_pem = std::fs::read_to_string(cli.private_key_path)?;
+    let private_key = RsaPrivateKey::from_pkcs8_pem(&private_key_pem)?;
+    let decoder = Decoder::new(private_key);
+
+    let remote_lister = RemoteLister::new(http_client, decoder, cli.remote_url.clone());
     let remote_lister = WithNormalize(remote_lister);
     let remote_lister = WithMetrics(
         remote_lister,
@@ -206,22 +218,24 @@ impl List for LocalLister {
     }
 }
 
-struct RemoteLister {
+struct RemoteLister<D> {
     http_client: reqwest::Client,
+    decoder: D,
     remote_url: String,
 }
 
-impl RemoteLister {
-    fn new(http_client: reqwest::Client, remote_url: String) -> Self {
+impl<D: Decode> RemoteLister<D> {
+    fn new(http_client: reqwest::Client, decoder: D, remote_url: String) -> Self {
         Self {
             http_client,
+            decoder,
             remote_url,
         }
     }
 }
 
 #[async_trait]
-impl List for RemoteLister {
+impl<D: Decode> List for RemoteLister<D> {
     async fn list(&self) -> Result<Vec<Entry>, Error> {
         let request = self
             .http_client
@@ -239,10 +253,20 @@ impl List for RemoteLister {
             return Err(anyhow!("request failed with status {}", response.status()));
         }
 
-        let entries = response
-            .json::<Vec<Entry>>()
+        let data = response
+            .bytes()
             .await
-            .context("failed to deserialize response")?;
+            .context("failed to get response bytes")?
+            .to_vec();
+
+        let data = self
+            .decoder
+            .decode(data)
+            .await
+            .context("failed to decode response")?;
+
+        let entries =
+            json::from_slice::<Vec<Entry>>(&data).context("failed to deserialize json response")?;
 
         Ok(entries)
     }

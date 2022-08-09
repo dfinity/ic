@@ -12,7 +12,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
-        "@crate_index//:rsa",
+        "@crate_index//:rsa_0_4_0",
         "@crate_index//:serde",
         "@crate_index//:simple_asn1",
     ],
