@@ -574,10 +574,17 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )],
     ));
 
+    let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
+                // TODO: Re-enable the test, once the issue is resolved.
+                pot(
+                    "xnet_120_subnets_pot",
+                    xnet_120_subnets.build(),
+                    par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+                ),
                 pot_with_setup(
                     "canister_http",
                     canister_http::lib::config,
