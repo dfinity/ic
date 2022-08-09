@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 /// BasicSignature captures basic signature on a value and the identity of the
 /// replica that signed it
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct BasicSignature<T> {
     pub signature: BasicSigOf<T>,
     pub signer: NodeId,
@@ -15,7 +15,7 @@ pub type BasicSigned<T> = Signed<T, BasicSignature<T>>;
 
 /// BasicSignatureBatch captures a collection of basic signatures on the same value and
 /// the identities of the replicas that signed it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct BasicSignatureBatch<T> {
     pub signatures_map: BTreeMap<NodeId, BasicSigOf<T>>,
 }

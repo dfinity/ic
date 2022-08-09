@@ -4,16 +4,16 @@ use crate::{
         CanisterHttpResponseContent, CanisterHttpResponseMetadata,
         CanisterHttpResponseWithConsensus,
     },
-    crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash, CryptoHashOf, Signed},
+    crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
-    signature::MultiSignature,
+    signature::BasicSignatureBatch,
     CountBytes, Time,
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::RejectCode;
 use ic_protobuf::{canister_http::v1 as canister_http_pb, types::v1 as pb};
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom};
 
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
@@ -54,13 +54,17 @@ impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
                         }),
                         hash: payload.proof.content.content_hash.clone().get().0,
                         registry_version: payload.proof.content.registry_version.get(),
-                        signature: payload.proof.signature.signature.clone().get().0,
-                        signers: payload
+                        signatures: payload
                             .proof
                             .signature
-                            .signers
+                            .signatures_map
                             .iter()
-                            .map(|node_id| (*node_id).get().into_vec())
+                            .map(|(signer, signature)| {
+                                canister_http_pb::CanisterHttpReponseSignature {
+                                    signer: (*signer).get().into_vec(),
+                                    signature: signature.clone().get().0,
+                                }
+                            })
                             .collect(),
                     },
                 )
@@ -119,20 +123,23 @@ impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
                                         payload.registry_version,
                                     ),
                                 },
-                                signature: MultiSignature {
-                                    signature: CombinedMultiSigOf::from(CombinedMultiSig(
-                                        payload.signature,
-                                    )),
-                                    signers: payload
-                                        .signers
+                                signature: BasicSignatureBatch {
+                                    signatures_map: payload
+                                        .signatures
                                         .iter()
-                                        .map(|n| {
-                                            Ok(NodeId::from(
-                                                PrincipalId::try_from(&n[..])
-                                                    .map_err(|err| format!("{:?}", err))?,
+                                        .map(|signature| {
+                                            Ok((
+                                                NodeId::from(
+                                                    PrincipalId::try_from(&signature.signer[..])
+                                                        .map_err(|err| format!("{:?}", err))?,
+                                                ),
+                                                BasicSigOf::new(BasicSig(
+                                                    signature.signature.clone(),
+                                                )),
                                             ))
                                         })
-                                        .collect::<Result<Vec<NodeId>, String>>()?,
+                                        .collect::<Result<BTreeMap<NodeId, BasicSigOf<_>>, String>>(
+                                        )?,
                                 },
                             },
                         })
@@ -236,9 +243,13 @@ mod tests {
                         ])),
                         registry_version: RegistryVersion::new(1),
                     },
-                    signature: MultiSignature {
-                        signature: CombinedMultiSigOf::from(CombinedMultiSig(vec![0, 1, 2, 3])),
-                        signers: vec![NodeId::from(PrincipalId::new_node_test_id(1))],
+                    signature: BasicSignatureBatch {
+                        signatures_map: vec![(
+                            NodeId::from(PrincipalId::new_node_test_id(1)),
+                            BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
+                        )]
+                        .drain(..)
+                        .collect(),
                     },
                 },
             }],

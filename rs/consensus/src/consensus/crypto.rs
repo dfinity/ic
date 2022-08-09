@@ -433,11 +433,11 @@ pub trait ConsensusCrypto:
     + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>
     + SignVerify<
         CanisterHttpResponseMetadata,
-        MultiSignatureShare<CanisterHttpResponseMetadata>,
+        BasicSignature<CanisterHttpResponseMetadata>,
         RegistryVersion,
     > + SignVerify<
         CanisterHttpResponseMetadata,
-        MultiSignatureShare<CanisterHttpResponseMetadata>,
+        BasicSignature<CanisterHttpResponseMetadata>,
         RegistryVersion,
     > + Aggregate<
         NotarizationContent,
@@ -471,9 +471,9 @@ pub trait ConsensusCrypto:
         ThresholdSignature<CatchUpContent>,
     > + Aggregate<
         CanisterHttpResponseMetadata,
-        MultiSignatureShare<CanisterHttpResponseMetadata>,
+        BasicSignature<CanisterHttpResponseMetadata>,
         RegistryVersion,
-        MultiSignature<CanisterHttpResponseMetadata>,
+        BasicSignatureBatch<CanisterHttpResponseMetadata>,
     > + Crypto
     + Send
     + Sync

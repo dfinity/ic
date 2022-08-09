@@ -82,8 +82,8 @@ pub trait Crypto:
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
     // CanisterHttpResponse
-    + MultiSigner<CanisterHttpResponseMetadata>
-    + MultiSigVerifier<CanisterHttpResponseMetadata>
+    + BasicSigner<CanisterHttpResponseMetadata>
+    + BasicSigVerifier<CanisterHttpResponseMetadata>
     // RequestId/WebAuthn
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
@@ -138,8 +138,8 @@ impl<T> Crypto for T where
         + BasicSigVerifier<EcdsaComplaintContent>
         + BasicSigner<EcdsaOpeningContent>
         + BasicSigVerifier<EcdsaOpeningContent>
-        + MultiSigner<CanisterHttpResponseMetadata>
-        + MultiSigVerifier<CanisterHttpResponseMetadata>
+        + BasicSigner<CanisterHttpResponseMetadata>
+        + BasicSigVerifier<CanisterHttpResponseMetadata>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier
