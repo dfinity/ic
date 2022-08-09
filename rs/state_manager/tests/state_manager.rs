@@ -1309,7 +1309,7 @@ fn can_purge_intermediate_snapshots() {
 }
 
 #[test]
-fn latest_certified_state_is_updated_on_state_removal() {
+fn latest_certified_state_is_not_removed() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
@@ -1321,9 +1321,18 @@ fn latest_certified_state_is_updated_on_state_removal() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
 
-        state_manager.remove_states_below(height(3));
-        assert_eq!(height(3), state_manager.latest_state_height());
-        assert_eq!(height(0), state_manager.latest_certified_height());
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata);
+
+        state_manager.remove_states_below(height(4));
+        assert_eq!(height(4), state_manager.latest_state_height());
+        assert_eq!(height(1), state_manager.latest_certified_height());
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            // 1 is protected as latest certified state, 2 is protected as latest checkpoint
+            vec![height(0), height(1), height(2), height(4)],
+        );
     });
 }
 
