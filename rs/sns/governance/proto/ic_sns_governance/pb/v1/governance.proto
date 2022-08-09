@@ -1443,7 +1443,7 @@ message Subaccount {
 // one is used.
 message Account {
   // The owner of the account.
-  ic_base_types.pb.v1.PrincipalId of = 1;
+  ic_base_types.pb.v1.PrincipalId owner = 1;
 
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.

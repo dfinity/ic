@@ -7,17 +7,16 @@ type Duration = nat64;
 type Tokens = nat;
 
 type Account = record {
-    of : principal;
+    owner : principal;
     subaccount : opt Subaccount;
 };
 
 type TransferArg = record {
     from_subaccount : opt Subaccount;
-    to_principal : principal;
-    to_subaccount : opt Subaccount;
+    to : Account;
     amount : Tokens;
     fee : opt Tokens;
-    memo : opt nat64;
+    memo : opt blob;
     created_at_time: opt Timestamp;
 };
 
@@ -25,9 +24,9 @@ type TransferError = variant {
     BadFee : record { expected_fee : Tokens };
     BadBurn : record { min_burn_amount : Tokens };
     InsufficientFunds : record { balance : Tokens };
-    TooOld : record { allowed_window_nanos : Duration };
-    CreatedInFuture;
-    Throttled;
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    TemporarilyUnavailable;
     Duplicate : record { duplicate_of : BlockIndex };
     GenericError : record { error_code : nat; message : text };
 };
@@ -69,6 +68,8 @@ service : (InitArgs) -> {
     icrc1_decimals : () -> (nat8) query;
     icrc1_metadata : () -> (vec record { text; Value }) query;
     icrc1_total_supply : () -> (Tokens) query;
+    icrc1_fee : () -> (Tokens) query;
+    icrc1_minting_account : () -> (opt Account) query;
 
     icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);

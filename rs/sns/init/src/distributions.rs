@@ -288,7 +288,7 @@ impl FractionalDeveloperVotingPower {
         let swap = self.swap_distribution()?;
 
         let swap_canister_account = Account {
-            of: sns_canister_ids.swap,
+            owner: sns_canister_ids.swap,
             subaccount: None,
         };
         let initial_swap_amount_tokens = Tokens::from_e8s(swap.initial_swap_amount_e8s);
@@ -335,7 +335,7 @@ impl FractionalDeveloperVotingPower {
         let subaccount =
             compute_distribution_subaccount_bytes(*governance_canister, distribution_account_nonce);
         let account = Account {
-            of: *governance_canister,
+            owner: *governance_canister,
             subaccount: Some(subaccount),
         };
         let tokens = Tokens::from_e8s(amount_e8s);
@@ -353,7 +353,7 @@ impl FractionalDeveloperVotingPower {
         let subaccount =
             compute_neuron_staking_subaccount_bytes(*claimer, DEFAULT_NEURON_STAKING_NONCE);
         let account = Account {
-            of: *governance_canister,
+            owner: *governance_canister,
             subaccount: Some(subaccount),
         };
         let tokens = Tokens::from_e8s(amount_e8s);
@@ -457,7 +457,7 @@ mod test {
         }
 
         Account {
-            of: canister,
+            owner: canister,
             subaccount,
         }
     }
@@ -476,7 +476,7 @@ mod test {
         }
 
         Account {
-            of: canister,
+            owner: canister,
             subaccount,
         }
     }
@@ -552,7 +552,7 @@ mod test {
             Some(SWAP_SUBACCOUNT_NONCE),
         );
         let swap_canister_account = Account {
-            of: canister_ids.swap,
+            owner: canister_ids.swap,
             subaccount: None,
         };
 

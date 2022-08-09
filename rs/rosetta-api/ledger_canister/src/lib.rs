@@ -481,7 +481,7 @@ impl Ledger {
                 } => PTE(TE::TxTooOld {
                     allowed_window_nanos,
                 }),
-                CTE::TxCreatedInFuture => PTE(TE::TxCreatedInFuture),
+                CTE::TxCreatedInFuture { .. } => PTE(TE::TxCreatedInFuture),
                 CTE::TxDuplicate { duplicate_of } => PTE(TE::TxDuplicate { duplicate_of }),
                 CTE::TxThrottled => PaymentError::Reject(
                     concat!(

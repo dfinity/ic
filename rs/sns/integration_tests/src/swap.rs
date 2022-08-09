@@ -211,7 +211,7 @@ impl Scenario {
 
         // Construct base configuration.
         let account_identifiers = vec![Account {
-            of: swap_canister_id.into(),
+            owner: swap_canister_id.into(),
             subaccount: None,
         }];
         let mut configuration = SnsTestsInitPayloadBuilder::new()

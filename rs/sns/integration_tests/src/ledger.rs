@@ -50,7 +50,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    of: user.get_principal_id(),
+                    owner: user.get_principal_id(),
                     subaccount: None,
                 },
             )
@@ -79,8 +79,10 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     amount: Nat::from(stake),
                     fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                     from_subaccount: None,
-                    to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
-                    to_subaccount: Some(to_subaccount),
+                    to: Account {
+                        owner: PrincipalId::from(sns_canisters.governance.canister_id()),
+                        subaccount: Some(to_subaccount),
+                    },
                     created_at_time: None,
                     memo: Some(Memo::from(nonce)),
                 },
@@ -120,7 +122,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    of: user.get_principal_id(),
+                    owner: user.get_principal_id(),
                     subaccount: None,
                 },
             )
@@ -147,7 +149,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         command: Some(Command::Disburse(Disburse {
                             amount: None,
                             to_account: Some(AccountProto {
-                                of: Some(user.get_principal_id()),
+                                owner: Some(user.get_principal_id()),
                                 subaccount: None,
                             }),
                         })),
@@ -165,7 +167,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance: Tokens = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    of: user.get_principal_id(),
+                    owner: user.get_principal_id(),
                     subaccount: None,
                 },
             )

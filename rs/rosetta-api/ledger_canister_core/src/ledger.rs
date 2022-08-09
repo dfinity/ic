@@ -115,7 +115,7 @@ pub enum TransferError {
     BadFee { expected_fee: Tokens },
     InsufficientFunds { balance: Tokens },
     TxTooOld { allowed_window_nanos: u64 },
-    TxCreatedInFuture,
+    TxCreatedInFuture { ledger_time: TimeStamp },
     TxThrottled,
     TxDuplicate { duplicate_of: BlockHeight },
 }
@@ -137,7 +137,7 @@ pub fn apply_transaction<L: LedgerData>(
     }
 
     if created_at_time > now + ic_constants::PERMITTED_DRIFT {
-        return Err(TransferError::TxCreatedInFuture);
+        return Err(TransferError::TxCreatedInFuture { ledger_time: now });
     }
 
     // If we pruned some transactions, let this one through

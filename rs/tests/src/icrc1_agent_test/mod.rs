@@ -50,15 +50,15 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let user1 = PrincipalId::try_from(agent.get_principal().unwrap().as_ref()).unwrap();
         let user2 = PrincipalId::new_user_test_id(102);
         let account1 = Account {
-            of: user1,
+            owner: user1,
             subaccount: None,
         };
         let account2 = Account {
-            of: user2,
+            owner: user2,
             subaccount: None,
         };
         let minting_account = Account {
-            of: minting_user,
+            owner: minting_user,
             subaccount: None,
         };
         let mut ledger = runtime
@@ -200,8 +200,10 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let _block = agent
             .transfer(TransferArg {
                 from_subaccount: None,
-                to_principal: user2,
-                to_subaccount: None,
+                to: Account {
+                    owner: user2,
+                    subaccount: None,
+                },
                 fee: None,
                 created_at_time: None,
                 amount: Nat::from(amount),

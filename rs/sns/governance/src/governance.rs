@@ -533,7 +533,7 @@ pub struct Governance {
 /// TODO - if we later allow to set the minting account more flexibly, this method should be renamed
 pub fn governance_minting_account() -> Account {
     Account {
-        of: id().get(),
+        owner: id().get(),
         subaccount: None,
     }
 }
@@ -542,7 +542,7 @@ pub fn governance_minting_account() -> Account {
 /// its subaccount.
 pub fn neuron_account_id(subaccount: Subaccount) -> Account {
     Account {
-        of: id().get(),
+        owner: id().get(),
         subaccount: Some(subaccount),
     }
 }
@@ -968,7 +968,7 @@ impl Governance {
         // If no account was provided, transfer to the caller's (default) account.
         let to_account: Account = match disburse.to_account.as_ref() {
             None => Account {
-                of: *caller,
+                owner: *caller,
                 subaccount: None,
             },
             Some(ai_pb) => account_from_proto(ai_pb.clone()).map_err(|e| {
@@ -1332,7 +1332,7 @@ impl Governance {
         // If no account was provided, transfer to the caller's account.
         let to_account: Account = match disburse_maturity.to_account.as_ref() {
             None => Account {
-                of: *caller,
+                owner: *caller,
                 subaccount: None,
             },
             Some(account) => account_from_proto(account.clone()).map_err(|e| {
@@ -3971,7 +3971,7 @@ mod tests {
                     command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
                         amount: None,
                         to_account: Some(AccountProto {
-                            of: Some(user.sender.get_principal_id()),
+                            owner: Some(user.sender.get_principal_id()),
                             subaccount: None,
                         }),
                     })),
