@@ -1,0 +1,537 @@
+= HostOS
+
+== Introduction
+
+The term HostOS is used for the operating system running on the physical machine. The purpose of this system is to enable virtualization for any node running on top.
+
+Instead of installing and relying on a full blown upstream ISO image, we assemble the system based on a minimal Docker image and add the required components ourselves. This approach allows for a minimal, controlled and well understood system - which is key for a secure platform.
+
+== Support
+
+The following vendors and models are currently supported:
+
+|====
+|Manufacturer|Model                |Mainboard|Processor       |Memory                           |Storage
+|Dell        |PowerEdge R6525      |0DMD2T   |2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|10x 3.5 TB NVMe
+|Supermicro  |AS-1023US-TR4-0-BC27G|H11DSU-iN|2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|1x 3.5 TB NVMe, 4x 8 TB SCSI
+|====
+
+== Operating System
+
+The operating system is currently based on the Ubuntu 20.04 Server LTS Docker image:
+
+   FROM ubuntu:20.04
+
+Missing components such as the kernel, bootloader and system service manager are installed during the build process.
+
+=== Build Process
+
+The build process consists of a Shell script and two Dockerfiles, which turn the upstream Ubuntu Docker image into a bootable disk-image containing the system. Please consult the following scripts for details:
+
+  ic/ic-os/hostos/build.sh
+
+=== Docker
+
+We currently split the Docker build process into two Dockerfiles. This split is necessary to ensure a reproducible build.
+
+  ic/ic-os/hostos/rootfs/Dockerfile.base
+  ic/ic-os/hostos/rootfs/Dockerfile
+
+The +Dockerfile.base+ takes care of installing all upstream Ubuntu packages. The version of these packages can change at any given time, as updates are published regularly. We publish the result on our public https://hub.docker.com/u/dfinity[Docker Hub].
+
+The +Dockerfile+ takes care of configuring and assembling the main disk-image. Any instruction in this file needs to be reproducible in itself.
+
+=== Partitioning
+
+The partitioning layout consists of multiple logical volumes and three primary partitions. Both the Host- and GuestOS (hereinafter referred to as ReplicaOS) have separate config and A/B partitions. Please find a rough schema below.
+
+|====
+2+^|Primary Partitions 17+^|LVM
+9+^|HostOS             10+^| ReplicaOS
+|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Empty
+|====
+
+The exact partitioning layout can be found in:
+
+  ic/ic-os/hostos/build/partitions.csv
+
+The LVM configuration is defined in:
+
+  ic/ic-os/hostos/build/volumes.csv
+
+==== Sizing
+
+Most of the disk space is allocated to the logical volume of the ReplicaOS. Only about 65 GB are reserved for the HostOS. Please find the individual partition sizes below:
+
+|====
+10+^|HostOS 10+^| ReplicaOS
+|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Unallocated Reserve|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Empty
+|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|20 GB|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|100%FREE
+|====
+
+==== Root Partition
+
+The root partition is formatted as an +ext4+ file system and is _read-only_ mounted.
+
+  # <file system> <mount point>   <type>  <options>              <dump>  <pass>
+  /dev/rootfs     /               ext4    ro,errors=remount-ro   0       1
+
+For details, please refer to the +fstab+ file in:
+
+  ic/ic-os/hostos/rootfs/etc/fstab
+
+==== Config Partition
+
+The config partition holds the following configuration files:
+
+  config.ini          # data center specific network settings
+  deployment.json     # deployment specific configurations
+  nns_public_key.pem  # NNS public key
+
+===== config.ini
+
+The +config.ini+ configuration file contains all network related settings. These have to be supplied by the node provider/operator prior running the deployment.
+
+The configuration file expects the following, lower-case key=value pairs:
+
+  ipv6_prefix=2a00:fb01:400:100
+  ipv6_subnet=/64
+  ipv6_gateway=2a00:fb01:400:100::1
+
+[NOTE]
+Please note that the values above are only an example.
+
+===== deployment.json
+
+The +deployment.json+ configuration file holds all deployment related settings, such as deployment name, log destination, dns servers, etc.
+
+  {
+    "deployment": {
+      "name": "mainnet"
+    },
+    "logging": {
+      "hosts": "host01.example.com:443 host02.example.com:443"
+    },
+    "nns": {
+      "url": "http://host01.example.com:8080,http://host02.example.com:8080"
+    },
+    "dns": {
+      "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
+    },
+    "resources": {
+      "memory": "490"
+    }
+  }
+
+[NOTE]
+Please note that the values above are only an example.
+
+===== nns_public_key.pem
+
+The +nns_public_key.pem+ file holds the public key of the NNS. For mainnet it is:
+
+  -----BEGIN PUBLIC KEY-----
+  MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9
+  gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bW
+  W5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg==
+  -----END PUBLIC KEY-----
+
+=== System Users
+
+In addition to the regular, built-in Ubuntu user accounts, we add the following users:
+
+|====
+|Username     |Home Directory     |Default Shell    |Description
+|backup       |var/lib/backup     |/bin/bash        |Backup subnet state
+|readonly     |/var/lib/readonly  |/bin/bash        |Administrative read-only account for node providers/operators
+|admin        |/var/lib/admin     |/bin/bash        |Administrative account for node providers/operators
+|journalbeat  |/home/journalbeat  |/usr/sbin/nologin|Journalbeat service account
+|node_exporter|/home/node_exporter|/usr/sbin/nologin|node_exporter service account
+|====
+
+=== System Configuration
+
+Besides the build instructions in the Docker files (+Dockerfile.base+ and +Dockerfile+), all hard-coded system configurations can be found in the +rootfs/etc+ directory. The full path is:
+
+  ic/ic-os/hostos/rootfs/etc/
+
+=== Network Configuration
+
+In order to simplify the physical cabling of the machine, we utilize Linux's active-backup bonding technique. This operating mode also improves redundancy if more than one 10 gigabit ethernet network interface is hooked up to the switch. A node operator can decide to either just use one or all of the 10GbE network interfaces in the bond. The Linux operating system will take care of handling the uplink and connectivity.
+
+Details can be found in:
+
+  ic/ic-os/hostos/rootfs/opt/ic/bin/generate-network-config.sh
+
+[NOTE]
+Please note that this mode does not increase the bandwidth/throughput. Only one link will be active at the same time.
+
+==== Deterministic MAC Address
+
+To have unique but deterministic MAC addresses for our nodes, we came up with the following schema:
+
+- The first 8-bits of the MAC address start with 4a for the IPv4 interface and with 6a for the IPv6 interface.
+- The second 8-bits are a consecutive hexadecimal number, starting at 00 and ending at ff. For the HostOS we reserved 00, for the first virtual machine (the ReplicaOS) 01. Any additional virtual machine on the same physical machine gets the next higher hexadecimal number:
+
+  # HostOS
+  6a:00:<deterministically-generated>
+
+  # ReplicaOS
+  6a:01:<deterministically-generated>
+
+  # BoundaryOS
+  6a:02:<deterministically-generated>
+
+  # Next Virtual Machine
+  6a:03:<deterministically-generated>
+
+  # SetupOS
+  6a:0f:<deterministically-generated>
+
+[NOTE]
+Please note that the MAC address is expected to be lower-case and contains colons between the octets.
+
+- The remaining 32-bits are deterministically generated based on the management MAC address (BMC, IPMI, iDRAC…) of the physical machine:
+
+  ipmitool lan print | grep 'MAC Address'
+
+===== Deterministically Generated Part
+
+Additionally, an arbitrary deployment name is added to the MAC address generation to further increase its uniqueness. The deployment name _mainnet_ is reserved for production. Testnets must use other names to avoid any chance of a MAC address collisions in the same data center.
+
+The deployment name is retrieved from the +deployment.json+ configuration file, generated as part of the SetupOS:
+
+  {
+    "deployment": {
+      "name": "mainnet"
+    }
+  }
+
+Based on these two inputs we calculate the sha256 checksum. Please note that there isn’t any white space in-between the two values:
+
+  # Example
+  sha256sum 3c:ec:ef:6b:37:99mainnet
+
+  # Checksum
+  f409d72aa8c98ea40a82ea5a0a437798a67d36e587b2cc49f9dabf2de1cedeeb
+
+The first 32-bit of the sha256 checksum are used as the deterministically generated part of the MAC address.
+
+  # Deterministically Generated Part
+  f409d72a
+
+  # HostOS
+  6a:00:f4:09:d7:2a
+
+  # ReplicaOS
+  6a:01:f4:09:d7:2a
+
+  # BoundaryOS
+  6a:02:f4:09:d7:2a
+
+  # Next Virtual Machine
+  6a:03:f4:09:d7:2a
+
+  # SetupOS
+  6a:0f:f4:09:d7:2a
+
+As every virtual machine ends in the same MAC address, we can derive the IPv6 address of each node on the same physical machine, including the hypervisor itself.
+In other words, swapping the prefix of the EUI-64 formatted IPv6 SLAAC address gets you to the IPv6 address of the next node.
+
+==== IPv6 Address
+
+When assigning the corresponding IPv6 address, we follow the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
+
+The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.json+ configuration file. The host part is the EUI-64 formatted address.
+
+=== Hostname
+
+Since every Host- and ReplicaOS is created equal, assigning a human-centric hostname isn’t feasible (pets vs. cattle). Instead, we use the management MAC address as part of the hostname.
+
+==== Transient Setup Hostname
+
+In the initial setup, before replica was able to join the IC, we use the following hostname schema:
+
+  system type - management mac address
+
+For example:
+
+  host-3cecef6b3799
+  replica-3cecef6b3799
+  boundary-3cecef6b3799
+
+==== Persistent Setup Hostname
+
+Once a node has successfully joined the IC, we add the first 5 characters of the node-id to the end of the hostname. The +orchestrator+ is used to fetch the node’s node-id. The schema is:
+
+  system type - management mac address - node id[1]
+
+For Example:
+
+  host-3cecef6b3799-4wd4u
+  replica--3cecef6b3799-4wd4u
+  boundary-3cecef6b3799-4wd4u
+
+[1] only the first 5 characters
+
+=== Applications
+
+==== Ubuntu Repositories
+
+The following default Ubuntu repositories are active during the Docker image build process:
+
+|====
+|Distribution|Component                                          |URL
+|Focal       |focal main restricted                              |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates main restricted                      |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal universe                                     |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates universe                             |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal multiverse                                   |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates multiverse                           |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-backports main restricted universe multiverse|http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-security main restricted                     |http://security.ubuntu.com/ubuntu/
+|Focal       |focal-security universe                            |http://security.ubuntu.com/ubuntu/
+|Focal       |focal-security multiverse                          |http://security.ubuntu.com/ubuntu/
+|====
+
+==== Upstream Ubuntu Packages
+
+|====
+|Name                         |Description
+|attr                         |utilities for manipulating filesystem extended attributes
+|ca-certificates              |Common CA certificates
+|checkpolicy                  |SELinux policy compiler
+|chrony                       |Versatile implementation of the Network Time Protocol
+|curl                         |command line tool for transferring data with URL syntax
+|dosfstools                   |utilities for making and checking MS-DOS FAT filesystems
+|ethtool                      |display or change Ethernet device settings
+|faketime                     |Report faked system time to programs (command-line tool)
+|fdisk                        |collection of partitioning utilities
+|initramfs-tools              |generic modular initramfs generator (automation)
+|ipmitool                     |utility for IPMI control with kernel driver or LAN interface (daemon)
+|iproute2                     |networking and traffic control tools
+|isc-dhcp-client              |DHCP client for automatically obtaining an IP address
+|jq                           |lightweight and flexible command-line JSON processor
+|less                         |pager program similar to more
+|libarchive-zip-perl          |Perl module for manipulation of ZIP archives
+|libvirt-daemon-system        |Libvirt daemon configuration files
+|libvirt-dev                  |development files for the libvirt library
+|linux-image-generic-hwe-20.04|Generic Linux kernel image
+|locales                      |GNU C Library: National Language (locale) data [support]
+|lvm2                         |Linux Logical Volume Manager
+|mtools                       |Tools for manipulating MSDOS files
+|net-tools                    |NET-3 networking toolkit
+|nftables                     |Program to control packet filtering rules by Netfilter project
+|opensc                       |Smart card utilities with support for PKCS#15 compatible cards
+|openssh-server               |secure shell (SSH) server, for secure access from remote machines
+|ovmf                         |UEFI firmware for 64-bit x86 virtual machines
+|parted                       |disk partition manipulator
+|pcsc-tools                   |Some tools to use with smart cards and PC/SC
+|pcscd                        |Middleware to access a smart card using PC/SC (daemon side)
+|policycoreutils              |SELinux core policy utilities
+|python-is-python3            |symlinks /usr/bin/python to python3
+|python3-libvirt              |libvirt Python 3 bindings
+|python3-requests             |elegant and simple HTTP library for Python3, built for human beings
+|rsync                        |fast, versatile, remote (and local) file-copying tool
+|selinux-policy-default       |Strict and Targeted variants of the SELinux policy
+|selinux-policy-dev           |Headers from the SELinux reference policy for building modules
+|selinux-utils                |SELinux utility programs
+|semodule-utils               |SELinux core policy utilities (modules utilities)
+|sudo                         |Provide limited super user privileges to specific users
+|systemd                      |system and service manager
+|systemd-journal-remote       |tools for sending and receiving remote journal logs
+|systemd-sysv                 |system and service manager - SysV links
+|udev                         |/dev/ and hotplug management daemon
+|usbutils                     |Linux USB utilities
+|xxd                          |tool to make (or reverse) a hex dump
+|zstd                         |fast lossless compression algorithm -- CLI tool
+|====
+
+==== 3rd Party Software
+
+List of 3rd party software installed from the official source. We strictly install vendor packaged archives, preferably tarballs to have the highest control over the installation.
+
+|====
+|Name         |Description                                                                          |URL
+|Journalbeat  |A lightweight shipper for forwarding and centralizing log data from systemd journals.|https://artifacts.elastic.co/downloads/beats/journalbeat/
+|node_exporter|Service to collect and publish system metrics                                        |https://github.com/prometheus/node_exporter/releases
+|QEMU         |Quick Emulator is a hypervisor.                                                      |https://download.qemu.org/
+|====
+
+=== Services
+
+In addition to the regular, built-in Ubuntu services, we add or manage the following systemd unit files:
+
+|====
+|Name                           |Type   |State  |Upstream|Description
+|chrony                         |service|Enabled|Yes     |chrony, an NTP client/server
+|deploy-updated-ssh-account-keys|service|Enabled|No      |Manage SSH public keys
+|generate-guestos-config        |service|Enabled|No      |Configure virtual machine XML configuration from template
+|generate-network-config        |service|Enabled|No      |Configure physical network interfaces, bonds and bridges
+|guestos                        |service|Enabled|No      |Start and stop virtual machine
+|journalbeat                    |service|Enabled|No      |Logging daemon
+|libvirtd                       |service|Enabled|Yes     |Virtualization daemon
+|monitor-guestos                |service|Enabled|No      |Monitor virtual machine service
+|monitor-guestos                |timer  |Enabled|No      |Monitor virtual machine interval
+|nftables                       |service|Enabled|Yes     |nftables firewall
+|node_exporter                  |service|Enabled|No      |Prometheus node_exporter daemon
+|relabel-machine-id             |service|Enabled|No      |Relabel unique machine ID
+|save-machine-id                |service|Enabled|No      |Save unique machine ID
+|setup-hostname                 |service|Enabled|No      |Configure hostname
+|setup-libvirt                  |service|Enabled|No      |Configure Libvirt
+|setup-node_exporter-keys       |service|Enabled|No      |Configure node_exporter daemon
+|setup-ssh-account-keys         |service|Enabled|No      |Configure SSH public keys
+|setup-ssh-keys                 |service|Enabled|No      |Generate SSH host keys
+|systemd-journal-gatewayd       |service|Enabled|No      |Journal Gateway Service
+|systemd-networkd-wait-online   |service|Enabled|Yes     |Wait for Network to be Configured
+|systemd-networkd               |service|Enabled|Yes     |Network Service
+|systemd-resolved               |service|Enabled|Yes     |Network Name Resolution
+|vsock-agent                    |service|Enabled|No      |VSOCK agent daemon
+|====
+
+=== QEMU / Libvirt
+
+For libvirt, we use the official upstream Ubuntu package +libvirt-daemon-system+. QEMU is being installed and compiled from source.
+
+|====
+|Name                |Source                     |URL
+libvirt-daemon-system|DEB package; APT repository|http://archive.ubuntu.com/ubuntu/
+Focal                |Tarball; Source            |https://www.qemu.org/download/
+|====
+
+==== Virtual Machines
+
+All Virtual machines are configured using the libvirt XML format. The configuration template is located in:
+
+  /opt/ic/share/<machine-type>.xml.template
+
+This template is being used to generate the actual XML configuration. The systemd service +generate-guestos-config.service+ executes this step. It is necessary in order to inject the deterministically generated MAC address.
+
+===== CPU Topology
+
+The following CPU topology is defined in the libvirt XML template.
+
+  <vcpu placement='static'>64</vcpu>
+  <cpu mode='host-passthrough' migratable='off'>
+    <cache mode='passthrough'/>
+    <topology sockets='2' cores='16' threads='2'/>
+    <feature policy="require" name="topoext"/>
+  </cpu>
+
+It makes sure the physical CPU topology is reflected in the virtual machine and the mapping is done accordingly.
+
+=== Firewall
+
+The hard-coded firewall ruleset is rather restrictive. A new disk-image has to be proposed and blessed in order to update the rules.
+
+Please find the raw NFTables ruleset in:
+
+  ic/ic-os/hostos/rootfs/etc/nftables.conf
+
+==== Filter
+
+===== Input
+
+Default INPUT policy is +drop+.
+
+|====
+|Version|Protocol|Port / Type            |Source                                 |Description
+|IPv4   |ICMP    |destination-unreachable|any                                    |
+|IPv4   |ICMP    |source-quench          |any                                    |
+|IPv4   |ICMP    |time-exceeded          |any                                    |
+|IPv4   |ICMP    |parameter-problem      |any                                    |
+|IPv4   |ICMP    |echo-request           |any                                    |
+|IPv4   |ICMP    |echo-reply             |any                                    |
+|IPv4   |TCP     |22                     |RFC 1918                               |openssh
+|IPv4   |UDP     |67                     |RFC 1918                               |DHCP
+|IPv6   |ICMP    |destination-unreachable|any                                    |
+|IPv6   |ICMP    |packet-too-big         |any                                    |
+|IPv6   |ICMP    |time-exceeded          |any                                    |
+|IPv6   |ICMP    |parameter-problem      |any                                    |
+|IPv6   |ICMP    |echo-request           |any                                    |
+|IPv6   |ICMP    |echo-reply             |any                                    |
+|IPv6   |ICMP    |nd-router-advert       |any                                    |
+|IPv6   |ICMP    |nd-neighbor-solicit    |any                                    |
+|IPv6   |ICMP    |nd-neighbor-advert     |any                                    |
+|IPv6   |TCP     |22                     |delegated IPv6 subnets from IC registry|openssh
+|IPv6   |TCP     |9100                   |delegated IPv6 subnets from IC registry|node_exporter
+|IPv6   |TCP     |19531                  |delegated IPv6 subnets from IC registry|systemd-journal-gatewayd
+|====
+
+===== Forward
+
+Default FORWARD policy is +drop+.
+
+
+|====
+|Version|Protocol|Port / Type            |Source                                 |Description
+|====
+
+===== Output
+
+Default OUTPUT policy is +drop+.
+
+|====
+|Version|Protocol|Port / Type            |Destination|Description
+|IPv4   |ICMP    |destination-unreachable|any        |
+|IPv4   |ICMP    |source-quench          |any        |
+|IPv4   |ICMP    |time-exceeded          |any        |
+|IPv4   |ICMP    |parameter-problem      |any        |
+|IPv4   |ICMP    |echo-request           |any        |
+|IPv4   |ICMP    |echo-reply             |any        |
+|IPv6   |ICMP    |destination-unreachable|any        |
+|IPv6   |ICMP    |packet-too-big         |any        |
+|IPv6   |ICMP    |time-exceeded          |any        |
+|IPv6   |ICMP    |parameter-problem      |any        |
+|IPv6   |ICMP    |echo-request           |any        |
+|IPv6   |ICMP    |echo-reply             |any        |
+|IPv6   |ICMP    |nd-router-solicit      |any        |
+|IPv6   |ICMP    |nd-neighbor-solicit    |any        |
+|IPv6   |ICMP    |nd-neighbor-advert     |any        |
+|IPv6   |TCP     |53                     |any        |DNS
+|IPv6   |UDP     |53                     |any        |DNS
+|IPv6   |UDP     |123                    |any        |NTP
+|IPv6   |TCP     |80                     |any        |HTTP to download update disk images
+|IPv6   |TCP     |443                    |any        |HTTPS to download update disk images
+|====
+
+=== SELinux
+
+SELinux is currently in permissive mode. Eventually, every service is confined into its own policy and SELinux running in enforcing mode.
+
+=== VMSockets Interface
+
+Whilst the whole point of virtualization is to securely isolate operating systems and system resources, we need a way to interact with the underlying hypervisor (HostOS) from the virtual machine (ReplicaOS). This is necessary as the HostOS won’t be running replica and therefore isn’t its own node in the NNS or any APP subnet.
+
+To retain the highest isolation between the two operating systems, we limit ourselves to strictly defined function calls. All VSOCK commands are triggered from the GuestOS.
+
+|Name        |Parameters      |Description
+|attach-hsm  |                |Attach HSM to ReplicaOS virtual machine
+|detach-hsm  |                |Detach HSM from ReplicaOS virtual machine
+|_upgrade_   |URL, hash       |Download and apply update disk-image on the HostOS, then trigger a reboot of HostOS
+|set-node-id |Node ID         |Sets the node-id on HostOS by storing it to the config partition, and adding it to the end of the hostname
+|join-success|                |Notifies the HostOS of a successful network join. The HostOS will use this to notify operators to remove the HSM from the machine
+
+==== set-node-id
+
+After setup, we add the node ID to the hostname of both Host- and ReplicaOS, in order to help with debugging. After a successful join, the orchestrator binary will trigger two processes. First, the join-success VSOCK call will instruct the operator it is safe to remove the HSM from the machine. Next, the orchestrator needs to update the hostname of the Host- and ReplicaOS. For the ReplicaOS, the orchestrator rightfully has very limited permissions. To trigger the update indirectly, the orchestrator touches /tmp/node-id, and triggers a system service. This service fetches the node-id, stores it to the config partition, updates the hostname, and calls the set-node-id VSOCK call. On the HostOS, when this call is received, the node ID is written to the config partition, and the hostname is updated.
+
+==== upgrade
+
+At the very least, the ReplicaOS needs to be able to instruct the HostOS that an HostOS upgrade should happen. The suggestion is to realize this communication also via VSOCK.
+
+One problem is that the ReplicaOS does not know which version the HostOS is currently running. In order to instruct the HostOS to upgrade, we either:
+- Have another VSOCK call which allows the ReplicaOS to query the current version and state (upgrading, upgraded, .. ) of the HostOS.
+- Or periodically send update requests to the HostOS independent of the hosts version (e.g. just call this endpoint every 5 minutes or so independent of the version of the HostOS).
+
+In addition, we’d like to be able to do staggered upgrades in some later version of the HostOS upgrade. This is to avoid long downtime of subnetworks, as rebooting the HostOS typically takes several minutes and rebooting all hosts at the same time would lead to downtime of the HostOS for the entire duration of the reboot. The staggering could be realized by:
+- The HostOS’es themselves (e.g. based on some hashing of the IPv6 address),
+- The ReplicaOS holding back upgrade instructions () or
+- Or they could be encoded in the NNS proposal triggering the upgrade itself (e.g. via absolute UNIX timestamp at which to upgrade or a relative time offset after the proposal finds its way into the registry; would have one such timestamp per HostOS).
+
+Suggestion:
+- Per-subnet entry of HostOS version in registry. Optional list of host IP → relative offset in order to instruct HostOS to wait at least that offset of time before upgrading
+- Replica periodically (every 5 mins) sends that entry via VSOCK to HostOS
+
+- system upgrade
+- network interfaces (networkctl)
