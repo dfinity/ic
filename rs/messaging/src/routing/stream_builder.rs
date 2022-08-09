@@ -39,6 +39,8 @@ struct StreamBuilderMetrics {
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
     pub routed_payload_sizes: Histogram,
+    /// Outgoing XNet messages, by destination subnet
+    pub outgoing_messages: IntCounterVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -64,6 +66,7 @@ const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
+const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -108,6 +111,11 @@ impl StreamBuilderMetrics {
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
+        let outgoing_messages = metrics_registry.int_counter_vec(
+            METRIC_OUTGOING_MESSAGES,
+            "Outgoing XNet messages, by destination subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
@@ -137,6 +145,7 @@ impl StreamBuilderMetrics {
             stream_begin,
             routed_messages,
             routed_payload_sizes,
+            outgoing_messages,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -421,6 +430,10 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
+                            self.metrics
+                                .outgoing_messages
+                                .with_label_values(&[&dst_net_id])
+                                .inc();
                             streams.push(dst_net_id, msg);
                         }
                     };
