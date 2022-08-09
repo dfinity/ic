@@ -48,6 +48,13 @@ pub struct CanisterHttpReject {
     pub message: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpReponseSignature {
+    #[prost(bytes = "vec", tag = "1")]
+    pub signer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseWithConsensus {
     #[prost(message, optional, tag = "1")]
     pub response: ::core::option::Option<CanisterHttpResponse>,
@@ -55,8 +62,6 @@ pub struct CanisterHttpResponseWithConsensus {
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(bytes = "vec", tag = "4")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", repeated, tag = "5")]
-    pub signers: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, repeated, tag = "6")]
+    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpReponseSignature>,
 }

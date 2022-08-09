@@ -580,7 +580,7 @@ impl fmt::Display for CryptoError {
 pub type CryptoResult<T> = std::result::Result<T, CryptoError>;
 
 /// A basic signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct BasicSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A basic signature for content of type `T`
 pub type BasicSigOf<T> = Id<T, BasicSig>; // Use newtype instead? E.g., `pub struct BasicSigOf<T>(Id<T, BasicSig>);`

@@ -30,7 +30,7 @@ use ic_types::{
     crypto::Signed,
     messages::CallbackId,
     registry::RegistryClientError,
-    signature::MultiSignatureShare,
+    signature::BasicSignature,
     CountBytes, Height, NumBytes, RegistryVersion, SubnetId,
 };
 pub use pool_manager::CanisterHttpPoolManagerImpl;
@@ -254,7 +254,7 @@ impl CanisterHttpPayloadBuilderImpl {
         &self,
         registry_version: RegistryVersion,
         metadata: CanisterHttpResponseMetadata,
-        shares: BTreeSet<MultiSignatureShare<CanisterHttpResponseMetadata>>,
+        shares: BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
         content: CanisterHttpResponse,
     ) -> Option<CanisterHttpResponseWithConsensus> {
         match self
@@ -643,11 +643,11 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
         canister_http::CanisterHttpResponseContent,
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, IndividualMultiSig, IndividualMultiSigOf},
-        signature::MultiSignature,
+        crypto::{BasicSig, BasicSigOf},
+        signature::BasicSignatureBatch,
         time::UNIX_EPOCH,
     };
-    use std::{ops::DerefMut, time::Duration};
+    use std::{collections::BTreeMap, ops::DerefMut, time::Duration};
 
     /// Check that a single well formed request with shares makes it through the block maker
     #[test]
@@ -751,9 +751,8 @@ mod tests {
                     content: past_response,
                     proof: Signed {
                         content: past_metadata,
-                        signature: MultiSignature::<CanisterHttpResponseMetadata> {
-                            signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-                            signers: vec![],
+                        signature: BasicSignatureBatch {
+                            signatures_map: BTreeMap::new(),
                         },
                     },
                 }],
@@ -1007,9 +1006,8 @@ mod tests {
     ) -> CanisterHttpResponseShare {
         Signed {
             content: metadata.clone(),
-            signature: MultiSignatureShare::<CanisterHttpResponseMetadata> {
-                // NOTE: Since we are using CryptoReturningOk we don't need an actual signature
-                signature: IndividualMultiSigOf::new(IndividualMultiSig(vec![])),
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
                 signer: node_test_id(from_node),
             },
         }
@@ -1024,9 +1022,8 @@ mod tests {
             content: response.clone(),
             proof: Signed {
                 content: metadata.clone(),
-                signature: MultiSignature {
-                    signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-                    signers: vec![],
+                signature: BasicSignatureBatch {
+                    signatures_map: BTreeMap::new(),
                 },
             },
         }

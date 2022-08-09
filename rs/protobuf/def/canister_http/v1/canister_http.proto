@@ -34,10 +34,17 @@ message CanisterHttpReject {
   string message = 2;
 }
 
+message CanisterHttpReponseSignature {
+  bytes signer = 1;
+  bytes signature = 2;
+}
+
 message CanisterHttpResponseWithConsensus {
   CanisterHttpResponse response = 1;
   bytes hash = 2;
   uint64 registry_version = 3;
-  bytes signature = 4;
-  repeated bytes signers = 5;
+  reserved 4;
+  reserved 5;
+  repeated CanisterHttpReponseSignature signatures = 6;
 }
+

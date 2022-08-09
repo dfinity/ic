@@ -327,11 +327,11 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 ///
 /// This is the artifact that will actually be gossiped.
 pub type CanisterHttpResponseShare =
-    Signed<CanisterHttpResponseMetadata, MultiSignatureShare<CanisterHttpResponseMetadata>>;
+    Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
 /// A signature of of [`CanisterHttpResponseMetadata`].
 pub type CanisterHttpResponseProof =
-    Signed<CanisterHttpResponseMetadata, MultiSignature<CanisterHttpResponseMetadata>>;
+    Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
 impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
