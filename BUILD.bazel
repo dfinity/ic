@@ -48,6 +48,11 @@ alias(
     actual = "//rs/bazelifier",
 )
 
+alias(
+    name = "rustfmt",
+    actual = "@rules_rust//:rustfmt",
+)
+
 opt_stripped_binary(
     name = "replica",
     binary = "//rs/replica",
