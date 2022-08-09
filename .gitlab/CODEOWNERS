@@ -1,9 +1,8 @@
-
 # New top-level dir creation requires approvals from codeowners.
-[Root-Level]
+# [Root-Level]
 * @dfinity-lab/teams/owners-owners
 
-[Misc]
+# [Misc]
 /.dependencies/           @dfinity-lab/teams/prodsec
 /.devcontainer/           @dfinity-lab/teams/idx
 /buf.yaml	              @dfinity-lab/teams/message-routing-owners
@@ -12,22 +11,22 @@
 /licenses/                @dfinity-lab/teams/idx
 /outsource/               @dfinity-lab/teams/idx
 
-[Bazel]
+# [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
 /toolchains/              @dfinity-lab/teams/idx
 
-[Documentation]
+# [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
 /docs/spec/replica/protocol/consensus_layer/	           @dfinity-lab/teams/consensus-owners
 /docs/internal/testing/testing-plan.adoc                   @dfinity-lab/teams/ic-testing-verification
 
-[IC-OS]
+# [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
-[GitLab-CI]
+# [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
 /.gitlab-ci.yml                                                         @dfinity-lab/teams/idx
 /.gitlab/                                                               @dfinity-lab/teams/idx
@@ -40,11 +39,11 @@
 /gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 
-[Typescript]    
+# [Typescript]    
 /typescript/                 @dfinity-lab/teams/owners-owners
 /typescript/service-worker/  @dfinity-lab/teams/trust-team
 
-[Testnet]
+# [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/ic-build-qualification
 /testnet/ansible/                                          @dfinity-lab/teams/dcs
 /testnet/ansible/roles/boundary_node/                      @dfinity-lab/teams/networking-team @dfinity-lab/teams/dcs        
@@ -70,7 +69,7 @@
 
 /testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 
-[Rust]
+# [Rust]
 /rs/                                    @dfinity-lab/teams/interface-owners
 /rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
@@ -209,19 +208,19 @@
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-[Scalability]
+# [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
 /scalability/experiments/run_sns_experiment.py                      @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
-[Nix]
+# [Nix]
 *.nix                     @dfinity-lab/teams/idx
 /nix/                     @dfinity-lab/teams/idx
 /experimental/nix/        @dfinity-lab/teams/idx
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
 
 # Log-based formal policy monitoring
-[Policy-Monitoring]
+# [Policy-Monitoring]
 /policy-monitoring/       @dfinity-lab/teams/ic-testing-verification
