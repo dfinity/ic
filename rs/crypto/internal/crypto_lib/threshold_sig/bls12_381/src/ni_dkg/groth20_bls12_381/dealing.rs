@@ -12,7 +12,6 @@ use crate::{
 };
 use ic_crypto_internal_bls12381_serde_miracl::FrBytes;
 use ic_crypto_internal_seed::Seed;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -178,7 +177,6 @@ pub fn create_dealing(
 ///   decryptability or sharing proofs of the dealing, or the integrity of the
 ///   dealing ciphertexts, don't verify.
 pub fn verify_dealing(
-    _dkg_id: NiDkgId,
     dealer_index: NodeIndex,
     threshold: NumberOfNodes,
     epoch: Epoch,
@@ -211,7 +209,6 @@ pub fn verify_dealing(
 /// Also cf. `verify_dealing`.
 ///
 /// # Arguments
-/// * `dkg_id` - Unused.
 /// * `dealer_resharing_index` - The index of the dealer that provided the given
 ///   `dealing`.
 /// * `threshold` - The threshold required by the given `dealing`.
@@ -234,7 +231,6 @@ pub fn verify_dealing(
 /// # Panics
 /// * If there are no `public_coefficients` in `dealing`.
 pub fn verify_resharing_dealing(
-    dkg_id: NiDkgId,
     dealer_resharing_index: NodeIndex,
     threshold: NumberOfNodes,
     epoch: Epoch,
@@ -243,7 +239,6 @@ pub fn verify_resharing_dealing(
     resharing_public_coefficients: &PublicCoefficientsBytes,
 ) -> Result<(), CspDkgVerifyDealingError> {
     verify_dealing(
-        dkg_id,
         dealer_resharing_index,
         threshold,
         epoch,
