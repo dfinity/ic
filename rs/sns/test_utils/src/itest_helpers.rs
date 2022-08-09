@@ -45,6 +45,7 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
+use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;
 use std::path::Path;
@@ -168,6 +169,15 @@ impl SnsTestsInitPayloadBuilder {
 
     pub fn with_nervous_system_parameters(&mut self, params: NervousSystemParameters) -> &mut Self {
         self.governance.with_parameters(params);
+        self
+    }
+
+    pub fn with_initial_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        let mut neuron_map = btreemap! {};
+        for neuron in neurons {
+            neuron_map.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
+        }
+        self.governance.with_neurons(neuron_map);
         self
     }
 

@@ -129,6 +129,7 @@ pub struct NeuronBuilder {
     neuron_fees: u64,
     dissolve_state: Option<DissolveState>,
     followees: BTreeMap<u64, Followees>,
+    voting_power_percentage_multiplier: u64,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -147,6 +148,7 @@ impl From<Neuron> for NeuronBuilder {
             neuron_fees: neuron.neuron_fees_e8s,
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
+            voting_power_percentage_multiplier: neuron.voting_power_percentage_multiplier,
         }
     }
 }
@@ -163,6 +165,7 @@ impl NeuronBuilder {
             neuron_fees: 0,
             dissolve_state: None,
             followees: BTreeMap::new(),
+            voting_power_percentage_multiplier: 100,
         }
     }
 
@@ -177,6 +180,7 @@ impl NeuronBuilder {
             neuron_fees: 0,
             dissolve_state: None,
             followees: BTreeMap::new(),
+            voting_power_percentage_multiplier: 100,
         }
     }
 
@@ -230,6 +234,14 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_voting_power_percentage_multiplier(
+        mut self,
+        voting_power_percentage_multiplier: u64,
+    ) -> Self {
+        self.voting_power_percentage_multiplier = voting_power_percentage_multiplier;
+        self
+    }
+
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
         if let Some(id) = self.id.as_ref() {
             let subaccount = id.subaccount().unwrap();
@@ -252,6 +264,7 @@ impl NeuronBuilder {
             maturity_e8s_equivalent: self.maturity,
             dissolve_state: self.dissolve_state,
             followees: self.followees,
+            voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
         }
     }
 

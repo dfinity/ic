@@ -150,6 +150,12 @@ message Neuron {
   // same scale as the governance token, maturity is not directly convertible to
   // governance tokens: conversion requires a minting event.
   uint64 maturity_e8s_equivalent = 12;
+
+  // A percentage multiplier to be applied when calculating the voting power of a neuron.
+  // The multiplier's unit is a integer percentage in the range of 0 to 100. The
+  // voting_power_percentage_multiplier can only be less than 100 for a developer neuron
+  // that is created at SNS initialization.
+  uint64 voting_power_percentage_multiplier = 13;
 }
 
 // The types of votes a neuron can issue.

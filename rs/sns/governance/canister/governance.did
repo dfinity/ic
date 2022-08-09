@@ -222,6 +222,7 @@ type Neuron = record {
   created_timestamp_seconds : nat64;
   aging_since_timestamp_seconds : nat64;
   dissolve_state : opt DissolveState;
+  voting_power_percentage_multiplier : nat64;
   followees : vec record { nat64; Followees };
   neuron_fees_e8s : nat64;
 };
