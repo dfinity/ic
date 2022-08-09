@@ -1,4 +1,4 @@
-type Account = record { of : opt principal; subaccount : opt Subaccount };
+type Account = record { owner : opt principal; subaccount : opt Subaccount };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;

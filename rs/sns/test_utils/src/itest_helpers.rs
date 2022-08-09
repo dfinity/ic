@@ -108,7 +108,7 @@ impl SnsTestsInitPayloadBuilder {
         let ledger = LedgerInitArgs {
             // minting_account will be set when the Governance canister ID is allocated
             minting_account: Account {
-                of: PrincipalId::default(),
+                owner: PrincipalId::default(),
                 subaccount: None,
             },
             initial_balances: vec![],
@@ -219,7 +219,7 @@ pub fn populate_canister_ids(
     {
         let ledger = &mut sns_canister_init_payloads.ledger;
         ledger.minting_account = Account {
-            of: governance_canister_id.unwrap(),
+            owner: governance_canister_id.unwrap(),
             subaccount: None,
         };
         ledger.archive_options.controller_id = root_canister_id.unwrap();
@@ -292,7 +292,7 @@ impl SnsCanisters<'_> {
 
         assert!(!init_payloads.ledger.initial_balances.iter().any(|(a, _)| a
             == &Account {
-                of: governance_canister_id.get(),
+                owner: governance_canister_id.get(),
                 subaccount: None
             }));
 
@@ -302,7 +302,7 @@ impl SnsCanisters<'_> {
                 .subaccount()
                 .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
             let aid = Account {
-                of: governance_canister_id.get(),
+                owner: governance_canister_id.get(),
                 subaccount: Some(sub),
             };
             init_payloads
@@ -530,8 +530,10 @@ impl SnsCanisters<'_> {
                 amount: Nat::from(stake.get_e8s()),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
-                to_principal: PrincipalId::from(self.governance.canister_id()),
-                to_subaccount: Some(*to_subaccount),
+                to: Account {
+                    owner: PrincipalId::from(self.governance.canister_id()),
+                    subaccount: Some(*to_subaccount),
+                },
                 memo: None,
                 created_at_time: Some(
                     SystemTime::now()
@@ -653,8 +655,8 @@ impl SnsCanisters<'_> {
         let amount = amount_e8s.map(|e8s| Amount { e8s });
 
         let to_account: Option<AccountProto> =
-            to_account.map(|Account { of, subaccount }| AccountProto {
-                of: Some(of),
+            to_account.map(|Account { owner, subaccount }| AccountProto {
+                owner: Some(owner),
                 subaccount: subaccount.map(|s| SubaccountProto {
                     subaccount: s.to_vec(),
                 }),
@@ -714,7 +716,7 @@ impl SnsCanisters<'_> {
         crate::icrc1::balance_of(
             &self.ledger,
             Account {
-                of: sender.get_principal_id(),
+                owner: sender.get_principal_id(),
                 subaccount: None,
             },
         )

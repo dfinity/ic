@@ -73,7 +73,7 @@ fn test_list_neurons_determinism() {
         let account_identifiers = users
             .iter()
             .map(|user| Account {
-                of: user.get_principal_id(),
+                owner: user.get_principal_id(),
                 subaccount: None,
             })
             .collect();
@@ -121,11 +121,11 @@ fn test_list_neurons_of_principal() {
         let user3 = Sender::from_keypair(&TEST_USER3_KEYPAIR);
 
         let account_identifier1 = Account {
-            of: user1.get_principal_id(),
+            owner: user1.get_principal_id(),
             subaccount: None,
         };
         let account_identifier2 = Account {
-            of: user2.get_principal_id(),
+            owner: user2.get_principal_id(),
             subaccount: None,
         };
 
@@ -522,7 +522,7 @@ fn test_neuron_action_is_not_authorized() {
         let unauthorized_caller = Sender::from_keypair(&TEST_USER2_KEYPAIR);
 
         let neuron_owner_account_identifier = Account {
-            of: neuron_owner.get_principal_id(),
+            owner: neuron_owner.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -588,7 +588,7 @@ fn test_disburse_maturity_a() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -674,7 +674,7 @@ fn test_disburse_maturity_to_different_account() {
     local_test_on_sns_subnet(|runtime| async move {
         let maturity_owner = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let maturity_owner_account_identifier = Account {
-            of: maturity_owner.get_principal_id(),
+            owner: maturity_owner.get_principal_id(),
             subaccount: None,
         };
         let maturity_receiver = Sender::from_keypair(&TEST_USER2_KEYPAIR);
@@ -733,7 +733,7 @@ fn test_disburse_maturity_to_different_account() {
                     command: Some(Command::DisburseMaturity(DisburseMaturity {
                         percentage_to_disburse: 50,
                         to_account: Some(AccountProto {
-                            of: Some(maturity_receiver.get_principal_id()),
+                            owner: Some(maturity_receiver.get_principal_id()),
                             subaccount: None,
                         }),
                     })),
@@ -770,7 +770,7 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1278,7 +1278,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
         let user1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let user2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier1 = Account {
-            of: user1.get_principal_id(),
+            owner: user1.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1315,8 +1315,10 @@ fn test_one_user_cannot_claim_other_users_neuron() {
                 amount: Nat::from(stake),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
-                to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
-                to_subaccount: Some(to_subaccount),
+                to: Account {
+                    owner: PrincipalId::from(sns_canisters.governance.canister_id()),
+                    subaccount: Some(to_subaccount),
+                },
                 created_at_time: None,
                 memo: Some(Memo::from(nonce)),
             },
@@ -1408,7 +1410,7 @@ fn test_neuron_add_all_permissions_to_self() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1480,7 +1482,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1567,7 +1569,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1636,7 +1638,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1705,7 +1707,7 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1775,7 +1777,7 @@ fn test_neuron_remove_all_permissions_of_self() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1830,7 +1832,7 @@ fn test_neuron_remove_some_permissions() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1899,7 +1901,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1971,7 +1973,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2061,7 +2063,7 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2128,7 +2130,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            of: user.get_principal_id(),
+            owner: user.get_principal_id(),
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();

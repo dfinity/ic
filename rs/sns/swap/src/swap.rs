@@ -416,7 +416,7 @@ impl Swap {
         }
         // Look for the token balanace of 'this' canister.
         let account = Account {
-            of: this_canister.get(),
+            owner: this_canister.get(),
             subaccount: None,
         };
         let e8s = ledger_stub(self.init().sns_ledger())
@@ -467,7 +467,7 @@ impl Swap {
         }
         // Look for the token balanace of the specified principal's subaccount on 'this' canister.
         let account = Account {
-            of: this_canister.get(),
+            owner: this_canister.get(),
             subaccount: Some(principal_to_subaccount(&buyer)),
         };
         let e8s = ledger_stub(self.init().icp_ledger())
@@ -578,7 +578,7 @@ impl Swap {
             // Observe: memo == 0. Could be specified as an argument instead.
             let dst_subaccount = compute_neuron_staking_subaccount_bytes(principal, 0);
             let dst = Account {
-                of: init.sns_governance().get(),
+                owner: init.sns_governance().get(),
                 subaccount: Some(dst_subaccount),
             };
             let result = buyer_state
@@ -609,7 +609,7 @@ impl Swap {
         if let Some(buyer_state) = self.state_mut().buyers.get_mut(&principal.to_string()) {
             let subaccount = principal_to_subaccount(&principal);
             let dst = Account {
-                of: principal,
+                owner: principal,
                 subaccount: None,
             };
             buyer_state
@@ -820,7 +820,7 @@ impl Swap {
         }
         let subaccount = principal_to_subaccount(&principal);
         let dst = Account {
-            of: principal,
+            owner: principal,
             subaccount: None,
         };
         let result = ledger_stub(self.init().icp_ledger())
@@ -886,12 +886,12 @@ impl Swap {
             let subaccount = principal_to_subaccount(&principal);
             let dst = if lifecycle == Lifecycle::Committed {
                 Account {
-                    of: sns_governance.get(),
+                    owner: sns_governance.get(),
                     subaccount: None,
                 }
             } else {
                 Account {
-                    of: principal,
+                    owner: principal,
                     subaccount: None,
                 }
             };
@@ -951,7 +951,7 @@ impl Swap {
             // Observe: memo == 0. Could be specified as an argument instead.
             let dst_subaccount = compute_neuron_staking_subaccount_bytes(principal, 0);
             let dst = Account {
-                of: sns_governance.get(),
+                owner: sns_governance.get(),
                 subaccount: Some(dst_subaccount),
             };
             let result = buyer_state

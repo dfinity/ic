@@ -126,7 +126,7 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
 }
 
 pub fn account_from_proto(account: crate::pb::v1::Account) -> Result<ic_icrc1::Account, String> {
-    let of = *validate_required_field("of", &account.of)?;
+    let owner = *validate_required_field("owner", &account.owner)?;
     let subaccount: Option<ic_icrc1::Subaccount> = match account.subaccount {
         Some(s) => match s.subaccount.as_slice().try_into() {
             Ok(s) => Ok(Some(s)),
@@ -137,7 +137,7 @@ pub fn account_from_proto(account: crate::pb::v1::Account) -> Result<ic_icrc1::A
         },
         None => Ok(None),
     }?;
-    Ok(ic_icrc1::Account { of, subaccount })
+    Ok(ic_icrc1::Account { owner, subaccount })
 }
 
 #[cfg(test)]

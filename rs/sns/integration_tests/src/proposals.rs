@@ -834,7 +834,7 @@ fn test_ballots_set_for_multiple_neurons() {
         let account_identifiers = users
             .iter()
             .map(|user| Account {
-                of: user.sender.get_principal_id(),
+                owner: user.sender.get_principal_id(),
                 subaccount: None,
             })
             .collect();

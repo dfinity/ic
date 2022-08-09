@@ -1,7 +1,7 @@
 use crate::Memo;
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::CanisterId;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
@@ -16,9 +16,9 @@ pub enum TransferError {
     BadFee { expected_fee: NumTokens },
     BadBurn { min_burn_amount: NumTokens },
     InsufficientFunds { balance: NumTokens },
-    TooOld { allowed_window_nanos: u64 },
-    CreatedInFuture,
-    Throttled,
+    TooOld,
+    CreatedInFuture { ledger_time: u64 },
+    TemporarilyUnavailable,
     Duplicate { duplicate_of: BlockIndex },
     GenericError { error_code: Nat, message: String },
 }
@@ -35,13 +35,11 @@ impl From<CoreTransferError> for TransferError {
             LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
                 balance: Nat::from(balance.get_e8s()),
             },
-            LTE::TxTooOld {
-                allowed_window_nanos,
-            } => TE::TooOld {
-                allowed_window_nanos,
+            LTE::TxTooOld { .. } => TE::TooOld,
+            LTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
             },
-            LTE::TxCreatedInFuture => TE::CreatedInFuture,
-            LTE::TxThrottled => TE::Throttled,
+            LTE::TxThrottled => TE::TemporarilyUnavailable,
             LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
                 duplicate_of: Nat::from(duplicate_of),
             },
@@ -53,9 +51,7 @@ impl From<CoreTransferError> for TransferError {
 pub struct TransferArg {
     #[serde(default)]
     pub from_subaccount: Option<Subaccount>,
-    pub to_principal: PrincipalId,
-    #[serde(default)]
-    pub to_subaccount: Option<Subaccount>,
+    pub to: Account,
     #[serde(default)]
     pub fee: Option<NumTokens>,
     #[serde(default)]
@@ -63,15 +59,6 @@ pub struct TransferArg {
     #[serde(default)]
     pub memo: Option<Memo>,
     pub amount: NumTokens,
-}
-
-impl TransferArg {
-    pub fn to_account(&self) -> Account {
-        Account {
-            of: self.to_principal,
-            subaccount: self.to_subaccount,
-        }
-    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]

@@ -1693,7 +1693,7 @@ pub struct Subaccount {
 pub struct Account {
     /// The owner of the account.
     #[prost(message, optional, tag = "1")]
-    pub of: ::core::option::Option<::ic_base_types::PrincipalId>,
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The subaccount of the account. If not set then the default
     /// subaccount (all bytes set to 0) is used.
     #[prost(message, optional, tag = "2")]

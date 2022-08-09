@@ -23,7 +23,7 @@ const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 const MINTER: Account = Account {
-    of: PrincipalId::new(0, [0u8; 29]),
+    owner: PrincipalId::new(0, [0u8; 29]),
     subaccount: None,
 };
 
@@ -164,11 +164,10 @@ fn transfer(
     send_transfer(
         env,
         ledger,
-        from.of,
+        from.owner,
         &TransferArg {
             from_subaccount: from.subaccount,
-            to_principal: to.of,
-            to_subaccount: to.subaccount,
+            to,
             fee: None,
             created_at_time: None,
             amount: Nat::from(amount),
@@ -318,8 +317,7 @@ fn test_tx_deduplication() {
         p1,
         &TransferArg {
             from_subaccount: None,
-            to_principal: p2,
-            to_subaccount: None,
+            to: p2.into(),
             fee: None,
             amount: Nat::from(1_000_000),
             created_at_time: Some(now),
@@ -339,8 +337,7 @@ fn test_tx_deduplication() {
             p1,
             &TransferArg {
                 from_subaccount: None,
-                to_principal: p2,
-                to_subaccount: None,
+                to: p2.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now),
@@ -357,8 +354,7 @@ fn test_tx_deduplication() {
         p1,
         &TransferArg {
             from_subaccount: None,
-            to_principal: p2,
-            to_subaccount: None,
+            to: p2.into(),
             fee: None,
             amount: Nat::from(1_000_000),
             created_at_time: Some(now),
@@ -378,8 +374,7 @@ fn test_tx_deduplication() {
             p1,
             &TransferArg {
                 from_subaccount: None,
-                to_principal: p2,
-                to_subaccount: None,
+                to: p2.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now),
@@ -487,7 +482,7 @@ fn test_account_canonicalization() {
             &env,
             canister_id,
             Account {
-                of: p1,
+                owner: p1,
                 subaccount: None
             }
         )
@@ -498,7 +493,7 @@ fn test_account_canonicalization() {
             &env,
             canister_id,
             Account {
-                of: p1,
+                owner: p1,
                 subaccount: Some([0; 32])
             }
         )
@@ -509,7 +504,7 @@ fn test_account_canonicalization() {
         canister_id,
         p1.into(),
         Account {
-            of: p2,
+            owner: p2,
             subaccount: Some([0; 32]),
         },
         1_000_000,
@@ -522,7 +517,7 @@ fn test_account_canonicalization() {
             &env,
             canister_id,
             Account {
-                of: p2,
+                owner: p2,
                 subaccount: None
             }
         )
@@ -540,7 +535,7 @@ fn test_memo_validation() {
     // need another type to check invalid inputs.
     #[derive(CandidType)]
     struct TransferArg {
-        to_principal: PrincipalId,
+        to: Account,
         amount: Nat,
         memo: Option<Vec<u8>>,
     }
@@ -553,7 +548,7 @@ fn test_memo_validation() {
             canister_id,
             "icrc1_transfer",
             Encode!(&TransferArg {
-                to_principal: p2,
+                to: p2.into(),
                 amount: Nat::from(10_000),
                 memo: Some(vec![1u8; 8]),
             })
@@ -573,7 +568,7 @@ fn test_memo_validation() {
             canister_id,
             "icrc1_transfer",
             Encode!(&TransferArg {
-                to_principal: p2,
+                to: p2.into(),
                 amount: Nat::from(10_000),
                 memo: Some(vec![1u8; 32]),
             })
@@ -592,7 +587,7 @@ fn test_memo_validation() {
         canister_id,
         "icrc1_transfer",
         Encode!(&TransferArg {
-            to_principal: p2,
+            to: p2.into(),
             amount: Nat::from(10_000),
             memo: Some(vec![1u8; 33]),
         })
@@ -622,17 +617,14 @@ fn test_tx_time_bounds() {
     let tx_window = TX_WINDOW.as_nanos() as u64;
 
     assert_eq!(
-        Err(TransferError::TooOld {
-            allowed_window_nanos: tx_window
-        }),
+        Err(TransferError::TooOld),
         send_transfer(
             &env,
             canister_id,
             p1,
             &TransferArg {
                 from_subaccount: None,
-                to_principal: p2,
-                to_subaccount: None,
+                to: p2.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now - tx_window - 1),
@@ -642,15 +634,14 @@ fn test_tx_time_bounds() {
     );
 
     assert_eq!(
-        Err(TransferError::CreatedInFuture),
+        Err(TransferError::CreatedInFuture { ledger_time: now }),
         send_transfer(
             &env,
             canister_id,
             p1,
             &TransferArg {
                 from_subaccount: None,
-                to_principal: p2,
-                to_subaccount: None,
+                to: p2.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
@@ -745,7 +736,7 @@ fn arb_account() -> impl Strategy<Value = Account> {
         .prop_map(|(mut principal, subaccount)| {
             principal.push(0x00);
             Account {
-                of: PrincipalId::try_from(&principal[..]).unwrap(),
+                owner: PrincipalId::try_from(&principal[..]).unwrap(),
                 subaccount,
             }
         })

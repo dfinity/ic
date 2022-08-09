@@ -24,7 +24,7 @@ pub const MAX_MEMO_LENGTH: usize = 32;
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
 pub struct Account {
-    pub of: PrincipalId,
+    pub owner: PrincipalId,
     pub subaccount: Option<Subaccount>,
 }
 
@@ -37,7 +37,7 @@ impl Account {
 
 impl PartialEq for Account {
     fn eq(&self, other: &Self) -> bool {
-        self.of == other.of && self.effective_subaccount() == other.effective_subaccount()
+        self.owner == other.owner && self.effective_subaccount() == other.effective_subaccount()
     }
 }
 
@@ -51,7 +51,7 @@ impl std::cmp::PartialOrd for Account {
 
 impl std::cmp::Ord for Account {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.of.cmp(&other.of).then_with(|| {
+        self.owner.cmp(&other.owner).then_with(|| {
             self.effective_subaccount()
                 .cmp(other.effective_subaccount())
         })
@@ -60,7 +60,7 @@ impl std::cmp::Ord for Account {
 
 impl std::hash::Hash for Account {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.of.hash(state);
+        self.owner.hash(state);
         self.effective_subaccount().hash(state);
     }
 }
@@ -68,16 +68,16 @@ impl std::hash::Hash for Account {
 impl fmt::Display for Account {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.subaccount {
-            None => write!(f, "{}", self.of),
-            Some(subaccount) => write!(f, "({}, {})", self.of, hex::encode(&subaccount[..])),
+            None => write!(f, "{}", self.owner),
+            Some(subaccount) => write!(f, "0x{}.{}", hex::encode(&subaccount[..]), self.owner),
         }
     }
 }
 
 impl From<PrincipalId> for Account {
-    fn from(of: PrincipalId) -> Self {
+    fn from(owner: PrincipalId) -> Self {
         Self {
-            of,
+            owner,
             subaccount: None,
         }
     }
@@ -104,8 +104,8 @@ where
 /// Instead of encoding accounts as structs with named fields,
 /// we encode them as tuples with variables number of elements.
 /// ```text
-/// [bytes] <=> Account { of: bytes, subaccount : None }
-/// [x: bytes, y: bytes] <=> Account { of: x, subaccount: Some(y) }
+/// [bytes] <=> Account { owner: bytes, subaccount : None }
+/// [x: bytes, y: bytes] <=> Account { owner: x, subaccount: Some(y) }
 /// ```
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
@@ -113,7 +113,7 @@ struct CompactAccount(Vec<ByteBuf>);
 
 impl From<Account> for CompactAccount {
     fn from(acc: Account) -> Self {
-        let mut components = vec![ByteBuf::from(acc.of.to_vec())];
+        let mut components = vec![ByteBuf::from(acc.owner.to_vec())];
         if let Some(sub) = acc.subaccount {
             components.push(ByteBuf::from(sub.to_vec()))
         }
@@ -149,7 +149,7 @@ impl TryFrom<CompactAccount> for Account {
         };
 
         Ok(Account {
-            of: principal,
+            owner: principal,
             subaccount,
         })
     }

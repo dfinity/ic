@@ -106,7 +106,7 @@ impl LedgerBuilder {
 
     pub fn account_id(ident: PrincipalId) -> Account {
         Account {
-            of: ident,
+            owner: ident,
             subaccount: None,
         }
     }
@@ -750,7 +750,7 @@ impl SNSBuilder {
     pub fn add_account_for(mut self, principal_id: PrincipalId, amount: u64) -> Self {
         self.ledger_builder.add_account(
             Account {
-                of: principal_id,
+                owner: principal_id,
                 subaccount: None,
             },
             amount,
@@ -766,7 +766,7 @@ impl SNSBuilder {
         if let Some(owner) = neuron.get_owner() {
             self.ledger_builder.try_add_account(
                 Account {
-                    of: owner,
+                    owner,
                     subaccount: None,
                 },
                 0,

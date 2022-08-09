@@ -91,8 +91,7 @@ impl Ledger for LedgerCanister {
     ) -> Result<BlockHeight, NervousSystemError> {
         let args = TransferArg {
             from_subaccount,
-            to_principal: to.of,
-            to_subaccount: to.subaccount,
+            to,
             fee: Some(Nat::from(fee_e8s)),
             created_at_time: None,
             amount: Nat::from(amount_e8s),
@@ -141,7 +140,7 @@ impl Ledger for LedgerCanister {
 }
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
-    AccountIdentifier::new(account.of, account.subaccount.map(IcpSubaccount))
+    AccountIdentifier::new(account.owner, account.subaccount.map(IcpSubaccount))
 }
 
 #[async_trait]

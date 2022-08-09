@@ -203,7 +203,7 @@ impl SnsInitPayload {
             .clone();
 
         let minting_account = Account {
-            of: sns_canister_ids.governance,
+            owner: sns_canister_ids.governance,
             subaccount: None,
         };
         let initial_balances = self
@@ -910,7 +910,7 @@ mod test {
         assert_eq!(
             sns_canisters_init_payloads.ledger.minting_account,
             Account {
-                of: sns_canister_ids.governance,
+                owner: sns_canister_ids.governance,
                 subaccount: None
             }
         );
@@ -1044,7 +1044,7 @@ mod test {
         assert_eq!(
             ledger.minting_account,
             Account {
-                of: sns_canister_ids.governance,
+                owner: sns_canister_ids.governance,
                 subaccount: None
             }
         );
