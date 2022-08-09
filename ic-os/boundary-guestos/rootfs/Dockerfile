@@ -10,8 +10,8 @@ ARG BASE_IMAGE=
 
 
 # Service worker version and sha256
-ARG sw_version=1.2.3
-ARG sw_sha256=9a2c42ccb5ecf2fe7276c8c5f1765a0ac25f7f186978d1909f2b410ec1b4f95e
+ARG sw_version=1.2.4
+ARG sw_sha256=47a80f78c5ffe73fec719c7854e71234e0b9171ca3b08d2bee52d8d551f176ef
 
 # ICX proxy  version and sha256
 ARG icx_proxy_version=dcaa135
