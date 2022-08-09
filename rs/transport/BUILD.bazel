@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,5 +33,20 @@ rust_library(
         "@crate_index//:strum",
         "@crate_index//:tokio",
         "@crate_index//:tower",
+    ],
+)
+
+rust_test(
+    name = "transport_tests",
+    srcs = glob(["src/**"]),
+    crate = ":transport",
+    edition = "2018",
+    deps = [
+        "//rs/crypto",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/logger",
+        "//rs/types/types_test_utils",
     ],
 )
