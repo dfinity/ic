@@ -17,6 +17,9 @@ use std::str::FromStr;
 /// The maximum number of neurons returned by the method `list_neurons`.
 pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 
+/// The default voting_power_percentage_multiplier applied to a neuron.
+pub const DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER: u64 = 100;
+
 /// The state of a neuron
 #[derive(Debug, PartialEq)]
 pub enum NeuronState {
@@ -114,11 +117,15 @@ impl Neuron {
     /// Returns the voting power of the neuron.
     ///
     /// The voting power is computed as
-    /// the neuron's stake * a dissolve delay bonus * an age bonus.
-    /// The dissolve delay bonus depends on the neuron's dissolve delay and is in the range
-    /// of 0%, for 0 dissolve delay, up to 100%, for a neuron with max_dissolve_delay_seconds.
-    /// The age bonus depends on the neuron's age and is in the range of 0%, for 0 age, up
-    /// to 25%, for a neuron with max_neuron_age_for_age_bonus.
+    /// the neuron's stake * a dissolve delay bonus * an age bonus * voting power multiplier.
+    /// - The dissolve delay bonus depends on the neuron's dissolve delay and is in the range
+    ///   of 0%, for 0 dissolve delay, up to 100%, for a neuron with max_dissolve_delay_seconds.
+    /// - The age bonus depends on the neuron's age and is in the range of 0%, for 0 age, up
+    ///   to 25%, for a neuron with max_neuron_age_for_age_bonus.
+    /// - The voting power multiplier depends on the neuron.voting_power_percentage_multiplier,
+    ///   and is applied against the total voting power of the neuron. It is represented
+    ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
+    ///   and 100 will result in unadjusted voting power.
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
     pub fn voting_power(
@@ -145,11 +152,24 @@ impl Neuron {
         let ad_stake = d_stake + ((d_stake * a) / (4 * max_neuron_age_for_age_bonus as u128));
         // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
         assert!(ad_stake <= (5 * d_stake) / 4);
-        // The final voting power is the stake adjusted by both age
-        // and dissolve delay. If the stake is is greater than
+
+        // Convert the multiplier to u128. The voting_power_percentage_multiplier represents
+        // a percent and will always be within the range 0 to 100.
+        let v = self.voting_power_percentage_multiplier as u128;
+
+        // Apply the multiplier to 'ad_stake' and divide by 100 to have the same effect as
+        // multiplying by a percent.
+        let vad_stake = ad_stake
+            .checked_mul(v)
+            .expect("Overflow detected when calculating voting power")
+            .checked_div(100)
+            .expect("Underflow detected when calculating voting power");
+
+        // The final voting power is the stake adjusted by both age,
+        // dissolve delay, and voting power multiplier. If the stake is is greater than
         // u64::MAX divided by 2.5, the voting power may actually not
         // fit in a u64.
-        std::cmp::min(ad_stake, u64::MAX as u128) as u64
+        std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
     /// Given the specified `ballots`, determine how the neuron would

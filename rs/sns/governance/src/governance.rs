@@ -48,7 +48,10 @@ use strum::IntoEnumIterator;
 use dfn_core::println;
 
 use crate::ledger::Ledger;
-use crate::neuron::{NeuronState, RemovePermissionsStatus, MAX_LIST_NEURONS_RESULTS};
+use crate::neuron::{
+    NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    MAX_LIST_NEURONS_RESULTS,
+};
 use crate::pb::v1::{
     manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions},
     manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
@@ -421,6 +424,7 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
         Self::validate_required_field("sns_metadata", &base.sns_metadata)?.validate()?;
         validate_id_to_nervous_system_functions(&base.id_to_nervous_system_functions)?;
         validate_default_followees(&base)?;
+        validate_neurons(&base)?;
 
         Ok(Self(base))
     }
@@ -478,6 +482,28 @@ pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> 
                     followee, neuron_id_to_neuron,
                 ));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Requires that the neurons identified in base.parameters.neurons have their
+/// voting_power_percentage_multiplier within the expected range of 0 to 100.
+///
+/// Assumes that base.parameters is Some.
+///
+/// If the validation fails, an Err is returned containing a string that explains why
+/// base is invalid.
+pub fn validate_neurons(base: &GovernanceProto) -> Result<(), String> {
+    for (neuron_id, neuron) in base.neurons.iter() {
+        // Since voting_power_percentage_multiplier, only check the upper bound.
+        if neuron.voting_power_percentage_multiplier > 100 {
+            return Err(format!(
+                "Neuron {} has an invalid voting_power_percentage_multiplier ({}). \
+                 Expected range is 0 to 100",
+                neuron_id, neuron.voting_power_percentage_multiplier
+            ));
         }
     }
 
@@ -1158,6 +1184,7 @@ impl Governance {
             followees: parent_neuron.followees.clone(),
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state.clone(),
+            voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -1366,7 +1393,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Tried to merge {} e8s, but can't merge an amount\
+                    "Tried to merge {} e8s, but can't merge an amount \
                      less than the transaction fee of {} e8s.",
                     maturity_to_disburse, transaction_fee_e8s
                 ),
@@ -2835,6 +2862,9 @@ impl Governance {
             followees: self.default_followees().followees,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
+            // A neuron created through the `claim_or_refresh` ManageNeuron command will
+            // have the default voting power multiplier applied.
+            voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -4143,6 +4173,34 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_governance_proto_neurons_voting_power_multiplier_in_expected_range() {
+        let mut proto = basic_governance_proto();
+        proto.neurons = btreemap! {
+            "A".to_string() => Neuron {
+                voting_power_percentage_multiplier: 0,
+                ..Default::default()
+            },
+            "B".to_string() => Neuron {
+                voting_power_percentage_multiplier: 50,
+                ..Default::default()
+            },
+            "C".to_string() => Neuron {
+                voting_power_percentage_multiplier: 100,
+                ..Default::default()
+            },
+        };
+        assert!(ValidGovernanceProto::try_from(proto.clone()).is_ok());
+        proto.neurons.insert(
+            "D".to_string(),
+            Neuron {
+                voting_power_percentage_multiplier: 101,
+                ..Default::default()
+            },
+        );
+        assert!(ValidGovernanceProto::try_from(proto).is_err());
     }
 
     #[test]

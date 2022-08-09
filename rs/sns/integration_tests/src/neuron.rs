@@ -14,7 +14,7 @@ use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::{
     governance::Governance,
     ledger::Ledger,
-    neuron::NeuronState,
+    neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance,
         governance_error::ErrorType,
@@ -25,6 +25,7 @@ use ic_sns_governance::{
             IncreaseDissolveDelay, RemoveNeuronPermissions,
         },
         manage_neuron_response::Command as CommandResponse,
+        neuron::DissolveState,
         proposal::Action,
         Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, ListNeurons,
         ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters,
@@ -290,6 +291,10 @@ fn test_claim_neuron() {
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         // The neuron's cached_neuron_stake_e8s should equal the 1 token (e8s) that was staked.
         assert_eq!(neuron.cached_neuron_stake_e8s, TOKEN_SUBDIVIDABLE_BY);
+        assert_eq!(
+            neuron.voting_power_percentage_multiplier,
+            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
+        );
 
         Ok(())
     });
@@ -1060,17 +1065,20 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         Neuron {
             id: Some(NeuronId { id: vec![1, 2, 3] }),
             cached_neuron_stake_e8s: 2,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
         Neuron {
             id: Some(NeuronId { id: vec![4, 5, 6] }),
             cached_neuron_stake_e8s: 3,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
         // A neuron that will not vote.
         Neuron {
             id: Some(NeuronId { id: vec![7, 8, 9] }),
             cached_neuron_stake_e8s: 4,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
     ];
@@ -2905,4 +2913,132 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
 
         Ok(())
     });
+}
+
+/// Tests that multiple neurons (both available at genesis and through claim_or_refresh)
+/// will show up in a proposals ballots with the correct voting power.
+#[test]
+fn test_neuron_voting_power_multiplier_with_ballots() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let user2 = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let user3 = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let dissolve_delay_seconds = *params
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .as_ref()
+            .unwrap();
+
+        let neurons = vec![
+            Neuron {
+                id: Some(user1.neuron_id.clone()),
+                cached_neuron_stake_e8s: 100_000_000,
+                // If created_timestamp_seconds, and aging_since_timestamp_seconds are 0 at genesis,
+                // the fields will be overwritten with the genesis timestamp
+                created_timestamp_seconds: 0,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 50,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                ..Default::default()
+            },
+            Neuron {
+                id: Some(user2.neuron_id.clone()),
+                cached_neuron_stake_e8s: 100_000_000,
+                // If created_timestamp_seconds, and aging_since_timestamp_seconds are 0 at genesis,
+                // the fields will be overwritten with the genesis timestamp
+                created_timestamp_seconds: 0,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 75,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                ..Default::default()
+            },
+        ];
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            // User3 will have funds available in the ledger for staking a neuron
+            .with_ledger_account(user3.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .with_initial_neurons(neurons)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        // Stake and claim a neuron for user3
+        sns_canisters
+            .stake_and_claim_neuron(&user3.sender, Some(dissolve_delay_seconds as u32))
+            .await;
+
+        let proposal_payload = Proposal {
+            title: "Test Motion proposal".into(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "motion_text".into(),
+            })),
+            ..Default::default()
+        };
+
+        // Submit a motion proposal to examine the ballots
+        let proposal_id = sns_canisters
+            .make_proposal(&user3.sender, &user3.subaccount, proposal_payload)
+            .await
+            .unwrap();
+
+        let proposal_data = sns_canisters.get_proposal(proposal_id).await;
+
+        // Inspect and assert the voting power
+        let neuron1 = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron1, &params);
+
+        let neuron2 = sns_canisters.get_neuron(&user2.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron2, &params);
+
+        let neuron3 = sns_canisters.get_neuron(&user3.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron3, &params);
+
+        Ok(())
+    });
+}
+
+/// Given a proposal and a neuron, assert that the corresponding ballot on the proposal
+/// matches the expected voting power of the neuron.
+fn assert_neuron_voting_power(
+    proposal_data: &ProposalData,
+    neuron: &Neuron,
+    params: &NervousSystemParameters,
+) {
+    // Compute the stake in the same way as Governance. In a sense this a regression test
+    // that the stake is computed in the way it is expected.
+    let stake = neuron.stake_e8s() as u128;
+    let max_dissolve_delay_seconds = *params.max_dissolve_delay_seconds.as_ref().unwrap();
+    let max_neuron_age_for_age_bonus = *params.max_neuron_age_for_age_bonus.as_ref().unwrap();
+
+    let d = match neuron.dissolve_state.as_ref().unwrap() {
+        DissolveState::DissolveDelaySeconds(amount) => *amount as u128,
+        _ => panic!("Unsupported DissolveState for assert_neuron_voting_power"),
+    };
+
+    let d_stake = stake + ((stake * d) / (max_dissolve_delay_seconds as u128));
+
+    let a = neuron.age_seconds(proposal_data.proposal_creation_timestamp_seconds) as u128;
+    let ad_stake = d_stake + ((d_stake * a) / (4 * max_neuron_age_for_age_bonus as u128));
+
+    let v = neuron.voting_power_percentage_multiplier as u128;
+
+    let vad_state = (ad_stake * v) / 100;
+    let expected_voting_power = vad_state as u64;
+
+    let neuron_ballot = proposal_data
+        .ballots
+        .get(&neuron.id.as_ref().unwrap().to_string())
+        .expect("Expected neuron to have a ballot");
+
+    let actual_voting_power = neuron_ballot.voting_power;
+    // Program in a little flexibility to reduce flakiness as these are u128 calculations
+    assert!(expected_voting_power.abs_diff(actual_voting_power) < 50);
 }

@@ -79,6 +79,12 @@ pub struct Neuron {
     /// governance tokens: conversion requires a minting event.
     #[prost(uint64, tag = "12")]
     pub maturity_e8s_equivalent: u64,
+    /// A percentage multiplier to be applied when calculating the voting power of a neuron.
+    /// The multiplier's unit is a integer percentage in the range of 0 to 100. The
+    /// voting_power_percentage_multiplier can only be less than 100 for a developer neuron
+    /// that is created at SNS initialization.
+    #[prost(uint64, tag = "13")]
+    pub voting_power_percentage_multiplier: u64,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
