@@ -2,20 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:private"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-    ) + ["//%s/%s:sources" % (
-        package_name(),
-        p,
-    ) for p in subpackages(
-        include = ["**"],
-        allow_empty = True,
-    )],
-    visibility = ["//visibility:public"],
-)
-
 DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",

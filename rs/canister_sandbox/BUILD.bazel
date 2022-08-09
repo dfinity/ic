@@ -3,16 +3,6 @@ load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]) + [
-        "//rs/canister_sandbox/backend_lib:sources",
-        "//rs/canister_sandbox/common:sources",
-        "//rs/canister_sandbox/sandbox_launcher:sources",
-        "//rs/canister_sandbox/replica_controller:sources",
-    ],
-)
-
 DEPENDENCIES = [
     "//rs/canister_sandbox/backend_lib",
     "@crate_index//:libc",

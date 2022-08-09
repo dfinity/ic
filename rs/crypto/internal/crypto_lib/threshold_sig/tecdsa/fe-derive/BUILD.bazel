@@ -2,15 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ),
-    visibility = ["//visibility:public"],
-)
-
 rust_proc_macro(
     name = "fe-derive",
     srcs = glob(["src/**"]),

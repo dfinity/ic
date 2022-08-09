@@ -1,14 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ),
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "der_utils",
     srcs = glob(["src/**"]),

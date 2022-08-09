@@ -4,14 +4,6 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ) + ["//rs/registry/transport/protobuf_generator:sources"],
-)
-
-filegroup(
     name = "protos",
     srcs = glob(["proto/**"]),
 )

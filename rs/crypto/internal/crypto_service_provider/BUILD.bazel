@@ -4,18 +4,6 @@ load("//bazel:prost.bzl", "generated_files_check")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ) + ["//%s/%s:sources" % (
-        package_name(),
-        p,
-    ) for p in subpackages(include = ["**"])],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
     name = "protos",
     srcs = glob(["proto/**"]),
 )

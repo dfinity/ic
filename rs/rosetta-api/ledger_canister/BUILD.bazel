@@ -5,13 +5,6 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
-    name = "sources",
-    srcs = glob(["**"]) + [
-        "//rs/rosetta-api/ledger_canister/protobuf_generator:sources",
-    ],
-)
-
-filegroup(
     name = "protos",
     srcs = glob(["proto/**"]),
 )

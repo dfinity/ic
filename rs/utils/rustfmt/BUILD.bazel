@@ -2,14 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "sources",
-    srcs = [
-        "Cargo.toml",
-        "src/lib.rs",
-    ],
-)
-
 rust_library(
     name = "rustfmt",
     srcs = ["src/lib.rs"],

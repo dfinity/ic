@@ -34,14 +34,6 @@ DEV_DEPENDENCIES = DEPENDENCIES + [
     "@crate_index//:tempfile",
 ]
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ),
-)
-
 rust_library(
     name = "canister",
     srcs = glob(["src/**/*.rs"]),

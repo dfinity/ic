@@ -2,12 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"],
-)
-
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",

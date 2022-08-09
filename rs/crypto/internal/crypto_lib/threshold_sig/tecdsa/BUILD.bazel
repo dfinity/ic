@@ -2,17 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-    ) + ["//%s/%s:sources" % (
-        package_name(),
-        p,
-    ) for p in subpackages(include = ["**"])],
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "tecdsa",
     srcs = glob(["src/**"]),

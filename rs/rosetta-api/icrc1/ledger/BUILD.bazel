@@ -3,11 +3,6 @@ load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-)
-
 rust_library(
     name = "ledger",
     srcs = [

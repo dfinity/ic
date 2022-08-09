@@ -2,12 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"],
-)
-
 ALIASES = {
     "@crate_index//:miracl_core_bls12381": "miracl_core",
 }

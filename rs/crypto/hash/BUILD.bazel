@@ -2,11 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-)
-
 rust_library(
     name = "hash",
     srcs = glob(["src/**"]),

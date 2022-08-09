@@ -2,12 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),

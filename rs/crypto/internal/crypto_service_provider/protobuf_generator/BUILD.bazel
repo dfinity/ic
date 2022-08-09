@@ -3,15 +3,6 @@ load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ),
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],

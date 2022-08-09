@@ -2,11 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]) + ["//rs/crypto/node_key_validation/tls_cert_validation:sources"],
-)
-
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/fs_ni_dkg",

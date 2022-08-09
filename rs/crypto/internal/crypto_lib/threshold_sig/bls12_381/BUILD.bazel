@@ -7,17 +7,6 @@ package(default_visibility = [
     "//rs/state_machine_tests:__pkg__",
 ])
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-    ) + ["//%s/%s:sources" % (
-        package_name(),
-        p,
-    ) for p in subpackages(include = ["**"])],
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),

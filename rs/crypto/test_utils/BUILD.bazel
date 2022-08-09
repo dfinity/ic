@@ -1,17 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-filegroup(
-    name = "sources",
-    srcs = glob(
-        ["**"],
-        exclude = ["target/**"],
-    ) + ["//%s/%s:sources" % (
-        package_name(),
-        p,
-    ) for p in subpackages(include = ["**"])],
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "test_utils",
     srcs = glob(["src/**"]),

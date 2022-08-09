@@ -8,12 +8,6 @@ package(
     ],
 )
 
-filegroup(
-    name = "sources",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"],
-)
-
 rust_library(
     name = "ecdsa_secp256k1",
     srcs = glob(["src/**"]),
