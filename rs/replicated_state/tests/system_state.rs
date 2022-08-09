@@ -6,6 +6,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, SystemState,
 };
+use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
@@ -91,7 +92,7 @@ fn induct_messages_to_self_in_running_status_works() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request.into())
+        .push_output_request(request.into(), mock_time())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -117,7 +118,7 @@ fn induct_messages_to_self_in_stopped_status_does_not_work() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request.into())
+        .push_output_request(request.into(), mock_time())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -143,7 +144,7 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request.into())
+        .push_output_request(request.into(), mock_time())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -250,12 +251,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
     // So there should be memory for this request.
     system_state
         .queues_mut()
-        .push_output_request(request.clone())
+        .push_output_request(request.clone(), mock_time())
         .unwrap();
     // But not for this one.
     system_state
         .queues_mut()
-        .push_output_request(request.clone())
+        .push_output_request(request.clone(), mock_time())
         .unwrap();
 
     system_state.induct_messages_to_self(
@@ -315,7 +316,7 @@ fn induct_messages_to_self_full_queue() {
     for _ in 0..DEFAULT_QUEUE_CAPACITY - 1 {
         system_state
             .queues_mut()
-            .push_output_request(request.clone())
+            .push_output_request(request.clone(), mock_time())
             .unwrap();
     }
 

@@ -12,9 +12,10 @@ use ic_protobuf::{
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, Cycles, QueueIndex,
+    CanisterId, CountBytes, Cycles, QueueIndex, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::{From, TryFrom},
@@ -28,6 +29,10 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 /// generated e.g. when a request cannot be inducted due to a full input queue
 /// (and enqueuing the response into the output queue might also fail).
 pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
+
+/// The default lifetime of a request in OutputQueue from which the deadline
+/// is computed as time + DEFAULT_OUTPUT_REQUEST_LIFETIME.
+pub const DEFAULT_OUTPUT_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
@@ -553,6 +558,7 @@ impl CanisterQueues {
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
+        time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         let (input_queue, output_queue) = self.get_or_insert_queues(&msg.receiver);
 
@@ -568,7 +574,7 @@ impl CanisterQueues {
             OutputQueuesStats::stats_delta(&RequestOrResponse::Request(msg.clone()));
 
         output_queue
-            .push_request(msg)
+            .push_request(msg, time + DEFAULT_OUTPUT_REQUEST_LIFETIME)
             .expect("cannot fail due to checks above");
 
         self.input_queues_stats.reserved_slots += 1;
@@ -1232,7 +1238,7 @@ pub mod testing {
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
-        CanisterId, QueueIndex,
+        CanisterId, QueueIndex, Time,
     };
     use std::{collections::VecDeque, sync::Arc};
 
@@ -1345,7 +1351,9 @@ pub mod testing {
             req.receiver = CanisterId::from_u64((i % num_receivers) as u64);
             let req = Arc::new(req);
             updated_requests.push_back(RequestOrResponse::Request(Arc::clone(&req)));
-            canister_queues.push_output_request(req).unwrap();
+            canister_queues
+                .push_output_request(req, Time::from_nanos_since_unix_epoch(0))
+                .unwrap();
         });
         (canister_queues, updated_requests)
     }

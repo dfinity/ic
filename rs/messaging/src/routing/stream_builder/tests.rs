@@ -149,7 +149,7 @@ fn reject_local_request_for_subnet() {
 
         state
             .subnet_queues_mut()
-            .push_output_request(msg.clone().into())
+            .push_output_request(msg.clone().into(), mock_time())
             .unwrap();
         state
             .subnet_queues_mut()

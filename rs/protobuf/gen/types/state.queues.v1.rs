@@ -93,6 +93,13 @@ pub mod request_or_response {
     }
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct MessageDeadline {
+    #[prost(uint64, tag = "1")]
+    pub deadline: u64,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct InputOutputQueue {
     #[prost(message, repeated, tag = "1")]
     pub queue: ::prost::alloc::vec::Vec<RequestOrResponse>,
@@ -102,6 +109,12 @@ pub struct InputOutputQueue {
     pub capacity: u64,
     #[prost(uint64, tag = "4")]
     pub num_slots_reserved: u64,
+    /// Ordered ranges of messages having the same request deadline. Each range
+    /// is represented as a deadline and its end index (the `QueueIndex` just past
+    /// the last request where the deadline applies). Both the deadlines and queue
+    /// indices are strictly increasing.
+    #[prost(message, repeated, tag = "5")]
+    pub deadline_range_ends: ::prost::alloc::vec::Vec<MessageDeadline>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct QueueEntry {
