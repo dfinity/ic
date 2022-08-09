@@ -5,12 +5,15 @@ use ic_base_types::{CanisterId, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
+};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
+use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::{Callback, WasmMethod};
@@ -351,6 +354,26 @@ pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutio
     round_limits.instructions -= as_round_instructions(slice.executed_instructions);
 }
 
+/// Tries to apply the given canister changes to the given system state and
+/// subnet available memory. In case of an error, the partially applied changes
+/// are not undone.
+fn try_apply_canister_state_changes(
+    system_state_changes: SystemStateChanges,
+    output: &WasmExecutionOutput,
+    system_state: &mut SystemState,
+    subnet_available_memory: &mut SubnetAvailableMemory,
+    time: Time,
+    network_topology: &NetworkTopology,
+    subnet_id: SubnetId,
+    log: &ReplicaLogger,
+) -> HypervisorResult<()> {
+    subnet_available_memory
+        .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+        .map_err(|_| HypervisorError::OutOfMemory)?;
+
+    system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
+}
+
 /// Applies canister state change after Wasm execution if possible.
 /// Otherwise, the function sets the corresponding error in
 /// `output.wasm_result`.
@@ -378,15 +401,49 @@ pub fn apply_canister_state_changes(
         system_state_changes,
     }) = canister_state_changes
     {
-        // TODO(RUN-285): Change `unwrap()` to a proper execution error and
-        // support failing when applying the system state changes.
-        round_limits
-            .subnet_available_memory
-            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-            .unwrap();
-        system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log);
-        execution_state.wasm_memory = wasm_memory;
-        execution_state.stable_memory = stable_memory;
-        execution_state.exported_globals = globals;
+        let clean_system_state = system_state.clone();
+        let clean_subnet_available_memory = round_limits.subnet_available_memory.clone();
+        // Everything that is passed via a mutable reference in this function
+        // should be cloned and restored in case of an error.
+        match try_apply_canister_state_changes(
+            system_state_changes,
+            output,
+            system_state,
+            &mut round_limits.subnet_available_memory,
+            time,
+            network_topology,
+            subnet_id,
+            log,
+        ) {
+            Ok(()) => {
+                execution_state.wasm_memory = wasm_memory;
+                execution_state.stable_memory = stable_memory;
+                execution_state.exported_globals = globals;
+            }
+            Err(err) => {
+                match &err {
+                    HypervisorError::WasmEngineError(err) => {
+                        // TODO(RUN-299): Increment a critical error counter here.
+                        error!(
+                            log,
+                            "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
+                        )
+                    }
+                    HypervisorError::OutOfMemory => {
+                        warn!(log, "Failed to apply state changes due to DTS: {}", err)
+                    }
+                    _ => {
+                        // TODO(RUN-299): Increment a critical error counter here.
+                        error!(
+                            log,
+                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
+                        )
+                    }
+                }
+                *system_state = clean_system_state;
+                round_limits.subnet_available_memory = clean_subnet_available_memory;
+                output.wasm_result = Err(err);
+            }
+        }
     }
 }

@@ -1307,13 +1307,15 @@ fn certified_data_set() {
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
     let system_state_changes = api.into_system_state_changes();
-    system_state_changes.apply_changes(
-        mock_time(),
-        &mut system_state,
-        &default_network_topology(),
-        subnet_test_id(1),
-        &no_op_logger(),
-    );
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
     assert_eq!(system_state.certified_data, vec![10; 32])
 }
 
@@ -1466,13 +1468,15 @@ fn call_perform_not_enough_cycles_resets_state() {
     api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
     let system_state_changes = api.into_system_state_changes();
-    system_state_changes.apply_changes(
-        mock_time(),
-        &mut system_state,
-        &default_network_topology(),
-        subnet_test_id(1),
-        &no_op_logger(),
-    );
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
     assert_eq!(system_state.balance(), initial_cycles);
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
@@ -1718,13 +1722,15 @@ fn push_output_request_respects_memory_limits() {
 
         // Ensure that exactly one output request was pushed.
         let system_state_changes = api.into_system_state_changes();
-        system_state_changes.apply_changes(
-            mock_time(),
-            &mut system_state,
-            &default_network_topology(),
-            subnet_test_id(1),
-            &no_op_logger(),
-        );
+        system_state_changes
+            .apply_changes(
+                mock_time(),
+                &mut system_state,
+                &default_network_topology(),
+                subnet_test_id(1),
+                &no_op_logger(),
+            )
+            .unwrap();
         assert_eq!(1, system_state.queues().output_queues_len());
     };
 
@@ -1807,12 +1813,14 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Ensure that exactly one output request was pushed.
     let system_state_changes = api.into_system_state_changes();
-    system_state_changes.apply_changes(
-        mock_time(),
-        &mut system_state,
-        &default_network_topology(),
-        subnet_test_id(1),
-        &no_op_logger(),
-    );
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
     assert_eq!(1, system_state.queues().output_queues_len());
 }

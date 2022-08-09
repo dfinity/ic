@@ -206,7 +206,8 @@ fn correct_charging_source_canister_for_a_request() {
             &default_network_topology(),
             subnet_test_id(1),
             &no_op_logger(),
-        );
+        )
+        .unwrap();
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.response_cycles_refund(
         &no_op_logger(),
@@ -305,13 +306,15 @@ fn call_increases_cycles_consumed_metric() {
         .unwrap();
 
     let system_state_changes = api.into_system_state_changes();
-    system_state_changes.apply_changes(
-        mock_time(),
-        &mut system_state,
-        &default_network_topology(),
-        subnet_test_id(1),
-        &no_op_logger(),
-    );
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
     assert!(
         system_state
             .canister_metrics
