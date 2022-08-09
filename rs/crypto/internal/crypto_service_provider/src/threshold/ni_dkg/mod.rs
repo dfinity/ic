@@ -233,7 +233,7 @@ pub mod static_api {
     /// Verifies a CSP dealing
     pub fn verify_dealing(
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
+        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -254,14 +254,7 @@ pub mod static_api {
                     },
                 )?;
                 // Call the specialised library method:
-                clib::verify_dealing(
-                    dkg_id,
-                    dealer_index,
-                    threshold,
-                    epoch,
-                    &receiver_keys,
-                    &dealing,
-                )
+                clib::verify_dealing(dealer_index, threshold, epoch, &receiver_keys, &dealing)
             }
             other => Err(ni_dkg_errors::CspDkgVerifyDealingError::UnsupportedAlgorithmId(other)),
         }
@@ -271,7 +264,7 @@ pub mod static_api {
     #[allow(clippy::too_many_arguments)]
     pub fn verify_resharing_dealing(
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
+        _dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -300,7 +293,6 @@ pub mod static_api {
                         )?;
                 // Call the specialised library method:
                 clib::verify_resharing_dealing(
-                    dkg_id,
                     dealer_resharing_index,
                     threshold,
                     epoch,
