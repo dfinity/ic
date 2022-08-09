@@ -478,14 +478,14 @@ impl SystemState {
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
-        _time: Time,
+        time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         assert_eq!(
             msg.sender, self.canister_id,
             "Expected `Request` to have been sent by canister ID {}, but instead got {}",
             self.canister_id, msg.sender
         );
-        self.queues.push_output_request(msg)
+        self.queues.push_output_request(msg, time)
     }
 
     /// Returns the number of output requests that can be pushed onto the queue

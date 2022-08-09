@@ -4,6 +4,7 @@ use super::{
 };
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_test_utilities::{
+    mock_time,
     state::arb_num_receivers,
     types::{
         arbitrary,
@@ -21,7 +22,10 @@ fn can_push_output_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
     queues
-        .push_output_request(RequestBuilder::default().sender(this).build().into())
+        .push_output_request(
+            RequestBuilder::default().sender(this).build().into(),
+            mock_time(),
+        )
         .unwrap();
 }
 
@@ -136,6 +140,7 @@ fn can_push_input_response_after_output_request() {
                 .receiver(other)
                 .build()
                 .into(),
+            mock_time(),
         )
         .unwrap();
     queues
@@ -254,6 +259,7 @@ fn test_message_picking_round_robin() {
                 .receiver(other_2)
                 .build()
                 .into(),
+            mock_time(),
         )
         .unwrap();
     // This succeeds because we pushed a request to other_2 to the output_queue
@@ -584,6 +590,7 @@ fn test_output_into_iter() {
                     .method_payload(vec![i as u8])
                     .build()
                     .into(),
+                mock_time(),
             )
             .expect("could not push");
     }
@@ -874,7 +881,7 @@ fn test_stats() {
         .payment(Cycles::new(5))
         .build();
     msg_size[4] = msg.count_bytes();
-    queues.push_output_request(msg.into()).unwrap();
+    queues.push_output_request(msg.into(), mock_time()).unwrap();
     // One more reserved slot, no reserved response bytes, oversized request.
     expected_iq_stats.reserved_slots += 1;
     expected_mu_stats.reserved_slots += 1;
@@ -1057,7 +1064,7 @@ fn test_stats_induct_message_to_self() {
         .build();
     let request_size = request.count_bytes();
     queues
-        .push_output_request(request.into())
+        .push_output_request(request.into(), mock_time())
         .expect("could not push");
 
     // New input queue was created, with one reservation.
