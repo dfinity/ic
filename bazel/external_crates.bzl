@@ -19,6 +19,9 @@ def external_crates_repository(name, annotations):
             "actix-web": crate.spec(
                 version = "^4.0.0-beta.6",
             ),
+            "chacha20poly1305": crate.spec(
+                version = "^0.10.0",
+            ),
             "anyhow": crate.spec(
                 version = "^1",
             ),
@@ -653,6 +656,10 @@ def external_crates_repository(name, annotations):
                 default_features = False,
             ),
             "rsa": crate.spec(
+                version = "^0.6.1",
+            ),
+            "rsa-0_4_0": crate.spec(
+                package = "rsa",
                 version = "^0.4.0",
             ),
             "rusqlite": crate.spec(
@@ -723,6 +730,10 @@ def external_crates_repository(name, annotations):
                 version = "^0.8.0",
             ),
             "sha2": crate.spec(
+                version = "^0.10.2",
+            ),
+            "sha2-0_9_1": crate.spec(
+                package = "sha2",
                 version = "^0.9.1",
             ),
             "sha3": crate.spec(
