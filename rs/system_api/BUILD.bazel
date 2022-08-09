@@ -30,6 +30,7 @@ rust_library(
         "//rs/types/error_types",
         "//rs/types/ic00_types",
         "//rs/types/types",
+        "//rs/types/wasm_types",
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:prometheus",

@@ -21,6 +21,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+ic-wasm-types = { path = "../types/wasm_types" }
 ic-utils = { path = "../utils" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = ["derive"] }

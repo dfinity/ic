@@ -271,6 +271,10 @@ impl ExecutionTest {
         self.subnet_available_memory.get()
     }
 
+    pub fn set_subnet_available_memory(&mut self, memory: AvailableMemory) {
+        self.subnet_available_memory.set(memory)
+    }
+
     pub fn metrics_registry(&self) -> &MetricsRegistry {
         &self.metrics_registry
     }

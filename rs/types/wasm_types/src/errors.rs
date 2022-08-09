@@ -166,6 +166,7 @@ pub enum WasmEngineError {
     FailedToSetWasmStack,
     FailedToSerializeModule(String),
     FailedToDeserializeModule(String),
+    FailedToApplySystemChanges(String),
 }
 
 impl std::fmt::Display for WasmEngineError {
@@ -188,6 +189,9 @@ impl std::fmt::Display for WasmEngineError {
             }
             Self::FailedToDeserializeModule(s) => {
                 write!(f, "Failed to deserialize module: {}", s)
+            }
+            Self::FailedToApplySystemChanges(s) => {
+                write!(f, "Failed to apply system changes: {}", s)
             }
         }
     }

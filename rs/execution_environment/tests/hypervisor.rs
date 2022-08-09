@@ -6,7 +6,7 @@ use ic_execution_environment::CompilationCostHandling;
 use ic_ic00_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
 };
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{AvailableMemory, HypervisorError};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -4209,4 +4209,117 @@ fn dts_abort_works_in_install_code() {
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+}
+
+#[test]
+fn dts_concurrent_subnet_available_change() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let work = wasm()
+        .push_bytes(&[1, 2, 3, 4, 5])
+        .append_and_reply()
+        .build();
+
+    // The workload above finishes in 5 slices.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    test.set_subnet_available_memory(AvailableMemory::new(0, 0));
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    let ingress_status = test.ingress_status(ingress_id);
+    let err = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+}
+
+#[test]
+fn system_state_apply_change_fails() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(1000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, 1000),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+    test.execute_slice(b_id);
+    let call_contexts = test
+        .canister_state_mut(b_id)
+        .system_state
+        .call_context_manager_mut()
+        .unwrap()
+        .call_contexts_mut();
+
+    // Remove cycles from all call contexts to trigger an error condition
+    // that may happen due to a bug or escape from Wasm sandbox.
+    for (_, call_context) in call_contexts.iter_mut() {
+        call_context.withdraw_cycles(Cycles::new(1000)).unwrap();
+    }
+    while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(b_id);
+    }
+    assert_eq!(
+        test.canister_state(b_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    match result {
+        WasmResult::Reply(_) => unreachable!("Expected the canister to reject the message"),
+        WasmResult::Reject(err) => {
+            assert!(
+                err.contains(
+                    "Wasm engine error: Failed to apply system changes: \
+                     Canister accepted more cycles than available from call context"
+                ),
+                "{}",
+                err
+            );
+        }
+    };
 }

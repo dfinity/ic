@@ -17,6 +17,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     ComputeAllocation, Cycles, MemoryAllocation, Time,
 };
+use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
@@ -74,7 +75,7 @@ impl Default for SystemStateChanges {
 impl SystemStateChanges {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
-    fn cycle_change_is_valid(&self, is_cmc_canister: bool) -> bool {
+    fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
         let mut universal_cycle_change = self.cycles_balance_change;
         for call_context_balance_taken in self.call_context_balance_taken.values() {
             universal_cycle_change =
@@ -84,21 +85,22 @@ impl SystemStateChanges {
             universal_cycle_change =
                 universal_cycle_change + CyclesBalanceChange::added(req.payment);
         }
-        if is_cmc_canister {
-            true
+        if is_cmc_canister || universal_cycle_change <= CyclesBalanceChange::zero() {
+            // TODO(RUN-287): Check that the change does not bring the canister
+            // below its freezing threshold, which may happen with DTS.
+            Ok(())
         } else {
-            // Check that no cycles were created.
-            universal_cycle_change <= CyclesBalanceChange::zero()
+            Err(HypervisorError::WasmEngineError(
+                WasmEngineError::FailedToApplySystemChanges(format!(
+                    "Invalid cycle change: {:?}",
+                    universal_cycle_change
+                )),
+            ))
         }
     }
 
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    ///
-    /// # Panic
-    ///
-    /// This will panic if the changes are invalid. That could indicate that a
-    /// canister has broken out of wasmtime.
     pub fn apply_changes(
         self,
         time: Time,
@@ -106,9 +108,15 @@ impl SystemStateChanges {
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         logger: &ReplicaLogger,
-    ) {
+    ) -> HypervisorResult<()> {
+        fn error<S: ToString>(message: S) -> HypervisorError {
+            HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
+                message.to_string(),
+            ))
+        }
+
         // Verify total cycle change is not positive and update cycles balance.
-        assert!(self.cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID));
+        self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.cycles_balance_change
             .apply_ref(system_state.balance_mut());
 
@@ -121,14 +129,16 @@ impl SystemStateChanges {
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
         if !self.call_context_balance_taken.is_empty() {
-            let call_context_manager = system_state.call_context_manager_mut().unwrap();
+            let call_context_manager = system_state
+                .call_context_manager_mut()
+                .ok_or_else(|| error("Call context manager does not exists"))?;
             for (context_id, amount_taken) in &self.call_context_balance_taken {
                 let call_context = call_context_manager
                     .call_context_mut(*context_id)
-                    .expect("Canister accepted cycles from invalid call context");
-                call_context
-                    .withdraw_cycles(*amount_taken)
-                    .expect("Canister accepted more cycles than available from call context");
+                    .ok_or_else(|| error("Canister accepted cycles from invalid call context"))?;
+                call_context.withdraw_cycles(*amount_taken).map_err(|_| {
+                    error("Canister accepted more cycles than available from call context")
+                })?;
             }
         }
 
@@ -158,37 +168,42 @@ impl SystemStateChanges {
             }
             system_state
                 .push_output_request(msg.into(), time)
-                .expect("Unable to send new request");
+                .map_err(|_| error("Failed to push output request"))?;
         }
 
         // Verify callback ids and register new callbacks.
         for update in self.callback_updates {
+            let call_context_manager = system_state
+                .call_context_manager_mut()
+                .ok_or_else(|| error("Call context manager does not exists"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
                         callback.respondent = Some(*receiver);
                     }
-                    let id = system_state
-                        .call_context_manager_mut()
-                        .unwrap()
-                        .register_callback(callback);
-                    assert_eq!(id, expected_id);
+                    let id = call_context_manager.register_callback(callback);
+                    if id != expected_id {
+                        return Err(error("Failed to register update callback"));
+                    }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    let _callback = system_state
-                        .call_context_manager_mut()
-                        .unwrap()
+                    let _callback = call_context_manager
                         .unregister_callback(callback_id)
-                        .expect("Tried to unregister callback with an id that isn't in use");
+                        .ok_or_else(|| {
+                            error("Tried to unregister callback with an id that isn't in use")
+                        });
                 }
             }
         }
 
         // Verify new certified data isn't too long and set it.
         if let Some(certified_data) = self.new_certified_data.as_ref() {
-            assert!(certified_data.len() <= CERTIFIED_DATA_MAX_LENGTH as usize);
+            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH as usize {
+                return Err(error("Certified data is too large"));
+            }
             system_state.certified_data = certified_data.clone();
         }
+        Ok(())
     }
 }
 
@@ -437,7 +452,7 @@ impl SandboxSafeSystemState {
             .system_state_changes
             .call_context_balance_taken
             .entry(call_context_id)
-            .or_insert_with(|| Cycles::zero()) += amount_to_accept;
+            .or_insert_with(Cycles::zero) += amount_to_accept;
 
         self.cycles_account_manager
             .add_cycles(&mut new_balance, amount_to_accept);
