@@ -1971,13 +1971,17 @@ impl StateManagerImpl {
 
         let mut states = self.states.write();
 
-        let checkpoints_to_keep: BTreeSet<Height> = states
+        // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
+        let latest_certified_height = self.latest_certified_height();
+
+        let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
             .copied()
             .filter(|height| {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
+            .chain(std::iter::once(latest_certified_height))
             .collect();
 
         // Send object to deallocation thread if it has capacity.
@@ -1993,7 +1997,7 @@ impl StateManagerImpl {
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
-                && !checkpoints_to_keep.contains(&snapshot.height)
+                && !heights_to_keep.contains(&snapshot.height)
         });
         states.snapshots = retained;
 
@@ -2010,7 +2014,7 @@ impl StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
-        let min_resident_height = checkpoints_to_keep
+        let min_resident_height = heights_to_keep
             .iter()
             .min()
             .unwrap_or(&last_height_to_keep)
@@ -2027,7 +2031,7 @@ impl StateManagerImpl {
         deallocate(Box::new(removed));
 
         for (height, metadata) in states.states_metadata.range(heights_to_remove) {
-            if checkpoints_to_keep.contains(height) {
+            if heights_to_keep.contains(height) {
                 continue;
             }
             if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
@@ -2039,7 +2043,7 @@ impl StateManagerImpl {
             .certifications_metadata
             .split_off(&last_height_to_keep);
 
-        for h in checkpoints_to_keep.iter() {
+        for h in heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
                 certifications_metadata.insert(*h, cert_metadata);
             }
@@ -2069,7 +2073,7 @@ impl StateManagerImpl {
 
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
-        for h in checkpoints_to_keep.iter() {
+        for h in heights_to_keep.iter() {
             if let Some(metadata) = states.states_metadata.remove(h) {
                 metadata_to_keep.insert(*h, metadata);
             }
@@ -2096,11 +2100,12 @@ impl StateManagerImpl {
             let checkpoint_heights = self.checkpoint_heights();
             let state_heights = self.list_state_heights(CERT_ANY);
 
-            debug_assert!(checkpoints_to_keep
+            debug_assert!(heights_to_keep
                 .iter()
-                .all(|h| checkpoint_heights.contains(h)));
+                .all(|h| checkpoint_heights.contains(h) || *h == latest_certified_height));
 
             debug_assert!(state_heights.contains(&latest_state_height));
+            debug_assert!(state_heights.contains(&latest_certified_height));
         }
     }
 
@@ -2511,6 +2516,8 @@ impl StateManager for StateManagerImpl {
     /// * We keep the (EXTRA_CHECKPOINTS_TO_KEEP + 1) most recent checkpoints to increase
     ///   average checkpoint lifetime. The larger the lifetime, the more time other nodes
     ///   have to sync states.
+    ///
+    /// * We always keep the latest certified state
     fn remove_states_below(&self, requested_height: Height) {
         let _timer = self
             .metrics
@@ -2554,6 +2561,7 @@ impl StateManager for StateManagerImpl {
     /// * Any state with height >= requested_height
     /// * Checkpoint heights
     /// * The latest state
+    /// * The latest certified state
     /// * State 0
     fn remove_inmemory_states_below(&self, requested_height: Height) {
         let _timer = self
