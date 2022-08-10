@@ -5,9 +5,7 @@ use ic_fondue::slack::{Alertable, SlackAlert};
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
-use ic_tests::driver::config::{
-    self, ENG_CONSENSUS_CHANNEL, ENG_NODE_CHANNEL, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL,
-};
+use ic_tests::driver::config::{self, *};
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::{
@@ -366,7 +364,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "node_assign_test",
                     orchestrator::node_assign_test::test,
                 )]),
-            ),
+            ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
             pot(
                 "node_graceful_leaving_pot",
                 consensus::node_graceful_leaving_test::config(),
@@ -739,7 +737,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "node_reassignment_test",
                         orchestrator::node_reassignment_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot(
                     "token_fault_tolerance_pot",
                     ledger_tests::token_fault_tolerance::config(),
@@ -775,7 +773,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "nns_backup_test",
                         orchestrator::nns_backup::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_same_subnet_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -815,7 +813,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unassigned_node_upgrade_test",
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
                     "unstuck_subnet_test_pot",
                     orchestrator::unstuck_subnet_test::config,
@@ -823,7 +821,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unstuck_subnet_test",
                         orchestrator::unstuck_subnet_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -889,38 +887,42 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
+        .with_alert(ENG_ORCHESTRATOR_CHANNEL)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    m.add_suite(suite(
-        "upgrade_compatibility",
-        vec![
-            pot_with_setup(
-                "downgrade_app_subnet_with_ecdsa",
-                orchestrator::downgrade_with_ecdsa::config,
-                par(vec![sys_t(
+    m.add_suite(
+        suite(
+            "upgrade_compatibility",
+            vec![
+                pot_with_setup(
                     "downgrade_app_subnet_with_ecdsa",
-                    orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
-                )]),
-            ),
-            pot_with_setup(
-                "upgrade_downgrade_app_subnet",
-                orchestrator::upgrade_downgrade::config,
-                par(vec![sys_t(
+                    orchestrator::downgrade_with_ecdsa::config,
+                    par(vec![sys_t(
+                        "downgrade_app_subnet_with_ecdsa",
+                        orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
+                    )]),
+                ),
+                pot_with_setup(
                     "upgrade_downgrade_app_subnet",
-                    orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
-                )]),
-            ),
-            pot_with_setup(
-                "upgrade_downgrade_nns_subnet",
-                orchestrator::upgrade_downgrade::config,
-                par(vec![sys_t(
+                    orchestrator::upgrade_downgrade::config,
+                    par(vec![sys_t(
+                        "upgrade_downgrade_app_subnet",
+                        orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
+                    )]),
+                ),
+                pot_with_setup(
                     "upgrade_downgrade_nns_subnet",
-                    orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
-                )]),
-            ),
-        ],
-    ));
+                    orchestrator::upgrade_downgrade::config,
+                    par(vec![sys_t(
+                        "upgrade_downgrade_nns_subnet",
+                        orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
+                    )]),
+                ),
+            ],
+        )
+        .with_alert(ENG_ORCHESTRATOR_CHANNEL),
+    );
 
     m.add_suite(
         suite(
