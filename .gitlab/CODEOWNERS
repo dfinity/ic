@@ -47,16 +47,16 @@
 /typescript/service-worker/  @dfinity-lab/teams/trust-team
 
 # [Testnet]
-/testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/ic-build-qualification
+/testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/release-team
 /testnet/ansible/                                          @dfinity-lab/teams/dcs
 /testnet/ansible/roles/boundary_node/                      @dfinity-lab/teams/networking-team @dfinity-lab/teams/dcs        
 /testnet/ansible/roles/icos_test_boundary_node/            @dfinity-lab/teams/boundarynode-team
 /testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
 /testnet/env/                                              @dfinity-lab/teams/dcs
 
-/testnet/release/                                          @dfinity-lab/teams/ic-build-qualification
+/testnet/release/                                          @dfinity-lab/teams/release-team
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification @sasa-tomic
+/testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/tools/                                      @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/tools/nns_state_deployment.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/nns_state_deployment_test.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
@@ -71,6 +71,7 @@
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 
 /testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
 # [Rust]
 /rs/                                    @dfinity-lab/teams/interface-owners
