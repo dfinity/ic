@@ -6,17 +6,17 @@
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.global_infra_io
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
 
-deploy-monpoly-docker:
-  extends:
-    - .ubuntu-nix-docker
-    - .rules-monpoly-deploy
-  stage: prod-tests
-  script:
-    - set -euo pipefail
-    - TAG=$(date '+%Y-%m-%d-%H%M')
-    - *build-and-test-monpoly-docker
-    - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-    - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:"$TAG"
-    - docker push dfinity/monpoly_pipeline:"$TAG"
-    - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:latest
-    - docker push dfinity/monpoly_pipeline:latest
+# deploy-monpoly-docker:
+#   extends:
+#     - .ubuntu-nix-docker
+#     - .rules-monpoly-deploy
+#   stage: prod-tests
+#   script:
+#     - set -euo pipefail
+#     - TAG=$(date '+%Y-%m-%d-%H%M')
+#     - *build-and-test-monpoly-docker
+#     - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+#     - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:"$TAG"
+#     - docker push dfinity/monpoly_pipeline:"$TAG"
+#     - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:latest
+#     - docker push dfinity/monpoly_pipeline:latest
