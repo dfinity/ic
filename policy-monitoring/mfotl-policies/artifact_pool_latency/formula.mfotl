@@ -8,6 +8,8 @@
   - originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - registry__subnet_created(subnet_id:string, subnet_type:string)
+  - registry__subnet_updated(subnet_id:string, subnet_type:string)
   - validated_BlockProposal_Added(node_id:string, subnet_id:string, hash:string)
   - validated_BlockProposal_Moved(node_id:string, subnet_id:string, hash:string)
 

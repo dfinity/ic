@@ -5,7 +5,9 @@
   Relevant events:
   - originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - TODO: use registry__node_removed_from_subnet
   - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
+  - TODO: use p2p__node_removed
   - replica_diverged(node_id:string, subnet_id:string, height:int)
   - CUP_share_proposed(node_id:string, subnet_id:string)
   - end_test()

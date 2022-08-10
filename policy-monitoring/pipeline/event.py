@@ -127,7 +127,6 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
 
 
 class RegistrySubnetEvent(Event):
-
     doc: RegistryDoc
 
     def __init__(self, doc: EsDoc, verb: str):
@@ -166,7 +165,6 @@ class RegistrySubnetUpdatedEvent(RegistrySubnetEvent):
 
 
 class RegistryNodeEvent(InfraEvent):
-
     doc: RegistryDoc
 
     def __init__(self, doc: EsDoc, verb: str, infra: GlobalInfra):
@@ -258,11 +256,21 @@ class NodeMembershipEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.node_id),  # NOT the ID of the event reported node
                 )
             ]
+
+
+class NodeAddedEvent(NodeMembershipEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="added")
+
+
+class NodeRemovedEvent(NodeMembershipEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="removed")
 
 
 class ValidatedBlockProposalEvent(ReplicaEvent):
@@ -277,7 +285,17 @@ class ValidatedBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash)]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash)]
+
+
+class ValidatedBlockProposalAddedEvent(ValidatedBlockProposalEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="Added")
+
+
+class ValidatedBlockProposalMovedEvent(ValidatedBlockProposalEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="Moved")
 
 
 class DeliverBatchEvent(ReplicaEvent):
@@ -291,8 +309,8 @@ class DeliverBatchEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.block_hash),
                 )
             ]
@@ -309,8 +327,8 @@ class ConsensusFinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(int(params.is_state_available)),
                     str(int(params.is_key_available)),
                 )
@@ -326,7 +344,7 @@ class MoveBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash, params.signer)]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash, params.signer)]
 
 
 class ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(ReplicaEvent):
@@ -360,7 +378,7 @@ class ReplicaDivergedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
 
 
 class CupShareProposedEvent(ReplicaEvent):
@@ -372,7 +390,7 @@ class CupShareProposedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
 
 
 class FinalizedEvent(ReplicaEvent):
@@ -386,8 +404,8 @@ class FinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.height),
                     params.hash,
                     params.replica_version,
@@ -395,22 +413,23 @@ class FinalizedEvent(ReplicaEvent):
             ]
 
 
-class GenericLogEvent(ReplicaEvent):
+class GenericLogEvent(Event):
+    doc: EsDoc
+
     def __init__(self, doc: EsDoc):
-        super().__init__(name="log", doc=doc, crate=ReplicaEvent.WILDCARD, module=ReplicaEvent.WILDCARD)
+        super().__init__(name="log", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_unusual_log_level_event_params()
+        params = self.doc.get_generic_params()
         if not params:
             return []
         else:
-            crate, module = self.doc.get_crate_module()
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
-                    crate,
-                    module,
+                    self.doc.host_id(),
+                    params.node_id,
+                    params.subnet_id,
+                    params.component_id,
                     params.level,
                     params.message,
                 )
