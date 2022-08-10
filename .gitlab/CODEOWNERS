@@ -15,6 +15,9 @@
 /bazel/                   @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
 /toolchains/              @dfinity-lab/teams/idx
+/WORKSPACE.bazel          @dfinity-lab/teams/idx
+/BUILD.bazel              @dfinity-lab/teams/idx
+
 
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
@@ -224,3 +227,8 @@
 # Log-based formal policy monitoring
 # [Policy-Monitoring]
 /policy-monitoring/       @dfinity-lab/teams/ic-testing-verification
+
+# [No-Approvals]
+# Ghost is a group with no direct memberes. GitLab will bypass codeowners for files that match ghost ownership.
+/experimental/            @dfinity-lab/teams/ghost
+*.lock                    @dfinity-lab/teams/ghost
