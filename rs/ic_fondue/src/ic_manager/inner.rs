@@ -359,10 +359,7 @@ impl IcManager {
         );
 
         debug!(logger, "ic_config.initialize");
-        let rt = tokio::runtime::Runtime::new().expect("Could not create runtime");
-        let init_ic = rt
-            .block_on(async { ic_config.initialize().await })
-            .expect("can't fail");
+        let init_ic = ic_config.initialize().expect("can't fail");
 
         IcPrepStateDir::new(init_ic.target_dir.as_path());
         (init_ic, malicious_nodes)
