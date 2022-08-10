@@ -1,8 +1,25 @@
+# job can run only in docker
 .e2e-test-base:
   extends:
     # Use untrusted builders for e2e tests.
     # The trusted builders don't work with IPv6 right now.
     - .ubuntu-nix-docker-pinned-dc
+    - .rules-parent-pipeline
+  stage: guest-os-test
+  retry: 2
+  # The e2e tests are flaky and impacting developer merges
+  # https://dfinity.slack.com/archives/C012RDFNK7U/p1618233620112900
+  variables:
+    GUEST_OS_TEST_TIMEOUT: 2400
+    # This var is needed as some shell scripts depend on it.
+    E2E_TEST_TIMEOUT: 480
+
+# job can run in docker or in k8s
+.e2e-test-base-k8s:
+  extends:
+    # Use untrusted builders for e2e tests.
+    # The trusted builders don't work with IPv6 right now.
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
   stage: guest-os-test
   retry: 2
@@ -122,7 +139,7 @@ e2e-workload-test:
 
 .system-tests:
   extends:
-    - .e2e-test-base
+    - .e2e-test-base-k8s
   needs:
     - job: guest-os-diskimg
       artifacts: false
@@ -175,7 +192,7 @@ tecdsa-pre-master:
   extends: .system-tests
   variables:
     SUITE_NAME: "tecdsa_pre_master"
-    
+
 test-prod-test-driver-e2e:
  extends:
   - .system-tests
