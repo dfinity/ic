@@ -12,6 +12,7 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
@@ -41,7 +42,9 @@ pub fn config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 // Tests a downgrade of the nns subnet to the mainnet version and an upgrade back to the branch version
@@ -62,13 +65,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
     assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
     assert!(hex::decode(&mainnet_version).is_ok());
-
-    info!(logger, "Make sure all nodes are healty...");
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 
     // choose a node from the nns subnet
     let nns_node = env

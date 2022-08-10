@@ -20,8 +20,7 @@ Success::
 
 end::catalog[] */
 
-use std::convert::TryFrom;
-
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::{
     driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes,
@@ -50,6 +49,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use slog::info;
+use std::convert::TryFrom;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -57,6 +57,8 @@ pub fn config(env: TestEnv) {
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
@@ -71,7 +73,6 @@ pub fn test(env: TestEnv) {
 
     // choose an unassigned node
     let unassigned_node = env.topology_snapshot().unassigned_nodes().next().unwrap();
-    unassigned_node.await_can_login_as_admin_via_ssh().unwrap();
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();

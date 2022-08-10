@@ -23,6 +23,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::driver_setup::{
     IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
@@ -56,15 +57,12 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 
     let master_version = IcSetup::read_attribute(&env).initial_replica_version;
     info!(logger, "IC_VERSION_ID: {}", master_version);

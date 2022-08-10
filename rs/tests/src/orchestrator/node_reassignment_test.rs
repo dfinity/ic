@@ -21,6 +21,7 @@ Coverage::
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint};
@@ -49,16 +50,13 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let log = &env.logger();
     let topo_snapshot = env.topology_snapshot();
-    topo_snapshot.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 
     let nns_node = get_nns_node(&topo_snapshot);
     nns_node
