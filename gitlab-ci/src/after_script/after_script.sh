@@ -40,12 +40,12 @@ if [[ -f "$CARGO_TEST_JUNIT_XML" ]]; then
 fi
 git checkout --detach --force "$CI_COMMIT_SHA"
 
-if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [ -n "$SLACK_CHANNEL" ] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
+if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
     cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # We support multiple comma separated slack channels in the SLACK_CHANNEL variable.
     debug=""
     [ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
-    IFS=',' read -ra CHANNELS <<<"$SLACK_CHANNEL"
+    IFS=',' read -ra CHANNELS <<<"${SLACK_CHANNEL:-}"
     MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
     for channel in "${CHANNELS[@]}"; do
         notify_slack/notify_slack.py "$MESSAGE" --channel "$channel" || true
