@@ -107,3 +107,6 @@ mod list_node_providers;
 
 #[cfg(test)]
 mod network_economics;
+
+#[cfg(test)]
+mod sns_token_swap_proposal;

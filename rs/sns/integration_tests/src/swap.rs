@@ -14,11 +14,11 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self, RegisterVote},
-    manage_neuron_response, proposal, ManageNeuron, ManageNeuronResponse, Proposal,
-    SetSnsTokenSwapOpenTimeWindow, Vote,
+    manage_neuron_response, proposal, ManageNeuron, Proposal, SetSnsTokenSwapOpenTimeWindow, Vote,
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_1_ID, state_test_helpers::setup_nns_canisters,
+    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_1_ID, state_test_helpers,
+    state_test_helpers::setup_nns_canisters,
 };
 use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
 use ic_sns_init::SnsCanisterInitPayloads;
@@ -752,28 +752,13 @@ fn nns_governance_make_proposal(
     neuron_id: nns_common_pb::NeuronId,
     proposal: &Proposal,
 ) -> manage_neuron_response::MakeProposalResponse {
-    let result = state_machine
-        .execute_ingress_as(
-            sender,
-            NNS_GOVERNANCE_CANISTER_ID,
-            "manage_neuron",
-            Encode!(&ManageNeuron {
-                id: Some(neuron_id),
-                command: Some(manage_neuron::Command::MakeProposal(Box::new(
-                    proposal.clone()
-                ))),
-                neuron_id_or_subaccount: None
-            })
-            .unwrap(),
-        )
-        .unwrap();
+    let result = state_test_helpers::nns_governance_make_proposal(
+        state_machine,
+        sender,
+        neuron_id,
+        proposal,
+    );
 
-    let result = match result {
-        WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Failed to make proposal: {:#?}", s),
-    };
-
-    let result = Decode!(&result, ManageNeuronResponse).unwrap();
     match result.command {
         Some(manage_neuron_response::Command::MakeProposal(response)) => response,
         _ => panic!("Response was not of type MakeProposal: {:#?}", result),

@@ -5069,10 +5069,8 @@ impl Governance {
             } else {
                 return Ok(());
             }
-        } else if let Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(action)) =
-            &proposal.action
-        {
-            return action.validate(self.env.now());
+        } else if let Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(_)) = &proposal.action {
+            return self.validate_sns_swap_proposal(proposal);
         } else if proposal.topic() == Topic::Unspecified {
             "The topic of the proposal is unspecified.".to_string()
         } else {
@@ -5083,6 +5081,42 @@ impl Governance {
             ErrorType::InvalidProposal,
             &error_str,
         ))
+    }
+
+    /// A SetSnsTokenSwapOpenTimeWindow proposal is valid if there are no other open
+    /// SetSnsTokenSwapOpenTimeWindow proposals and the proposal itself is well-formed.
+    fn validate_sns_swap_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
+        let maybe_open_sns_swap_proposal = self.proto.proposals.values().find(|proposal_data| {
+            if let Some(p) = &proposal_data.proposal {
+                if let Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(_)) = &p.action {
+                    proposal_data.status() == ProposalStatus::Open
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        });
+
+        if let Some(open_sns_swap_proposal) = maybe_open_sns_swap_proposal {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Error: there can only be one SetSnsTokenSwapOpenTimeWindow proposal open at a \
+                    time, but there is already an open proposal with proposal ID {}",
+                    open_sns_swap_proposal.id.unwrap().id
+                ),
+            ));
+        }
+
+        if let Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(action)) = &proposal.action {
+            action.validate(self.env.now())
+        } else {
+            Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Internal Error: Expected SetSnsTokenSwapOpenTimeWindow action",
+            ))
+        }
     }
 
     pub fn make_proposal(
