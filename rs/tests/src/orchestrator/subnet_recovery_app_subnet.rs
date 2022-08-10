@@ -24,6 +24,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
@@ -57,6 +58,8 @@ pub fn setup_same_nodes(env: TestEnv) {
     config_same_nodes()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
@@ -64,19 +67,12 @@ pub fn setup_failover_nodes(env: TestEnv) {
         .with_unassigned_nodes(3)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-
-    env.topology_snapshot().unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh().unwrap();
-    });
 
     let master_version = match env::var("IC_VERSION_ID") {
         Ok(ver) => ver,

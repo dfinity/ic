@@ -108,3 +108,14 @@ pub(crate) fn can_install_canister(url: &url::Url) -> bool {
         UniversalCanister::try_new(&agent).await.is_ok()
     })
 }
+
+pub(crate) fn await_all_nodes_are_healthy(topology: TopologySnapshot) {
+    topology.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    topology.unassigned_nodes().for_each(|node| {
+        node.await_can_login_as_admin_via_ssh().unwrap();
+    });
+}

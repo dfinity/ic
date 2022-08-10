@@ -20,6 +20,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::{
@@ -55,7 +56,9 @@ pub fn config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

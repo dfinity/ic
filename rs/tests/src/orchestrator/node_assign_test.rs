@@ -22,6 +22,7 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
@@ -55,6 +56,8 @@ pub fn config(env: TestEnv) {
         .with_unassigned_nodes(UNASSIGNED_NODES_COUNT as i32)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
@@ -72,9 +75,6 @@ pub fn test(env: TestEnv) {
         .collect();
     assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT);
 
-    topo_snapshot.unassigned_nodes().for_each(|n| {
-        n.await_can_login_as_admin_via_ssh().unwrap();
-    });
     let unassigned_nodes = topo_snapshot.unassigned_nodes();
 
     // get application node

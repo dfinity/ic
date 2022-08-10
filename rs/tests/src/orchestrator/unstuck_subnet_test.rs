@@ -13,6 +13,7 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
@@ -44,7 +45,9 @@ pub fn config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot());
 }
 
 pub fn test(test_env: TestEnv) {
@@ -52,12 +55,8 @@ pub fn test(test_env: TestEnv) {
     let mut all_nodes = test_env.topology_snapshot().root_subnet().nodes();
 
     let nns_node = all_nodes.next().unwrap();
-    nns_node.await_status_is_healthy().unwrap();
     info!(logger, "node0: {:?}", nns_node.get_ip_addr());
     let nodes = all_nodes.collect::<Vec<IcNodeSnapshot>>();
-    for n in &nodes {
-        n.await_status_is_healthy().unwrap();
-    }
     info!(logger, "node1: {:?}", nodes[0].get_ip_addr());
     info!(logger, "node2: {:?}", nodes[1].get_ip_addr());
     info!(logger, "node3: {:?}", nodes[2].get_ip_addr());

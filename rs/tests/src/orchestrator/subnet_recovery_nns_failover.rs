@@ -21,6 +21,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::driver_setup::{
     IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
@@ -68,6 +69,9 @@ pub fn setup(env: TestEnv) {
         .with_unassigned_nodes(SUBNET_SIZE as i32)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    await_all_nodes_are_healthy(env.topology_snapshot_by_name("broken"));
+    await_all_nodes_are_healthy(env.topology_snapshot_by_name("restore"));
 }
 
 pub fn test(env: TestEnv) {
@@ -75,19 +79,6 @@ pub fn test(env: TestEnv) {
 
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
     let topo_restore_ic = env.topology_snapshot_by_name("restore");
-    topo_broken_ic.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    topo_restore_ic.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    topo_restore_ic.unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh().unwrap();
-    });
 
     let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
     let ic_version_str = ic_version.to_string();
