@@ -49,6 +49,7 @@ if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
         --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
 
         --mount type=bind,source="${HOME}/.cache/bazel",target="${HOME}/.cache/bazel"
+        --mount type=bind,source="${HOME}/.ssh",target="${HOME}/.ssh"
 
         # target must match CARGO_TARGET_DIR.
         --mount type=bind,source="${REPO_ROOT}/rs/target",target=/cargo_target
