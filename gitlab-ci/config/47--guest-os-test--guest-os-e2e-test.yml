@@ -277,26 +277,26 @@ spec-compliance-pre-master:
         ${CI_PROJECT_DIR}/rs/tests/run-system-tests.py --suite=spec_compliance
       "
 
-# .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
-#   docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
-#   TEST_DRIVER_ARTIFACTS="${CI_PROJECT_DIR}/working_dir"
-#   echo "=== Listing contents of ${TEST_DRIVER_ARTIFACTS} ==="
-#   find "${TEST_DRIVER_ARTIFACTS}" -type d -printf '%d\t%P\n' | sort -nk1 | cut -f2-
-#   MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
-#   trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
-#   docker cp "${TEST_DRIVER_ARTIFACTS}" "${MONPOLY_PIPELINE_INSTANCE}":/work/system_tests_working_dir
-#   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
-#   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
-#   docker exec "${MONPOLY_PIPELINE_INSTANCE}" ls -alh /work
-#   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 main.py --fail --system_tests_working_dir /work/system_tests_working_dir --mode universal_policy pre_processor_test
+.build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
+  docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+  TEST_DRIVER_ARTIFACTS="${CI_PROJECT_DIR}/working_dir"
+  echo "=== Listing contents of ${TEST_DRIVER_ARTIFACTS} ==="
+  find "${TEST_DRIVER_ARTIFACTS}" -type d -printf '%d\t%P\n' | sort -nk1 | cut -f2-
+  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
+  trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
+  docker cp "${TEST_DRIVER_ARTIFACTS}" "${MONPOLY_PIPELINE_INSTANCE}":/work/system_tests_working_dir
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" ls -alh /work
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 main.py --fail --system_tests_working_dir /work/system_tests_working_dir --mode universal_policy pre_processor_test
 
-# test-monpoly-docker:
-#   extends:
-#     - .e2e-test-base
-#   stage: prod-tests
-#   allow_failure: true  # TODO: VER-1714
-#   script:
-#     - set -euo pipefail
-#     - *build-and-test-monpoly-docker-e2e
-#   needs:
-#     - create-subnet-pre-master  # Use the logs produced by this system test in e2e tests of monpoly_pipeline
+test-monpoly-docker:
+  extends:
+    - .e2e-test-base
+  stage: prod-tests
+  allow_failure: true  # TODO: VER-1714
+  script:
+    - set -euo pipefail
+    - *build-and-test-monpoly-docker-e2e
+  needs:
+    - create-subnet-pre-master  # Use the logs produced by this system test in e2e tests of monpoly_pipeline
