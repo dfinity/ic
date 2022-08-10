@@ -25,9 +25,8 @@ use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init;
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap, hashset};
-use std::collections::HashSet;
-use std::collections::{BTreeMap, HashMap};
+use maplit::{btreemap, hashset};
+use std::collections::{BTreeMap, HashSet};
 
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
@@ -283,9 +282,9 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<Account, Tokens>> {
+    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
         match &self.initial_token_distribution {
-            None => Ok(hashmap! {}),
+            None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => {
                 f.get_account_ids_and_tokens(sns_canister_ids)
             }
