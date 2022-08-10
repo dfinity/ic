@@ -44,7 +44,7 @@ rules_proto_dependencies()
 
 rules_proto_toolchains()
 
-load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
+load("@rules_rust//crate_universe:defs.bzl", "crate")
 load("//bazel:external_crates.bzl", "external_crates_repository")
 
 external_crates_repository(
@@ -94,27 +94,6 @@ external_crates_repository(
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
-
-# We need another repository for customizing packages for Wasm targest.
-# TODO: remove the second lock file once https://github.com/bazelbuild/rules_rust/issues/1337 is fixed.
-crates_repository(
-    name = "wasm_crate_index",
-    isolated = True,
-    lockfile = "//:Wasm.Cargo.Bazel.lock",
-    packages = {
-        "getrandom": crate.spec(
-            features = ["custom"],
-            version = "=0.2.6",
-        ),
-    },
-    splicing_config = splicing_config(
-        resolver_version = "2",
-    ),
-)
-
-load("@wasm_crate_index//:defs.bzl", wasm_crate_repositories = "crate_repositories")
-
-wasm_crate_repositories()
 
 http_archive(
     name = "rules_motoko",
