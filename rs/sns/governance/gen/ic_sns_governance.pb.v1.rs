@@ -584,7 +584,7 @@ pub struct ProposalData {
     /// NervousSystemParameters, and duplicated here so the parameters can be changed
     /// without affecting existing proposals.
     #[prost(uint64, tag = "17")]
-    pub initial_voting_period: u64,
+    pub initial_voting_period_seconds: u64,
     /// The wait_for_quiet_deadline_increase_seconds of the proposal, identical in
     /// meaning to the one in NervousSystemParameters, and duplicated here so the
     /// parameters can be changed without affecting existing proposals.
@@ -633,10 +633,10 @@ pub struct NervousSystemParameters {
     /// a proposal's lifecycle due to the wait-for-quiet algorithm.
     ///
     /// The voting period must be between (inclusive) the defined floor
-    /// INITIAL_VOTING_PERIOD_FLOOR and ceiling
-    /// INITIAL_VOTING_PERIOD_CEILING.
+    /// INITIAL_VOTING_PERIOD_SECONDS_FLOOR and ceiling
+    /// INITIAL_VOTING_PERIOD_SECONDS_CEILING.
     #[prost(uint64, optional, tag = "5")]
-    pub initial_voting_period: ::core::option::Option<u64>,
+    pub initial_voting_period_seconds: ::core::option::Option<u64>,
     /// The wait for quiet algorithm extends the voting period of a proposal when
     /// there is a flip in the majority vote during the proposal's voting period.
     /// This parameter determines the maximum time period that the voting period

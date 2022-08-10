@@ -822,14 +822,14 @@ impl SnsCanisters<'_> {
             .await
             .unwrap();
 
-        let initial_voting_period = self
+        let initial_voting_period_seconds = self
             .get_nervous_system_parameters()
             .await
-            .initial_voting_period
+            .initial_voting_period_seconds
             .unwrap();
 
         // Advance time to have the proposal be eligible for rewards
-        let delta_s = (initial_voting_period + 1) as i64;
+        let delta_s = (initial_voting_period_seconds + 1) as i64;
         self.set_time_warp(delta_s).await?;
 
         let mut proposal = self.get_proposal(proposal_id).await;

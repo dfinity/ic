@@ -108,8 +108,9 @@ fn test_motion_proposal_execution() {
 
             // ProposalData.executed_timestamp_seconds is not set until the end of the voting period.
             // Use TimeWarp to shift time to the end of the voting period for this proposal.
-            let initial_voting_period = system_params.initial_voting_period.unwrap();
-            let delta_s = (initial_voting_period + 1) as i64;
+            let initial_voting_period_seconds =
+                system_params.initial_voting_period_seconds.unwrap();
+            let delta_s = (initial_voting_period_seconds + 1) as i64;
             sns_canisters
                 .set_time_warp(delta_s)
                 .await
@@ -1501,8 +1502,8 @@ fn test_proposal_rejection() {
 
         // ProposalData.executed_timestamp_seconds is not set until the end of the voting period.
         // Use TimeWarp to shift time to the end of the voting period for this proposal.
-        let initial_voting_period = params.initial_voting_period.unwrap();
-        let delta_s = (initial_voting_period + 1) as i64;
+        let initial_voting_period_seconds = params.initial_voting_period_seconds.unwrap();
+        let delta_s = (initial_voting_period_seconds + 1) as i64;
         sns_canisters
             .set_time_warp(delta_s)
             .await
@@ -1616,10 +1617,11 @@ fn test_proposal_garbage_collection() {
         // still exist in the SNS
         assert_eq!(proposal_count, proposal_ids.len());
 
-        // Advance time initial_voting_period + 1 days:
-        // - initial_voting_period so a proposal can be settled
+        // Advance time initial_voting_period_seconds + 1 days:
+        // - initial_voting_period_seconds so a proposal can be settled
         // - Additional 1 day since garbage collection happens every 24 hours
-        let delta_s = (params.initial_voting_period.unwrap() as i64) + (ONE_DAY_SECONDS as i64);
+        let delta_s =
+            (params.initial_voting_period_seconds.unwrap() as i64) + (ONE_DAY_SECONDS as i64);
         sns_canisters
             .set_time_warp(delta_s)
             .await
@@ -1669,7 +1671,7 @@ fn test_intermittent_proposal_submission() {
         // settled within a single period.
         let reward_round_duration_seconds =
             VOTING_REWARDS_PARAMETERS.round_duration_seconds.unwrap();
-        let initial_voting_period = reward_round_duration_seconds / 2;
+        let initial_voting_period_seconds = reward_round_duration_seconds / 2;
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1683,8 +1685,8 @@ fn test_intermittent_proposal_submission() {
                 start_timestamp_seconds: Some(now),
                 ..VOTING_REWARDS_PARAMETERS
             }),
-            initial_voting_period: Some(initial_voting_period),
-            wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period / 4), // The default of one day is too short
+            initial_voting_period_seconds: Some(initial_voting_period_seconds),
+            wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period_seconds / 4), // The default of one day is too short
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1733,7 +1735,7 @@ fn test_intermittent_proposal_submission() {
         assert!(proposal_data.decided_timestamp_seconds > 0);
         assert!(proposal_data.executed_timestamp_seconds > 0);
         // Even though the proposal is executed, it still accepts votes until the
-        // initial_voting_period is reached and the proposal is considered ReadyToSettle.
+        // initial_voting_period_seconds is reached and the proposal is considered ReadyToSettle.
         // Until then, it's reward_event_round should be "unset" (0), and its RewardStatus is
         // AcceptsVotes
         assert_eq!(proposal_data.reward_event_round, 0);
@@ -1743,11 +1745,11 @@ fn test_intermittent_proposal_submission() {
         );
 
         // Advance time to when the proposal's voting period is over.
-        let mut delta_s = (initial_voting_period) as i64;
+        let mut delta_s = (initial_voting_period_seconds) as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
         // The reward_event_round should still not have changed (due to a period not elapsing), but
-        // since the initial_voting_period of the proposal has passed, it should be considered
+        // since the initial_voting_period_seconds of the proposal has passed, it should be considered
         // ReadyToSettle.
         let proposal_data = sns_canisters.get_proposal(p1_id).await;
         assert_eq!(proposal_data.reward_event_round, 0);
@@ -1804,7 +1806,7 @@ fn test_intermittent_proposal_submission() {
 
         // Now warp time to the middle of the next reward period. The proposal should have been
         // decided and executed, but since another period hasn't completed, not rewarded.
-        delta_s += initial_voting_period as i64;
+        delta_s += initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
         // Assert that the periodic proposal processing still works
