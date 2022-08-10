@@ -587,7 +587,7 @@ message ProposalData {
   // The initial voting period of the proposal, identical in meaning to the one in  
   // NervousSystemParameters, and duplicated here so the parameters can be changed 
   // without affecting existing proposals.
-  uint64 initial_voting_period = 17;
+  uint64 initial_voting_period_seconds = 17;
 
   // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in 
   // meaning to the one in NervousSystemParameters, and duplicated here so the 
@@ -634,9 +634,9 @@ message NervousSystemParameters {
   // a proposal's lifecycle due to the wait-for-quiet algorithm.
   //
   // The voting period must be between (inclusive) the defined floor
-  // INITIAL_VOTING_PERIOD_FLOOR and ceiling
-  // INITIAL_VOTING_PERIOD_CEILING.
-  optional uint64 initial_voting_period = 5;
+  // INITIAL_VOTING_PERIOD_SECONDS_FLOOR and ceiling
+  // INITIAL_VOTING_PERIOD_SECONDS_CEILING.
+  optional uint64 initial_voting_period_seconds = 5;
 
   // The wait for quiet algorithm extends the voting period of a proposal when
   // there is a flip in the majority vote during the proposal's voting period.

@@ -694,28 +694,28 @@ impl ProposalData {
         }
 
         // Let W be short for wait_for_quiet_deadline_increase_seconds. A proposal's voting
-        // period starts with an initial_voting_period and can be extended
-        // to at most initial_voting_period + 2 * W.
+        // period starts with an initial_voting_period_seconds and can be extended
+        // to at most initial_voting_period_seconds + 2 * W.
         // The required_margin reflects the proposed deadline extension to be
         // made beyond the current moment, so long as that extends beyond the
         // current wait-for-quiet deadline. We calculate the required_margin a
         // bit indirectly here so as to keep with unsigned integers, but the
         // idea is:
         //
-        //     W + (initial_voting_period - elapsed) / 2
+        //     W + (initial_voting_period_seconds - elapsed) / 2
         //
         // Thus, while we are still within the initial voting period, we add
         // to W, but once we are beyond that window, we subtract from W until
         // reaching the limit where required_margin remains at zero. This
         // occurs when:
         //
-        //     elapsed = initial_voting_period + 2 * W
+        //     elapsed = initial_voting_period_seconds + 2 * W
         //
-        // As an example, given that W = 12h, if the initial_voting_period is
+        // As an example, given that W = 12h, if the initial_voting_period_seconds is
         // 24h then the maximum deadline will be 24h + 2 * 12h = 48h.
         //
         // The required_margin ends up being a linearly decreasing value,
-        // starting at W + initial_voting_period / 2 and reducing to zero at the
+        // starting at W + initial_voting_period_seconds / 2 and reducing to zero at the
         // furthest possible deadline. When the vote does not flip, we do not
         // update the deadline, and so there is a chance of ending prior to
         // the extreme limit. But each time the vote flips, we "re-enter" the
@@ -728,7 +728,7 @@ impl ProposalData {
         let elapsed_seconds = now_seconds.saturating_sub(self.proposal_creation_timestamp_seconds);
         let required_margin = self
             .wait_for_quiet_deadline_increase_seconds
-            .saturating_add(self.initial_voting_period / 2)
+            .saturating_add(self.initial_voting_period_seconds / 2)
             .saturating_sub(elapsed_seconds / 2);
         let new_deadline = std::cmp::max(
             current_deadline,

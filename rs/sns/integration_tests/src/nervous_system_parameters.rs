@@ -49,8 +49,8 @@ fn test_init_with_sys_params() {
 fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
     local_test_on_sns_subnet(|runtime| {
         async move {
-            // The `initial_voting_period` will change, so this is the `initial_initial_voting_period` :P
-            let initial_initial_voting_period = ONE_DAY_SECONDS * 4;
+            // The `initial_voting_period_seconds` will change, so this is the `initial_initial_voting_period_seconds` :P
+            let initial_initial_voting_period_seconds = ONE_DAY_SECONDS * 4;
 
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -75,7 +75,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                initial_voting_period: Some(initial_initial_voting_period),
+                initial_voting_period_seconds: Some(initial_initial_voting_period_seconds),
                 wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS / 8),
                 ..NervousSystemParameters::with_default_values()
             };
@@ -173,7 +173,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                     &user_1,
                     &user_1_subaccount,
                     NervousSystemParameters {
-                        initial_voting_period: Some(ONE_DAY_SECONDS),
+                        initial_voting_period_seconds: Some(ONE_DAY_SECONDS),
                         ..system_params
                     },
                 )
@@ -203,19 +203,20 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 assert_eq!(proposal.executed_timestamp_seconds, 0);
                 assert!(
                     proposal.proposal_creation_timestamp_seconds
-                        + parameters.initial_voting_period.unwrap()
+                        + parameters.initial_voting_period_seconds.unwrap()
                         > now_seconds
                 );
-                // `proposal.initial_voting_period` should not have been modified from its initial value
+                // `proposal.initial_voting_period_seconds` should not have been modified from its initial value
                 assert_eq!(
-                    proposal.initial_voting_period,
-                    initial_initial_voting_period
+                    proposal.initial_voting_period_seconds,
+                    initial_initial_voting_period_seconds
                 );
                 // Just double checking that the time that's passed and
-                // the current `initial_voting_period` would be enough to
+                // the current `initial_voting_period_seconds` would be enough to
                 // end the proposal
                 assert!(
-                    proposal.proposal_creation_timestamp_seconds + proposal.initial_voting_period
+                    proposal.proposal_creation_timestamp_seconds
+                        + proposal.initial_voting_period_seconds
                         > now_seconds
                 );
             }

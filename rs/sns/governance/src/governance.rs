@@ -637,10 +637,10 @@ impl Governance {
     }
 
     /// Returns the initial voting period of proposals.
-    fn initial_voting_period(&self) -> u64 {
+    fn initial_voting_period_seconds(&self) -> u64 {
         self.nervous_system_parameters()
-            .initial_voting_period
-            .expect("NervousSystemParameters must have initial_voting_period")
+            .initial_voting_period_seconds
+            .expect("NervousSystemParameters must have initial_voting_period_seconds")
     }
 
     /// Returns the wait for quiet deadline extension period for proposals.
@@ -1725,7 +1725,7 @@ impl Governance {
                     .unwrap_or_else(|| {
                         proposal_data
                             .proposal_creation_timestamp_seconds
-                            .saturating_add(proposal_data.initial_voting_period)
+                            .saturating_add(proposal_data.initial_voting_period_seconds)
                     })
             })
             .min()
@@ -2075,10 +2075,10 @@ impl Governance {
     ///
     /// This is a low-level function that makes no verification whatsoever.
     fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let initial_voting_period = data.initial_voting_period;
+        let initial_voting_period_seconds = data.initial_voting_period_seconds;
 
         self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            data.proposal_creation_timestamp_seconds + initial_voting_period,
+            data.proposal_creation_timestamp_seconds + initial_voting_period_seconds,
             self.closest_proposal_deadline_timestamp_seconds,
         );
         self.proto.proposals.insert(pid, data);
@@ -2249,7 +2249,7 @@ impl Governance {
             .nervous_system_parameters()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
-        let initial_voting_period = self.initial_voting_period();
+        let initial_voting_period_seconds = self.initial_voting_period_seconds();
         let wait_for_quiet_deadline_increase_seconds =
             self.wait_for_quiet_deadline_increase_seconds();
 
@@ -2306,7 +2306,7 @@ impl Governance {
             ballots: electoral_roll,
             payload_text_rendering: Some(rendering),
             is_eligible_for_rewards,
-            initial_voting_period,
+            initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             // Writing these explicitly so that we have to make a consious decision
             // about what to do when adding a new field to `ProposalData`.
@@ -2320,7 +2320,8 @@ impl Governance {
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: now_seconds.saturating_add(initial_voting_period),
+            current_deadline_timestamp_seconds: now_seconds
+                .saturating_add(initial_voting_period_seconds),
         });
 
         // Charge the cost of rejection upfront.
@@ -4162,7 +4163,7 @@ mod tests {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         now_seconds in 0u64..1_000_000,
                                         old_yes in 0u64..1_000_000,
@@ -4176,9 +4177,9 @@ mod tests {
                 id: Some(ProposalId { id: 0 }),
                 proposal_creation_timestamp_seconds,
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4203,7 +4204,7 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            prop_assert!(new_deadline >= initial_voting_period);
+            prop_assert!(new_deadline >= initial_voting_period_seconds);
         }
     }
 
@@ -4212,19 +4213,19 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at the end of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip_at_end(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_flip_at_end(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         no_votes in 0u64..1_000_000,
                                         yes_votes_margin in 1u64..1_000_000,
                                         total in 10_000_000u64..100_000_000,
     ) {
-            let now_seconds = initial_voting_period;
+            let now_seconds = initial_voting_period_seconds;
             let mut proposal = ProposalData {
                 id: Some(ProposalId { id: 0 }),
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4249,7 +4250,7 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            prop_assert!(new_deadline == initial_voting_period + wait_for_quiet_deadline_increase_seconds);
+            prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds);
         }
     }
 
@@ -4258,7 +4259,7 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at any point during of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_flip(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         no_votes in 0u64..1_000_000,
                                         yes_votes_margin in 1u64..1_000_000,
@@ -4267,15 +4268,15 @@ mod tests {
     ) {
             // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
             // by the smallest time where any flip in the vote will cause a deadline increase.
-            let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period + 1) / 2;
-            // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period` to test at.
-            let now_seconds = (time * initial_voting_period as f32) as u64;
+            let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+            // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
+            let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
             let mut proposal = ProposalData {
                 id: Some(ProposalId { id: 0 }),
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds: adjusted_wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4300,8 +4301,8 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            dbg!(new_deadline , initial_voting_period + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-            prop_assert!(new_deadline == initial_voting_period + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+            dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+            prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
         }
     }
 

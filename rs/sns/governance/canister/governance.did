@@ -201,8 +201,8 @@ type NervousSystemParameters = record {
   max_followees_per_function : opt nat64;
   neuron_claimer_permissions : opt NeuronPermissionList;
   neuron_minimum_stake_e8s : opt nat64;
-  initial_voting_period : opt nat64;
   max_neuron_age_for_age_bonus : opt nat64;
+  initial_voting_period_seconds : opt nat64;
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   reject_cost_e8s : opt nat64;
   max_proposals_to_keep_per_action : opt nat32;
@@ -254,9 +254,9 @@ type ProposalData = record {
   failure_reason : opt GovernanceError;
   ballots : vec record { text; Ballot };
   reward_event_round : nat64;
-  initial_voting_period : nat64;
   failed_timestamp_seconds : nat64;
   proposal_creation_timestamp_seconds : nat64;
+  initial_voting_period_seconds : nat64;
   reject_cost_e8s : nat64;
   latest_tally : opt Tally;
   wait_for_quiet_deadline_increase_seconds : nat64;
