@@ -10,7 +10,8 @@ def external_crates_repository(name, annotations):
         name = name,
         annotations = annotations,
         isolated = True,
-        lockfile = "//:Cargo.Bazel.lock",
+        cargo_lockfile = "//:Cargo.Bazel.toml.lock",
+        lockfile = "//:Cargo.Bazel.json.lock",
         cargo_config = "//:bazel/cargo.config",
         packages = {
             "actix-rt": crate.spec(
