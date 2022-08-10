@@ -137,6 +137,9 @@ impl Membership {
             Committee::Notarization => {
                 unreachable!("Notarization/Finalization does not use threshold committee")
             }
+            Committee::CanisterHttp => {
+                unreachable!("CanisterHttp does not use threshold committee")
+            }
         }
     }
 
@@ -151,6 +154,7 @@ impl Membership {
             Committee::HighThreshold => self.get_high_threshold_committee_threshold(height),
             Committee::LowThreshold => self.get_low_threshold_committee_threshold(height),
             Committee::Notarization => self.get_notarization_committee_threshold(height),
+            Committee::CanisterHttp => self.get_canister_http_committee_threshold(height),
         }
     }
 
@@ -180,28 +184,7 @@ impl Membership {
         height: Height,
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
-        if !self
-            .consensus_cache
-            .summary_block()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .current_interval_includes(height)
-        {
-            return Err(MembershipError::UnableToRetrieveDkgSummary(height));
-        }
-
-        let node_ids = self.get_nodes(height)?;
-        let size = get_committee_size(node_ids.len());
-
-        Ok(
-            if let Some(i) = node_ids.iter().position(|id| *id == node_id) {
-                i < size
-            } else {
-                false
-            },
-        )
+        Ok(self.get_nodes(height)?.iter().any(|id| *id == node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at
@@ -261,6 +244,14 @@ impl Membership {
             Some(transcript) => Ok(transcript.threshold.get().get() as usize),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
+    }
+
+    fn get_canister_http_committee_threshold(
+        &self,
+        height: Height,
+    ) -> Result<Threshold, MembershipError> {
+        let committee_size = get_committee_size(self.get_nodes(height)?.len());
+        Ok(committee_size - get_faults_tolerated(committee_size))
     }
 }
 

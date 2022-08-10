@@ -31,7 +31,7 @@ use ic_types::{
     messages::CallbackId,
     registry::RegistryClientError,
     signature::BasicSignature,
-    CountBytes, Height, NumBytes, RegistryVersion, SubnetId,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 pub use pool_manager::CanisterHttpPoolManagerImpl;
 use prometheus::{HistogramVec, IntGauge};
@@ -306,10 +306,10 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // Get a set of the messages of the already delivered responses
         let delivered_ids = Self::get_past_payload_ids(past_payloads);
         // Get the threshold value that is needed for consensus
-        let threshold = match self.membership.get_committee_threshold(
-            validation_context.certified_height,
-            Committee::HighThreshold,
-        ) {
+        let threshold = match self
+            .membership
+            .get_committee_threshold(height, Committee::CanisterHttp)
+        {
             Ok(threshold) => threshold,
             Err(err) => {
                 warn!(self.log, "Failed to get membership: {:?}", err);
@@ -564,6 +564,36 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // NOTE: We do this in a separate loop because this check is expensive and we want to
         // do all the cheap checks first
         for response in &payload.responses {
+            let mut membership_check_failure = None;
+            let invalid_signers: Vec<NodeId> = response
+                .proof
+                .signature
+                .signatures_map
+                .keys()
+                .cloned()
+                .filter(|signer| {
+                    match self
+                        .membership
+                        .node_belongs_to_canister_http_committee(height, *signer)
+                    {
+                        Ok(is_member) => is_member,
+                        Err(err) => {
+                            membership_check_failure = Some(err);
+                            false
+                        }
+                    }
+                })
+                .collect();
+            if membership_check_failure.is_some() {
+                return Err(CanisterHttpPayloadValidationError::Transient(
+                    CanisterHttpTransientValidationError::Membership,
+                ));
+            }
+            if !invalid_signers.is_empty() {
+                return Err(CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::SignersNotMembers(invalid_signers),
+                ));
+            }
             self.crypto
                 .verify_aggregate(&response.proof, consensus_registry_version)
                 .map_err(|err| {
@@ -759,19 +789,29 @@ mod tests {
                 timeouts: vec![],
             };
 
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: mock_time() + Duration::from_secs(3),
+            };
+
             // Build a payload
             let payload = payload_builder.get_canister_http_payload(
                 Height::new(1),
-                &ValidationContext {
-                    registry_version: RegistryVersion::new(1),
-                    certified_height: Height::new(0),
-                    time: mock_time() + Duration::from_secs(3),
-                },
+                &validation_context,
                 &[&past_payload],
                 NumBytes::new(4 * 1024 * 1024),
             );
 
             //  Make sure the response is not contained in the payload
+            payload_builder
+                .validate_canister_http_payload(
+                    Height::new(1),
+                    &payload,
+                    &validation_context,
+                    &[&past_payload],
+                )
+                .unwrap();
             assert_eq!(payload.num_responses(), 1);
             assert_eq!(payload.responses[0].content, valid_response);
         });
