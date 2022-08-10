@@ -31,6 +31,7 @@ use crate::{
 };
 use anyhow::bail;
 use ic_agent::{export::Principal, Agent};
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use slog::info;
@@ -191,11 +192,32 @@ pub fn test(env: TestEnv) {
             channel.wait_close().unwrap();
         }
     }
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    info!(&logger, "Polling registry");
+    let registry_data_provider = RegistryClientImpl::new(
+        ic_registry_nns_data_provider::create_nns_data_provider(
+            rt.handle().clone(),
+            env.topology_snapshot()
+                .root_subnet()
+                .nodes()
+                .map(|node| node.get_public_url())
+                .collect(),
+            None,
+        ),
+        None,
+    );
+    registry_data_provider.try_polling_latest_version(100)
+        .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
+    let version = registry_data_provider.get_latest_version();
+    info!(&logger, "Latest registry = {version}");
+
+    info!(&logger, "Checking BN health");
     boundary_node_vm
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
 
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_url.unwrap().as_str()).await;
