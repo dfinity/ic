@@ -1,4 +1,4 @@
-log(node_id:string, subnet_id:string, crate:string, module:string, level:string, message:string)
+log(internal_host_id:string, node_id:string, subnet_id:string, component:string, level:string, message:string)
 log1(node:string, val:float)
 
 original_subnet_type(subnet_id:string, subnet_type:string)

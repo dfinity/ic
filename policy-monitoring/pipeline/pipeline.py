@@ -17,9 +17,7 @@ from .alert import AlertService
 from .artifact_manager import ArtifactManager
 from .backend.group import Group
 from .formula_manager import formula_local_path
-from .mode import is_raw_stream_reusable
 from .mode import Mode
-from .mode import multiple_preprocessing_needed
 from .pre_processor import PreProcessor
 from .pre_processor import UniversalPreProcessor
 from .repro_manager import ReproManager
@@ -259,7 +257,6 @@ class Pipeline:
                 error_handler=error_h,
                 exit_handler=exit_h,
             ) as monitor:
-
                 try:
                     for datum in event_stream:
                         monitor.submit(datum)
@@ -286,19 +283,8 @@ class Pipeline:
         self.stat[group.gid] = {
             "pre_processor": dict(),
             "monpoly": dict(),
-            "global_infra": group.global_infra.to_dict(),
+            "global_infra": None if group.global_infra is None else group.global_infra.to_dict(),
         }
-
-        # We convert the iterator to List in order to enable two scans.
-        # This could be avoided if there was another way of constructing
-        # a GlobalInfra object.
-        if True or is_raw_stream_reusable(self.modes):  # FIXME
-            group.logs = list(group.logs)
-
-        # TODO: implement stream probing (current approach works for static lists)
-        if len(group.logs) == 0:
-            eprint(f"Skipping {str(group)} containing no logs")
-            return
 
         if Mode.raw in self.modes:
             self.art_manager.save_raw_logs(group)
@@ -313,9 +299,6 @@ class Pipeline:
             pproc = UniversalPreProcessor(group.global_infra, self.formulas)
 
         event_stream = pproc.run(group.logs)
-
-        if multiple_preprocessing_needed(self.modes):
-            event_stream = list(event_stream)
 
         if Mode.save_event_stream in self.modes:
             self.art_manager.save_event_stream(group, pproc.name, event_stream)

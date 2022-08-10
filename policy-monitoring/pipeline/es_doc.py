@@ -75,13 +75,14 @@ class EsDoc:
             addr = addr_field
         return self._parse_ip_address(addr)
 
-    def get_host_principal(self) -> str:
+    def host_id(self) -> str:
+        """Returns a unique identifier that is guaranteed not to change."""
         host = self.host()
-        assert "hostname" in host, "host principal not found"
-        principal = host["hostname"]
-        assert isinstance(principal, str), f"host.hostname has unexpected type: {str(type(principal))}"
-        assert principal != "", "expected principal; got empty string"
-        return principal
+        assert "id" in host, f"host.id not found in {str(self)}"
+        hid = host["id"]
+        assert isinstance(hid, str), f"host.id has unexpected type: {str(type(hid))}"
+        assert hid != "", "expected host ID; got empty string"
+        return hid
 
     def message(self) -> str:
         return self.repr["_source"]["message"]
@@ -118,8 +119,26 @@ class EsDoc:
     def is_host_reboot_intent(self) -> bool:
         return self.is_systemd() and self.message() == "Shutting down orchestrator..."
 
-    def is_replica(self) -> bool:
-        if self.component_identifier() != "orchestrator":
+    IDS_OF_COMPONENTS_WITH_STRUCTURED_LOGS = set(
+        [
+            "orchestrator",
+            "ic-btc-adapter",
+            "ic-crypto-csp",
+            "ic-canister-http-adapter",
+            # TODO: all components that use the ReplicaLogger library
+        ]
+    )
+
+    def is_ic_related(self) -> bool:
+        return self.component_identifier() in self.IDS_OF_COMPONENTS_WITH_STRUCTURED_LOGS
+
+    def is_structured(self) -> bool:
+        if not self.is_ic_related():
+            # Not all orchestrator logs are structured, e.g., NNS canister logs come from orchestrator but are unstructured.
+            # However, if logs are not IC-related, they are definitely unstructured.
+            return False
+        if '"log_entry"' not in self.message():
+            # Optimization
             return False
         try:
             msg = self.parse_message()
@@ -129,24 +148,21 @@ class EsDoc:
             return False
         try:
             if "log_entry" not in msg:
-                # FIXME uncomment
-                # sys.stderr.write("WARNING: orchestrator document {doc} with message" + \
-                #                  " ({msg}) has no 'log_entry'\n".format(
-                #                     doc=self.id(),
-                #                     msg=self.message()))
                 return False
         except TypeError:
             sys.stderr.write(
-                f"WARNING: orchestrator document {str(self)} has "
-                f"message ({str(msg)}) of unexpected type: {type(msg)}\n"
+                f"WARNING: document {str(self)} has message ({str(msg)}) of unexpected type: {type(msg)}\n"
             )
             return False
         return True
 
+    def is_replica(self) -> bool:
+        return self.is_structured() and self.component_identifier() == "orchestrator"
+
     def is_registry_canister(self) -> bool:
         if self.component_identifier() != "orchestrator":
             return False
-        if self.is_replica():
+        if self.is_structured():
             return False
 
         m = re.match(RegistryDoc.MARKER, self.message())
@@ -154,6 +170,40 @@ class EsDoc:
             return False
         else:
             return True
+
+    class GenericParams:
+        """Data class"""
+
+        def __init__(self, component_id: str, level: str, message: str, node_id: str, subnet_id: str):
+            self.component_id = component_id
+            self.level = level
+            self.message = message
+            self.node_id = node_id
+            self.subnet_id = subnet_id
+
+    def get_generic_params(self) -> Optional[GenericParams]:
+        comp = self.component_identifier()
+        if self.is_structured():
+            r_doc = StructuredDoc(self.repr)
+            crate, module = r_doc.get_crate_module()
+            component_id = f"{comp}::{crate}::{module}"
+            le = r_doc._log_entry()
+            lel = le["level"]
+            lem = r_doc.get_message()
+            node = r_doc.get_node_id()
+            subnet = r_doc.get_subnet_id()
+        else:
+            if comp:
+                component_id = comp
+            else:
+                component_id = "unknown"
+            lel = "UNKNOWN"
+            lem = self.message()
+            node = quoted("")
+            subnet = quoted("")
+        return ReplicaDoc.GenericParams(
+            component_id=component_id, level=lel, message=quoted(lem), node_id=node, subnet_id=subnet
+        )
 
 
 class RegistryDoc(EsDoc):
@@ -244,10 +294,10 @@ class RegistryDoc(EsDoc):
         return list(map(lambda n: NodesubnetParams(n, subnet), nodes))
 
 
-class ReplicaDoc(EsDoc):
+class StructuredDoc(EsDoc):
     def __init__(self, repr):
         super().__init__(repr)
-        assert self.is_replica(), f"Doc {str(self)} is not from the replica"
+        assert self.is_structured(), f"Doc {str(self)} is unstructured"
 
     def _log_entry(self):
         return self.parse_message()["log_entry"]
@@ -260,9 +310,21 @@ class ReplicaDoc(EsDoc):
         le = self._log_entry()
         return le["crate_"], le["module"]
 
-    def get_subnet_principal(self) -> str:
+    def get_node_id(self) -> str:
+        """Returns the principal of the node that produced this log."""
         le = self._log_entry()
-        return f'"{le["subnet_id"]}"'
+        return quoted(le["node_id"])
+
+    def get_subnet_id(self) -> str:
+        """Returns the principal of the subnet to which this node belongs to."""
+        le = self._log_entry()
+        return quoted(le["subnet_id"])
+
+
+class ReplicaDoc(StructuredDoc):
+    def __init__(self, repr):
+        super().__init__(repr)
+        assert self.component_identifier() == "orchestrator", f"Doc {str(self)} is not from the replica"
 
     def get_subnet_type(self) -> Optional[Tuple[str, str]]:
         m = re.search(
@@ -279,10 +341,6 @@ class ReplicaDoc(EsDoc):
             return (subnet_id, subnet_type)
         return None
 
-    def get_node_id(self) -> str:
-        le = self._log_entry()
-        return le["node_id"]
-
     # Consensus finalization
     class ConsensusFinalizationParams:
         """Data class"""
@@ -291,7 +349,7 @@ class ReplicaDoc(EsDoc):
             self.is_state_available = is_state_available
             self.is_key_available = is_key_available
 
-    # Jan 20 09:04:28 medium05-1-2 orchestrator[1128]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:04:28.911Z","message":"Consensus finalized height: 149, state available: false, DKG key material available: true","crate_":"ic_consensus","module":"consensus","line":434,"node_id":"ycnxt-nn7hh-sow5h-fmdzh-gyy54-ilhxf-xubix-pwv2c-aie7o-whivf-lae","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+    # https://gitlab.com/dfinity-lab/public/ic/-/blob/64f34f254c9c98ee9f717941d6c9679051ba804e/rs/consensus/src/consensus.rs#L433
     def get_consensus_finalized_params(self) -> Optional[ConsensusFinalizationParams]:
 
         lem = self.get_message()
@@ -353,7 +411,7 @@ class ReplicaDoc(EsDoc):
         def __init__(self, height: int):
             self.height = height
 
-    # {"log_entry":{"level":"DEBUG","utc_time":"2021-11-25T11:40:22.079Z","message":"Proposing a CatchUpPackageShare at height 10","crate_":"ic_consensus","module":"catchup_package_maker","line":192,"node_id":"ctk2e-qe25c-zfjpi-s5ps2-uvvvk-uiofl-u3ab4-pryzz-tnyyv-egupe-cqe","subnet_id":"cpv7s-uecxn-abdz5-xkr3l-l5exk-f54in-66ebe-kyquf-ov2zm-wcq2m-nqe"}}
+    # https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/consensus/src/consensus/catchup_package_maker.rs?L216&subtree=true
     def get_catchup_package_share_params(self) -> Optional[CatchUpPackageShare]:
         lem = self.get_message()
         m = re.match(r"Proposing a CatchUpPackageShare at height (\d+)", lem)
@@ -448,6 +506,7 @@ class ReplicaDoc(EsDoc):
         def __init__(self, block_hash: str):
             self.block_hash = block_hash
 
+    # https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/consensus/src/consensus/batch_delivery.rs?L157&subtree=true
     def get_batch_delivery_params(self) -> Optional[BatchDeliveryParams]:
         m = re.match('.*block_hash \\"(.*?)\\".*', self.get_message())
         if not m or len(m.groups()) < 1:
@@ -463,7 +522,7 @@ class ReplicaDoc(EsDoc):
             self.hash = hash
             self.replica_version = replica_version
 
-    # 'message': '{"log_entry":{"level":"DEBUG","utc_time":"2022-02-13T11:05:01.863Z","message":"Finalized height","crate_":"ic_consensus","module":"batch_delivery","line":81,"node_id":"cpd7c-6rrmi-s34or-7tihv-byeqs-22wtz-u3jl7-7rmmm-k4l3z-f3ak4-4ae","subnet_id":"3yr5l-fecjk-i4yxq-fsukl-zerdg-jqlnr-xsqrs-j65jq-w2246-4qhzl-wqe","consensus":{"height":1,"hash":"e36232694f0ce7f0e13e98ec64e4db26f04a3e9d7bc07791fb7b2eacceec2b44"}}}'
+    # https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/consensus/src/consensus/batch_delivery.rs?L69
     def get_batch_delivery_consensus_params(self) -> Optional[ConsensusParams]:
         le = self._log_entry()
         if "consensus" in le:
@@ -473,22 +532,3 @@ class ReplicaDoc(EsDoc):
             )
         else:
             return None
-
-    class UnusualLogLevelParams:
-        """Data class"""
-
-        def __init__(self, level: str, message: str):
-            self.level = level
-            self.message = message
-
-    def get_unusual_log_level_event_params(self) -> Optional[UnusualLogLevelParams]:
-
-        le = self._log_entry()
-        lel = le["level"]
-        lem = self.get_message()
-        # Note: We opt for pre-processing all events, even that are not unusual.
-        # This allows us to test the pre-processor more thoroughly.
-        # if lel != "CRITICAL" and lel != "ERROR":
-        #     return None
-        # else:
-        return ReplicaDoc.UnusualLogLevelParams(level=lel, message=quoted(lem))

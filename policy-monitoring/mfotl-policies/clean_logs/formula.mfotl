@@ -3,11 +3,11 @@
   level.
 
   Relevant events:
-  - log(node_id:string, subnet_id:string, crate:string, module:string, level:string, message:string)
+  - log(internal_host_id:string, node_id:string, subnet_id:string, component:string, level:string, message:string)
 *)
 
 LET error_level(level) =
      level = "CRITICAL"
   OR level = "ERROR"
 IN
-log(node_id, subnet_id, crate, module, level, message) AND error_level(level)
+log(internal_host_id, node_id, subnet_id, component, level, message) AND error_level(level)

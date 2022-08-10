@@ -169,8 +169,8 @@ class GlobalInfra:
             # Process all replica docs' node_id / subnet data
             unix_ts, node_id, subnet_id, subnet_type = (
                 doc.unix_ts(),
-                doc.get_host_principal(),
-                doc.get_subnet_principal(),
+                doc.get_node_id(),
+                doc.get_subnet_id(),
                 doc.get_subnet_type(),
             )
 

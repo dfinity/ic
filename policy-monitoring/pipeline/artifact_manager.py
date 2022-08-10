@@ -67,8 +67,12 @@ class ArtifactManager:
         eprint(f"Pretty-printing raw logs into '{output_file}' ...")
 
         with open(output_file, "w") as fout:
+            fout.write("[")  # the entire output should respresent a syntactically correct python object, e.g., a list
             pp = pprint.PrettyPrinter(indent=2, stream=fout)
-            pp.pprint(group.logs)
+            for log in group.logs:
+                raw = pp.pformat(log)[:-1]  # avoid the \n after the comma
+                fout.write(f"{raw},\n")
+            fout.write("]")
 
         eprint(f"Pretty-printing raw logs completed; results written into '{output_file}'.")
 

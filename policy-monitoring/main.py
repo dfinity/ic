@@ -172,7 +172,7 @@ def main():
     if args.mainnet and not args.global_infra:
         print(
             "Warning: if you are monitoring policies that require Global Infra, "
-            "then option --global_infra shoul dbe used together with --mainnet; see --list_policies"
+            "then option --global_infra should be used together with --mainnet; see --list_policies"
         )
     if args.limit_time and args.limit != 0:
         print("Option --limit_time requires setting --limit to 0")
@@ -183,11 +183,40 @@ def main():
         exit(0)
 
     if args.list_policies:
-        for formula in UniversalPreProcessor.get_supported_formulas():
-            if UniversalPreProcessor.is_global_infra_required(set([formula])):
-                print(f"{formula} (requires global infra)")
+        print("--- Supported events ---")
+        preambles = set(UniversalPreProcessor.get_supported_preamble_events())
+        for event in UniversalPreProcessor.get_supported_events():
+            attrs = []
+            if UniversalPreProcessor.is_event_dbg_level(event):
+                attrs.append("requires DEBUG-level logs")
+            if event in preambles:
+                attrs.append("preamble event")
+            if UniversalPreProcessor.is_global_infra_event(event):
+                attrs.append("requires global infra")
+            if len(attrs) > 0:
+                attrs_str = " (" + "; ".join(attrs) + ")"
             else:
-                print(f"{formula}")
+                attrs_str = ""
+            print(f"{event}{attrs_str}")
+
+        print("--- Supported IC policies ---")
+        for formula in UniversalPreProcessor.get_supported_formulas():
+            attrs = []
+            if not UniversalPreProcessor.is_formula_enabled(formula):
+                attrs.append("DISABLED")
+            if UniversalPreProcessor.is_dbg_log_level_required(formula):
+                attrs.append("requires DEBUG-level logs")
+            if UniversalPreProcessor.is_preamble_required(formula):
+                attrs.append("needs preamble events")
+            if UniversalPreProcessor.is_global_infra_required(set([formula])):
+                attrs.append("requires global infra")
+            if UniversalPreProcessor.is_end_event_required(formula):
+                attrs.append("requires end event")
+            if len(attrs) > 0:
+                attrs_str = " (" + "; ".join(attrs) + ")"
+            else:
+                attrs_str = ""
+            print(f"{formula}{attrs_str}")
         exit(0)
 
     # Read environment variables
@@ -266,7 +295,9 @@ def main():
     try:
         # Obtains logs for each group
         if args.read:
-            groups = file_io.read_logs(log_file=args.read)
+            # If the input file is small enough, it would be faster to load in into memory completely and then process, i.e.:
+            # groups = file_io.read_logs(log_file=args.read)
+            groups = file_io.stream_file(log_file=args.read)
         else:
             gitlab: Optional[Ci] = None
             if args.mainnet:
@@ -308,12 +339,12 @@ def main():
         if args.global_infra:
             # Load global infra from file (same for all groups)
             print(f"Setting global infra for all groups based on {args.global_infra}")
-            glob_infra_path = Path(args.global_infra)
-            suf = glob_infra_path.suffix
+            gi_path = Path(args.global_infra)
+            suf = gi_path.suffix
             if suf in [".yml", ".yaml"]:
-                infra = GlobalInfra.fromYamlFile(glob_infra_path)
+                infra = GlobalInfra.fromYamlFile(gi_path)
             elif suf == ".json":
-                infra = GlobalInfra.fromIcRegeditSnapshotFile(glob_infra_path)
+                infra = GlobalInfra.fromIcRegeditSnapshotFile(gi_path)
             else:
                 raise Exception(f"unsupported file format: {suf}")
             for group in groups.values():
@@ -336,6 +367,8 @@ def main():
                         group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb)
                     except CiException:
                         print("Falling back to inferring Global Infra from logs ...")
+                        # logs need to be reusable, so we serialize the stream
+                        group.logs = list(group.logs)
                         group.infer_global_infra()
         else:
             print("Skipping Global Infra")
