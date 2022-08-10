@@ -66,7 +66,11 @@ fn main() {}
 
 #[test]
 fn check_candid_file() {
-    let candid = String::from_utf8(std::fs::read("ecdsa.did").unwrap()).unwrap();
+    let ecdsa_did_path = match std::env::var("ECDSA_DID_PATH") {
+        Ok(v) => v,
+        Err(_e) => "ecdsa.did".to_string(),
+    };
+    let candid = String::from_utf8(std::fs::read(ecdsa_did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();
