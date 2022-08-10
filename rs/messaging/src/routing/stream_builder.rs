@@ -432,7 +432,7 @@ impl StreamBuilderImpl {
                             self.observe_payload_size(&msg);
                             self.metrics
                                 .outgoing_messages
-                                .with_label_values(&dst_net_id.to_string())
+                                .with_label_values(&[&dst_net_id.to_string()])
                                 .inc();
                             streams.push(dst_net_id, msg);
                         }
