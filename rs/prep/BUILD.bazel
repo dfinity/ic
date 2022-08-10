@@ -36,7 +36,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
-    "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 

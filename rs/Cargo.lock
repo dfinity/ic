@@ -6816,7 +6816,6 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror",
- "tokio",
  "url",
 ]
 
@@ -7976,7 +7975,6 @@ dependencies = [
  "serde_json",
  "slog",
  "tempfile",
- "tokio",
  "url",
 ]
 

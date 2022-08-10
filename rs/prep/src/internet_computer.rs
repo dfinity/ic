@@ -53,8 +53,6 @@ use crate::{
     subnet_configuration::InitializeSubnetError,
 };
 
-use ic_http_utils::file_downloader::FileDownloader;
-
 /// Path to the Registry Local Store
 pub const IC_REGISTRY_LOCAL_STORE_PATH: &str = "ic_registry_local_store";
 /// Path of the Root Public Key
@@ -326,7 +324,7 @@ impl IcConfig {
     /// * ... the secret key store for each node in this IC
     /// * ... registry entries to be picked up by ic-admin
     /// * ... a registry file to be used as a static registry
-    pub async fn initialize(mut self) -> Result<InitializedIc, InitializeError> {
+    pub fn initialize(mut self) -> Result<InitializedIc, InitializeError> {
         let version = INITIAL_REGISTRY_VERSION;
         let data_provider = ProtoRegistryDataProvider::new();
         data_provider
@@ -439,24 +437,16 @@ impl IcConfig {
             routing_table_record,
         );
 
+        fn opturl_to_string(opt_url: Option<Url>) -> String {
+            opt_url
+                .map(|u| u.to_string())
+                .unwrap_or_else(|| "".to_string())
+        }
+
         let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
-            release_package_url: self
-                .initial_release_package_url
-                .map(|url| url.to_string())
-                .unwrap_or(format!(
-                    "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.gz",
-                    initial_replica_version
-                )),
-            release_package_sha256_hex: match self.initial_release_package_sha256_hex {
-                Some(hex) => hex,
-                None => fetch_replica_version_sha256(&format!(
-                    "https://download.dfinity.systems/ic/{}/guest-os/update-img/SHA256SUMS",
-                    initial_replica_version
-                ))
-                .await
-                .unwrap_or_default(),
-            },
+            release_package_url: opturl_to_string(self.initial_release_package_url),
+            release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
@@ -723,27 +713,6 @@ impl IcConfig {
             .extend(node_operator_entries);
         Ok(self)
     }
-}
-
-async fn fetch_replica_version_sha256(sha_url: &str) -> Result<String, String> {
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
-    let mut tmp_file = tmp_dir;
-    tmp_file.push("SHA256.txt");
-
-    FileDownloader::new(None)
-        .download_file(sha_url, &tmp_file, None)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let contents = fs::read_to_string(tmp_file).map_err(|e| e.to_string())?;
-    for line in contents.lines() {
-        let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        if words.len() == 2 && words[1].ends_with("update-img.tar.gz") {
-            return Ok(words[0].to_string());
-        }
-    }
-
-    Err(format!("SHA256 hash is not fund in {}", sha_url))
 }
 
 pub struct InitializedIc {
