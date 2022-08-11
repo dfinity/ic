@@ -24,6 +24,7 @@ use ic_logger::ReplicaLogger;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
+    node::v1::{ConnectionEndpoint, NodeRecord},
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     routing_table::v1::CanisterMigrations as PbCanisterMigrations,
     routing_table::v1::RoutingTable as PbRoutingTable,
@@ -33,8 +34,8 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::subnet::SubnetListRegistry;
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_provisional_whitelist_record_key,
-    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -139,6 +140,28 @@ fn make_single_node_registry(
             &make_provisional_whitelist_record_key(),
             registry_version,
             Some(pb_whitelist),
+        )
+        .unwrap();
+    let node_record = NodeRecord {
+        node_operator_id: vec![0],
+        xnet: None,
+        http: Some(ConnectionEndpoint {
+            ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
+            port: 1234,
+            protocol: 0,
+        }),
+        p2p_flow_endpoints: vec![],
+        prometheus_metrics_http: None,
+        public_api: vec![],
+        private_api: vec![],
+        prometheus_metrics: vec![],
+        xnet_api: vec![],
+    };
+    data_provider
+        .add(
+            &make_node_record_key(node_id),
+            registry_version,
+            Some(node_record),
         )
         .unwrap();
 
