@@ -430,6 +430,11 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
+                            //TODO: store sum of cycles sent per subnet
+                            //add cycles to this sum
+                            //export high and low to prometheus gauge
+                            //let (high, low) = &msg.cycles().into_parts(); //This should be the cycle amount in this msg.
+                            //should be stored in replicated state, metadata state?
                             self.metrics
                                 .outgoing_messages
                                 .with_label_values(&[&dst_net_id.to_string()])

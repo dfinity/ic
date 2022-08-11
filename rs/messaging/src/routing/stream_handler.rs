@@ -32,7 +32,7 @@ use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, convert::TryInto,
 };
 
 #[cfg(test)]
@@ -50,6 +50,9 @@ struct StreamHandlerMetrics {
     /// Backlog of XNet messages based on end in stream header and last message
     /// in slice, per subnet.
     pub xnet_message_backlog: IntGaugeVec,
+    /// ### XNET cycle monitoring 
+    /// Incoming stream index, by sending subnet.
+    pub inc_stream_index: IntGaugeVec,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking the
     /// receival of reject signals for requests.
     pub critical_error_reject_signals_for_request: IntCounter,
@@ -72,6 +75,7 @@ const METRIC_GCED_XNET_MESSAGES: &str = "mr_gced_xnet_message_count";
 const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count";
 
 const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
+const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
@@ -117,6 +121,11 @@ impl StreamHandlerMetrics {
             "Backlog of XNet messages, by sending subnet.",
             &[LABEL_REMOTE],
         );
+        let inc_stream_index = metrics_registry.int_gauge_vec(
+            METRIC_INC_STREAM_INDEX,
+            "Incoming stream index, by sending subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_reject_signals_for_request =
             metrics_registry.error_counter(CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST);
         let critical_error_induct_response_failed =
@@ -152,6 +161,7 @@ impl StreamHandlerMetrics {
             gced_xnet_messages,
             gced_xnet_reject_signals,
             xnet_message_backlog,
+            inc_stream_index,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
@@ -613,6 +623,12 @@ impl StreamHandlerImpl {
                     Ok(()) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
+                        // #### XNet cycle transfer monitoring
+                        self.metrics
+                                .inc_stream_index
+                                .with_label_values(&[&remote_subnet_id.to_string()])
+                                .set(stream_index.get().try_into().unwrap());
+                        // ####
                     }
 
                     // Message not inducted.
