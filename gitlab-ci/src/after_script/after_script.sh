@@ -40,16 +40,23 @@ if [[ -f "$CARGO_TEST_JUNIT_XML" ]]; then
 fi
 git checkout --detach --force "$CI_COMMIT_SHA"
 
+# send slack messages
+debug=""
+[ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
+MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
+
 if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
     cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # We support multiple comma separated slack channels in the SLACK_CHANNEL variable.
-    debug=""
-    [ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
     IFS=',' read -ra CHANNELS <<<"${SLACK_CHANNEL:-}"
-    MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
     for channel in "${CHANNELS[@]}"; do
         notify_slack/notify_slack.py "$MESSAGE" --channel "$channel" || true
     done
+fi
+
+# send slack messages for specific test signals
+if [[ "$CI_JOB_STATUS" == "failed" ]]; then
+    cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # and old bash-test that was introduced with OR-187, failures are dispatched to OR-team directly
     if [[ "$CI_JOB_NAME" == "$NNS_STATE_TEST_NAME" ]]; then
         notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_OR_CHANNEL" || true
