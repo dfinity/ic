@@ -67,7 +67,7 @@ fn test_get_sns_canisters_summary() {
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
 
         // Assert that all the canisters returned a canister summary
         assert!(response.root.is_some());
@@ -114,7 +114,7 @@ fn test_get_sns_canisters_summary() {
             .expect("Error calling the register_dapp_canister API");
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
 
         // Assert that the newly registered dapp is present in the response and that it's canister
         // id matches
@@ -133,7 +133,7 @@ fn test_get_sns_canisters_summary() {
             .expect("Expected the Swap canister to stop");
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
         assert!(response.swap.is_some());
         assert!(response.swap_canister_summary().status.is_none());
         assert_eq!(
