@@ -628,6 +628,8 @@ impl StreamHandlerImpl {
                                 .inc_stream_index
                                 .with_label_values(&[&remote_subnet_id.to_string()])
                                 .set(stream_index.get().try_into().unwrap());
+                        // count cycles (using msg), for requests, add to balance
+                        // for refund, subtract?
                         // ####
                     }
 

@@ -23,6 +23,7 @@ use ic_types::{
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -41,6 +42,9 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Outgoing XNet messages, by destination subnet
     pub outgoing_messages: IntCounterVec,
+    /// ### XNET cycle monitoring 
+    /// Outgoing stream index, by sending subnet.
+    pub out_stream_index: IntGaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -67,6 +71,7 @@ const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
+const METRIC_OUT_STREAM_INDEX: &str = "mr_out_stream_index";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -116,6 +121,11 @@ impl StreamBuilderMetrics {
             "Outgoing XNet messages, by destination subnet.",
             &[LABEL_REMOTE],
         );
+        let out_stream_index = metrics_registry.int_gauge_vec(
+            METRIC_OUT_STREAM_INDEX,
+            "Incoming stream index, by sending subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
@@ -146,6 +156,7 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             outgoing_messages,
+            out_stream_index,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -422,7 +433,23 @@ impl StreamBuilderImpl {
                                     context.message = message;
                                 }
                             }
-
+                            //TODO I put the inc here as well. need to distinguish btwn request and response
+                            //keep track of stream index
+                            //streams.get(dst_net_id).signals_end.get().try_into().unwrap()
+                            //streams.get(&dst_net_id)
+                            self.metrics
+                                .outgoing_messages
+                                .with_label_values(&[&dst_net_id.to_string()])
+                                .inc();
+                            match streams.get(&dst_net_id) {
+                                Some(stream) => {
+                                    self.metrics
+                                        .out_stream_index
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(stream.signals_end().get().try_into().unwrap());
+                                },
+                                None => {},
+                            }
                             streams.push(dst_net_id, msg);
                         }
 
@@ -439,6 +466,15 @@ impl StreamBuilderImpl {
                                 .outgoing_messages
                                 .with_label_values(&[&dst_net_id.to_string()])
                                 .inc();
+                            match streams.get(&dst_net_id) {
+                                Some(stream) => {
+                                    self.metrics
+                                        .out_stream_index
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(stream.signals_end().get().try_into().unwrap());
+                                },
+                                None => {},
+                            }
                             streams.push(dst_net_id, msg);
                         }
                     };
