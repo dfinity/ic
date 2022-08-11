@@ -29,7 +29,6 @@ rust_library(
         "@crate_index//:bincode",
         "@crate_index//:byte-unit",
         "@crate_index//:candid",
-        "@crate_index//:chrono",
         "@crate_index//:hex",
         "@crate_index//:http",
         "@crate_index//:maplit",
@@ -44,5 +43,8 @@ rust_library(
         "@crate_index//:strum",
         "@crate_index//:thiserror",
         "@crate_index//:url",
-    ],
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "//conditions:default": ["@crate_index//:chrono"],
+    }),
 )
