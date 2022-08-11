@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -83,4 +83,24 @@ rust_library(
     ],
 )
 
-# TODO(IC-1207): migrate tests and benches when unblocked dependencies.
+rust_test(
+    name = "test_utilities_test",
+    crate = ":test_utilities",
+    deps = [
+        "//rs/artifact_pool",
+        "@crate_index//:assert_matches",
+        "@crate_index//:rusty-fork",
+    ],
+)
+
+# TODO(IC-1207): `rust_doc_test` fails with `error: Failed to load argument file: IO Error`
+# see https://dash.buildfarm.dfinity.systems/invocation/1aa6195b-afe4-4ee8-99ee-1ff46270b196
+# rust_doc_test(
+#     name = "test_utilities_doc_test",
+#     crate = ":test_utilities",
+#     deps = [
+#         "//rs/artifact_pool",
+#         "@crate_index//:assert_matches",
+#         "@crate_index//:rusty-fork",
+#     ],
+# )
