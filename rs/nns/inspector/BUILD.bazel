@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/nns/constants",
+    "//rs/nns/governance",
+    "//rs/nns/gtc",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rust_canisters/stable_reader",
+    "//rs/types/base_types",
+    "@crate_index//:clap",
+    "@crate_index//:csv",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+]
+
+rust_binary(
+    name = "inspector",
+    srcs = glob(["src/**"]),
+    aliases = {},
+    crate_name = "ic_nns_inspector",
+    edition = "2018",
+    proc_macro_deps = [],
+    deps = DEPENDENCIES,
+)
