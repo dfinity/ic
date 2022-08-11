@@ -1,0 +1,68 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/messaging",
+    "//rs/monitoring/metrics",
+    "//rs/monitoring/metrics_exporter",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/state_manager",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@wabt_rs//:wabt",
+]
+
+rust_library(
+    name = "determinism_test",
+    srcs = glob(["src/**"]),
+    aliases = {},
+    crate_name = "ic_determinism_test",
+    edition = "2018",
+    proc_macro_deps = [],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "determinism_test_test",
+    aliases = {},
+    crate = ":determinism_test",
+    edition = "2018",
+    proc_macro_deps = [],
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "determinism_test_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = {},
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    edition = "2018",
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    proc_macro_deps = [],
+    deps = [":determinism_test"] + DEPENDENCIES,
+)
