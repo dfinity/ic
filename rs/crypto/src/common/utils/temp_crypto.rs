@@ -55,7 +55,7 @@ use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -805,7 +805,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
 
     fn retain_active_transcripts(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscript>,
+        active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         self.crypto_component
             .retain_active_transcripts(active_transcripts)

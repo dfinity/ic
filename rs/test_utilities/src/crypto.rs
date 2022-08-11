@@ -570,7 +570,7 @@ impl IDkgProtocol for CryptoReturningOk {
 
     fn retain_active_transcripts(
         &self,
-        _active_transcripts: &BTreeSet<IDkgTranscript>,
+        _active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         Ok(())
     }
