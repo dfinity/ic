@@ -1008,12 +1008,17 @@ impl SnsCanisters<'_> {
     }
 
     /// Get the summary of the SNS from root
-    pub async fn get_sns_canisters_summary(&self) -> GetSnsCanistersSummaryResponse {
+    pub async fn get_sns_canisters_summary(
+        &self,
+        update_canister_list: Option<bool>,
+    ) -> GetSnsCanistersSummaryResponse {
         self.root
             .update_(
                 "get_sns_canisters_summary",
                 candid_one,
-                GetSnsCanistersSummaryRequest {},
+                GetSnsCanistersSummaryRequest {
+                    update_canister_list,
+                },
             )
             .await
             .expect("Error calling the get_sns_canisters_summary API")

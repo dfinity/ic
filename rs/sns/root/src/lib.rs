@@ -1,4 +1,5 @@
 pub mod pb;
+pub mod types;
 
 use crate::pb::v1::{
     set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
@@ -6,8 +7,8 @@ use crate::pb::v1::{
     SetDappControllersResponse, SnsRootCanister,
 };
 use async_trait::async_trait;
-use candid::{CandidType, Deserialize};
-use dfn_core::{api::call, CanisterId};
+use candid::{CandidType, Decode, Deserialize, Encode};
+use dfn_core::CanisterId;
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_icrc1::endpoints::ArchiveInfo;
 use ic_nervous_system_root::LOG_PREFIX;
@@ -15,6 +16,7 @@ use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use num_traits::cast::ToPrimitive;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
+use crate::types::Environment;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -251,7 +253,11 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 // corresponding PB definition.
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {
-    // This struct intentionally left blank (for now).
+    /// If set to true, root will update the list of canisters it owns before building the
+    /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
+    /// canisters.
+    /// Only the SNS governance canister can set this field to true currently.
+    pub update_canister_list: Option<bool>,
 }
 
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
@@ -327,8 +333,23 @@ impl SnsRootCanister {
     pub async fn get_sns_canisters_summary(
         self_ref: &'static LocalKey<RefCell<Self>>,
         management_canister_client: &mut impl ManagementCanisterClient,
-        own_canister_id: CanisterId,
+        ledger_canister_client: &mut impl LedgerCanisterClient,
+        env: &impl Environment,
+        update_canister_list: bool,
     ) -> GetSnsCanistersSummaryResponse {
+        let own_canister_id = env.canister_id();
+        let current_timestamp_seconds = env.now();
+
+        // Optionally update the canister list
+        if update_canister_list {
+            Self::poll_for_new_archive_canisters(
+                self_ref,
+                ledger_canister_client,
+                current_timestamp_seconds,
+            )
+            .await;
+        }
+
         // Get ID of other canisters.
         let (
             governance_canister_id,
@@ -348,7 +369,7 @@ impl SnsRootCanister {
         });
 
         // Get our status.
-        let root_status = get_root_status(governance_canister_id).await;
+        let root_status = get_root_status(env, governance_canister_id).await;
         let root_canister_summary = Some(CanisterSummary {
             canister_id: Some(own_canister_id.into()),
             status: Some(root_status),
@@ -385,7 +406,7 @@ impl SnsRootCanister {
         });
 
         // Get status of swap.
-        let swap_status = get_swap_status(swap_canister_id).await;
+        let swap_status = get_swap_status(env, swap_canister_id).await;
         let swap_canister_summary = Some(CanisterSummary {
             canister_id: Some(swap_canister_id),
             status: swap_status,
@@ -775,25 +796,42 @@ impl SnsRootCanister {
 /// Get the canister status of the Root canister controlled by the given Governance canister.
 /// Root cannot get its own status because only the controller of a canister is able to
 /// query the canister's status, and Root is solely controlled by Governance.
-async fn get_root_status(governance_id: PrincipalId) -> CanisterStatusResultV2 {
-    call(
-        CanisterId::new(governance_id).unwrap(),
-        "get_root_canister_status",
-        dfn_candid::candid,
-        (),
-    )
-    .await
-    .unwrap()
+async fn get_root_status(
+    env: &impl Environment,
+    governance_id: PrincipalId,
+) -> CanisterStatusResultV2 {
+    let result = env
+        .call_canister(
+            CanisterId::new(governance_id).unwrap(),
+            "get_root_canister_status",
+            Encode!(&()).unwrap(),
+        )
+        .await
+        .map_err(|err| {
+            let code = err.0.unwrap_or_default();
+            let msg = err.1;
+            format!(
+                "Could not get root status from governance: {}: {}",
+                code, msg
+            )
+        })
+        .unwrap();
+
+    Decode!(&result, CanisterStatusResultV2).unwrap()
 }
 
-async fn get_swap_status(swap_id: PrincipalId) -> Option<CanisterStatusResultV2> {
-    let response: Result<CanisterStatusResultV2, (Option<i32>, String)> = call(
-        CanisterId::new(swap_id).unwrap(),
-        "get_canister_status",
-        dfn_candid::candid,
-        (GetCanisterStatusRequest {},),
-    )
-    .await;
+async fn get_swap_status(
+    env: &impl Environment,
+    swap_id: PrincipalId,
+) -> Option<CanisterStatusResultV2> {
+    let response: Result<CanisterStatusResultV2, (Option<i32>, String)> = env
+        .call_canister(
+            CanisterId::new(swap_id).unwrap(),
+            "get_canister_status",
+            Encode!(&GetCanisterStatusRequest {}).unwrap(),
+        )
+        .await
+        .map(|bytes| Decode!(&bytes, CanisterStatusResultV2).unwrap());
 
     match response {
         Ok(canister_status) => Some(canister_status),
@@ -815,6 +853,7 @@ mod tests {
     use crate::pb::v1::ListSnsCanistersResponse;
     use dfn_core::api::now;
     use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
     use std::time::SystemTime;
 
     #[derive(Debug)]
@@ -913,6 +952,85 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone)]
+    enum EnvironmentCall {
+        CallCanister {
+            expected_canister: CanisterId,
+            expected_method: String,
+            expected_bytes: Option<Vec<u8>>,
+            result: Result<Vec<u8>, (Option<i32>, String)>,
+        },
+    }
+
+    struct TestEnvironment {
+        pub now: u64,
+        canister_id: CanisterId,
+        calls: Arc<Mutex<VecDeque<EnvironmentCall>>>,
+    }
+
+    #[async_trait]
+    impl Environment for TestEnvironment {
+        fn now(&self) -> u64 {
+            self.now
+        }
+
+        async fn call_canister(
+            &self,
+            canister_id: CanisterId,
+            method_name: &str,
+            arg: Vec<u8>,
+        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+            let result = match self.calls.lock().unwrap().pop_front().unwrap() {
+                EnvironmentCall::CallCanister {
+                    expected_canister,
+                    expected_method,
+                    expected_bytes,
+                    result,
+                } => {
+                    if expected_canister != canister_id || !expected_method.eq(method_name) {
+                        panic!(
+                            "An unexpected call_canister call was made. \
+                            Should have been {expected_canister:#?}, {expected_method}. \
+                            instead: {canister_id:#?} {method_name} (bytes omitted)"
+                        );
+                    }
+                    if let Some(bytes) = expected_bytes {
+                        assert_eq!(
+                            bytes, arg,
+                            "Expected bytes were not the same when calling \
+                        {} {}",
+                            expected_canister, expected_method
+                        );
+                    }
+
+                    result
+                }
+            };
+
+            result
+        }
+
+        fn canister_id(&self) -> CanisterId {
+            self.canister_id
+        }
+    }
+
+    /// Get a dummy value for CanisterStatusResultV2.
+    fn canister_status_result_v2_for_test(controller: PrincipalId) -> CanisterStatusResultV2 {
+        CanisterStatusResultV2::new(
+            CanisterStatusType::Running,
+            None,              // module_hash
+            controller,        // controller
+            vec![controller],  // controllers
+            NumBytes::new(42), // memory_size
+            43,                // cycles
+            44,                // compute_allocation
+            None,              // memory_allocation
+            45,                // freezing_threshold
+            46,                // idle_cycles_burned_per_day
+        )
+    }
+
     fn build_test_sns_root_canister() -> SnsRootCanister {
         SnsRootCanister {
             governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
@@ -957,18 +1075,7 @@ mod tests {
         let mut management_canister_client = MockManagementCanisterClient {
             calls: vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: dapp_canister_id,
-                result: Ok(CanisterStatusResultV2::new(
-                    CanisterStatusType::Running,
-                    None,                       // module_hash
-                    sns_root_canister_id,       // controller
-                    vec![sns_root_canister_id], // controllers
-                    NumBytes::new(42),          // memory_size
-                    43,                         // cycles
-                    44,                         // compute_allocation
-                    None,                       // memory_allocation
-                    45,                         // freezing_threshold
-                    46,                         // idle_cycles_burned_per_day
-                )),
+                result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
             }]
             .into(),
         };
@@ -1064,18 +1171,7 @@ mod tests {
         let mut management_canister_client = MockManagementCanisterClient {
             calls: vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: DAPP_CANISTER_ID.with(|i| *i),
-                result: Ok(CanisterStatusResultV2::new(
-                    CanisterStatusType::Running,
-                    None,                       // module_hash
-                    sns_root_canister_id,       // controller
-                    vec![sns_root_canister_id], // controllers
-                    NumBytes::new(42),          // memory_size
-                    43,                         // cycles
-                    44,                         // compute_allocation
-                    None,                       // memory_allocation
-                    45,                         // freezing_threshold
-                    46,                         // idle_cycles_burned_per_day
-                )),
+                result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
             }]
             .into(),
         };
@@ -1185,17 +1281,8 @@ mod tests {
             calls: vec![
                 ManagementCanisterClientCall::CanisterStatus {
                     expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::new(
-                        CanisterStatusType::Running,
-                        None,                              // module_hash
-                        sns_root_canister_id.into(),       // controller
-                        vec![sns_root_canister_id.into()], // controllers
-                        NumBytes::new(42),                 // memory_size
-                        43,                                // cycles
-                        44,                                // compute_allocation
-                        None,                              // memory_allocation
-                        45,                                // freezing_threshold
-                        46,                                // idle_cycles_burned_per_day
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
                     )),
                 },
                 ManagementCanisterClientCall::UpdateSettings {
@@ -1302,17 +1389,8 @@ mod tests {
             calls: vec![
                 ManagementCanisterClientCall::CanisterStatus {
                     expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::new(
-                        CanisterStatusType::Running,
-                        None,                              // module_hash
-                        sns_root_canister_id.into(),       // controller
-                        vec![sns_root_canister_id.into()], // controllers
-                        NumBytes::new(42),                 // memory_size
-                        43,                                // cycles
-                        44,                                // compute_allocation
-                        None,                              // memory_allocation
-                        45,                                // freezing_threshold
-                        46,                                // idle_cycles_burned_per_day
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
                     )),
                 },
                 ManagementCanisterClientCall::UpdateSettings {
@@ -1872,6 +1950,195 @@ mod tests {
             &SNS_ROOT_CANISTER,
             &expected_archive_canister_ids,
             now + ONE_DAY_SECONDS,
+        );
+    }
+
+    #[tokio::test]
+    async fn list_of_canisters_updates_when_update_canister_list_is_true() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+
+        let root_canister_id = CanisterId::from_u64(1000);
+        let expected_archive_canister_ids =
+            vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
+
+        let (governance_canister_id, ledger_canister_id, swap_canister_id) = SNS_ROOT_CANISTER
+            .with(|sns_root| {
+                let sns_root = sns_root.borrow();
+                (
+                    sns_root.governance_canister_id(),
+                    sns_root.ledger_canister_id(),
+                    sns_root.swap_canister_id(),
+                )
+            });
+
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: governance_canister_id,
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: ledger_canister_id,
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: expected_archive_canister_ids[0].get(),
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: governance_canister_id,
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: ledger_canister_id,
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: expected_archive_canister_ids[0].get(),
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: expected_archive_canister_ids[1].get(),
+                    result: Ok(canister_status_result_v2_for_test(root_canister_id.get())),
+                },
+            ]
+            .into(),
+        };
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0],
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    }]),
+                },
+                LedgerCanisterClientCall::Archives {
+                    result: Ok(vec![
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[0],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                        ArchiveInfo {
+                            canister_id: expected_archive_canister_ids[1],
+                            block_range_start: Default::default(),
+                            block_range_end: Default::default(),
+                        },
+                    ]),
+                },
+            ]
+            .into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        let env = TestEnvironment {
+            now,
+            canister_id: root_canister_id,
+            calls: Arc::new(Mutex::new(
+                vec![
+                    EnvironmentCall::CallCanister {
+                        expected_canister: CanisterId::try_from(governance_canister_id).unwrap(),
+                        expected_method: "get_root_canister_status".to_string(),
+                        expected_bytes: None,
+                        result: Ok(Encode!(&canister_status_result_v2_for_test(
+                            governance_canister_id
+                        ))
+                        .unwrap()),
+                    },
+                    EnvironmentCall::CallCanister {
+                        expected_canister: CanisterId::try_from(swap_canister_id).unwrap(),
+                        expected_method: "get_canister_status".to_string(),
+                        expected_bytes: None,
+                        result: Ok(Encode!(&canister_status_result_v2_for_test(
+                            governance_canister_id
+                        ))
+                        .unwrap()),
+                    },
+                    EnvironmentCall::CallCanister {
+                        expected_canister: CanisterId::try_from(governance_canister_id).unwrap(),
+                        expected_method: "get_root_canister_status".to_string(),
+                        expected_bytes: None,
+                        result: Ok(Encode!(&canister_status_result_v2_for_test(
+                            governance_canister_id
+                        ))
+                        .unwrap()),
+                    },
+                    EnvironmentCall::CallCanister {
+                        expected_canister: CanisterId::try_from(swap_canister_id).unwrap(),
+                        expected_method: "get_canister_status".to_string(),
+                        expected_bytes: None,
+                        result: Ok(Encode!(&canister_status_result_v2_for_test(
+                            governance_canister_id
+                        ))
+                        .unwrap()),
+                    },
+                ]
+                .into(),
+            )),
+        };
+
+        // Step 2: Call the code under test.
+        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &mut ledger_canister_client, now)
+            .await;
+
+        // We should now have a single Archive canister registered.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        let first_result = SnsRootCanister::get_sns_canisters_summary(
+            &SNS_ROOT_CANISTER,
+            &mut management_canister_client,
+            &mut ledger_canister_client,
+            &env,
+            false,
+        )
+        .await;
+
+        // No chnage should happen after our first call as it doesn't force an update.
+        assert_archive_poll_state_change(
+            &SNS_ROOT_CANISTER,
+            &expected_archive_canister_ids[0..1],
+            now,
+        );
+
+        let second_result = SnsRootCanister::get_sns_canisters_summary(
+            &SNS_ROOT_CANISTER,
+            &mut management_canister_client,
+            &mut ledger_canister_client,
+            &env,
+            true,
+        )
+        .await;
+
+        assert_eq!(
+            first_result
+                .archives
+                .into_iter()
+                .map(|status| CanisterId::try_from(status.canister_id.unwrap()).unwrap())
+                .collect::<Vec<_>>(),
+            expected_archive_canister_ids[0..1].to_vec()
+        );
+
+        assert_archive_poll_state_change(&SNS_ROOT_CANISTER, &expected_archive_canister_ids, now);
+        assert_eq!(
+            second_result
+                .archives
+                .into_iter()
+                .map(|status| CanisterId::try_from(status.canister_id.unwrap()).unwrap())
+                .collect::<Vec<_>>(),
+            expected_archive_canister_ids.to_vec()
         );
     }
 }

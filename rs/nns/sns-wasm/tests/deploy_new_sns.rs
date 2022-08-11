@@ -171,7 +171,9 @@ fn test_canisters_are_created_and_installed() {
             .update_(
                 "get_sns_canisters_summary",
                 candid_one,
-                GetSnsCanistersSummaryRequest {},
+                GetSnsCanistersSummaryRequest {
+                    update_canister_list: None,
+                },
             )
             .await
             .unwrap();

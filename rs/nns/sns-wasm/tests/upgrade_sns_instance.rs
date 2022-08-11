@@ -138,7 +138,10 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         &machine,
         root,
         "get_sns_canisters_summary",
-        Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
+        Encode!(&GetSnsCanistersSummaryRequest {
+            update_canister_list: None
+        })
+        .unwrap(),
     )
     .unwrap();
     let status_summary = Decode!(&status_summary, GetSnsCanistersSummaryResponse).unwrap();
@@ -229,7 +232,10 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
             &machine,
             root,
             "get_sns_canisters_summary",
-            Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: None
+            })
+            .unwrap(),
         ) {
             Ok(summary) => summary,
             Err(_) => continue,
