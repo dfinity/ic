@@ -16,8 +16,8 @@ use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, consensus, execution, icrc1_agent_test, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    btc_integration, canister_http, consensus, execution, icrc1_agent_test, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
@@ -298,7 +298,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            /*
+            /* Moved to staging
             pot_with_setup(
                 "btc_pot",
                 btc_integration::btc::config,
@@ -328,13 +328,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority),
                 ]),
             ),
-            /*
-            pot(
-                "create_subnet",
-                nns_tests::create_subnet::pre_master_config(),
-                par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
-            ),
-             */
             execution::upgraded_pots::general_execution_pot(),
             execution::upgraded_pots::cycles_restrictions_pot(),
             execution::upgraded_pots::inter_canister_queries(),
@@ -485,64 +478,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            /*
-            pot(
-                "tecdsa_add_nodes_pot",
-                tecdsa::tecdsa_add_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_add_nodes",
-                    tecdsa::tecdsa_add_nodes_test::test,
-                )]),
-            ),
-            pot(
-                "tecdsa_remove_nodes_pot",
-                tecdsa::tecdsa_remove_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_remove_nodes",
-                    tecdsa::tecdsa_remove_nodes_test::test,
-                )]),
-            ),
-            pot_with_setup(
-                "tecdsa_signature_same_subnet_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_same_subnet",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_life_cycle",
-                tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                seq(vec![t(
-                    "test_threshold_ecdsa_life_cycle",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_from_other_subnet_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_from_other_subnet",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_fails_without_cycles_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_fails_without_cycles",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_from_nns_without_cycles_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_from_nns_without_cycles",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
-                )])
-            ),
-             */
         ],
     ).with_alert(TEST_FAILURE_CHANNEL));
 
@@ -577,11 +512,32 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
-                // TODO: Re-enable the test, once the issue is resolved.
                 pot(
                     "xnet_120_subnets_pot",
                     xnet_120_subnets.build(),
                     par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
+                ),
+                pot_with_setup(
+                    "btc_pot",
+                    btc_integration::btc::config,
+                    par(vec![sys_t(
+                        "btc_get_balance",
+                        btc_integration::btc::get_balance,
+                    )]),
+                ),
+                pot_with_setup(
+                    "boundary_nodes_pot",
+                    boundary_nodes_integration::boundary_nodes::config,
+                    par(vec![
+                        sys_t(
+                            "boundary_nodes_test",
+                            boundary_nodes_integration::boundary_nodes::test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_test,
+                        ),
+                    ]),
                 ),
                 pot_with_setup(
                     "canister_http",
@@ -629,20 +585,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    // let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
+    //let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(suite(
         "nightly_long_duration",
         vec![
-            // Readiness of the node's status endpoint (after VM boot) is still an issue (VER-1791).
-            // Having that many nodes results in a substantial probability of the IC setup failure.
-            // TODO: Re-enable the test, once the issue is resolved.
-            /*
+            /* running in staging suite for the time being
             pot(
                 "xnet_120_subnets_pot",
                 xnet_120_subnets.build(),
                 par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-            ),
-            */
+            ),*/
             pot_with_setup(
                 "default_subnet_workload_pot",
                 networking::subnet_update_workload::default_config,
