@@ -16,7 +16,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 
 /// A Crypto Component interface to run Interactive-DKG
 /// (for canister threshold signatures).
@@ -198,7 +198,7 @@ pub trait IDkgProtocol {
     ///   be serialized into a key id
     fn retain_active_transcripts(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscript>,
+        active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 

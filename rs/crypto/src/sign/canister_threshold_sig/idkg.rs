@@ -14,7 +14,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptParams,
 };
 use ic_types::NodeId;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 
 mod complaint;
 mod dealing;
@@ -345,7 +345,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
 
     fn retain_active_transcripts(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscript>,
+        active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
