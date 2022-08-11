@@ -16,7 +16,7 @@ use ic_sns_governance::pb::v1::{
     neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
 };
 use maplit::btreemap;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
 pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
@@ -33,8 +33,8 @@ impl FractionalDeveloperVotingPower {
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<Account, Tokens>> {
-        let mut accounts = HashMap::new();
+    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
+        let mut accounts = BTreeMap::new();
 
         self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
         self.insert_treasury_accounts(sns_canister_ids, &mut accounts)?;
@@ -278,7 +278,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_developer_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.developer_distribution()?.developer_neurons {
             let principal_id = neuron_distribution.controller()?;
@@ -297,7 +297,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_treasury_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let treasury = self.treasury_distribution()?;
 
@@ -319,7 +319,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_swap_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let swap = self.swap_distribution()?;
 
@@ -346,7 +346,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_airdrop_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
             let principal_id = neuron_distribution.controller()?;
