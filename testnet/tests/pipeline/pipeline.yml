@@ -147,6 +147,7 @@ rejoin-nightly:
 # SCENARIO TEST deploy_nns_prod_state: Tests the NNS state deployment script
 nns-state-deployment-test-nightly:
   extends: .prod-nightly-test-group-2
+  allow_failure: true #nns state deployment is not needed for release of replica
   script:
     - |
       set -eExou pipefail
