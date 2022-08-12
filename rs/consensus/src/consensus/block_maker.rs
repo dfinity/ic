@@ -403,7 +403,7 @@ impl BlockMaker {
             pool,
         );
         if upgrade_pending.is_none() {
-            error!(self.log, "Failed to check if upgrade is pending!");
+            warn!(self.log, "Failed to check if upgrade is pending!");
         }
         if upgrade_pending? {
             let upgrade_finalized = is_upgrade_finalized(
@@ -413,7 +413,7 @@ impl BlockMaker {
                 pool,
             );
             if upgrade_finalized.is_none() {
-                error!(self.log, "Failed to check if upgrade is finalized!");
+                warn!(self.log, "Failed to check if upgrade is finalized!");
             }
             if upgrade_finalized.unwrap_or(false) {
                 None
