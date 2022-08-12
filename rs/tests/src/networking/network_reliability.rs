@@ -519,7 +519,7 @@ fn limit_tc_randomly_ssh_command(mut rng: &mut ChaCha8Rng) -> String {
     let latency_dist = Uniform::from(LATENCY_MIN..=LATENCY_MAX);
     let drops_perc_dist = Uniform::from(DROPS_PERC_MIN..=DROPS_PERC_MAX);
     let cfg = util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().p2p_flows.get(0).unwrap().server_port;
+    let p2p_listen_port = cfg.transport.unwrap().listening_port;
     // The second command deletes existing tc rules (if present).
     // The last command reads the active tc rules.
     format!(

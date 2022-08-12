@@ -2,7 +2,7 @@ use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
+use ic_config::{crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ic00_types::CanisterInstallMode;
@@ -381,12 +381,12 @@ where
 
         let subnet_type = get_subnet_type(&*registry, subnet_id, registry.get_latest_version());
 
-        config.transport.node_ip = "0.0.0.0".to_string();
-        config.transport.p2p_flows = vec![TransportFlowConfig {
-            flow_tag: 0,
-            server_port: 1234,
-            queue_size: 0,
-        }];
+        config.transport = TransportConfig {
+            node_ip: "0.0.0.0".to_string(),
+            legacy_flow_tag: 0,
+            listening_port: 1234,
+            send_queue_size: 0,
+        };
         let temp_node = node_id;
         let (
             _,

@@ -10,10 +10,9 @@
     // =======================================================
     transport: {
         node_ip: "{{ ipv6_address }}",
-        // mapping of flow ids to TCP port number, also depth of send queue
-        p2p_flows: [
-        {flow_tag: 1234, server_port: 4100, queue_size: 51200}
-        ],
+        legacy_flow_tag: 1234,
+        listening_port: 4100,
+        send_queue_size: 51200,
     },
     // ============================================
     // Configuration of registry client

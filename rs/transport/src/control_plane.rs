@@ -85,29 +85,25 @@ impl TransportImpl {
         };
 
         // TODO: P2P-514
-        let mut queue_size_map = HashMap::new();
         let flow_ips = get_flow_ips(peer_record)?;
-        for flow_config in &self.config.p2p_flows {
-            let flow_tag = FlowTag::from(flow_config.flow_tag);
-            queue_size_map.insert(flow_tag, QueueSize::from(flow_config.queue_size));
-            if role == ConnectionRole::Server {
-                let peer_ip = flow_ips
-                    .get(&flow_tag)
-                    .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
-                let flow_label = get_flow_label(&peer_ip, peer_id);
-                let flow_state = FlowState::new(
-                    self.log.clone(),
-                    flow_tag,
-                    flow_label.clone(),
-                    ConnectionState::Listening,
-                    QueueSize::from(flow_config.queue_size),
-                    self.send_queue_metrics.clone(),
-                    self.control_plane_metrics.clone(),
-                );
-                peer_state
-                    .flow_map
-                    .insert(flow_tag, RwLock::new(flow_state));
-            }
+        let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
+        if role == ConnectionRole::Server {
+            let peer_ip = flow_ips
+                .get(&flow_tag)
+                .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
+            let flow_label = get_flow_label(&peer_ip, peer_id);
+            let flow_state = FlowState::new(
+                self.log.clone(),
+                flow_tag,
+                flow_label,
+                ConnectionState::Listening,
+                QueueSize::from(self.config.send_queue_size),
+                self.send_queue_metrics.clone(),
+                self.control_plane_metrics.clone(),
+            );
+            peer_state
+                .flow_map
+                .insert(flow_tag, RwLock::new(flow_state));
         }
         if role == ConnectionRole::Server {
             peer_map.insert(*peer_id, peer_state);
@@ -128,17 +124,6 @@ impl TransportImpl {
             };
 
             let flow_tag = FlowTag::from(flow_endpoint.flow_tag);
-            let queue_size = match queue_size_map.get(&flow_tag) {
-                Some(queue_size) => queue_size,
-                None => {
-                    error!(
-                        self.log,
-                        "ControlPlane::start_peer(): TransportConfig NodeRecord mismatch: flow_tag = {:?}",
-                        flow_endpoint.flow_tag
-                    );
-                    continue;
-                }
-            };
 
             let peer_ip = IpAddr::from_str(endpoint.ip_addr.as_str())
                 .unwrap_or_else(|_| panic!("Invalid node IP: {}", endpoint.ip_addr));
@@ -159,7 +144,7 @@ impl TransportImpl {
                 flow_tag,
                 flow_label.clone(),
                 ConnectionState::Connecting(connecting_state),
-                *queue_size,
+                QueueSize::from(self.config.send_queue_size),
                 self.send_queue_metrics.clone(),
                 self.control_plane_metrics.clone(),
             );
@@ -610,19 +595,18 @@ impl TransportImpl {
         let _rt_enter_guard = self.rt_handle.enter();
         // Bind to the server ports.
         let mut listeners = Vec::new();
-        for flow_config in &self.config.p2p_flows {
-            let server_addr = SocketAddr::new(self.node_ip, flow_config.server_port);
-            listeners.push((
-                flow_config.flow_tag,
-                flow_config.server_port,
-                Self::start_listener(&server_addr).unwrap_or_else(|err| {
-                    panic!(
-                        "Failed to init listener: local_addr = {:?}, error = {:?}",
-                        server_addr, err
-                    )
-                }),
-            ));
-        }
+
+        let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
+        listeners.push((
+            self.config.legacy_flow_tag,
+            self.config.listening_port,
+            Self::start_listener(&server_addr).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to init listener: local_addr = {:?}, error = {:?}",
+                    server_addr, err
+                )
+            }),
+        ));
 
         let mut accept_ports = HashMap::new();
         for (config_flow_tag, _, tcp_listener) in listeners {
@@ -640,7 +624,7 @@ mod tests {
     use crate::transport::create_transport;
     use async_trait::async_trait;
     use ic_base_types::{NodeId, RegistryVersion};
-    use ic_config::transport::{TransportConfig, TransportFlowConfig};
+    use ic_config::transport::TransportConfig;
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces_transport::{TransportEvent, TransportStateChange};
     use ic_metrics::MetricsRegistry;
@@ -707,16 +691,12 @@ mod tests {
             registry_and_data.registry.update_to_latest_version();
             let rt = tokio::runtime::Runtime::new().unwrap();
 
-            let mut client_config_1 = TransportConfig {
+            let client_config_1 = TransportConfig {
                 node_ip: "0.0.0.0".to_string(),
-                p2p_flows: Vec::new(),
+                legacy_flow_tag: FLOW_TAG_1,
+                listening_port: PORT_1,
+                send_queue_size: 10,
             };
-            let flow_internal_1 = TransportFlowConfig {
-                flow_tag: FLOW_TAG_1,
-                server_port: PORT_1,
-                queue_size: 10,
-            };
-            client_config_1.p2p_flows.push(flow_internal_1);
             let control_plane_1 = create_transport(
                 NODE_ID_1,
                 client_config_1,
@@ -727,16 +707,12 @@ mod tests {
                 logger.clone(),
             );
 
-            let mut client_config_2 = TransportConfig {
+            let client_config_2 = TransportConfig {
                 node_ip: "0.0.0.0".to_string(),
-                p2p_flows: Vec::new(),
+                legacy_flow_tag: FLOW_TAG_2,
+                listening_port: PORT_2,
+                send_queue_size: 10,
             };
-            let flow_internal_2 = TransportFlowConfig {
-                flow_tag: FLOW_TAG_2,
-                server_port: PORT_2,
-                queue_size: 10,
-            };
-            client_config_2.p2p_flows.push(flow_internal_2);
             let control_plane_2 = create_transport(
                 NODE_ID_2,
                 client_config_2,

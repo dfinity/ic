@@ -10,10 +10,9 @@
     // =======================================================
     transport: {
         node_ip: "{{ p2p_listen_ip }}",
-        // mapping of flow ids to TCP port number, also depth of send queue
-        p2p_flows: [
-        {flow_tag: 1234, server_port: {{ p2p_listen_port }}, queue_size: 51200}
-        ],
+        listening_port: {{ p2p_listen_port }},
+        send_queue_size: 51200,
+        legacy_flow_tag: 1234,
     },
     // ============================================
     // Configuration of registry client

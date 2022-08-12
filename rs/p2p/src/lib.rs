@@ -168,11 +168,7 @@ pub fn start_p2p(
     malicious_flags: MaliciousFlags,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
-    let p2p_flow_tags = transport_config
-        .p2p_flows
-        .iter()
-        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
-        .collect();
+    let p2p_flow_tags = vec![FlowTag::from(transport_config.legacy_flow_tag)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
         subnet_id,
