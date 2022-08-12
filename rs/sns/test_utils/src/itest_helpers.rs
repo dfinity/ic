@@ -27,7 +27,10 @@ use ic_sns_governance::{
             AddNeuronPermissions, ClaimOrRefresh, Command, Configure, Disburse, Follow,
             IncreaseDissolveDelay, RegisterVote, RemoveNeuronPermissions, Split, StartDissolving,
         },
-        manage_neuron_response::Command as CommandResponse,
+        manage_neuron_response::{
+            AddNeuronPermissionsResponse, Command as CommandResponse,
+            RemoveNeuronPermissionsResponse,
+        },
         proposal::Action,
         Account as AccountProto, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         Governance, GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons,
@@ -886,13 +889,30 @@ impl SnsCanisters<'_> {
             .await
     }
 
-    pub async fn add_neuron_permissions(
+    pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
         subaccount: &Subaccount,
         principal_to_add: Option<PrincipalId>,
         permissions: Vec<i32>,
     ) {
+        let response = self
+            .add_neuron_permissions(sender, subaccount, principal_to_add, permissions)
+            .await;
+
+        match response {
+            Ok(_add_neuron_permission_response) => (),
+            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
+        };
+    }
+
+    pub async fn add_neuron_permissions(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        principal_to_add: Option<PrincipalId>,
+        permissions: Vec<i32>,
+    ) -> Result<AddNeuronPermissionsResponse, GovernanceError> {
         let add_neuron_permissions = AddNeuronPermissions {
             principal_id: principal_to_add,
             permissions_to_add: Some(NeuronPermissionList { permissions }),
@@ -913,8 +933,29 @@ impl SnsCanisters<'_> {
             .expect("Error calling manage_neuron");
 
         match manage_neuron_response.command.unwrap() {
-            CommandResponse::AddNeuronPermission(_) => (),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            CommandResponse::AddNeuronPermission(response) => Ok(response),
+            CommandResponse::Error(error) => Err(error),
+            response => panic!(
+                "Unexpected response from manage_neuron::AddNeuronPermissions: {:?}",
+                response
+            ),
+        }
+    }
+
+    pub async fn remove_neuron_permissions_or_panic(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        principal_to_remove: &PrincipalId,
+        permissions: Vec<i32>,
+    ) {
+        let response = self
+            .remove_neuron_permissions(sender, subaccount, principal_to_remove, permissions)
+            .await;
+
+        match response {
+            Ok(_remove_neuron_permissions_response) => (),
+            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
         };
     }
 
@@ -924,7 +965,7 @@ impl SnsCanisters<'_> {
         subaccount: &Subaccount,
         principal_to_remove: &PrincipalId,
         permissions: Vec<i32>,
-    ) {
+    ) -> Result<RemoveNeuronPermissionsResponse, GovernanceError> {
         let remove_neuron_permissions = RemoveNeuronPermissions {
             principal_id: Some(*principal_to_remove),
             permissions_to_remove: Some(NeuronPermissionList { permissions }),
@@ -945,9 +986,13 @@ impl SnsCanisters<'_> {
             .expect("Error calling manage_neuron");
 
         match manage_neuron_response.command.unwrap() {
-            CommandResponse::RemoveNeuronPermission(_) => (),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
-        };
+            CommandResponse::RemoveNeuronPermission(response) => Ok(response),
+            CommandResponse::Error(error) => Err(error),
+            response => panic!(
+                "Unexpected response from manage_neuron::RemoveNeuronPermissions: {:?}",
+                response
+            ),
+        }
     }
 
     pub async fn manage_nervous_system_parameters(
