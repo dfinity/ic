@@ -5,6 +5,7 @@ edition = "2018"
 
 [[bin]]
 name = "governance_upgrader"
+path = "src/main.rs"
 
 [dependencies]
 bytes = "1.0.1"
