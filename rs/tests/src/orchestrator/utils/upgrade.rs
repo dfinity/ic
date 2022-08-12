@@ -157,7 +157,7 @@ pub(crate) fn assert_assigned_replica_version(
 pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
-        Ok(_) => return Err("Replica is not healty".to_string()),
+        Ok(_) => return Err("Replica is not healthy".to_string()),
         Err(err) => return Err(err.to_string()),
     }
     .impl_version;

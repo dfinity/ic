@@ -18,7 +18,6 @@ use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::*;
 use crate::util::block_on;
-use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
@@ -214,36 +213,26 @@ fn upgrade_to(
 
 // Stops the node and makes sure it becomes unreachable
 pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
-    wait_node_healthy(logger, app_node);
+    app_node
+        .await_status_is_healthy()
+        .expect("Node not healthy");
     info!(logger, "Kill node: {}", app_node.get_ip_addr());
     app_node.vm().kill();
-    wait_node_unreachable(logger, app_node);
+    app_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
     info!(logger, "Node killed: {}", app_node.get_ip_addr());
 }
 
 // Starts a node and makes sure it becomes reachable
 pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
-    wait_node_unreachable(logger, app_node);
+    app_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
     info!(logger, "Starting node: {}", app_node.get_ip_addr());
     app_node.vm().start();
-    wait_node_healthy(logger, app_node);
+    app_node
+        .await_status_is_healthy()
+        .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
-}
-
-fn wait_node_healthy(logger: &Logger, node: &IcNodeSnapshot) {
-    retry(logger.clone(), secs(600), secs(20), || {
-        node.status_is_healthy()
-            .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
-    })
-    .expect("Node not healty");
-}
-
-pub fn wait_node_unreachable(logger: &Logger, node: &IcNodeSnapshot) {
-    retry(logger.clone(), secs(600), secs(20), || {
-        match node.status_is_healthy() {
-            Ok(true) => bail!("Still ready!"),
-            _ => Ok(()),
-        }
-    })
-    .expect("Node still healty");
 }

@@ -26,7 +26,6 @@ use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
-use crate::orchestrator::upgrade_downgrade::wait_node_unreachable;
 use crate::util::*;
 use canister_test;
 use ic_base_types::NodeId;
@@ -135,7 +134,7 @@ pub fn test(env: TestEnv) {
     }
     // Second loop to paralelize the effects of the previous one
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
-        wait_node_unreachable(&env.logger(), n);
+        n.await_status_is_unavailable().expect("Node still healthy");
     }
 
     // Assert that `update` call to the canister succeeds.
@@ -148,7 +147,9 @@ pub fn test(env: TestEnv) {
 
     // Kill one more node and break consensus.
     newly_assigned_nodes[kill_nodes_count].vm().kill();
-    wait_node_unreachable(&env.logger(), &newly_assigned_nodes[kill_nodes_count]);
+    newly_assigned_nodes[kill_nodes_count]
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
 
     // Assert that `update` call to the canister now fails.
     assert!(block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_3, delay)).is_err());

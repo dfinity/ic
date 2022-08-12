@@ -207,7 +207,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .try_read_stable(0, UPDATE_MSG_1.len() as u32)
                 .await,
             UPDATE_MSG_1.to_vec(),
-            "could not validate that subnet is healty: universal canister is broken"
+            "could not validate that subnet is healthy: universal canister is broken"
         );
     });
 
