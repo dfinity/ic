@@ -9,6 +9,7 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     visibility = [
+        "//rs/certified_vars:__pkg__",
         "//rs/certified_vars/test-utils:__pkg__",
         "//rs/crypto:__subpackages__",
         "//rs/identity:__pkg__",
