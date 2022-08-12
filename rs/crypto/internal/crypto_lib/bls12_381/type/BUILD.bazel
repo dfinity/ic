@@ -5,6 +5,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "@crate_index//:bls12_381",
+    "@crate_index//:hex",
     "@crate_index//:lazy_static",
     "@crate_index//:miracl_core_bls12381",
     "@crate_index//:pairing",
@@ -20,7 +21,6 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "@crate_index//:criterion",
-    "@crate_index//:hex",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
