@@ -1,4 +1,5 @@
 #![deny(clippy::unwrap_used)]
+#![forbid(unsafe_code)]
 
 //! Threshold signatures using BLS12-381.
 

@@ -1,6 +1,5 @@
 //! Standard arithmetic operations such as addition
 
-use super::common_traits::zeroize_fr;
 use super::*;
 use std::borrow::Borrow;
 use std::iter::Sum;
@@ -127,7 +126,7 @@ impl<'a, B: Borrow<Polynomial>> ops::Mul<B> for &'a Polynomial {
                 coeffs[i + j].add_assign(&tmp);
             }
         }
-        zeroize_fr(&mut tmp);
+        tmp.zeroize();
         Polynomial::from(coeffs)
     }
 }
