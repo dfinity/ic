@@ -23,7 +23,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::nominal_cycles::NominalCycles;
+use ic_types::{nominal_cycles::NominalCycles, Cycles};
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -762,6 +762,9 @@ pub struct Stream {
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
+
+    /// Sum of cycles transferred over this stream.
+    sum_cycles_transferred: Cycles,
 }
 
 impl Default for Stream {
@@ -770,11 +773,13 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
+        let sum_cycles_transferred = Cycles::zero();
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            sum_cycles_transferred,
         }
     }
 }
@@ -810,12 +815,15 @@ impl TryFrom<pb_queues::Stream> for Stream {
             .iter()
             .map(|i| StreamIndex::new(*i))
             .collect();
+        
+        let sum_cycles_transferred = Cycles::zero();
 
         Ok(Self {
             messages,
             signals_end: item.signals_end.into(),
             reject_signals,
             messages_size_bytes,
+            sum_cycles_transferred,
         })
     }
 }
@@ -824,11 +832,13 @@ impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let sum_cycles_transferred = Cycles::zero();
         Self {
             messages,
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
+            sum_cycles_transferred,
         }
     }
 
@@ -839,11 +849,13 @@ impl Stream {
         reject_signals: VecDeque<StreamIndex>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let sum_cycles_transferred = Cycles::zero();
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            sum_cycles_transferred,
         }
     }
 
@@ -959,6 +971,16 @@ impl Stream {
     /// Increments the index of the last sent signal.
     pub fn increment_signals_end(&mut self) {
         self.signals_end.inc_assign()
+    }
+
+    /// Returns the sum of cycles transferred.
+    pub fn sum_cycles_transferred(&self) -> Cycles {
+        self.sum_cycles_transferred
+    }
+
+    /// Returns the sum of cycles transferred.
+    pub fn set_sum_cycles_transferred(&mut self, new_sum_cycles_transferred: Cycles) {
+        self.sum_cycles_transferred = new_sum_cycles_transferred
     }
 
     /// Appends the given reject signal to the tail of the reject signals.
@@ -1151,6 +1173,16 @@ impl<'a> StreamHandle<'a> {
     /// Returns the index just beyond the last sent signal.
     pub fn signals_end(&self) -> StreamIndex {
         self.stream.signals_end
+    }
+
+    /// Returns the sum of cycles transferred.
+    pub fn sum_cycles_transferred(&self) -> Cycles {
+        self.stream.sum_cycles_transferred
+    }
+
+    /// Returns the sum of cycles transferred.
+    pub fn set_sum_cycles_transferred(&mut self, new_sum_cycles_transferred: Cycles) {
+        self.stream.sum_cycles_transferred = new_sum_cycles_transferred
     }
 
     /// Appends the given message to the tail of the stream.

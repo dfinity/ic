@@ -26,14 +26,14 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
     },
     xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
-    SubnetId,
+    SubnetId, Cycles,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
     convert::TryInto,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, ops::Add,
 };
 
 #[cfg(test)]
@@ -53,6 +53,10 @@ struct StreamHandlerMetrics {
     pub xnet_message_backlog: IntGaugeVec,
     /// Incoming stream index, by sending subnet.
     pub inc_stream_index: IntGaugeVec,
+    /// Incoming cycles hi 64bit part of 128bit cycles, by sending subnet.
+    pub inc_cycles_hi: IntGaugeVec,
+    /// Incoming cycles lo 64bit part of 128bit cycles, by sending subnet.
+    pub inc_cycles_lo: IntGaugeVec,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking the
     /// receival of reject signals for requests.
     pub critical_error_reject_signals_for_request: IntCounter,
@@ -76,6 +80,8 @@ const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count"
 
 const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
+const METRIC_INC_CYCLES_HI: &str = "mr_inc_cycles_hi";
+const METRIC_INC_CYCLES_LO: &str = "mr_inc_cycles_lo";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
@@ -126,6 +132,16 @@ impl StreamHandlerMetrics {
             "Incoming stream index, by sending subnet.",
             &[LABEL_REMOTE],
         );
+        let inc_cycles_hi = metrics_registry.int_gauge_vec(
+            METRIC_INC_CYCLES_HI,
+            "Incoming stream index, by sending subnet.",
+            &[LABEL_REMOTE],
+        );
+        let inc_cycles_lo = metrics_registry.int_gauge_vec(
+            METRIC_INC_CYCLES_LO,
+            "Incoming stream index, by sending subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_reject_signals_for_request =
             metrics_registry.error_counter(CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST);
         let critical_error_induct_response_failed =
@@ -162,6 +178,8 @@ impl StreamHandlerMetrics {
             gced_xnet_reject_signals,
             xnet_message_backlog,
             inc_stream_index,
+            inc_cycles_hi,
+            inc_cycles_lo,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
@@ -188,6 +206,9 @@ pub(crate) struct StreamHandlerImpl {
     max_canister_memory_size: NumBytes,
     subnet_memory_capacity: NumBytes,
     subnet_message_memory_capacity: NumBytes,
+
+    /// storing cycles per subnet (stream)
+    //cycle_map: BTreeMap<SubnetId, Cycles>,
 
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the
@@ -216,6 +237,7 @@ impl StreamHandlerImpl {
             max_canister_memory_size: hypervisor_config.max_canister_memory_size,
             subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
             subnet_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
+            //cycle_map: BTreeMap::new(),
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -611,6 +633,7 @@ impl StreamHandlerImpl {
                 .route(msg.receiver().get());
 
             let payload_size = msg.payload_size_bytes().get();
+            let cycles_in_msg = msg.cycles();
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -627,7 +650,31 @@ impl StreamHandlerImpl {
                         self.metrics
                             .inc_stream_index
                             .with_label_values(&[&remote_subnet_id.to_string()])
-                            .set(stream_index.get().try_into().unwrap());
+                            .set(stream.messages_begin().get() as i64); // option to mirror what is being sent
+                            //.set(stream_index.get().try_into().unwrap()); // +1 needed, since this is actual index, not next index
+                        //let old_cycles = &match self.cycle_map.get(&remote_subnet_id) {
+                        //    Some(c) => {
+                        //        *c
+                        //     },
+                        //     None => {
+                        //         Cycles::zero()
+                        //     }
+                        // };
+                        // let new_cycles = old_cycles.add(cycles_in_msg);
+                        // self.cycle_map.insert(remote_subnet_id, new_cycles);
+                        let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
+                        stream.set_sum_cycles_transferred(new_cycles_sum);
+                        let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
+                        self.metrics
+                            .inc_cycles_hi
+                            .with_label_values(&[&remote_subnet_id.to_string()])
+                            .set(cycles_hi as i64);
+                        self.metrics
+                            .inc_cycles_lo
+                            .with_label_values(&[&remote_subnet_id.to_string()])
+                            .set(cycles_lo as i64);
+                        // self.cycle_map.insert(remote_subnet_id, new_cycles);
+                        // cycle_map: BTreeMap<SubnetId, Cycles>,
                         // count cycles (using msg), for requests, add to balance
                         // for refund, subtract?
                         // ####
