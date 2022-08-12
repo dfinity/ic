@@ -1,13 +1,13 @@
 //! Type conversion for using the Miracl-based FS library.
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
+use crate::ni_dkg::fs_ni_dkg::{nizk_chunking::ProofChunking, nizk_sharing::ProofSharing};
 use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked,
     miracl_g1_to_bytes, miracl_g2_from_bytes, miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
-use ic_crypto_internal_fs_ni_dkg::{nizk_chunking::ProofChunking, nizk_sharing::ProofSharing};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey,

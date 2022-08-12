@@ -1,4 +1,4 @@
-use ic_crypto_internal_fs_ni_dkg::utils::*;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::utils::RAND_ChaCha20;
 use miracl_core::rand::RAND;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;

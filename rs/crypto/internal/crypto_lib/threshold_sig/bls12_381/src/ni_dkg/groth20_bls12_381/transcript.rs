@@ -7,9 +7,9 @@ use super::dealing::{
 use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::crypto::x_for_index;
+use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
 use ic_crypto_internal_bls12_381_type::Scalar;
-use ic_crypto_internal_fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;

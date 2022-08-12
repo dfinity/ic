@@ -1,7 +1,7 @@
 //! Proofs of correct sharing
 
-use crate::random_oracles::*;
-use crate::utils::*;
+use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
+use crate::ni_dkg::fs_ni_dkg::utils::*;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;

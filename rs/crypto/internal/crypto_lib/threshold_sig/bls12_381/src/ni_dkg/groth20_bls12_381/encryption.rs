@@ -36,19 +36,19 @@ use std::convert::TryFrom;
 pub(crate) mod conversions;
 
 mod crypto {
-    pub use ic_crypto_internal_fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
-    pub use ic_crypto_internal_fs_ni_dkg::forward_secure::{
+    pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
+    pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, mk_sys_params,
         verify_ciphertext_integrity, BTENode, Bit, Crsz, PublicKeyWithPop, SecretKey, SysParam,
         ToxicWaste,
     };
-    pub use ic_crypto_internal_fs_ni_dkg::nizk_chunking::{
+    pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
     };
-    pub use ic_crypto_internal_fs_ni_dkg::nizk_sharing::{
+    pub use crate::ni_dkg::fs_ni_dkg::nizk_sharing::{
         prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
     };
-    pub use ic_crypto_internal_fs_ni_dkg::utils::RAND_ChaCha20;
+    pub use crate::ni_dkg::fs_ni_dkg::utils::RAND_ChaCha20;
 }
 mod miracl {
     pub use miracl_core::bls12381::big::BIG;
