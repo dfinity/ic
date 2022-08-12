@@ -42,7 +42,6 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Outgoing XNet messages, by destination subnet
     pub outgoing_messages: IntCounterVec,
-    /// ### XNET cycle monitoring 
     /// Outgoing stream index, by sending subnet.
     pub out_stream_index: IntGaugeVec,
     /// Critical error counter for detected infinite loops while routing.
@@ -447,8 +446,8 @@ impl StreamBuilderImpl {
                                         .out_stream_index
                                         .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.signals_end().get().try_into().unwrap());
-                                },
-                                None => {},
+                                }
+                                None => {}
                             }
                             streams.push(dst_net_id, msg);
                         }
@@ -472,8 +471,8 @@ impl StreamBuilderImpl {
                                         .out_stream_index
                                         .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.signals_end().get().try_into().unwrap());
-                                },
-                                None => {},
+                                }
+                                None => {}
                             }
                             streams.push(dst_net_id, msg);
                         }

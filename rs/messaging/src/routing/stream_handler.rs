@@ -32,7 +32,8 @@ use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex}, convert::TryInto,
+    convert::TryInto,
+    sync::{Arc, Mutex},
 };
 
 #[cfg(test)]
@@ -50,7 +51,6 @@ struct StreamHandlerMetrics {
     /// Backlog of XNet messages based on end in stream header and last message
     /// in slice, per subnet.
     pub xnet_message_backlog: IntGaugeVec,
-    /// ### XNET cycle monitoring 
     /// Incoming stream index, by sending subnet.
     pub inc_stream_index: IntGaugeVec,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking the
@@ -625,9 +625,9 @@ impl StreamHandlerImpl {
                         self.observe_inducted_payload_size(payload_size);
                         // #### XNet cycle transfer monitoring
                         self.metrics
-                                .inc_stream_index
-                                .with_label_values(&[&remote_subnet_id.to_string()])
-                                .set(stream_index.get().try_into().unwrap());
+                            .inc_stream_index
+                            .with_label_values(&[&remote_subnet_id.to_string()])
+                            .set(stream_index.get().try_into().unwrap());
                         // count cycles (using msg), for requests, add to balance
                         // for refund, subtract?
                         // ####
