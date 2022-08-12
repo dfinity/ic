@@ -266,6 +266,19 @@ fn test_scalar_inverse() {
 }
 
 #[test]
+fn test_impl_debugs() {
+    assert_eq!(
+        format!("{:?}", Scalar::one().neg()),
+        "Scalar(73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000)"
+    );
+
+    assert_eq!(format!("{:?}", G1Affine::generator()),
+               "G1Affine(97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb)");
+    assert_eq!(format!("{:?}", G2Affine::generator()),
+               "G2Affine(93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8)");
+}
+
+#[test]
 fn test_gt_generator_is_expected_value() {
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
@@ -360,6 +373,45 @@ fn test_gt_addition() {
         assert_eq!(gs0 - gs1, gs2);
         assert_eq!(gs0 - gs2, gs1);
     }
+}
+
+#[test]
+fn test_g1_generator_is_expected_value() {
+    /*
+    The generators of G1 and and G2 are computed by finding the
+    lexicographically smallest valid x-coordinate, and its
+    lexicographically smallest y-coordinate and scaling it by the
+    cofactor such that the result is not the point at infinity.
+
+    For G1 x = 4
+    */
+    let g1_cofactor = Scalar::deserialize(
+        &hex::decode("00000000000000000000000000000000396c8c005555e1568c00aaab0000aaab").unwrap(),
+    )
+    .unwrap();
+
+    fn x4() -> [u8; 48] {
+        let mut x4 = [0u8; 48];
+        x4[0] = 0x80; // set compressed bit
+        x4[47] = 4;
+        x4
+    }
+
+    let x4 = G1Affine::deserialize_unchecked(&x4()).unwrap();
+
+    let g1 = x4 * g1_cofactor;
+
+    assert_eq!(g1, G1Projective::generator());
+    assert_eq!(G1Affine::from(g1), G1Affine::generator());
+
+    assert_eq!(hex::encode(G1Affine::generator().serialize()),
+               "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
+}
+
+#[test]
+fn test_g2_generator_is_expected_value() {
+    assert_eq!(hex::encode(G2Affine::generator().serialize()),
+               "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8");
 }
 
 #[test]

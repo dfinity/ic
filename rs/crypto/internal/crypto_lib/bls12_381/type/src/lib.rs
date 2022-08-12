@@ -11,6 +11,7 @@ mod miracl;
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use rand::{CryptoRng, RngCore};
+use std::fmt;
 use zeroize::Zeroize;
 
 macro_rules! ctoption_ok_or {
@@ -38,7 +39,7 @@ pub enum PairingInvalidScalar {
 }
 
 /// An integer of the order of the groups G1/G2/Gt
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
 pub struct Scalar {
     value: bls12_381::Scalar,
 }
@@ -58,6 +59,18 @@ impl PartialOrd for Scalar {
         Some(self.cmp(other))
     }
 }
+
+macro_rules! impl_debug_using_serialize_for {
+    ( $typ:ty ) => {
+        impl fmt::Debug for $typ {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}({})", stringify!($typ), hex::encode(self.serialize()))
+            }
+        }
+    };
+}
+
+impl_debug_using_serialize_for!(Scalar);
 
 impl Scalar {
     /// The size in bytes of this type
@@ -465,7 +478,7 @@ declare_mul_scalar_ops_for!(Scalar);
 macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
         /// An element of the group in affine form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $affine {
             value: bls12_381::$affine
         }
@@ -559,7 +572,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         /// An element of the group in projective form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $projective {
             value: bls12_381::$projective
         }
@@ -697,6 +710,8 @@ macro_rules! define_affine_and_projective_types {
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
 declare_mul_scalar_ops_for!(G1Projective);
+impl_debug_using_serialize_for!(G1Affine);
+impl_debug_using_serialize_for!(G1Projective);
 
 struct WindowInfo<const WINDOW_SIZE: usize> {}
 
@@ -894,6 +909,8 @@ impl G1Projective {
 define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);
 declare_mul_scalar_ops_for!(G2Projective);
+impl_debug_using_serialize_for!(G2Affine);
+impl_debug_using_serialize_for!(G2Projective);
 
 /// An element of the group Gt
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
