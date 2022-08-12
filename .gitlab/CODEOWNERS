@@ -234,3 +234,4 @@
 # Ghost is a group with no direct memberes. GitLab will bypass codeowners for files that match ghost ownership.
 /experimental/            @dfinity-lab/teams/ghost
 *.lock                    @dfinity-lab/teams/ghost
+/rs/Cargo.toml            @dfinity-lab/teams/ghost
