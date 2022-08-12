@@ -28,12 +28,15 @@ from .event import InfraEvent
 from .event import MoveBlockProposalEvent
 from .event import NodeAddedEvent
 from .event import NodeRemovedEvent
+from .event import OriginallyInIcPreambleEvent
 from .event import OriginallyInSubnetPreambleEvent
 from .event import OriginalSubnetTypePreambleEvent
 from .event import RebootEvent
 from .event import RebootIntentEvent
-from .event import RegistryNodeAddedEvent
-from .event import RegistryNodeRemovedEvent
+from .event import RegistryNodeAddedToIcEvent
+from .event import RegistryNodeAddedToSubnetEvent
+from .event import RegistryNodesRemovedFromIcEvent
+from .event import RegistryNodesRemovedFromSubnetEvent
 from .event import RegistrySubnetCreatedEvent
 from .event import RegistrySubnetUpdatedEvent
 from .event import ReplicaDivergedEvent
@@ -209,6 +212,12 @@ class DeclarativePreProcessor(PreProcessor):
             "is_dbg_level": False,
             "need_global_infra": True,
         },
+        "originally_in_ic": {
+            "type": OriginallyInIcPreambleEvent,
+            "is_preamble": True,
+            "is_dbg_level": False,
+            "need_global_infra": True,
+        },
         "originally_in_subnet": {
             "type": OriginallyInSubnetPreambleEvent,
             "is_preamble": True,
@@ -266,13 +275,13 @@ class DeclarativePreProcessor(PreProcessor):
         "consensus_finalized": {
             "type": ConsensusFinalizedEvent,
             "is_preamble": False,
-            "is_dbg_level": False,
+            "is_dbg_level": True,
             "need_global_infra": False,
         },
         "move_block_proposal": {
             "type": MoveBlockProposalEvent,
             "is_preamble": False,
-            "is_dbg_level": False,
+            "is_dbg_level": True,
             "need_global_infra": False,
         },
         "ControlPlane__spawn_accept_task__tls_server_handshake_failed": {
@@ -280,6 +289,18 @@ class DeclarativePreProcessor(PreProcessor):
             "is_preamble": False,
             "is_dbg_level": False,
             "need_global_infra": False,
+        },
+        "registry__node_added_to_ic": {
+            "type": RegistryNodeAddedToIcEvent,
+            "is_preamble": False,
+            "is_dbg_level": False,
+            "need_global_infra": True,
+        },
+        "registry__node_removed_from_ic": {
+            "type": RegistryNodesRemovedFromIcEvent,
+            "is_preamble": False,
+            "is_dbg_level": False,
+            "need_global_infra": True,
         },
         "registry__subnet_created": {
             "type": RegistrySubnetCreatedEvent,
@@ -294,13 +315,13 @@ class DeclarativePreProcessor(PreProcessor):
             "need_global_infra": False,
         },
         "registry__node_added_to_subnet": {
-            "type": RegistryNodeAddedEvent,
+            "type": RegistryNodeAddedToSubnetEvent,
             "is_preamble": False,
             "is_dbg_level": False,
             "need_global_infra": True,
         },
         "registry__node_removed_from_subnet": {
-            "type": RegistryNodeRemovedEvent,
+            "type": RegistryNodesRemovedFromSubnetEvent,
             "is_preamble": False,
             "is_dbg_level": False,
             "need_global_infra": True,
@@ -400,12 +421,15 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "enabled": False,  # Disabled because violations are not actionable
             "preamble_dependencies": frozenset(
                 [
+                    # "originally_in_ic" -- TODO
                     "original_subnet_type",
                     "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_removed_from_subnet",
                     "registry__node_added_to_subnet",
                     "registry__subnet_created",
@@ -418,9 +442,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "catching_up_period": {
             "enabled": False,
-            "preamble_dependencies": frozenset(["originally_in_subnet"]),
+            "preamble_dependencies": frozenset(
+                [
+                    # "originally_in_ic" -- TODO
+                    "originally_in_subnet",
+                ]
+            ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                     "p2p__node_added",
@@ -432,9 +463,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "proposal_fairness": {
             "enabled": False,
-            "preamble_dependencies": frozenset(["originally_in_subnet"]),
+            "preamble_dependencies": frozenset(
+                [
+                    # "originally_in_ic" -- TODO
+                    "originally_in_subnet",
+                ]
+            ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                     "p2p__node_added",
@@ -447,9 +485,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "replica_divergence": {
             "enabled": False,
-            "preamble_dependencies": frozenset(["originally_in_subnet"]),
+            "preamble_dependencies": frozenset(
+                [
+                    # "originally_in_ic" -- TODO
+                    "originally_in_subnet",
+                ]
+            ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                     "p2p__node_added",
@@ -464,11 +509,14 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "enabled": True,
             "preamble_dependencies": frozenset(
                 [
+                    # "originally_in_ic" -- TODO
                     "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "ControlPlane__spawn_accept_task__tls_server_handshake_failed",
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
@@ -478,15 +526,32 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "reboot_count": {
             "enabled": True,
-            "preamble_dependencies": frozenset([]),
-            "regular_dependencies": frozenset(["reboot", "reboot_intent"]),
+            "preamble_dependencies": frozenset(
+                [
+                    "originally_in_ic",
+                ]
+            ),
+            "regular_dependencies": frozenset(
+                [
+                    "registry__node_removed_from_ic",
+                    "registry__node_added_to_ic",
+                    "reboot",
+                    "reboot_intent",
+                ]
+            ),
             "needs_end_event": False,
         },
         "finalization_consistency": {
             "enabled": False,
-            "preamble_dependencies": frozenset([]),
+            "preamble_dependencies": frozenset(
+                [
+                    # "originally_in_ic" -- TODO
+                ]
+            ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "finalized",
                 ]
             ),
@@ -494,9 +559,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "finalized_height": {
             "enabled": False,
-            "preamble_dependencies": frozenset(["originally_in_subnet"]),
+            "preamble_dependencies": frozenset(
+                [
+                    # "originally_in_ic" -- TODO
+                    "originally_in_subnet"
+                ]
+            ),
             "regular_dependencies": frozenset(
                 [
+                    # "registry__node_removed_from_ic", -- TODO
+                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                     "p2p__node_added",

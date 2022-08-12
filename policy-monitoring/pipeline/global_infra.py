@@ -58,6 +58,9 @@ class GlobalInfra:
     def get_original_subnet_membership(self) -> Dict[str, str]:
         return self.original_subnet_membership
 
+    def get_original_nodes(self) -> Dict[IPv6Address, str]:
+        return self.host_addr_to_node_id_map
+
     @classmethod
     def _get_dc_info_impl(Self, node_addrs: Set[IPv6Address]) -> Dict[IPv6Network, Set[IPv6Address]]:
         dcs: Dict[IPv6Network, Set[IPv6Address]] = dict()

@@ -1,3 +1,6 @@
+import base64
+import binascii
+import hashlib
 import ipaddress
 import json
 import re
@@ -252,7 +255,7 @@ class RegistryDoc(EsDoc):
         ), "invalid subnet_type"
         return SubnetParams(subnet_id, subnet_type)
 
-    def get_removed_nodes(self) -> Optional[List[NodeParams]]:
+    def get_removed_nodes_from_subnet_params(self) -> Optional[List[NodeParams]]:
         text = self._text()
         m = re.match(
             r"do_remove_nodes_from_subnet finished: RemoveNodesFromSubnetPayload { node_ids: \[(.*?)\] }", text
@@ -265,33 +268,65 @@ class RegistryDoc(EsDoc):
                 removed_nodes_str = m1.group(1)
         else:
             removed_nodes_str = m.group(1)
-
         removed_nodes = removed_nodes_str.split(", ")
         assert len(removed_nodes) > 0, "expected node ids but didn't find any"
         return list(map(lambda node_str: NodeParams(node_str), removed_nodes))
 
-    def get_added_nodes(self) -> Optional[List[NodesubnetParams]]:
+    def get_added_nodes_to_subnet_params(self) -> Optional[List[NodesubnetParams]]:
         text = self._text()
         m = re.match("do_add_nodes_to_subnet finished: AddNodesToSubnetPayload { (.*?) }", text)
         if not m or len(m.groups()) != 1:
             return None
-
         params = m.group(1)
         m1 = re.match(".*subnet_id: (.*?),.*", params)
         assert (
             m1 and len(m1.groups()) == 1
         ), f"could not parse find `subnet_id` in AddNodesToSubnetPayload with params `{params}`"
-
         subnet = m1.group(1)
         m2 = re.match(r".*node_ids: \[(.*?)\].*", params)
         assert (
             m2 and len(m2.groups()) == 1
         ), f"could not parse find `node_ids` in AddNodesToSubnetPayload with params `{params}`"
-
         nodes_str = m2.group(1)
         nodes = nodes_str.split(", ")
         assert len(nodes) > 0, "got empty list of node ids"
         return list(map(lambda n: NodesubnetParams(n, subnet), nodes))
+
+    def get_added_node_to_ic_params(self) -> Optional[NodeParams]:
+        text = self._text()
+        m = re.match(r"do_add_node finished: AddNodePayload { (.*?) }", text)
+        if not m or len(m.groups()) != 1:
+            return None
+        params = m.group(1)
+        m1 = re.match(r".*node_signing_pk: \[(.*?)\],.*", params)
+        assert m1 and len(m1.groups()) == 1, "could not extract field node_signing_pk from AddNodePayload"
+        pk_str: str = m1.group(1)
+        assert isinstance(
+            pk_str, str
+        ), f"could not extract field node_signing_pk from AddNodePayload (RE group's type is {type(pk_str)})"
+        pk = [int(c) for c in pk_str.split(", ")]
+        bulb = hashlib.sha224(bytes(pk)).digest()
+
+        def to_be_bytes(n: int) -> bytes:
+            return n.to_bytes((n.bit_length() + 7) // 8, "big") or b"\0"
+
+        # Formula according to https://internetcomputer.org/docs/current/references/ic-interface-spec/#textual-ids
+        node_id = "-".join(
+            (lambda xs: [xs[i : i + 5] for i in range(0, len(xs), 5)])(
+                base64.b32encode(to_be_bytes(binascii.crc32(bulb)) + bulb).decode("ascii").rstrip("=").lower()
+            )
+        )
+        return NodeParams(node_id=node_id)
+
+    def get_removed_nodes_from_ic_params(self) -> Optional[List[NodeParams]]:
+        text = self._text()
+        m = re.match(r"do_remove_nodes finished: RemoveNodesPayload { node_ids: \[(.*?)\] }", text)
+        if not m or len(m.groups()) != 1:
+            return None
+        removed_nodes_str = m.group(1)
+        removed_nodes = removed_nodes_str.split(", ")
+        assert len(removed_nodes) > 0, "expected node ids but didn't find any"
+        return list(map(lambda node_str: NodeParams(node_str), removed_nodes))
 
 
 class StructuredDoc(EsDoc):

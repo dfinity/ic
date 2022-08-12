@@ -112,6 +112,21 @@ class OriginalSubnetTypePreambleEvent(InfraEvent):
         return list(subnet_types.items())
 
 
+class OriginallyInIcPreambleEvent(InfraEvent):
+    """Synthetic event"""
+
+    def __init__(self, infra: GlobalInfra):
+        super().__init__(name="originally_in_ic", doc=None, infra=infra)
+
+    def unix_ts(self) -> int:
+        return 0
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        in_ic_nodes = self.infra.get_original_nodes()
+        bla = [(node_id, str(node_addr)) for node_addr, node_id in in_ic_nodes.items()]
+        return bla
+
+
 class OriginallyInSubnetPreambleEvent(InfraEvent):
     """Synthetic event"""
 
@@ -126,11 +141,12 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
         return list(map(lambda p: (p[0], str(self.infra.get_host_ip_addr(p[0])), p[1]), in_subnet_rel.items()))
 
 
-class RegistrySubnetEvent(Event):
+class RegistryEvent(Event):
+
     doc: RegistryDoc
 
-    def __init__(self, doc: EsDoc, verb: str):
-        super().__init__(name=f"registry__subnet_{verb}", doc=doc)
+    def __init__(self, doc: EsDoc, mutation: str):
+        super().__init__(name=f"registry__{mutation}", doc=doc)
 
     def filter(self) -> bool:
         if super().filter() and self.doc.is_registry_canister():
@@ -138,6 +154,26 @@ class RegistrySubnetEvent(Event):
             return True
         else:
             return False
+
+
+class RegistryEventWithInfra(InfraEvent):
+
+    doc: RegistryDoc
+
+    def __init__(self, doc: EsDoc, mutation: str, infra: GlobalInfra):
+        super().__init__(name=f"registry__{mutation}", doc=doc, infra=infra)
+
+    def filter(self) -> bool:
+        if super().filter() and self.doc.is_registry_canister():
+            self.doc = RegistryDoc(self.doc.repr)
+            return True
+        else:
+            return False
+
+
+class RegistrySubnetEvent(RegistryEvent):
+    def __init__(self, doc: EsDoc, verb: str):
+        super().__init__(mutation=f"subnet_{verb}", doc=doc)
 
 
 class RegistrySubnetCreatedEvent(RegistrySubnetEvent):
@@ -164,26 +200,19 @@ class RegistrySubnetUpdatedEvent(RegistrySubnetEvent):
             return [(params.subnet_id, params.subnet_type)]
 
 
-class RegistryNodeEvent(InfraEvent):
+class RegistryNodeEvent(RegistryEventWithInfra):
     doc: RegistryDoc
 
     def __init__(self, doc: EsDoc, verb: str, infra: GlobalInfra):
-        super().__init__(name=f"registry__node_{verb}_subnet", doc=doc, infra=infra)
-
-    def filter(self) -> bool:
-        if super().filter() and self.doc.is_registry_canister():
-            self.doc = RegistryDoc(self.doc.repr)
-            return True
-        else:
-            return False
+        super().__init__(mutation=f"node_{verb}_subnet", doc=doc, infra=infra)
 
 
-class RegistryNodeRemovedEvent(RegistryNodeEvent):
+class RegistryNodesRemovedFromSubnetEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="removed_from", infra=infra)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params_iter = self.doc.get_removed_nodes()
+        params_iter = self.doc.get_removed_nodes_from_subnet_params()
         if params_iter is None:
             return []
         else:
@@ -192,12 +221,12 @@ class RegistryNodeRemovedEvent(RegistryNodeEvent):
             )
 
 
-class RegistryNodeAddedEvent(RegistryNodeEvent):
+class RegistryNodeAddedToSubnetEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="added_to", infra=infra)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params_iter = self.doc.get_added_nodes()
+        params_iter = self.doc.get_added_nodes_to_subnet_params()
         if params_iter is None:
             return []
         else:
@@ -211,6 +240,43 @@ class RegistryNodeAddedEvent(RegistryNodeEvent):
                     params_iter,
                 )
             )
+
+
+class RegistryNodesRemovedFromIcEvent(RegistryEventWithInfra):
+    def __init__(self, doc: EsDoc, infra: GlobalInfra):
+        super().__init__(doc=doc, mutation="node_removed_from_ic", infra=infra)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params_iter = self.doc.get_removed_nodes_from_ic_params()
+        if params_iter is None:
+            return []
+        else:
+            return list(
+                map(
+                    lambda params: (
+                        params.node_id,
+                        str(self.infra.get_host_ip_addr(params.node_id)),
+                    ),
+                    params_iter,
+                )
+            )
+
+
+class RegistryNodeAddedToIcEvent(RegistryEventWithInfra):
+    def __init__(self, doc: EsDoc, infra: GlobalInfra):
+        super().__init__(doc=doc, mutation="node_added_to_ic", infra=infra)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params = self.doc.get_added_node_to_ic_params()
+        if params is None:
+            return []
+        else:
+            return [
+                (
+                    params.node_id,
+                    str(self.infra.get_host_ip_addr(params.node_id)),
+                )
+            ]
 
 
 class ReplicaEvent(Event):
