@@ -40,7 +40,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{NextExecution, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState, SubnetTopology,
+    CallContext, CanisterState, ExecutionState, InputQueueType, NodeTopology, ReplicatedState,
+    SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
@@ -51,7 +52,7 @@ use ic_types::{
     messages::{AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery},
     CanisterId, Cycles, NumInstructions, UserId,
 };
-use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
@@ -1325,14 +1326,25 @@ impl ExecutionTestBuilder {
 
         for subnet in subnets {
             let mut subnet_type = SubnetType::System;
+            let mut nodes = btreemap! {};
             if subnet == self.own_subnet_id {
                 subnet_type = self.subnet_type;
+                // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
+                for i in 0..self.registry_settings.subnet_size {
+                    nodes.insert(
+                        node_test_id(i as u64),
+                        NodeTopology {
+                            ip_address: "fake-ip-address".to_string(),
+                            http_port: 1234,
+                        },
+                    );
+                }
             }
             state.metadata.network_topology.subnets.insert(
                 subnet,
                 SubnetTopology {
                     public_key: vec![1, 2, 3, 4],
-                    nodes: btreemap! {},
+                    nodes,
                     subnet_type,
                     subnet_features: SubnetFeatures::default(),
                     ecdsa_keys_held: BTreeSet::new(),
