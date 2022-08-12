@@ -3,10 +3,9 @@
 #![allow(clippy::many_single_char_names)]
 
 use ic_crypto_internal_bls12_381_type::Scalar;
-use ic_crypto_internal_fs_ni_dkg::forward_secure::*;
-use ic_crypto_internal_fs_ni_dkg::nizk_chunking::*;
-use ic_crypto_internal_fs_ni_dkg::nizk_sharing::*;
-use ic_crypto_internal_fs_ni_dkg::utils::RAND_ChaCha20;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
+    forward_secure::*, nizk_chunking::*, nizk_sharing::*, utils::RAND_ChaCha20,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;

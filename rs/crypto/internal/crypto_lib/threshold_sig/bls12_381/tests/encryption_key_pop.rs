@@ -1,6 +1,8 @@
 //! Tests for the POP of the Encryption Key
 use ic_crypto_internal_bls12_381_type::*;
-use ic_crypto_internal_fs_ni_dkg::{encryption_key_pop::*, utils::RAND_ChaCha20};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
+    encryption_key_pop::*, utils::RAND_ChaCha20,
+};
 use miracl_core::rand::RAND;
 
 fn setup_pop_instance_and_witness(rng: &mut impl RAND) -> (EncryptionKeyInstance, Scalar) {

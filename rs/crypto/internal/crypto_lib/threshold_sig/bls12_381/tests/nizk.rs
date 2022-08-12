@@ -1,6 +1,6 @@
 //! Tests for combined forward secure encryption and ZK proofs
 
-use ic_crypto_internal_fs_ni_dkg as dkg;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg as dkg;
 
 use dkg::forward_secure::CHUNK_SIZE;
 use dkg::nizk_chunking::*;
@@ -9,7 +9,6 @@ use dkg::nizk_sharing::{
     ZkProofSharingError,
 };
 use dkg::utils::RAND_ChaCha20;
-use miracl_core::bls12381::big;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
@@ -31,11 +30,11 @@ fn setup_sharing_instance_and_witness(
         pk.push(g1.mul(&BIG::randomnum(&spec_p, rng)));
     }
     for _i in 0..threshold {
-        let apow = big::BIG::randomnum(&spec_p, rng);
+        let apow = BIG::randomnum(&spec_p, rng);
         a.push(apow);
         aa.push(g2.mul(&apow));
     }
-    let r = big::BIG::randomnum(&spec_p, rng);
+    let r = BIG::randomnum(&spec_p, rng);
     let rr = g1.mul(&r);
     let mut s = Vec::new();
     // s = [sum [a_k ^ i^k | (a_k, k) <- zip a [0..t-1]] | i <- [1..n]]

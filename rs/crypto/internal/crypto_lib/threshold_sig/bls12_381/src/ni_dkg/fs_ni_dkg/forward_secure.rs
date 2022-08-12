@@ -10,11 +10,13 @@ use std::vec::Vec;
 // and
 //    g^x  corresponds to g.mul(x)
 
-use crate::encryption_key_pop::{prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop};
-use crate::nizk_chunking::CHALLENGE_BITS;
-use crate::nizk_chunking::NUM_ZK_REPETITIONS;
-use crate::random_oracles::{random_oracle, HashedMap};
-use crate::utils::*;
+use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
+    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+};
+use crate::ni_dkg::fs_ni_dkg::nizk_chunking::CHALLENGE_BITS;
+use crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS;
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::utils::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, G2Prepared, Gt, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;

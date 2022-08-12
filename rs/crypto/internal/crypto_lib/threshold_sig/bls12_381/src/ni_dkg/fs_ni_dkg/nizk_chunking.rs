@@ -1,8 +1,10 @@
 //! Proofs of correct chunking
 
-use crate::forward_secure::CHUNK_SIZE;
-use crate::random_oracles::{random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash};
-use crate::utils::*;
+use crate::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{
+    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+};
+use crate::ni_dkg::fs_ni_dkg::utils::*;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::rom;

@@ -1,4 +1,4 @@
-use ic_crypto_internal_fs_ni_dkg::random_oracles::*;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use miracl_core::bls12381::{big::BIG, ecp::ECP, ecp2::ECP2};
 

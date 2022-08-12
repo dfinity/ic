@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
-use ic_crypto_internal_fs_ni_dkg::{forward_secure::*, utils::RAND_ChaCha20, Epoch};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
+    forward_secure::*, utils::RAND_ChaCha20, Epoch,
+};
 use proptest::prelude::*;
 
 proptest! {

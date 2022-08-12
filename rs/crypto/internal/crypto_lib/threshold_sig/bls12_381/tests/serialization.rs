@@ -1,4 +1,4 @@
-use ic_crypto_internal_fs_ni_dkg::Epoch;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
     types::FsEncryptionSecretKey, *,
 };

@@ -6,9 +6,9 @@ edition = "2018"
 [dependencies]
 arrayvec = "0.5.1"
 base64 = "0.11.0"
+hex = "0.4"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-bls12381-serde-miracl = { path = "../../bls12_381/serde/miracl" }
-ic-crypto-internal-fs-ni-dkg = { path = "../../fs_ni_dkg" }
 ic-crypto-internal-seed = { path = "../../seed" }
 ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils"}
 ic-crypto-internal-types = { path = "../../types" }
@@ -25,7 +25,6 @@ strum_macros = "0.23.0"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-hex = "0.4.2"
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 
