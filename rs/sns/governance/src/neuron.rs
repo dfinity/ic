@@ -3,7 +3,7 @@ use crate::pb::v1::neuron::DissolveState;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
     manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission,
-    NeuronPermissionType, Vote,
+    NeuronPermissionList, NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::Subaccount;
@@ -109,6 +109,32 @@ impl Neuron {
 
         if let Some(p) = found_neuron_permission {
             return p.permission_type.contains(&(permission as i32));
+        }
+
+        false
+    }
+
+    /// Returns true if the principalId has at least all (i.e. has a superset)
+    /// the permissions to act on this neuron (i.e., self).
+    pub(crate) fn is_authorized_with_permissions(
+        &self,
+        principal_id: &PrincipalId,
+        permissions: &NeuronPermissionList,
+    ) -> bool {
+        let found_neuron_permission = self
+            .permissions
+            .iter()
+            .find(|neuron_permission| neuron_permission.principal == Some(*principal_id));
+
+        if let Some(neuron_permission) = found_neuron_permission {
+            // Check that the found permissions contains each of the requested permissions
+            for permission in &permissions.permissions {
+                if !neuron_permission.permission_type.contains(permission) {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         false

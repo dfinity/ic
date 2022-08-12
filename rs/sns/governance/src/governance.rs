@@ -2927,9 +2927,10 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`)
+    ///   (permission `ManagePrincipals`), or already has the permissions that
+    ///   are being added.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
-    ///   as defined in the nervous system paramters. To see what the current parameters are
+    ///   as defined in the nervous system parameters. To see what the current parameters are
     ///   for an SNS see `get_nervous_system_parameters`.
     /// - adding the new permissions for the principal does not exceed the limit of principals
     ///   that a neuron can have in its access control list, which is defined by the nervous
@@ -2941,8 +2942,6 @@ impl Governance {
         add_neuron_permissions: &AddNeuronPermissions,
     ) -> Result<(), GovernanceError> {
         let neuron = self.get_neuron_result(neuron_id)?;
-
-        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
 
         let permissions_to_add = add_neuron_permissions
             .permissions_to_add
@@ -2960,6 +2959,13 @@ impl Governance {
                 ErrorType::InvalidCommand,
                 "AddNeuronPermissions command provided more permissions than exist in the system",
             ));
+        }
+
+        // Check if the caller has the same permissions that the request is requesting to add.
+        // If so, allow the caller to add the permissions to the principal_id, which the security
+        // policy allows. If not, check if the caller can manage other principals
+        if !neuron.is_authorized_with_permissions(caller, permissions_to_add) {
+            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
         }
 
         self.nervous_system_parameters()
@@ -3018,7 +3024,8 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`)
+    ///   (permission `ManagePrincipals`), or already has the permissions that
+    ///   are being removed.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
     fn remove_neuron_permissions(
@@ -3028,8 +3035,6 @@ impl Governance {
         remove_neuron_permissions: &RemoveNeuronPermissions,
     ) -> Result<(), GovernanceError> {
         let neuron = self.get_neuron_result(neuron_id)?;
-
-        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
 
         let permissions_to_remove = remove_neuron_permissions
             .permissions_to_remove
@@ -3047,6 +3052,13 @@ impl Governance {
                 ErrorType::InvalidCommand,
                 "RemoveNeuronPermissions command provided more permissions than exist in the system",
             ));
+        }
+
+        // Check if the caller has the same permissions that the request is requesting to remove.
+        // If so, allow the caller to remove the permissions of the principal_id, which the security
+        // policy allows. If not, check if the caller can manage other principals
+        if !neuron.is_authorized_with_permissions(caller, permissions_to_remove) {
+            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
         }
 
         let principal_id = remove_neuron_permissions

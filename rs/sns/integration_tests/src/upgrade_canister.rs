@@ -440,7 +440,7 @@ fn test_upgrade_after_state_shrink() {
         // Use the neuron_claimer to add the extra_user's unique principal as a permission to
         // the neuron. This permission is what will shrink the state after the update.
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &neuron_claimer.sender,
                 &neuron_claimer.subaccount,
                 Some(extra_user.sender.get_principal_id()),
@@ -485,7 +485,7 @@ fn test_upgrade_after_state_shrink() {
         // Now that the first upgrade is complete, shrink the state by removing the NeuronPermission
         // granted to the extra_voter user.
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &neuron_claimer.sender,
                 &neuron_claimer.subaccount,
                 &extra_user.sender.get_principal_id(),
