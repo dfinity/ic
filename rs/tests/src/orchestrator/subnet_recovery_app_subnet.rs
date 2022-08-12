@@ -28,9 +28,12 @@ use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg, store_message};
+use crate::orchestrator::utils::rw_message::{
+    can_install_canister, can_read_msg, cannot_store_msg, store_message,
+};
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
+use anyhow::bail;
 use ic_base_types::NodeId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
@@ -300,6 +303,18 @@ pub fn test(env: TestEnv) {
             "Healthy upgrade of assigned node {} to {}", node.node_id, working_version
         );
     }
+
+    // make sure that state sync is completed
+    retry(logger.clone(), secs(120), secs(5), || {
+        info!(logger, "Try to install canister...");
+        if can_install_canister(&upload_node.get_public_url()) {
+            info!(logger, "Installing canister is possible.");
+            Ok(())
+        } else {
+            bail!("retry...")
+        }
+    })
+    .expect("Canister instalation should work!");
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(

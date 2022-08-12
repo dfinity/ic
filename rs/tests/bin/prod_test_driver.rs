@@ -798,10 +798,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "subnet_recovery",
             vec![
                 pot_with_setup(
-                    "subnet_recovery_app_same_nodes",
+                    "subnet_recovery_app_same_nodes_pot",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
                     par(vec![sys_t(
-                        "subnet_recovery_app_same_nodes",
+                        "subnet_recovery_app_same_nodes_test",
                         orchestrator::subnet_recovery_app_subnet::test,
                     )]),
                 ),
