@@ -123,7 +123,7 @@ impl StreamBuilderMetrics {
         );
         let out_stream_index = metrics_registry.int_gauge_vec(
             METRIC_OUT_STREAM_INDEX,
-            "Incoming stream index, by sending subnet.",
+            "Outgoing stream index, by sending subnet.",
             &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
