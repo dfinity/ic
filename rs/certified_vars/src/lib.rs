@@ -75,11 +75,30 @@ impl fmt::Display for CertificateValidationError {
     }
 }
 
-/// Checks if the specified certificate verifies the certified data of
-/// specified canister.
+/// Verifies a certificate.
 ///
-/// If the check is successful, this function returns the timestamp on the
-/// certificate.
+/// Verification ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   optionally a delegation with a certificate and a subnet ID,
+/// * if a delegation is present, that the delegation certificate is valid for
+///   the delegation subnet for the canister with ID `canister_id` w.r.t. the
+///   `root_pk` (see below for details on verifying a delegation certificate).
+/// * the signature is valid, either w.r.t. `root_pk` or w.r.t
+///   the delegation key if a delegation is present,
+/// * the tree is well-formed and contains time as well as canister information
+///   (i.e., certified data) for the canister with ID `canister_id`, and
+/// * the canister's certified data is equal to `certified_data`.
+///
+/// Verification of the delegation certificate ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   _no_ further delegation, i.e., it comes directly from the root subnet,
+/// * the signature is valid w.r.t. `root_pk`,
+/// * the tree is well-formed and contains time as well as subnet information
+///   (i.e., a public_key and canister ranges) for the given subnet,
+/// * the canister ranges are well-formed and contain the `canister_id`, and
+/// * the public key is well-formed.
+///
+/// Returns the certificate's timestamp, if verification is successful.
 pub fn verify_certificate(
     certificate: &[u8],
     canister_id: &CanisterId,
@@ -108,7 +127,12 @@ pub fn verify_certificate(
                     err
                 ))
             })?;
-        verify_delegation_certificate(&delegation.certificate, &subnet_id, root_pk, canister_id)?
+        verify_delegation_certificate(
+            &delegation.certificate,
+            &subnet_id,
+            root_pk,
+            Some(canister_id),
+        )?
     } else {
         *root_pk
     };
@@ -147,11 +171,14 @@ pub fn verify_certificate(
     Ok(Time::from_nanos_since_unix_epoch(replica_state.time.0))
 }
 
+/// Verifies a delegation certificate.
+///
+/// See the documentation of `verify_certificate` for more details.
 fn verify_delegation_certificate(
     certificate: &[u8],
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
-    canister_id: &CanisterId,
+    canister_id: Option<&CanisterId>,
 ) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
     #[derive(Deserialize, Debug)]
     struct SubnetView {
@@ -200,17 +227,33 @@ fn verify_delegation_certificate(
             ))
         })?;
 
-    if !&canister_id_ranges
-        .iter()
-        .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
-    {
-        return Err(CertificateValidationError::CanisterIdOutOfRange);
+    if let Some(canister_id) = canister_id {
+        if !&canister_id_ranges
+            .iter()
+            .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
+        {
+            return Err(CertificateValidationError::CanisterIdOutOfRange);
+        }
     }
 
     let public_key = parse_threshold_sig_key_from_der(&subnet_info.public_key).map_err(|err| {
         CertificateValidationError::DeserError(format!("failed to deserialize public key: {}", err))
     })?;
     Ok(public_key)
+}
+
+/// Validates a subnet delegation certificate.
+///
+/// Returns `Ok(())` iff the verification of a delegation certificate
+/// as described in the documentation of `verify_certificate` is successful
+/// for subnet with ID `subnet_id`, with the exception that no canister ID
+/// range check is performed.
+pub fn validate_subnet_delegation_certificate(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<(), CertificateValidationError> {
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None).map(|_public_key| ())
 }
 
 fn parse_certificate(certificate: &[u8]) -> Result<Certificate, CertificateValidationError> {

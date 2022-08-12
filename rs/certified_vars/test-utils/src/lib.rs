@@ -56,8 +56,7 @@ impl CertificateData {
         subnet_pub_key: Option<ThresholdSigPublicKey>,
         time: Option<u64>,
     ) -> LabeledTree<Vec<u8>> {
-        let mut encoded_time = vec![];
-        leb128::write::unsigned(&mut encoded_time, time.unwrap_or(REPLICA_TIME)).unwrap();
+        let encoded_time = encoded_time(time.unwrap_or(REPLICA_TIME));
         match self {
             CertificateData::CustomTree(tree) => tree.clone(),
             CertificateData::CanisterData {
@@ -204,7 +203,7 @@ impl CertificateBuilder {
                 return subnet_id;
             }
         }
-        panic!("No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_subnet_id'")
+        panic!("No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_delegation_subnet_id'")
     }
 
     fn build_delegation(&self) -> Option<CertificateDelegation> {
@@ -218,11 +217,17 @@ impl CertificateBuilder {
     }
 }
 
-fn serialize_to_cbor<T: Serialize>(payload: &T) -> Vec<u8> {
+pub fn serialize_to_cbor<T: Serialize>(payload: &T) -> Vec<u8> {
     let mut serializer = serde_cbor::Serializer::new(Vec::new());
     serializer.self_describe().unwrap();
     payload.serialize(&mut serializer).unwrap();
     serializer.into_inner()
+}
+
+pub fn encoded_time(time: u64) -> Vec<u8> {
+    let mut encoded_time = vec![];
+    leb128::write::unsigned(&mut encoded_time, time).unwrap();
+    encoded_time
 }
 
 fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
