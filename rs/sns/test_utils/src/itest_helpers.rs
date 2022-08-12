@@ -181,6 +181,11 @@ impl SnsTestsInitPayloadBuilder {
         self
     }
 
+    pub fn with_archive_options(&mut self, archive_options: ArchiveOptions) -> &mut Self {
+        self.ledger.archive_options = archive_options;
+        self
+    }
+
     pub fn build(&mut self) -> SnsCanisterInitPayloads {
         SnsCanisterInitPayloads {
             governance: self.governance.build(),
@@ -533,16 +538,35 @@ impl SnsCanisters<'_> {
     ) -> u64 {
         // Stake the neuron.
         let stake = Tokens::from_tokens(token_amount).unwrap();
+        let block_height = self
+            .icrc1_transfer(
+                sender,
+                &self.governance.canister_id().get(),
+                Some(*to_subaccount),
+                stake.get_e8s(),
+            )
+            .await;
+        block_height
+    }
+
+    pub async fn icrc1_transfer(
+        &self,
+        sender: &Sender,
+        to_principal_id: &PrincipalId,
+        to_subaccount: Option<Subaccount>,
+        token_amount_e8s: u64,
+    ) -> u64 {
+        let amount = Tokens::from_e8s(token_amount_e8s);
         let block_height = crate::icrc1::transfer(
             &self.ledger,
             sender,
             TransferArg {
-                amount: Nat::from(stake.get_e8s()),
+                amount: Nat::from(amount.get_e8s()),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
                 to: Account {
-                    owner: PrincipalId::from(self.governance.canister_id()),
-                    subaccount: Some(*to_subaccount),
+                    owner: *to_principal_id,
+                    subaccount: to_subaccount,
                 },
                 memo: None,
                 created_at_time: Some(
