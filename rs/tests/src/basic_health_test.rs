@@ -167,7 +167,7 @@ pub fn test(env: TestEnv) {
                 Ok(())
             })
             .await
-            .expect("Node not healty");
+            .expect("Node not healthy");
         })
     }
 }
