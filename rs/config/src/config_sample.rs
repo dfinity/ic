@@ -77,9 +77,12 @@ pub const SAMPLE_CONFIG: &str = r#"
     transport: {
         // IP address to bind if p2p_connections is not empty.
         node_ip: "127.0.0.1",
-
-        // mapping of flow ids to TCP port number, also depth of send queue
-        p2p_flows: [{flow_tag: 1, server_port: 3000, queue_size: 1024}],
+        // Listening port used by transport to establish peer connections.
+        listening_port: 3000,
+        // The size of the buffered messages on the transport send queue.
+        send_queue_size: 1024,
+        // The field will be removed after the new transport implementation is rolled out.
+        legacy_flow_tag: 1,
     },
     // ============================================
     // Configuration of registry client

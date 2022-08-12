@@ -36,7 +36,7 @@ mod utils;
 
 use ic_config::{
     logger::{Config as LoggerConfig, LogTarget},
-    transport::{TransportConfig, TransportFlowConfig},
+    transport::TransportConfig,
 };
 use ic_interfaces_transport::{
     FlowTag, Transport, TransportErrorCode, TransportEvent, TransportPayload, TransportStateChange,
@@ -444,11 +444,9 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
         if *node_id == n.0 {
             config = Some(TransportConfig {
                 node_ip: n.1.clone(),
-                p2p_flows: vec![TransportFlowConfig {
-                    flow_tag: FLOW_TAG,
-                    server_port: n.2,
-                    queue_size: 1024,
-                }],
+                legacy_flow_tag: FLOW_TAG,
+                listening_port: n.2,
+                send_queue_size: 1024,
             });
         }
 

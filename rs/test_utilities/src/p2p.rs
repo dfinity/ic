@@ -3,7 +3,7 @@
 use crate::types::ids::node_test_id;
 use ic_config::{
     logger::{default_logtarget, Config as LoggerConfig, LogFormat},
-    transport::{TransportConfig, TransportFlowConfig},
+    transport::TransportConfig,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::*;
@@ -324,11 +324,9 @@ pub fn get_replica_transport_config(
 
     TransportConfig {
         node_ip: "127.0.0.1".to_string(),
-        p2p_flows: vec![TransportFlowConfig {
-            flow_tag: 0,
-            server_port: port,
-            queue_size: 8,
-        }],
+        legacy_flow_tag: 0,
+        listening_port: port,
+        send_queue_size: 8,
     }
 }
 

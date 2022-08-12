@@ -366,19 +366,15 @@ pub(crate) fn transport_config_to_endpoints(
     info!(log, "Reading transport config for registration");
     let mut flow_endpoints: Vec<String> = vec![];
 
-    if transport_config.p2p_flows.is_empty() {
-        return Err(OrchestratorError::invalid_configuration_error(
-            "Empty list of transport flows",
-        ));
-    }
-
-    for tf in transport_config.p2p_flows.iter() {
-        flow_endpoints.push(format!(
-            "{},{}",
-            tf.flow_tag,
-            get_endpoint(log, transport_config.node_ip.clone(), tf.server_port)?
-        ));
-    }
+    flow_endpoints.push(format!(
+        "{},{}",
+        transport_config.legacy_flow_tag,
+        get_endpoint(
+            log,
+            transport_config.node_ip.clone(),
+            transport_config.listening_port
+        )?
+    ));
     Ok(flow_endpoints)
 }
 
@@ -435,7 +431,6 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_config::transport::TransportFlowConfig;
     use ic_test_utilities::with_test_replica_logger;
 
     #[test]
@@ -451,24 +446,15 @@ mod tests {
     fn transport_config_endpoints_succeeds() {
         let transport_config = TransportConfig {
             node_ip: "::1".to_string(),
-            p2p_flows: vec![
-                TransportFlowConfig {
-                    flow_tag: 1337,
-                    server_port: 23,
-                    queue_size: 1,
-                },
-                TransportFlowConfig {
-                    flow_tag: 1338,
-                    server_port: 24,
-                    queue_size: 1,
-                },
-            ],
+            legacy_flow_tag: 1337,
+            listening_port: 23,
+            send_queue_size: 1,
         };
 
         with_test_replica_logger(|log| {
             assert_eq!(
                 transport_config_to_endpoints(&log, &transport_config).unwrap(),
-                vec!["1337,[::1]:23".to_string(), "1338,[::1]:24".to_string()]
+                vec!["1337,[::1]:23".to_string()]
             )
         });
     }

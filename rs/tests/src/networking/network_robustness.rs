@@ -432,7 +432,7 @@ fn reset_tc_ssh_command() -> String {
 
 fn limit_tc_ssh_command(parameter: TestParameter, value: f32) -> String {
     let cfg = util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().p2p_flows.get(0).unwrap().server_port;
+    let p2p_listen_port = cfg.transport.unwrap().listening_port;
 
     let network_limitation = match parameter {
         TestParameter::PacketLoss => format!("netem loss {}%", value),
