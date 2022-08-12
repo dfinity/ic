@@ -1,0 +1,117 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "//rs/rust_canisters/on_wire",
+    "@crate_index//:mersenne_twister",
+    "@crate_index//:rand_0_4_6",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_macro",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/test_utilities",
+    "//rs/test_utilities/identity",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid",
+    "@crate_index//:criterion",
+]
+
+ALIASES = {}
+
+# Use the sh_binary rule below to execute the benchmark.
+rust_binary(
+    name = "tests_bench_bin",
+    srcs = ["benches/json.rs"],
+    crate_root = "benches/json.rs",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# rust_binary rule doesn't support env attribute, so pass them in here.
+sh_binary(
+    name = "test_bench",
+    srcs = ["benches/run_test_bench.sh"],
+    data = [
+        ":json",
+        ":tests_bench_bin",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "TESTS_BENCH_BIN": "$(rootpath :tests_bench_bin)",
+        "JSON_WASM_PATH": "$(rootpath :json)",
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests/",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+)
+
+rust_canister(
+    name = "json",
+    srcs = ["src/json.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "inter_canister_error_handling",
+    srcs = ["src/inter_canister_error_handling.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "nan_canonicalized",
+    srcs = ["src/nan_canonicalized.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "stable",
+    srcs = ["src/stable.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "time",
+    srcs = ["src/time.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "panics",
+    srcs = ["src/panics.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
