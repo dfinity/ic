@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,10 +16,34 @@ DEPENDENCIES = [
     "@crate_index//:x509-parser",
 ]
 
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/test_utilities",
+    "@crate_index//:curve25519-dalek",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "node_key_validation",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_node_key_validation",
     edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "node_key_validation_test",
+    aliases = ALIASES,
+    crate = ":node_key_validation",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
