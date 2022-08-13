@@ -1,5 +1,5 @@
 [package]
-name = "ic-certified-vars-test-utils"
+name = "ic-certification-test-utils"
 version = "0.1.0"
 edition = "2018"
 

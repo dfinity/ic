@@ -34,7 +34,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
 ic-cdk = "0.5.5"
-ic-certified-vars = { path = "../certified_vars" }
+ic-certification = { path = "../certification" }
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }

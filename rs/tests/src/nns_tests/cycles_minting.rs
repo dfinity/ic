@@ -17,7 +17,7 @@ use cycles_minting_canister::{
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, HttpClient, Sender};
-use ic_certified_vars::verify_certificate;
+use ic_certification::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;

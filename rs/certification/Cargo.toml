@@ -1,5 +1,5 @@
 [package]
-name = "ic-certified-vars"
+name = "ic-certification"
 version = "0.8.0"
 edition = "2018"
 
@@ -14,7 +14,7 @@ tree-deserializer = { path = "../tree_deserializer" }
 
 [dev-dependencies]
 ic-base-types = {path = "../types/base_types"}
-ic-certified-vars-test-utils = { path = "test-utils"}
+ic-certification-test-utils = { path = "test-utils"}
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 leb128 = "0.2.4"

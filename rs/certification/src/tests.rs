@@ -3,7 +3,7 @@ use std::str::FromStr;
 use rand::{thread_rng, Rng};
 
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_certified_vars_test_utils::{
+use ic_certification_test_utils::{
     encoded_time, serialize_to_cbor, CertificateBuilder, CertificateData::CanisterData,
     CertificateData::CustomTree, CertificateData::SubnetData,
 };

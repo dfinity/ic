@@ -3,9 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "certified_vars",
+    name = "certification",
     srcs = glob(["src/**"]),
-    crate_name = "ic_certified_vars",
+    crate_name = "ic_certification",
     edition = "2018",
     deps = [
         "//rs/crypto/tree_hash",
@@ -19,10 +19,10 @@ rust_library(
 )
 
 rust_test(
-    name = "certified_vars_test",
-    crate = ":certified_vars",
+    name = "certification_test",
+    crate = ":certification",
     deps = [
-        "//rs/certified_vars/test-utils",
+        "//rs/certification/test-utils",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/types/base_types",

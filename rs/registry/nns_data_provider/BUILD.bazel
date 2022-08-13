@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client",
-    "//rs/certified_vars",
+    "//rs/certification",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig",
     "//rs/interfaces",

@@ -19,7 +19,7 @@ DEPENDENCIES = [
 rust_library(
     name = "test-utils",
     srcs = glob(["src/**"]),
-    crate_name = "ic_certified_vars_test_utils",
+    crate_name = "ic_certification_test_utils",
     edition = "2018",
     deps = DEPENDENCIES,
 )
