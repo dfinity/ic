@@ -413,7 +413,7 @@ impl ExecutionEnvironment {
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => Some((Err(err.into()), cycles)),
                                     Ok(settings) =>
-                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size))
+                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size, round_limits))
                                 };
                                 info!(
                                     self.log,
@@ -462,6 +462,7 @@ impl ExecutionEnvironment {
                                 settings,
                                 canister_id,
                                 &mut state,
+                                round_limits,
                             ),
                         };
                         // The induction cost of `UpdateSettings` is charged
@@ -513,6 +514,7 @@ impl ExecutionEnvironment {
                             args.get_canister_id(),
                             args.get_new_controller(),
                             &mut state,
+                            round_limits,
                         )
                         .map(|()| EmptyBlob::encode())
                         .map_err(|err| err.into()),
@@ -814,6 +816,7 @@ impl ExecutionEnvironment {
                                     &mut state,
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
+                                    round_limits
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -1056,6 +1059,7 @@ impl ExecutionEnvironment {
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.find_subnet_id(sender) {
             Ok(sender_subnet_id) => {
@@ -1067,6 +1071,7 @@ impl ExecutionEnvironment {
                     max_number_of_canisters,
                     state,
                     subnet_size,
+                    round_limits,
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())
@@ -1084,9 +1089,9 @@ impl ExecutionEnvironment {
         settings: CanisterSettings,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
 
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
@@ -1095,7 +1100,7 @@ impl ExecutionEnvironment {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                round_limits,
             )
             .map(|()| EmptyBlob::encode())
             .map_err(|err| err.into())
@@ -1682,7 +1687,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
     ) -> ReplicatedState {
         let compute_allocation_used = state.total_compute_allocation();
-        let total_memory_taken = state.total_memory_taken();
+
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,
@@ -1754,7 +1759,6 @@ impl ExecutionEnvironment {
             state.time(),
             state.path().to_path_buf(),
             compute_allocation_used,
-            total_memory_taken,
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,

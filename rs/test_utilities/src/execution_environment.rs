@@ -332,6 +332,56 @@ impl ExecutionTest {
             .get_canister_id()
     }
 
+    pub fn create_canister_with_allocation(
+        &mut self,
+        cycles: Cycles,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+    ) -> Result<CanisterId, UserError> {
+        let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()));
+        args.settings = Some(CanisterSettingsArgs::new(
+            None,
+            None,
+            compute_allocation,
+            memory_allocation,
+            None,
+        ));
+
+        let result =
+            self.subnet_message(Method::ProvisionalCreateCanisterWithCycles, args.encode());
+
+        match result {
+            Ok(WasmResult::Reply(data)) => {
+                Ok(CanisterIdRecord::decode(&data).unwrap().get_canister_id())
+            }
+            Ok(WasmResult::Reject(error)) => {
+                panic!("Expected reply, got: {:?}", error);
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Updates the compute and memory allocations of the given canister.
+    pub fn canister_update_allocations_settings(
+        &mut self,
+        canister_id: CanisterId,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgs::new(
+                None,
+                None,
+                compute_allocation,
+                memory_allocation,
+                None,
+            ),
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
     /// Sends an `install_code` message to the IC management canister.
     /// Consider using higher-level helpers like `canister_from_wat()`.
     pub fn install_code(&mut self, args: InstallCodeArgs) -> Result<WasmResult, UserError> {
@@ -1124,6 +1174,9 @@ impl Default for ExecutionTestBuilder {
         let subnet_total_memory = ic_config::execution_environment::Config::default()
             .subnet_memory_capacity
             .get() as i64;
+        let subnet_message_memory = ic_config::execution_environment::Config::default()
+            .subnet_message_memory_capacity
+            .get() as i64;
         Self {
             nns_subnet_id: subnet_test_id(2),
             own_subnet_id: subnet_test_id(1),
@@ -1138,7 +1191,7 @@ impl Default for ExecutionTestBuilder {
             slice_instruction_limit: config.max_instructions_per_slice,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
-            subnet_message_memory: subnet_total_memory,
+            subnet_message_memory,
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
@@ -1410,6 +1463,8 @@ impl ExecutionTestBuilder {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
+            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
+            subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(
