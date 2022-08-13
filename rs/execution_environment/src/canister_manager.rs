@@ -16,7 +16,7 @@ use ic_ic00_types::{
     Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter,
+    CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{error, fatal, info, ReplicaLogger};
@@ -366,15 +366,14 @@ impl CanisterManager {
         &self,
         settings: CanisterSettings,
         total_subnet_compute_allocation_used: u64,
-        total_subnet_memory_taken: NumBytes,
+        available_memory: &SubnetAvailableMemory,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         if let Some(memory_allocation) = settings.memory_allocation() {
             let requested_allocation: NumBytes = memory_allocation.bytes();
-            if requested_allocation + total_subnet_memory_taken > self.config.subnet_memory_capacity
-            {
+            if requested_allocation.get() as i64 > available_memory.get_total_memory() {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                     requested: requested_allocation,
-                    available: self.config.subnet_memory_capacity - total_subnet_memory_taken,
+                    available: NumBytes::from(available_memory.get_total_memory().max(0) as u64),
                 });
             }
         }
@@ -454,7 +453,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         canister: &mut CanisterState,
         total_subnet_compute_allocation_used: u64,
-        total_subnet_memory_taken: NumBytes,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // Verify controller.
         self.validate_controller(canister, &sender)?;
@@ -464,14 +463,41 @@ impl CanisterManager {
             settings.compute_allocation(),
         )?;
         self.validate_memory_allocation(
-            total_subnet_memory_taken,
+            &round_limits.subnet_available_memory,
             canister,
             settings.memory_allocation(),
         )?;
 
         let validated_settings =
             ValidatedCanisterSettings::try_from((settings, self.config.max_controllers))?;
+
+        let old_usage = canister.memory_usage(self.config.own_subnet_type);
+        let old_mem = canister
+            .system_state
+            .memory_allocation
+            .bytes()
+            .max(old_usage);
+
         self.do_update_settings(validated_settings, canister);
+
+        let new_usage = old_usage;
+        let new_mem = canister
+            .system_state
+            .memory_allocation
+            .bytes()
+            .max(new_usage);
+
+        if new_mem >= old_mem {
+            // settings were validated before so this should always succeed
+            round_limits
+                .subnet_available_memory
+                .try_decrement(new_mem - old_mem, NumBytes::from(0))
+                .ok();
+        } else {
+            round_limits
+                .subnet_available_memory
+                .increment(old_mem - new_mem, NumBytes::from(0));
+        }
 
         Ok(())
     }
@@ -488,6 +514,7 @@ impl CanisterManager {
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        round_limits: &mut RoundLimits,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
@@ -519,7 +546,7 @@ impl CanisterManager {
         match self.validate_settings(
             settings,
             state.total_compute_allocation(),
-            state.total_memory_taken(),
+            &round_limits.subnet_available_memory,
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
@@ -530,6 +557,7 @@ impl CanisterManager {
                     validate_settings,
                     max_number_of_canisters,
                     state,
+                    round_limits,
                 ) {
                     Ok(canister_id) => canister_id,
                     Err(err) => return (Err(err), cycles),
@@ -559,7 +587,6 @@ impl CanisterManager {
         let time = state.time();
         let canister_layout_path = state.path().to_path_buf();
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_taken = state.total_memory_taken();
         let network_topology = state.metadata.network_topology.clone();
 
         let old_canister = match state.take_canister_state(&context.canister_id) {
@@ -578,7 +605,6 @@ impl CanisterManager {
             time,
             canister_layout_path,
             compute_allocation_used,
-            memory_taken,
             &network_topology,
             execution_parameters,
             round_limits,
@@ -632,7 +658,6 @@ impl CanisterManager {
         time: Time,
         canister_layout_path: PathBuf,
         compute_allocation_used: u64,
-        memory_taken: NumBytes,
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -658,9 +683,11 @@ impl CanisterManager {
                 result: Err(err),
             };
         }
-        if let Err(err) =
-            self.validate_memory_allocation(memory_taken, &canister, context.memory_allocation)
-        {
+        if let Err(err) = self.validate_memory_allocation(
+            &round_limits.subnet_available_memory,
+            &canister,
+            context.memory_allocation,
+        ) {
             return DtsInstallCodeResult::Finished {
                 canister,
                 message,
@@ -987,9 +1014,11 @@ impl CanisterManager {
         canister_id: CanisterId,
         new_controller: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
-        let compute_allocation_used = state.total_compute_allocation();
-        let memory_taken = state.total_memory_taken();
+        // Setting controller has nothing to do with compute allocation
+        let compute_allocation_used = 0;
+
         let canister = state
             .canister_state_mut(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
@@ -1000,7 +1029,7 @@ impl CanisterManager {
             settings,
             canister,
             compute_allocation_used,
-            memory_taken,
+            round_limits,
         )
     }
 
@@ -1110,6 +1139,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
         max_number_of_canisters: u64,
+        round_limits: &mut RoundLimits,
     ) -> Result<CanisterId, CanisterManagerError> {
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
@@ -1125,7 +1155,7 @@ impl CanisterManager {
         match self.validate_settings(
             settings,
             state.total_compute_allocation(),
-            state.total_memory_taken(),
+            &round_limits.subnet_available_memory,
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1135,6 +1165,7 @@ impl CanisterManager {
                 validated_settings,
                 max_number_of_canisters,
                 state,
+                round_limits,
             ),
         }
     }
@@ -1147,6 +1178,7 @@ impl CanisterManager {
         settings: ValidatedCanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<CanisterId, CanisterManagerError> {
         // A value of 0 is equivalent to setting no limit.
         // See documentation of `SubnetRecord` for the semantics of `max_number_of_canisters`.
@@ -1177,6 +1209,18 @@ impl CanisterManager {
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
         self.do_update_settings(settings, &mut new_canister);
+        let new_usage = new_canister.memory_usage(self.config.own_subnet_type);
+        let new_mem = new_canister
+            .system_state
+            .memory_allocation
+            .bytes()
+            .max(new_usage);
+
+        // settings were validated before so this should always succeed
+        round_limits
+            .subnet_available_memory
+            .try_decrement(new_mem, NumBytes::from(0))
+            .ok();
 
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
@@ -1268,7 +1312,7 @@ impl CanisterManager {
     // canister.
     fn validate_memory_allocation(
         &self,
-        total_subnet_memory_taken: NumBytes,
+        available_memory: &SubnetAvailableMemory,
         canister: &CanisterState,
         memory_allocation: Option<MemoryAllocation>,
     ) -> Result<(), CanisterManagerError> {
@@ -1286,14 +1330,17 @@ impl CanisterManager {
                 MemoryAllocation::Reserved(bytes) => bytes,
                 MemoryAllocation::BestEffort => canister.memory_usage(self.config.own_subnet_type),
             };
-            if memory_allocation.bytes() + total_subnet_memory_taken - canister_current_allocation
-                > self.config.subnet_memory_capacity
+            if memory_allocation.bytes().get() as i128
+                > available_memory.get_total_memory() as i128
+                    + canister_current_allocation.get() as i128
             {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                     requested: memory_allocation.bytes(),
-                    available: self.config.subnet_memory_capacity
-                        - total_subnet_memory_taken
-                        - canister_current_allocation,
+                    available: NumBytes::from(
+                        (available_memory.get_total_memory()
+                            - canister_current_allocation.get() as i64)
+                            .max(0) as u64,
+                    ),
                 });
             }
         }

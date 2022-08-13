@@ -1740,14 +1740,19 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
-    assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+    assert!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_total_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
-    )
+    );
+    let memory_used = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        initial_subnet_available_memory.get_total_memory() - memory_used
+    );
 }
 
 #[test]
@@ -1763,19 +1768,25 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
-    assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+    assert!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_total_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
+    let mem_before_upgrade = test.subnet_available_memory().get_total_memory();
     let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 20 * WASM_PAGE_SIZE as i64,
+        mem_before_upgrade,
         test.subnet_available_memory().get_total_memory()
+    );
+    let memory_used = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        initial_subnet_available_memory.get_total_memory() - memory_used
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),

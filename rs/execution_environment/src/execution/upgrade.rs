@@ -8,7 +8,9 @@ use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCode
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorError, SubnetAvailableMemoryError, WasmExecutionOutput,
+};
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, Memory, SystemState};
 use ic_sys::PAGE_SIZE;
@@ -225,6 +227,13 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     compilation_cost_handling: CompilationCostHandling,
 ) -> InstallCodeRoutineResult {
     let canister_id = new_canister.canister_id();
+    let subnet_type = round.hypervisor.subnet_type();
+    let old_usage = new_canister.memory_usage(subnet_type);
+    let old_mem = new_canister
+        .system_state
+        .memory_allocation
+        .bytes()
+        .max(old_usage);
 
     info!(
         round.log,
@@ -286,7 +295,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         Some(allocation) => allocation,
         None => new_canister.system_state.memory_allocation,
     };
-    let subnet_type = round.hypervisor.subnet_type();
+
     if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
         if bytes < new_canister.memory_usage(subnet_type) {
             return InstallCodeRoutineResult::Finished {
@@ -301,6 +310,37 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         execution_parameters.canister_memory_limit = bytes;
     }
     new_canister.system_state.memory_allocation = desired_memory_allocation;
+
+    let new_usage = new_canister.memory_usage(subnet_type);
+    let new_mem = desired_memory_allocation.bytes().max(new_usage);
+
+    if new_mem >= old_mem {
+        if let Err(err) = round_limits
+            .subnet_available_memory
+            .try_decrement(new_mem - old_mem, NumBytes::from(0))
+        {
+            match err {
+                SubnetAvailableMemoryError::InsufficientMemory {
+                    requested_total,
+                    message_requested: _,
+                    available_total,
+                    available_messages: _,
+                } => {
+                    return InstallCodeRoutineResult::Finished {
+                        instructions_left: execution_parameters.instruction_limits.message(),
+                        result: Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                            requested: requested_total,
+                            available: NumBytes::new(available_total.max(0) as u64),
+                        }),
+                    };
+                }
+            }
+        }
+    } else {
+        round_limits
+            .subnet_available_memory
+            .increment(old_mem - new_mem, NumBytes::from(0));
+    }
 
     // Stage 3: invoke the `start()` method (if present).
 

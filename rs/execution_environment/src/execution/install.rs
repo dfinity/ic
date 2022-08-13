@@ -7,7 +7,7 @@ use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCode
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_interfaces::execution_environment::WasmExecutionOutput;
+use ic_interfaces::execution_environment::{SubnetAvailableMemoryError, WasmExecutionOutput};
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_sys::PAGE_SIZE;
@@ -109,8 +109,17 @@ pub(crate) fn execute_install(
         None => new_canister.system_state.memory_allocation,
     };
     let subnet_type = round.hypervisor.subnet_type();
+
+    let new_usage = new_canister.memory_usage(subnet_type);
+    let old_usage = old_canister.memory_usage(subnet_type);
+    let old_mem = old_canister
+        .system_state
+        .memory_allocation
+        .bytes()
+        .max(old_usage);
+
     if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-        if bytes < new_canister.memory_usage(subnet_type) {
+        if bytes < new_usage {
             return InstallCodeRoutineResult::Finished {
                 instructions_left: execution_parameters.instruction_limits.message(),
                 result: Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
@@ -121,6 +130,36 @@ pub(crate) fn execute_install(
             };
         }
         execution_parameters.canister_memory_limit = bytes;
+    }
+
+    let new_mem = desired_memory_allocation.bytes().max(new_usage);
+
+    if new_mem >= old_mem {
+        if let Err(err) = round_limits
+            .subnet_available_memory
+            .try_decrement(new_mem - old_mem, NumBytes::from(0))
+        {
+            match err {
+                SubnetAvailableMemoryError::InsufficientMemory {
+                    requested_total,
+                    message_requested: _,
+                    available_total,
+                    available_messages: _,
+                } => {
+                    return InstallCodeRoutineResult::Finished {
+                        instructions_left: execution_parameters.instruction_limits.message(),
+                        result: Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                            requested: requested_total,
+                            available: NumBytes::new(available_total.max(0) as u64),
+                        }),
+                    };
+                }
+            }
+        }
+    } else {
+        round_limits
+            .subnet_available_memory
+            .increment(old_mem - new_mem, NumBytes::from(0));
     }
     new_canister.system_state.memory_allocation = desired_memory_allocation;
 
