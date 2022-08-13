@@ -14,14 +14,14 @@ mock! {
             event_handler: TransportEventHandler,
         );
 
-        fn start_connections(
+        fn start_connection(
             &self,
             peer: &NodeId,
             record: &NodeRecord,
             registry_version: RegistryVersion,
         ) -> Result<(), TransportErrorCode>;
 
-        fn stop_connections(
+        fn stop_connection(
             &self,
             peer: &NodeId,
         );

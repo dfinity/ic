@@ -188,7 +188,7 @@ impl PeerManager for PeerManagerImpl {
         // Instead, connection failures should be retried internally in
         // transport.
         self.transport
-            .start_connections(&node_id, node_record, registry_version)
+            .start_connection(&node_id, node_record, registry_version)
             .map_err(|e| {
                 let mut current_peers = self.current_peers.lock().unwrap();
                 current_peers.remove(&node_id);
@@ -202,8 +202,8 @@ impl PeerManager for PeerManagerImpl {
     /// The method removes the given peer from the list of current peers.
     fn remove_peer(&self, node_id: NodeId) {
         let mut current_peers = self.current_peers.lock().unwrap();
-        self.transport.stop_connections(&node_id);
-        // Remove the peer irrespective of the result of the stop_connections() call.
+        self.transport.stop_connection(&node_id);
+        // Remove the peer irrespective of the result of the stop_connection() call.
         current_peers.remove(&node_id);
         info!(self.log, "Nodes {:0} removed", node_id);
     }

@@ -57,20 +57,20 @@ const TRANSITION_FROM_ACCEPT_TASK_NAME: &str = "transition_from_accept";
 /// Implementation for the transport control plane
 impl TransportImpl {
     /// Stops connection to a peer
-    pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
+    pub(crate) fn stop_peer_connection(&self, peer_id: &NodeId) {
         self.allowed_clients.blocking_write().remove(peer_id);
         self.peer_map.blocking_write().remove(peer_id);
     }
 
     /// Starts connection(s) to a peer and initializes the corresponding data
     /// structures and tasks
-    pub(crate) fn start_peer_connections(
+    pub(crate) fn start_peer_connection(
         &self,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        let role = Self::connection_role(&self.node_id, peer_id);
+        let role = connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
             self.allowed_clients.blocking_write().insert(*peer_id);
@@ -317,7 +317,7 @@ impl TransportImpl {
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
-                match Self::connect_to_server(&local_addr, &peer_addr).await {
+                match connect_to_server(local_addr, peer_addr).await {
                     Ok(stream) => {
                         arc_self.control_plane_metrics
                             .tcp_connects
@@ -454,31 +454,31 @@ impl TransportImpl {
             .inc();
 
         let socket_addr = connected.peer_addr;
-        let connection_state =
-            if Self::connection_role(&self.node_id, &peer_id) == ConnectionRole::Server {
-                // We are the server, wait for the peer to connect
-                warn!(
-                    self.log,
-                    "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
+        let connection_state = if connection_role(&self.node_id, &peer_id) == ConnectionRole::Server
+        {
+            // We are the server, wait for the peer to connect
+            warn!(
+                self.log,
+                "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
                  node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
-                    self.node_id,
-                    flow_tag,
-                    peer_id
-                );
-                ConnectionState::Listening
-            } else {
-                // reconnect if we have a listener
-                let connecting_task = self.spawn_connect_task(
-                    flow_tag,
-                    peer_id,
-                    socket_addr.ip(),
-                    ServerPort::from(socket_addr.port()),
-                );
-                let connecting_state = Connecting {
-                    peer_addr: socket_addr,
-                    connecting_task,
-                };
-                warn!(
+                self.node_id,
+                flow_tag,
+                peer_id
+            );
+            ConnectionState::Listening
+        } else {
+            // reconnect if we have a listener
+            let connecting_task = self.spawn_connect_task(
+                flow_tag,
+                peer_id,
+                socket_addr.ip(),
+                ServerPort::from(socket_addr.port()),
+            );
+            let connecting_state = Connecting {
+                peer_addr: socket_addr,
+                connecting_task,
+            };
+            warn!(
                 self.log,
                 "ControlPlane::process_disconnect(): spawning reconnect task: node = {:?}/{:?}, \
                     flow_tag = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
@@ -489,8 +489,8 @@ impl TransportImpl {
                 socket_addr.ip(),
                 socket_addr.port(),
             );
-                ConnectionState::Connecting(connecting_state)
-            };
+            ConnectionState::Connecting(connecting_state)
+        };
         event_handler
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowDown(peer_id),
@@ -498,22 +498,6 @@ impl TransportImpl {
             .await
             .expect("Can't panic on infallible");
         flow_state.update(connection_state);
-    }
-
-    /// Set up the client socket, and connect to the specified server peer
-    async fn connect_to_server(
-        local_addr: &SocketAddr,
-        peer_addr: &SocketAddr,
-    ) -> std::io::Result<TcpStream> {
-        let socket = if local_addr.is_ipv6() {
-            TcpSocket::new_v6()?
-        } else {
-            TcpSocket::new_v4()?
-        };
-        socket.bind(*local_addr)?;
-        let stream = socket.connect(*peer_addr).await?;
-        stream.set_nodelay(true)?;
-        Ok(stream)
     }
 
     /// Performs the server side TLS hand shake processing
@@ -565,30 +549,6 @@ impl TransportImpl {
         }
     }
 
-    // Sets up the server side socket with the node IP:port
-    // Panics in case of unrecoverable error.
-    fn start_listener(local_addr: &SocketAddr) -> std::io::Result<TcpListener> {
-        let socket = if local_addr.is_ipv6() {
-            TcpSocket::new_v6()?
-        } else {
-            TcpSocket::new_v4()?
-        };
-        socket.set_reuseaddr(true)?;
-        socket.set_reuseport(true)?;
-        socket.bind(*local_addr)?;
-        socket.listen(128)
-    }
-
-    /// Returns our role wrt the peer connection
-    fn connection_role(my_id: &NodeId, peer: &NodeId) -> ConnectionRole {
-        assert!(*my_id != *peer);
-        if *my_id > *peer {
-            ConnectionRole::Server
-        } else {
-            ConnectionRole::Client
-        }
-    }
-
     /// Initilizes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
         // Creating the listeners requres that we are within a tokio runtime context.
@@ -600,7 +560,7 @@ impl TransportImpl {
         listeners.push((
             self.config.legacy_flow_tag,
             self.config.listening_port,
-            Self::start_listener(&server_addr).unwrap_or_else(|err| {
+            start_listener(server_addr).unwrap_or_else(|err| {
                 panic!(
                     "Failed to init listener: local_addr = {:?}, error = {:?}",
                     server_addr, err
@@ -616,6 +576,46 @@ impl TransportImpl {
         }
         *self.accept_ports.blocking_lock() = accept_ports;
         *self.event_handler.blocking_lock() = Some(event_handler);
+    }
+}
+
+/// Set up the client socket, and connect to the specified server peer
+async fn connect_to_server(
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
+) -> std::io::Result<TcpStream> {
+    let socket = if local_addr.is_ipv6() {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+    socket.bind(local_addr)?;
+    let stream = socket.connect(peer_addr).await?;
+    stream.set_nodelay(true)?;
+    Ok(stream)
+}
+
+// Sets up the server side socket with the node IP:port
+// Panics in case of unrecoverable error.
+fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
+    let socket = if local_addr.is_ipv6() {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(true)?;
+    socket.bind(local_addr)?;
+    socket.listen(128)
+}
+
+/// Returns our role wrt the peer connection
+fn connection_role(my_id: &NodeId, peer: &NodeId) -> ConnectionRole {
+    assert!(*my_id != *peer);
+    if *my_id > *peer {
+        ConnectionRole::Server
+    } else {
+        ConnectionRole::Client
     }
 }
 
@@ -738,8 +738,8 @@ mod tests {
                 }),
             });
             control_plane_1
-                .start_connections(&NODE_ID_2, &node_record_1, REG_V1)
-                .expect("start_connections");
+                .start_connection(&NODE_ID_2, &node_record_1, REG_V1)
+                .expect("start_connection");
 
             let (connected_2, mut done_2) = channel(1);
             let fake_event_handler_2 = BoxCloneService::new(FakeEventHandler {
@@ -756,8 +756,8 @@ mod tests {
                 }),
             });
             control_plane_2
-                .start_connections(&NODE_ID_1, &node_record_2, REG_V1)
-                .expect("start_connections");
+                .start_connection(&NODE_ID_1, &node_record_2, REG_V1)
+                .expect("start_connection");
             assert_eq!(done_1.blocking_recv(), Some(true));
             assert_eq!(done_2.blocking_recv(), Some(true));
         });

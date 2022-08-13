@@ -144,31 +144,31 @@ impl TestClient {
         }
     }
 
-    fn start_connections(&self) -> Result<(), TransportErrorCode> {
+    fn start_connection(&self) -> Result<(), TransportErrorCode> {
         self.transport
-            .start_connections(&self.prev, &self.prev_node_record, self.registry_version)
+            .start_connection(&self.prev, &self.prev_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
-                    "Failed to start_connections(): peer = {:?} err = {:?}", self.prev, e
+                    "Failed to start_connection(): peer = {:?} err = {:?}", self.prev, e
                 );
                 e
             })?;
         self.transport
-            .start_connections(&self.next, &self.next_node_record, self.registry_version)
+            .start_connection(&self.next, &self.next_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
-                    "Failed to start_connections(): peer = {:?} err = {:?}", self.next, e
+                    "Failed to start_connection(): peer = {:?} err = {:?}", self.next, e
                 );
                 e
             })?;
         Ok(())
     }
 
-    fn stop_connections(&self) {
-        self.transport.stop_connections(&self.prev);
-        self.transport.stop_connections(&self.next);
+    fn stop_connection(&self) {
+        self.transport.stop_connection(&self.prev);
+        self.transport.stop_connection(&self.next);
     }
 
     // Waits for the flows/connections to be up
@@ -574,7 +574,7 @@ fn task_main(
     );
     println!("starting connections... [Node: {}]", node_id_val);
     test_client
-        .start_connections()
+        .start_connection()
         .map_err(TestClientErrorCode::TransportError)?;
 
     println!("starting test... [Node: {}]", node_id_val);
@@ -584,17 +584,17 @@ fn task_main(
             active_flag.store(false, Ordering::Relaxed);
             if let Err(e) = res {
                 info!(log, "Source thread failed, attempting to stop connections");
-                test_client.stop_connections();
+                test_client.stop_connection();
                 Err(e)
             } else {
-                test_client.stop_connections();
+                test_client.stop_connection();
                 info!(log, "Test successful");
                 Ok(())
             }
         }
         Role::Relay => {
             let res = test_client.relay_loop();
-            test_client.stop_connections();
+            test_client.stop_connection();
             res.map_err(TestClientErrorCode::TransportError)
         }
     }
