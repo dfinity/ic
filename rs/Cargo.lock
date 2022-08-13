@@ -4507,6 +4507,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-certification"
+version = "0.8.0"
+dependencies = [
+ "hex",
+ "ic-base-types",
+ "ic-certification-test-utils",
+ "ic-crypto-internal-types",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-types 0.8.0",
+ "leb128",
+ "rand 0.8.5",
+ "serde",
+ "serde_cbor",
+ "tree-deserializer",
+]
+
+[[package]]
+name = "ic-certification-test-utils"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-seed",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-types",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-interfaces",
+ "ic-types 0.8.0",
+ "leb128",
+ "rand 0.8.5",
+ "serde",
+ "serde_cbor",
+]
+
+[[package]]
 name = "ic-certification-version"
 version = "0.8.0"
 dependencies = [
@@ -4522,42 +4558,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.9.9",
-]
-
-[[package]]
-name = "ic-certified-vars"
-version = "0.8.0"
-dependencies = [
- "hex",
- "ic-base-types",
- "ic-certified-vars-test-utils",
- "ic-crypto-internal-types",
- "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig",
- "ic-crypto-utils-threshold-sig-der",
- "ic-types 0.8.0",
- "leb128",
- "rand 0.8.5",
- "serde",
- "serde_cbor",
- "tree-deserializer",
-]
-
-[[package]]
-name = "ic-certified-vars-test-utils"
-version = "0.1.0"
-dependencies = [
- "ic-crypto-internal-seed",
- "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-types",
- "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig-der",
- "ic-interfaces",
- "ic-types 0.8.0",
- "leb128",
- "rand 0.8.5",
- "serde",
- "serde_cbor",
 ]
 
 [[package]]
@@ -4886,7 +4886,7 @@ version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
  "hex",
- "ic-certified-vars",
+ "ic-certification",
  "ic-crypto",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-test-vectors",
@@ -6035,7 +6035,7 @@ dependencies = [
  "clap 3.2.14",
  "dfn_protobuf",
  "ic-canister-client",
- "ic-certified-vars",
+ "ic-certification",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -7036,8 +7036,8 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "ic-canister-client",
- "ic-certified-vars",
- "ic-certified-vars-test-utils",
+ "ic-certification",
+ "ic-certification-test-utils",
  "ic-crypto",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
@@ -13258,7 +13258,7 @@ dependencies = [
  "ic-btc-types",
  "ic-canister-client",
  "ic-cdk 0.5.5",
- "ic-certified-vars",
+ "ic-certification",
  "ic-config",
  "ic-constants",
  "ic-crypto",

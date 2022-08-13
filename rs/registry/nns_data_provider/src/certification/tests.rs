@@ -1,5 +1,5 @@
 use super::{decode_certified_deltas, CertificationError};
-use ic_certified_vars_test_utils::{CertificateBuilder, CertificateData};
+use ic_certification_test_utils::{CertificateBuilder, CertificateData};
 use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
     WitnessGenerator,

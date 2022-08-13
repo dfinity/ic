@@ -1,6 +1,6 @@
 //! ICCSA (Internet Computer Canister Signature Algorithm) API
 use crate::types::{PublicKey, PublicKeyBytes, Signature, SignatureBytes};
-use ic_certified_vars::CertificateValidationError;
+use ic_certification::CertificateValidationError;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_sha::Sha256;
 use ic_crypto_tree_hash::{Digest, LabeledTree};
@@ -56,7 +56,7 @@ pub fn verify(
 ) -> CryptoResult<()> {
     let (canister_id, seed) = parse_pubkey_bytes(&pk)?;
     let parsed_sig = parse_signature_bytes(&sig)?;
-    verify_certified_vars_certificate(
+    verify_certificate(
         parsed_sig.certificate.as_ref(),
         &canister_id,
         root_pubkey,
@@ -96,7 +96,7 @@ fn parse_signature_bytes(sig: &SignatureBytes) -> CryptoResult<Signature> {
     })
 }
 
-fn verify_certified_vars_certificate(
+fn verify_certificate(
     certificate: &[u8],
     canister_id: &CanisterId,
     root_pubkey: &ThresholdSigPublicKey,
@@ -104,7 +104,7 @@ fn verify_certified_vars_certificate(
     sig: &SignatureBytes,
     pk: &PublicKeyBytes,
 ) -> CryptoResult<()> {
-    ic_certified_vars::verify_certificate(certificate, canister_id, root_pubkey, digest.as_bytes())
+    ic_certification::verify_certificate(certificate, canister_id, root_pubkey, digest.as_bytes())
         .map_err(|err| match &err {
             CertificateValidationError::DeserError(_)
             | CertificateValidationError::MalformedHashTree(_) => CryptoError::MalformedSignature {

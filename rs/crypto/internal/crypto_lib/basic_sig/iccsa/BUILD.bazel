@@ -8,7 +8,7 @@ rust_library(
     crate_name = "ic_crypto_internal_basic_sig_iccsa",
     edition = "2018",
     deps = [
-        "//rs/certified_vars",
+        "//rs/certification",
         "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha",

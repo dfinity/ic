@@ -1,4 +1,4 @@
-use ic_certified_vars::verify_certificate;
+use ic_certification::verify_certificate;
 use ic_ledger_core::block::{EncodedBlock, HashOf};
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId};
 
