@@ -16,7 +16,7 @@ use tower::util::BoxCloneService;
 /// (which are called 'Transport clients').
 pub trait Transport: Send + Sync {
     /// Sets an event handler object that is called when a new message is received.
-    /// It is important to call this method before `start_connections`, otherwise,
+    /// It is important to call this method before `start_connection`, otherwise,
     /// a panic may occur due to the missing `event_handler`.
     ///
     /// Alternatives considered:
@@ -27,39 +27,35 @@ pub trait Transport: Send + Sync {
     ///        received messages.
     ///        One way to implement this is to return channel receiver(s) when a connection
     ///        is established. Then the client can pull the receiver(s) to consume messages.
-    ///        Using a pull model gives us less flexibility:
+    ///        Using a pull model leads to:
     ///             a) can't have custom logic like filtering, load shedding, queueing,
     ///                rate-limitting, etc. before messages are deliver to the client
     ///             b) complicated concurrent processing, because messages are fanned in into
     ///                a single channel that the client uses to receive them
-    ///                (channel receivers require exclusive access to receive a message)
+    ///                (channel receivers require exclusive access to receive a message).
+    ///                If one day we need a custom scheduler this is the abstraction we need to
+    ///                consider.
     fn set_event_handler(&self, event_handler: TransportEventHandler);
 
-    /// Mark the peer as valid neighbor, and set up the transport layer to
-    /// exchange messages with the peer. This call would create the
-    /// necessary wiring in the transport layer for the peer:
-    /// - 1. Set up the Tx/Rx queueing, based on TransportQueueConfig.
-    /// - 2. If the peer is the server, initiate connection requests to the peer
-    ///   server ports.
-    /// - 3. If the peer is the client, set up the connection state to accept
-    ///   connection requests from the peer.
-    /// These are all implementation details that should not bother the
-    /// components that are using Transport (the Transport clients).
-    fn start_connections(
+    /// Initiates a connection to the corresponding peer. This method should be non-blocking
+    /// because the success of establishing the connection depends on the internal state of
+    /// both peers. This is different than the client-server model where a server starts up
+    /// waiting for connection and it can be acceptable for the client to block until a
+    /// connection is established.
+    /// Since this method is non-blocking, the callee can send messages to the peer
+    /// once it received the PeerFlowUp event.
+    fn start_connection(
         &self,
         peer: &NodeId,
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode>;
 
-    /// Remove the peer from the set of valid neighbors, and tear down the
-    /// queues and connections for the peer. Any messages in the Tx and Rx
-    /// queues for the peer will be discarded.
-    /// It is fine to call the function on non-existing connection(s).
-    fn stop_connections(&self, peer_id: &NodeId);
+    /// Terminates the connection with the peer.
+    fn stop_connection(&self, peer_id: &NodeId);
 
     /// Send the message to the specified peer. The message will be enqueued
-    /// into the appropriate TxQ based on the TransportQueueConfig.
+    /// into the corresponding 'FlowTag' send queue.
     fn send(
         &self,
         peer_id: &NodeId,
@@ -67,7 +63,7 @@ pub trait Transport: Send + Sync {
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode>;
 
-    /// Clear any unsent messages in all the send queues for the peer.
+    /// Clear any queued messages in all the send queues for the peer.
     fn clear_send_queues(&self, peer_id: &NodeId);
 }
 

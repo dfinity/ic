@@ -151,7 +151,17 @@ impl Transport for TransportImpl {
         self.init_client(event_handler)
     }
 
-    fn start_connections(
+    /// Mark the peer as valid neighbor, and set up the transport layer to
+    /// exchange messages with the peer. This call would create the
+    /// necessary wiring in the transport layer for the peer:
+    /// - 1. Set up the Tx/Rx queueing, based on TransportQueueConfig.
+    /// - 2. If the peer is the server, initiate connection requests to the peer
+    ///   server ports.
+    /// - 3. If the peer is the client, set up the connection state to accept
+    ///   connection requests from the peer.
+    /// These are all implementation details that should not bother the
+    /// components that are using Transport (the Transport clients).
+    fn start_connection(
         &self,
         peer_id: &NodeId,
         node_record: &NodeRecord,
@@ -159,17 +169,21 @@ impl Transport for TransportImpl {
     ) -> Result<(), TransportErrorCode> {
         info!(
             self.log,
-            "Transport::start_connections(): peer_id = {:?}", peer_id
+            "Transport::start_connection(): peer_id = {:?}", peer_id
         );
-        self.start_peer_connections(peer_id, node_record, registry_version)
+        self.start_peer_connection(peer_id, node_record, registry_version)
     }
 
-    fn stop_connections(&self, peer_id: &NodeId) {
+    /// Remove the peer from the set of valid neighbors, and tear down the
+    /// queues and connections for the peer. Any messages in the Tx and Rx
+    /// queues for the peer will be discarded.
+    /// It is fine to call the function on non-existing connection(s).
+    fn stop_connection(&self, peer_id: &NodeId) {
         info!(
             self.log,
-            "Transport::stop_connections(): peer_id = {:?}", peer_id,
+            "Transport::stop_connection(): peer_id = {:?}", peer_id,
         );
-        self.stop_peer_connections(peer_id);
+        self.stop_peer_connection(peer_id);
     }
 
     fn send(
