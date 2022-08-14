@@ -268,11 +268,14 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
 
     fn combine_basic_sig(
         &self,
-        _signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+        signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
         _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSignatureBatch<T>> {
         Ok(BasicSignatureBatch {
-            signatures_map: BTreeMap::new(),
+            signatures_map: signatures
+                .iter()
+                .map(|(key, value)| (*key, (*value).clone()))
+                .collect(),
         })
     }
 
