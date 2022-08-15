@@ -12,6 +12,8 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
+from util.print import eprint
+
 
 # Changes to a subnet
 class SubnetParams:
@@ -61,17 +63,17 @@ class EsDoc:
         ip = addr[3:] if addr.startswith("ip6") else addr
         return ipaddress.IPv6Address(ip.replace("-", ":"))
 
-    def host_addr(self) -> ipaddress.IPv6Address:
+    def host_addr(self) -> Optional[ipaddress.IPv6Address]:
         host = self.host()
         assert "ip" in host, "host address not found"
         addr_field = host["ip"]
         if isinstance(addr_field, list):
             ext_addrs = [addr for addr in addr_field if not self._parse_ip_address(addr).is_link_local]
+            if len(ext_addrs) == 0:
+                # This may happen early after the host is booted
+                return None
             if len(ext_addrs) > 1:
-                sys.stderr.write(
-                    f"WARNING: multiple non-link-local addresses specified for host: {', '.join(ext_addrs)}"
-                )
-            assert len(ext_addrs) > 0, "host address is empty"
+                eprint(f"WARNING: multiple non-link-local addresses specified for host: {', '.join(ext_addrs)}")
             addr = ext_addrs[0]
         else:
             assert isinstance(addr_field, str), f"host.ip has unexpected type: {str(type(addr_field))}"
@@ -393,10 +395,10 @@ class ReplicaDoc(StructuredDoc):
         else:
             m = re.match(".*state available: (false|true).*DKG key material available: (false|true).*", lem)
             if not m or len(m.groups()) < 2:
-                sys.stderr.write(
+                eprint(
                     f"WARNING: could not parse "
                     f"consensus_finalized_params in "
-                    f"orchestrator document {self.id()}: {lem}\n"
+                    f"orchestrator document {self.id()}: {lem}"
                 )
                 return None
             else:
@@ -411,10 +413,10 @@ class ReplicaDoc(StructuredDoc):
         else:
             node_id_str = m.group(1)
             if " " in node_id_str:
-                sys.stderr.write(
+                eprint(
                     f"WARNING: multiple nodes not yet supported "
                     f"in get_p2p_node_params; see doc {self.id()}: "
-                    f"{node_id_str}\n"
+                    f"{node_id_str}"
                 )
                 return None
             return NodeParams(node_id=node_id_str)

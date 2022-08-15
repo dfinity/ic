@@ -11,7 +11,6 @@ from monpoly.monpoly import Monpoly
 from pipeline.alert import AlertService
 from pipeline.alert import DummyAlertService
 from pipeline.artifact_manager import ArtifactManager
-from pipeline.backend import file_io
 from pipeline.backend.ci import Ci
 from pipeline.backend.ci import CiException
 from pipeline.backend.es import Es
@@ -294,26 +293,37 @@ def main():
     with_docker = not args.without_docker
 
     try:
+        gitlab: Optional[Ci]
+        if gitlab_token is None:
+            gitlab = None
+        else:
+            gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
+
         # Obtains logs for each group
         if args.read:
             # If the input file is small enough, it would be faster to load in into memory completely and then process, i.e.:
             # groups = file_io.read_logs(log_file=args.read)
-            groups = file_io.stream_file(log_file=args.read)
+            group = Group.fromFile(log_file=args.read, as_stream=True)
+            groups = {group.name: group}
         else:
-            gitlab: Optional[Ci] = None
             if args.mainnet:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True, fail=args.fail)
-                gid = "mainnet"
-                groups = {gid: Group(gid)}
+                group_name = "mainnet"
+                groups = {group_name: Group(group_name)}
             else:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False, fail=args.fail)
                 if args.group_names:
                     assert isinstance(args.group_names, Iterable)
-                    gids: Iterable[str] = args.group_names
-                    groups = {gid: Group(gid) for gid in gids}
+                    group_names: Iterable[str] = args.group_names
+                    if (
+                        any([Group.is_group_name_local(g) for g in group_names])
+                        and args.system_tests_working_dir is None
+                    ):
+                        print("please specify --system_tests_working_dir to monitor locally invoked tests")
+                        exit(1)
+                    groups = {g: Group(g) for g in group_names}
                 else:
                     if gitlab_token is not None:
-                        gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
                         if args.pre_master_pipeline:
                             # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
                             groups = gitlab.get_premaster_groups_for_pipeline(
@@ -361,7 +371,7 @@ def main():
                         )
                     )
                 else:
-                    # Obrain Global Infra from initial registry snapshot Gitbal artifact
+                    # Obtain Global Infra from initial registry snapshot GitLab artifact
                     assert gitlab is not None
                     try:
                         snap_bulb = gitlab.get_registry_snapshot_for_group(group)

@@ -168,11 +168,11 @@ class Ci:
         if not group_names:
             return None
         eprint(f"Found {len(group_names)} group(s)")
-        gid: str
-        for gid in group_names:
-            if include_pattern is None or re.match(include_pattern, gid):
-                eprint(f" + {gid}", end="\n", flush=True)
-                groups[gid] = Group(gid, ci_job_id=job_id, url=job_url)
+        gname: str
+        for gname in group_names:
+            if include_pattern is None or re.match(include_pattern, gname):
+                eprint(f" + {gname}", end="\n", flush=True)
+                groups[gname] = Group(gname, url=job_url)
         return groups
 
     def _get_group_names_from_jobs(
@@ -190,7 +190,9 @@ class Ci:
                 eprint(f"Warning: cannot find test group name for job {jurl}")
             else:
                 intersect = set(new_groups.keys()).intersection(groups.keys())
-                assert set() == intersect, f"duplicate groups found: {', '.join(intersect)}"
+                assert set() == intersect, "duplicate groups found: " + ", ".join(
+                    map(lambda g: str(new_groups[g]) + " and " + str(groups[g]), intersect)
+                )
                 groups.update(new_groups)
         return groups
 
@@ -241,15 +243,16 @@ class Ci:
         return groups
 
     def get_registry_snapshot_for_group(self, group: Group) -> str:
-        if group.ci_job_id is None:
-            eprint(f"cannot obtain initial registry snapshot for {str(group)} without job ID")
+        jid = group.job_id()
+        if jid is None:
+            eprint(f"Cannot obtain initial registry snapshot for {str(group)} without job ID")
             raise CiJobNotDefinedForGroup()
 
         try:
-            job = self.project.jobs.get(group.ci_job_id)
+            job = self.project.jobs.get(jid)
         except gitlab.exceptions.GitlabGetError:
-            eprint(f"Cannot find job with ID {group.ci_job_id}")
-            raise CiJobNotFoundException(group.ci_job_id)
+            eprint(f"Cannot find job with ID {jid}")
+            raise CiJobNotFoundException(jid)
 
         snap_bs: bytes
         try:
@@ -259,6 +262,6 @@ class Ci:
                 gitlab.exceptions.GitlabGetError()
         except gitlab.exceptions.GitlabGetError:
             eprint(f"Could not find artifact {snap_path} of {str(group)}")
-            raise PotArtifactNotFoundInCi(group.ci_job_id, snap_path)
+            raise PotArtifactNotFoundInCi(jid, snap_path)
 
         return snap_bs.decode().strip()

@@ -144,11 +144,11 @@ class Pipeline:
         event_stream: Iterable[str],
     ) -> None:
 
-        assert group.gid in self.stat and "monpoly" in self.stat[group.gid]
+        assert group.name in self.stat and "monpoly" in self.stat[group.name]
 
         eprint(f"Checking MFOTL policy from `{self.policies_path}` ...")
 
-        self.stat[group.gid]["monpoly"] = dict()
+        self.stat[group.name]["monpoly"] = dict()
 
         for formula in pproc.get_formulas():
 
@@ -162,7 +162,7 @@ class Pipeline:
                     hard_timeout=10.0,
                 )
 
-            self.stat[group.gid]["monpoly"][formula] = dict()
+            self.stat[group.name]["monpoly"][formula] = dict()
 
             log_file = self.art_manager.event_stream_file(group, pproc.name)
             session_name = f"{log_file.stem}.{formula}"
@@ -171,16 +171,16 @@ class Pipeline:
                 repro_cmd = session.cmd_wo_rss() + ("-log", f'"/repro/{log_file.name}"')
 
                 # Save this repro in case we need to run it later
-                if group.gid not in self.repros:
-                    self.repros[group.gid] = dict()
+                if group.name not in self.repros:
+                    self.repros[group.name] = dict()
 
-                if formula not in self.repros[group.gid]:
-                    self.repros[group.gid][formula] = set()
+                if formula not in self.repros[group.name]:
+                    self.repros[group.name][formula] = set()
                 else:
-                    eprint(f"REPRO WARNING: multiple violations of policy {formula} by group name {group.gid}")
+                    eprint(f"REPRO WARNING: multiple violations of policy {formula} by group name {group.name}")
 
                 s: Set[Tuple[str, ...]]
-                s = self.repros[group.gid][formula]
+                s = self.repros[group.name][formula]
                 s.add(repro_cmd)
 
                 if self.docker_starter is not None:
@@ -211,7 +211,7 @@ class Pipeline:
                         viol = f"@{m.group(1)} (time point {m.group(2)}):\n " + "\n ".join(key_val_pairs)
                 self.slack.alert(
                     level="🎩",
-                    text=f"`{arg.source}` reports that group `{group.gid}`"
+                    text=f"`{arg.source}` reports that group `{group.name}`"
                     f" has violated policy {self._formula_url(formula)}:\n"
                     f"```\n{viol}\n```\n"
                     f"Repro:\n"
@@ -224,7 +224,7 @@ class Pipeline:
                 self.slack.alert(
                     level="🍊",
                     text=f"`{arg.source}` reports an error while checking"
-                    f" policy `{formula}` against group `{group.gid}`:\n"
+                    f" policy `{formula}` against group `{group.name}`:\n"
                     f"```\n{arg.message}\n```\n"
                     f"Repro:\n"
                     f"```\n{repro(arg.session)}\n"
@@ -237,7 +237,7 @@ class Pipeline:
                     self.slack.alert(
                         level="🚱",
                         text=f"Monpoly exited with non-zero code `{arg.exit_code}`"
-                        f" while checking policy `{formula}` of `{group.gid}`\n"
+                        f" while checking policy `{formula}` of `{group.name}`\n"
                         f"Repro:\n"
                         f"```\n{repro(arg.session)}\n"
                         f"```\nTest logs: <{group.url}>\n",
@@ -248,7 +248,7 @@ class Pipeline:
                 name=session_name,
                 docker=self.docker,
                 workdir=self.policies_path,
-                stat=self.stat[group.gid]["monpoly"][formula],
+                stat=self.stat[group.name]["monpoly"][formula],
                 reprodir=str(self.art_manager.artifacts_prefix()),
                 local_sig_file="predicates.sig",
                 local_formula=formula_local_path(formula),
@@ -280,7 +280,7 @@ class Pipeline:
         ), f"Global Infra is required but not available for {str(group)}"
 
         # Init statistics object for this group name
-        self.stat[group.gid] = {
+        self.stat[group.name] = {
             "pre_processor": dict(),
             "monpoly": dict(),
             "global_infra": None if group.global_infra is None else group.global_infra.to_dict(),
@@ -310,7 +310,7 @@ class Pipeline:
                 event_stream,
             )
         # Save test runtime statistics
-        self.stat[group.gid]["pre_processor"] = pproc.stat
+        self.stat[group.name]["pre_processor"] = pproc.stat
 
     def _run_liveness_check(self, group: Group):
         eprint("Starting liveness check ...")

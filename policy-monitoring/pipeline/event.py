@@ -69,10 +69,10 @@ class RebootEvent(Event):
         super().__init__(name="reboot", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot():
+        host_addr = self.doc.host_addr()
+        if not host_addr or not self.doc.is_host_reboot():
             return []
         else:
-            host_addr = self.doc.host_addr()
             data_center_prefix = GlobalInfra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 
@@ -84,10 +84,10 @@ class RebootIntentEvent(Event):
         super().__init__(name="reboot_intent", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot_intent():
+        host_addr = self.doc.host_addr()
+        if not host_addr or not self.doc.is_host_reboot_intent():
             return []
         else:
-            host_addr = self.doc.host_addr()
             data_center_prefix = GlobalInfra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 
