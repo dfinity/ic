@@ -283,6 +283,16 @@ export async function handleRequest(request: Request): Promise<Response> {
         httpRequest
       )) as HttpResponse;
 
+      if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
+        console.error(
+          'Due to security reasons redirects are blocked on the IC until further notice!'
+        );
+        return new Response(
+          'Due to security reasons redirects are blocked on the IC until further notice!',
+          { status: 500 }
+        );
+      }
+
       if (httpResponse.upgrade.length === 1 && httpResponse.upgrade[0]) {
         // repeat the request as an update call
         httpResponse = (await actor.http_request_update(

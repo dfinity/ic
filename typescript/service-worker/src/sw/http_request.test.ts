@@ -518,6 +518,21 @@ it('should do update call on upgrade flag', async () => {
   );
 });
 
+it('should reject redirects', async () => {
+  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  const queryHttpPayload = createHttpRedirectResponsePayload();
+  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(500);
+  expect(await response.text()).toEqual(
+    'Due to security reasons redirects are blocked on the IC until further notice!'
+  );
+});
+
 function decodeContent<T>(
   [_, request]: [unknown, RequestInit],
   argType: IDL.Type
@@ -643,6 +658,26 @@ function createHttpQueryResponsePayload(
     status: QueryResponseStatus.Replied,
     reply: {
       arg: IDL.encode([responseType], [response]),
+    },
+  };
+  return Agent.Cbor.encode(candidResponse);
+}
+
+function createHttpRedirectResponsePayload(
+  statusCode: number = 302,
+  redirectLocation: string = ''
+) {
+  const response = {
+    status_code: statusCode,
+    headers: [['Location', redirectLocation]],
+    body: Array.from(new TextEncoder().encode('')),
+    streaming_strategy: [],
+    upgrade: [],
+  };
+  const candidResponse: QueryResponse = {
+    status: QueryResponseStatus.Replied,
+    reply: {
+      arg: IDL.encode([getResponseTypes(IDL.Text)[0]], [response]),
     },
   };
   return Agent.Cbor.encode(candidResponse);
