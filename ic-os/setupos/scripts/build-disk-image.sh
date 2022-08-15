@@ -282,21 +282,21 @@ function assemble_and_populate_image() {
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
 
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
+    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 50M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
+    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 50M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
         "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
 
-    "${TOOL_DIR}"/build_fat32_image.py -o "${TMP_DIR}/partition-config.tar" -s 100M -p config/ -l CONFIG -i "${TMP_DIR}/config.tar"
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-data.tar" -s 2G -p data/ -i "${TMP_DIR}/data.tar"
+    "${TOOL_DIR}"/build_fat32_image.py -o "${TMP_DIR}/partition-config.tar" -s 50M -p config/ -l CONFIG -i "${TMP_DIR}/config.tar"
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-data.tar" -s 1750M -p data/ -i "${TMP_DIR}/data.tar"
 
     tar xOf "${TMP_DIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMP_DIR}/file_contexts"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-boot.tar" -s 500M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" -p boot/ \
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-boot.tar" -s 100M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" -p boot/ \
         "${TMP_DIR}/version.txt:/boot/version.txt:0644" \
         "${BASE_DIR}/extra_boot_args:/boot/extra_boot_args:0644"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 2G -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 1750M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
         "${TMP_DIR}/version.txt:/opt/ic/share/version.txt:0644"
 
     "${TOOL_DIR}"/build_disk_image.py -o "${TMP_DIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
@@ -315,7 +315,7 @@ function provide_raw_image() {
     OUT_BASENAME="$(basename "${OUT_FILE}")"
     tar xf "${TMP_DIR}/disk.img.tar" --transform="s/disk.img/${OUT_BASENAME}/" -C "${OUT_DIRNAME}"
     # increase size a bit, for immediate qemu use (legacy)
-    truncate --size 5G "${OUT_FILE}"
+    truncate --size 4G "${OUT_FILE}"
 }
 
 function log_end() {
