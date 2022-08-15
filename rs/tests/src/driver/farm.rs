@@ -30,7 +30,7 @@ const TIMEOUT_SETTINGS_LONG: TimeoutSettings = TimeoutSettings {
 const TIMEOUT_SETTINGS: TimeoutSettings = TimeoutSettings {
     retry_timeout: Duration::from_secs(120),
     min_http_timeout: Duration::from_secs(5),
-    max_http_timeout: Duration::from_secs(30),
+    max_http_timeout: Duration::from_secs(60),
     linear_backoff: Duration::from_secs(5),
 };
 
