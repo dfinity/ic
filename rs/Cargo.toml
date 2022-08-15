@@ -139,6 +139,7 @@ members = [
   "nns/sns-wasm",
   "determinism_test",
   "orchestrator",
+  "orchestrator/dashboard",
   "orchestrator/registry_replicator",
   "p2p",
   "replica/setup_ic_network",
