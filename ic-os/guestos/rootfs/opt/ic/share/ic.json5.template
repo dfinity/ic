@@ -305,13 +305,13 @@ table ip6 filter {\n\
             "2a0f:cd00:0002::/56",
             "fd00:2:1:1::/64",
           ],
-          ports: [22, 2497, 4100, 8080, 9090, 9091, 9100, 19531],
+          ports: [22, 2497, 4100, 8080, 7070, 9090, 9091, 9100, 19531],
           action: 1,
           comment: "Default rule from template",
           direction: 1,
         }],
-        ports_for_node_whitelist: [2497, 4100, 8080],
-        ports_for_http_adapter_blacklist: [22, 2497, 4100, 8080, 9090, 9091, 9100, 19531],
+        ports_for_node_whitelist: [2497, 4100, 7070, 8080],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 8080, 7070, 9090, 9091, 9100, 19531],
     },
 
     registration: {

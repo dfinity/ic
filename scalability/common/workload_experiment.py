@@ -5,6 +5,7 @@ import random
 import subprocess
 import tempfile
 import time
+import uuid
 from statistics import mean
 from typing import List
 
@@ -164,22 +165,17 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """Kill all workload generators on the given machine."""
         self.kill_pids = ssh.spawn_ssh_in_parallel(
             machines,
-            "sudo systemctl stop ic-replica; kill $(pidof ic-workload-generator) || true",
+            "sudo systemctl stop ic-replica",
             f_stdout=tempfile.NamedTemporaryFile().name,
             f_stderr=tempfile.NamedTemporaryFile().name,
         )
+        for _, s in self.kill_pids:
+            s.wait()
+        self.kill_pids = []
 
     def __restart_services(self, machines):
         """Kill all workload generators on the given machine."""
-        print("Restarting services")
-        self.start_pids = ssh.spawn_ssh_in_parallel(
-            machines,
-            "sudo systemctl start ic-replica",
-            f_stdout=tempfile.NamedTemporaryFile().name,
-            f_stderr=tempfile.NamedTemporaryFile().name,
-        )
-        for _, s in self.start_pids:
-            s.wait()
+        print("Removed for now")
 
     def end_experiment(self):
         self.__restart_services(self.machines)
@@ -292,11 +288,20 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         since_time = self.t_iter_end - self.t_iter_start
         self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
 
-    def start_iteration(self):
-        """Start a new iteration of the experiment."""
+    def __wait_kill(self):
+        """Wait for previously asynchronously started processes that kill running workload generator instances."""
+        print(f"Waiting for previous workload generator kill commands: {self.kill_pids}")
         for (machine, p) in self.kill_pids:
             p.wait()
         self.kill_pids = []
+
+    def __del__(self):
+        """Make sure all asynchronously spawned processes are terminated."""
+        self.__wait_kill()
+
+    def start_iteration(self):
+        """Start a new iteration of the experiment."""
+        self.__wait_kill()
 
         super().start_iteration()
         self.__wait_for_quiet()
@@ -327,6 +332,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         arguments=[],
     ):
         """Run the workload generator on all given machines."""
+        assert (
+            len(self.kill_pids) == 0
+        ), "Some previous commands to kill workload generators has not been completed when attempting to start new ones. This might lead to races. Make sure to start an iteration via start_iteration() before calling run_workload_generator()"
         if canister_ids is None:
             canister_ids = self.get_canister_ids()
 
@@ -334,8 +342,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Running against target_list")
 
         curr_outdir = self.iter_outdir
-        f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
-        f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
+        f_stdout = os.path.join(curr_outdir, "workload-generator-%s-{}.stdout.txt" % uuid.uuid4())
+        f_stderr = os.path.join(curr_outdir, "workload-generator-%s-{}.stderr.txt" % uuid.uuid4())
 
         # To handle stragglers we allow the workload generator to run longer than "duration".
         # We don't really care about requests that took longer than 2min to complete, so

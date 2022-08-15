@@ -14,6 +14,7 @@ use std::convert::TryFrom;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {
@@ -31,7 +32,7 @@ pub(crate) struct Firewall {
     configuration: FirewallConfig,
     source: DataSource,
     compiled_config: String,
-    last_check_version: Option<RegistryVersion>,
+    last_applied_version: Arc<RwLock<RegistryVersion>>,
     // If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
     // If false, do not update the firewall rules (test mode)
@@ -68,7 +69,7 @@ impl Firewall {
             source: DataSource::Config,
             logger,
             compiled_config: Default::default(),
-            last_check_version: None,
+            last_applied_version: Default::default(),
             must_write: true,
             enabled,
             node_id,
@@ -87,11 +88,11 @@ impl Firewall {
     }
 
     /// Checks for the firewall configuration that applies to this node
-    fn check_for_firewall_config(
+    async fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if self.last_check_version == Some(registry_version) {
+        if *self.last_applied_version.read().await == registry_version {
             // No update in the registry, so no need to re-check
             return Ok(());
         }
@@ -239,7 +240,7 @@ impl Firewall {
                 .firewall_registry_version
                 .set(i64::try_from(registry_version.get()).unwrap_or(-1));
         }
-        self.last_check_version = Some(registry_version);
+        *self.last_applied_version.write().await = registry_version;
 
         Ok(())
     }
@@ -374,7 +375,7 @@ impl Firewall {
 
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
-    pub fn check_and_update(&mut self) {
+    pub async fn check_and_update(&mut self) {
         if !self.enabled {
             return;
         }
@@ -384,7 +385,7 @@ impl Firewall {
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        match self.check_for_firewall_config(registry_version) {
+        match self.check_for_firewall_config(registry_version).await {
             Ok(()) => self
                 .metrics
                 .datacenter_registry_version
@@ -394,6 +395,10 @@ impl Firewall {
                 "Failed to check for firewall config at version {}: {}", registry_version, e
             ),
         };
+    }
+
+    pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
+        Arc::clone(&self.last_applied_version)
     }
 }
 

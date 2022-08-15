@@ -34,6 +34,7 @@
 
 pub mod args;
 mod catch_up_package_provider;
+mod dashboard;
 pub mod error;
 mod firewall;
 mod metrics;

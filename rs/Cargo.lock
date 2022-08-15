@@ -5461,6 +5461,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-dashboard"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "tokio",
+]
+
+[[package]]
 name = "ic-determinism-test"
 version = "0.8.0"
 dependencies = [
@@ -10329,6 +10337,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-threshold-sig",
+ "ic-dashboard",
  "ic-http-utils",
  "ic-image-upgrader",
  "ic-interfaces",

@@ -28,6 +28,7 @@ rust_library(
         "//rs/monitoring/metrics",
         "//rs/monitoring/metrics_exporter",
         "//rs/nns/constants",
+        "//rs/orchestrator/dashboard",
         "//rs/orchestrator/image_upgrader",
         "//rs/orchestrator/registry_replicator",
         "//rs/protobuf",

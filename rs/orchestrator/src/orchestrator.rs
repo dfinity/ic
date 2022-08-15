@@ -1,5 +1,6 @@
 use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
+use crate::dashboard::{Dashboard, OrchestratorDashboard};
 use crate::firewall::Firewall;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
@@ -37,6 +38,7 @@ pub struct Orchestrator {
     upgrade: Option<Upgrade>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
+    orchestrator_dashboard: Option<OrchestratorDashboard>,
     // A flag used to communicate to async tasks, that their job is done.
     exit_signal: Arc<RwLock<bool>>,
     // The subnet id of the node.
@@ -170,9 +172,9 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry),
                 Arc::clone(&metrics),
-                replica_process,
-                cup_provider,
-                replica_version,
+                Arc::clone(&replica_process),
+                Arc::clone(&cup_provider),
+                replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory,
@@ -184,16 +186,28 @@ impl Orchestrator {
             .await,
         );
 
-        let firewall = Some(Firewall::new(
+        let firewall = Firewall::new(
             node_id,
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
             logger.clone(),
-        ));
-        let ssh_access_manager = Some(SshAccessManager::new(
+        );
+
+        let ssh_access_manager =
+            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone());
+
+        let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
+
+        let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
-            Arc::clone(&metrics),
+            node_id,
+            ssh_access_manager.get_last_applied_parameters(),
+            firewall.get_last_applied_version(),
+            replica_process,
+            Arc::clone(&subnet_id),
+            replica_version,
+            cup_provider,
             logger.clone(),
         ));
         Ok(Self {
@@ -201,10 +215,11 @@ impl Orchestrator {
             _async_log_guard,
             _metrics_runtime,
             upgrade,
-            firewall,
-            ssh_access_manager,
+            firewall: Some(firewall),
+            ssh_access_manager: Some(ssh_access_manager),
+            orchestrator_dashboard,
             exit_signal: Default::default(),
-            subnet_id: Default::default(),
+            subnet_id,
             task_handles: Default::default(),
         })
     }
@@ -259,10 +274,19 @@ impl Orchestrator {
                     .check_for_keyset_changes(*maybe_subnet_id.read().await)
                     .await;
                 // Check and update the firewall rules
-                firewall.check_and_update();
+                firewall.check_and_update().await;
                 tokio::time::sleep(CHECK_INTERVAL_SECS).await;
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
+        }
+
+        async fn serve_dashboard(
+            dashboard: OrchestratorDashboard,
+            exit_signal: Arc<RwLock<bool>>,
+            logger: ReplicaLogger,
+        ) {
+            dashboard.listen(exit_signal).await;
+            info!(logger, "Shut down the orchestrator dashboard");
         }
 
         if let Some(upgrade) = self.upgrade.take() {
@@ -289,6 +313,14 @@ impl Orchestrator {
                     Arc::clone(&self.exit_signal),
                     self.logger.clone(),
                 )));
+        }
+        if let Some(dashboard) = self.orchestrator_dashboard.take() {
+            info!(self.logger, "Spawning the orchestrator dashboard");
+            self.task_handles.push(tokio::spawn(serve_dashboard(
+                dashboard,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
         }
     }
 

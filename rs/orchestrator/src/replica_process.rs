@@ -40,7 +40,7 @@ impl ReplicaProcess {
 
     /// Returns the `Pid` if the currently running replica; or `None` if no
     /// replica is running.
-    fn get_pid(&self) -> Option<Pid> {
+    pub fn get_pid(&self) -> Option<Pid> {
         *self.pid_cell.lock().unwrap()
     }
 
