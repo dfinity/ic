@@ -226,7 +226,7 @@ fn fanout() {
                 on_reject,
                 None,
                 std::ptr::null_mut(),
-                api::Funds::zero(),
+                api::Funds::new(50),
             );
 
             if err_code != 0 {
