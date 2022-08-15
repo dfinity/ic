@@ -11,3 +11,5 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
     ],
 )
+
+# There is no 'rust_test' definition in this crate, as it only re-exports existing utils.
