@@ -359,7 +359,7 @@ impl TransportImpl {
                                     local_addr,
                                     peer_addr,
                                 );
-                                return;
+                                continue;
                             }
                         };
 
