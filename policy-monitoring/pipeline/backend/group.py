@@ -26,7 +26,7 @@ class Group:
         optional_fields = []
         url = self.job_url()
         if url:
-            optional_fields.append(f"url={self.url}")
+            optional_fields.append(f"url={url}")
         return f"<Group name={self.name} {' '.join(optional_fields)}>"
 
     def infer_global_infra(self) -> None:
