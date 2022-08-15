@@ -16,6 +16,7 @@ deploy-monpoly-docker:
   extends:
     - .ubuntu-nix-docker
     - .rules-monpoly-deploy
+  allow_failure: true
   stage: prod-tests
   script:
     - set -euo pipefail
