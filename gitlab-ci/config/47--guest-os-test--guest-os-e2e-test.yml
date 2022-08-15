@@ -36,6 +36,8 @@ e2e-workload-test:
   needs:
     - job: guest-os-diskimg
       artifacts: false
+    - job: guest-os-updateimg-build
+      artifacts: false
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e

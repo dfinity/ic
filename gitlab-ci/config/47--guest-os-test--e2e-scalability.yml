@@ -4,6 +4,8 @@ e2e-scalability-suite-test:
   needs:
     - job: guest-os-diskimg
       artifacts: false
+    - job: guest-os-updateimg-build
+      artifacts: false
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-scalability-suite-test
