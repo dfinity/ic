@@ -298,6 +298,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
+            pot_with_setup(
+                "canister_http",
+                canister_http::lib::config,
+                par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
+            ),
             /* Moved to staging
             pot_with_setup(
                 "btc_pot",
@@ -540,19 +545,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ]),
                 ),
                 pot_with_setup(
-                    "canister_http",
-                    canister_http::lib::config,
-                    par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
-                ),
-                pot_with_setup(
-                    "canister_http_time_out",
-                    canister_http::lib::config,
-                    seq(vec![sys_t(
-                        "http_time_out",
-                        canister_http::http_time_out::test,
-                    )]),
-                ),
-                pot_with_setup(
                     "canister_http_fault_tolerance",
                     canister_http::lib::config,
                     par(vec![sys_t(
@@ -644,6 +636,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![sys_t(
                     "http_basic_remote",
                     canister_http::http_basic_remote::test,
+                )]),
+            ),
+            pot_with_setup(
+                "canister_http_time_out",
+                canister_http::lib::config,
+                seq(vec![sys_t(
+                    "http_time_out",
+                    canister_http::http_time_out::test,
                 )]),
             ),
             pot(
