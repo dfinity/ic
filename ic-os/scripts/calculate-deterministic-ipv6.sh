@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set -e
+set -o errexit
+set -o nounset
+set -o pipefail
 
 # Calculate a deterministic IPv6 address.
 
@@ -69,7 +71,7 @@ function calculate_deterministic_mac() {
     VENDOR_PART=$(echo ${SEED} | sha256sum | cut -c 1-8)
 
     VERSION_OCTET="6a"
-    DETERMINISTIC_MAC=$(echo "${VERSION_OCTET}0${INDEX}${OUI_PART}${VENDOR_PART}" | sed 's/\(..\)/\1:/g;s/:$//')
+    DETERMINISTIC_MAC=$(echo "${VERSION_OCTET}0${INDEX}${VENDOR_PART}" | sed 's/\(..\)/\1:/g;s/:$//')
 }
 
 function print_deterministic_mac() {

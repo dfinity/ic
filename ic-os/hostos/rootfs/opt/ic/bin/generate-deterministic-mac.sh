@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set -e
+set -o errexit
+set -o nounset
+set -o pipefail
 
 # Generate a deterministic MAC address.
 
@@ -80,7 +82,7 @@ function generate_deterministic_mac() {
         VERSION_OCTET="6a"
     fi
 
-    DETERMINISTIC_MAC=$(echo "${VERSION_OCTET}0${INDEX}${OUI_PART}${VENDOR_PART}" | sed 's/\(..\)/\1:/g;s/:$//')
+    DETERMINISTIC_MAC=$(echo "${VERSION_OCTET}0${INDEX}${VENDOR_PART}" | sed 's/\(..\)/\1:/g;s/:$//')
 
     echo "${DETERMINISTIC_MAC}"
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -e
+set -o errexit
+set -o pipefail
 
 # Generate the network configuration.
 
