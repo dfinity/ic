@@ -177,6 +177,14 @@ impl Membership {
         })
     }
 
+    /// Get the committee to be used for canister http at the given height
+    pub fn get_canister_http_committee(
+        &self,
+        height: Height,
+    ) -> Result<Vec<NodeId>, MembershipError> {
+        self.get_nodes(height)
+    }
+
     /// Return true if the given node ID is part of the canister http committee
     /// at the given height
     pub fn node_belongs_to_canister_http_committee(
@@ -184,7 +192,10 @@ impl Membership {
         height: Height,
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
-        Ok(self.get_nodes(height)?.iter().any(|id| *id == node_id))
+        Ok(self
+            .get_canister_http_committee(height)?
+            .iter()
+            .any(|id| *id == node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at

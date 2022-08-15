@@ -156,7 +156,7 @@ impl CanisterHttpPayloadBuilderImpl {
             .map(|features| features.unwrap_or_default().http_requests)
     }
 
-    /// Checks, whether the response is consistent
+    /// Checks whether the response is consistent
     ///
     /// Consistency means:
     /// - The signed metadata is the same as the metadata of the response
@@ -564,34 +564,49 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // NOTE: We do this in a separate loop because this check is expensive and we want to
         // do all the cheap checks first
         for response in &payload.responses {
-            let mut membership_check_failure = None;
-            let invalid_signers: Vec<NodeId> = response
+            let committee = self
+                .membership
+                .get_canister_http_committee(height)
+                .map_err(|_| {
+                    CanisterHttpPayloadValidationError::Transient(
+                        CanisterHttpTransientValidationError::Membership,
+                    )
+                })?;
+            let threshold = match self
+                .membership
+                .get_committee_threshold(height, Committee::CanisterHttp)
+            {
+                Ok(threshold) => threshold,
+                Err(err) => {
+                    warn!(self.log, "Failed to get membership: {:?}", err);
+                    return Err(CanisterHttpPayloadValidationError::Transient(
+                        CanisterHttpTransientValidationError::Membership,
+                    ));
+                }
+            };
+            let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .proof
                 .signature
                 .signatures_map
                 .keys()
                 .cloned()
-                .filter(|signer| {
-                    match self
-                        .membership
-                        .node_belongs_to_canister_http_committee(height, *signer)
-                    {
-                        Ok(is_member) => is_member,
-                        Err(err) => {
-                            membership_check_failure = Some(err);
-                            false
-                        }
-                    }
-                })
-                .collect();
-            if membership_check_failure.is_some() {
-                return Err(CanisterHttpPayloadValidationError::Transient(
-                    CanisterHttpTransientValidationError::Membership,
-                ));
-            }
+                .partition(|signer| committee.iter().any(|id| id == signer));
             if !invalid_signers.is_empty() {
                 return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::SignersNotMembers(invalid_signers),
+                    CanisterHttpPermanentValidationError::SignersNotMembers {
+                        invalid_signers,
+                        committee,
+                        valid_signers,
+                    },
+                ));
+            }
+            if valid_signers.len() < threshold {
+                return Err(CanisterHttpPayloadValidationError::Permanent(
+                    CanisterHttpPermanentValidationError::NotEnoughSigners {
+                        committee,
+                        signers: valid_signers,
+                        expected_threshold: threshold,
+                    },
                 ));
             }
             self.crypto
@@ -695,14 +710,16 @@ mod tests {
                 add_received_shares_to_pool(pool_access.deref_mut(), shares[1..3].to_vec());
             }
 
+            let context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: mock_time(),
+            };
+
             // Build a payload
             let payload = payload_builder.get_canister_http_payload(
                 Height::new(1),
-                &ValidationContext {
-                    registry_version: RegistryVersion::new(1),
-                    certified_height: Height::new(0),
-                    time: mock_time(),
-                },
+                &context,
                 &[],
                 NumBytes::new(4 * 1024 * 1024),
             );
@@ -710,6 +727,10 @@ mod tests {
             //  Make sure the response is contained in the payload
             assert_eq!(payload.num_responses(), 1);
             assert_eq!(payload.responses[0].content, response);
+
+            assert!(payload_builder
+                .validate_canister_http_payload(Height::new(1), &payload, &context, &[])
+                .is_ok());
         });
     }
 
