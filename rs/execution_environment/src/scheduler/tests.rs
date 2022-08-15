@@ -28,8 +28,8 @@ use ic_types::messages::{Payload, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use proptest::prelude::*;
+use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
-use std::{collections::HashMap, thread::ThreadId};
 use std::{convert::TryFrom, time::Duration};
 
 const M: usize = 1_000_000;
@@ -2095,7 +2095,7 @@ fn long_open_call_context_is_recorded() {
 // inside `inner_round` is the same as the one provided by the scheduling strategy.
 #[test]
 fn scheduler_maintains_canister_order() {
-    let ca = [60, 100, 90, 60, 0];
+    let ca = [6, 10, 9, 5, 0];
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
@@ -2125,9 +2125,25 @@ fn scheduler_maintains_canister_order() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let expected = vec![canisters[1], canisters[2], canisters[0], canisters[3]];
-    let actual: Vec<_> = test.executed_schedule().into_iter().map(|x| x.2).collect();
-    assert_eq!(expected, actual);
+    let expected_per_thread = vec![
+        vec![canisters[1], canisters[0]],
+        vec![canisters[2], canisters[3]],
+    ];
+    // Build a map of Canister indexes
+    let mut canister_indexes = BTreeMap::new();
+    for (index, (_round, canister_id, _num_instructions)) in
+        test.executed_schedule().into_iter().enumerate()
+    {
+        assert_eq!(canister_indexes.insert(canister_id, index), None);
+    }
+    // Assert that Canisters on each thread were scheduled after each other, i.e.
+    // have increasing indexes
+    for canister_ids in expected_per_thread {
+        canister_ids.iter().fold(0, |prev_idx, canister_id| {
+            assert!(canister_indexes[canister_id] >= prev_idx);
+            canister_indexes[canister_id]
+        });
+    }
 }
 
 // Returns the sum of messages of the input queues of all canisters.
@@ -2298,14 +2314,13 @@ proptest! {
     // floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
     // messages in the input queues of all canisters.
 
-    #[ignore] // TODO(EXC-1166): Investigate the failure in this test and re-enable.
     #[test]
     // This test verifies that the scheduler will never consume more than
     // `max_instructions_per_round` in a single execution round per core.
     fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
         (
             mut test,
-            _scheduler_cores,
+            scheduler_cores,
             instructions_per_round,
             instructions_per_message,
         ) in arb_scheduler_test(1..10, 1..20, 1..100, M..B, 1..M, 100, false),
@@ -2316,26 +2331,26 @@ proptest! {
             instructions_per_round / instructions_per_message,
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        let mut executed = HashMap::<ThreadId, NumInstructions>::new();
-        for (thread, _, _, instructions) in test.executed_schedule().into_iter() {
-            let entry = executed.entry(thread).or_default();
+        let mut executed = HashMap::new();
+        for (round, _canister_id, instructions) in test.executed_schedule().into_iter() {
+            let entry = executed.entry(round).or_insert(0);
             assert!(instructions <= instructions_per_message);
-            *entry += instructions;
+            *entry += instructions.get();
         }
         for instructions in executed.values() {
             assert!(
-                *instructions <= instructions_per_round,
+                *instructions / scheduler_cores as u64 <= instructions_per_round.get(),
                 "Executed more instructions than expected: {} <= {}",
                 *instructions,
                 instructions_per_round
             );
         }
-        let total_executed: NumInstructions = executed.values().sum();
+        let total_executed: u64 = executed.into_values().sum();
         assert!(
-            minimum_executed_messages <= total_executed.get(),
-            "Executed less instructions as expected: {} <= {}",
+            minimum_executed_messages <= total_executed / scheduler_cores as u64,
+            "Executed less instructions than expected: {} <= {}",
             minimum_executed_messages,
-            total_executed.get()
+            total_executed
         );
     }
 
