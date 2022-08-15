@@ -4,8 +4,11 @@ import os
 import sys
 import traceback
 from pathlib import Path
+from typing import Dict
+from typing import FrozenSet
 from typing import Iterable
 from typing import Optional
+from typing import TypedDict
 
 from monpoly.monpoly import Monpoly
 from pipeline.alert import AlertService
@@ -158,14 +161,37 @@ def main():
         help="The Git branch name or revision SHA of this pipeline invocation. Used to add policy definition links in violation alerts",
     )
     args = parser.parse_args()
-    args_by_name = vars(args)
 
     # Detect meaningless option combinations
-    conflicting_modes = set(filter(lambda x: args_by_name[x], ["mainnet", "group_names", "pre_master_pipeline"]))
-    conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", conflicting_modes))
-    if len(conflicting_modes) > 1:
-        print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
-        exit(1)
+
+    ModeConflictSpec = TypedDict(
+        "ModeConflictSpec",
+        {
+            "modes": FrozenSet[str],
+            "is_required": bool,
+        },
+    )
+    CONFLICTING_MODES: Dict[str, ModeConflictSpec] = {
+        "source_of_logs": {
+            "modes": frozenset(["mainnet", "group_names", "pre_master_pipeline", "system_tests_working_dir"]),
+            "is_required": True,
+        },
+        "test_driver_artifacts_locality": {
+            "modes": frozenset(["system_tests_working_dir", "gitlab_token"]),
+            "is_required": False,
+        },
+    }
+
+    def activated_modes(category: str) -> FrozenSet[str]:
+        return frozenset(filter(lambda x: vars(args)[x], CONFLICTING_MODES[category]["modes"]))
+
+    for category, cmodes in CONFLICTING_MODES.items():
+        if len(activated_modes(category)) > 1:
+            conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", cmodes["modes"]))
+            print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
+            exit(1)
+
+    # TODO: specify the dependencies between CLI options via the above approach for conflicts
     if args.mainnet and not args.limit_time:
         print("Option --limit_time should be specified together with --mainnet")
         exit(1)
@@ -339,7 +365,9 @@ def main():
                             SystemTestsArtifactManager(args.system_tests_working_dir).test_driver_log_path()
                         )
                     else:
-                        print(f"Please specify at least one of the following options: {conflicting_modes_disjunction}")
+                        print(
+                            f"Please specify at least one of the following options: {CONFLICTING_MODES['source_of_logs']}"
+                        )
                         exit(1)
 
             es.download_logs(groups, limit_per_group=args.limit, minutes_per_group=args.limit_time)

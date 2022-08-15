@@ -323,7 +323,9 @@ class Pipeline:
         eprint("Liveness check completed.")
 
     def run(self, groups: Dict[str, Group]):
-        assert len(groups) > 0
+        assert (
+            len(groups) > 0
+        ), "check if system tests are running via https://grafana.dfinity.systems/d/uwEFG_yGk/testing-dashboard"
 
         eprint("Starting policy monitoring ...")
 

@@ -160,9 +160,7 @@ class Ci:
                 return jobs
 
     @staticmethod
-    def _get_groups_from_trace(
-        trace: str, include_pattern: Optional[str] = None, job_id: Optional[int] = None, job_url: Optional[str] = None
-    ) -> Optional[Dict[str, Group]]:
+    def _get_groups_from_trace(trace: str, include_pattern: Optional[str] = None) -> Optional[Dict[str, Group]]:
         groups: Dict[str, Group] = dict()
         group_names = re.findall("creating group '(.*)'", trace)
         if not group_names:
@@ -172,7 +170,7 @@ class Ci:
         for gname in group_names:
             if include_pattern is None or re.match(include_pattern, gname):
                 eprint(f" + {gname}", end="\n", flush=True)
-                groups[gname] = Group(gname, url=job_url)
+                groups[gname] = Group(gname)
         return groups
 
     def _get_group_names_from_jobs(
@@ -182,12 +180,9 @@ class Ci:
         for job in jobs:
             eprint(f"Searching for group names for job `{job.name}` ...")
             trace = job.trace().decode("utf-8")
-            jurl = Ci.job_url(job)
-            new_groups = self._get_groups_from_trace(
-                trace, include_pattern=include_pattern, job_id=job.id, job_url=jurl
-            )
+            new_groups = self._get_groups_from_trace(trace, include_pattern=include_pattern)
             if not new_groups:
-                eprint(f"Warning: cannot find test group name for job {jurl}")
+                eprint(f"Warning: cannot find test group name for job {Ci.job_url(job)}")
             else:
                 intersect = set(new_groups.keys()).intersection(groups.keys())
                 assert set() == intersect, "duplicate groups found: " + ", ".join(
