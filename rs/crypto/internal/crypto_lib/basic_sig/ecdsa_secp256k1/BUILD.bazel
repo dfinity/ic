@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(
     default_visibility = [
@@ -25,5 +25,18 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:simple_asn1",
         "@crate_index//:zeroize",
+    ],
+)
+
+rust_test(
+    name = "ic_crypto_internal_basic_sig_ecdsa_secp256k1_test",
+    crate = ":ecdsa_secp256k1",
+    proc_macro_deps = [
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        "//rs/crypto/internal/test_vectors",
+        "@crate_index//:proptest",
+        "@crate_index//:strum",
     ],
 )
