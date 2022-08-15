@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
+const package = require('./package.json');
 
 module.exports = {
   entry: {
@@ -51,6 +52,7 @@ module.exports = {
     }),
     new webpack.EnvironmentPlugin({
       FORCE_FETCH_ROOT_KEY: false,
+      VERSION: package.version,
     }),
   ],
 };
