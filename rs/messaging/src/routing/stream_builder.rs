@@ -24,6 +24,7 @@ use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
+use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -44,6 +45,10 @@ struct StreamBuilderMetrics {
     pub outgoing_messages: IntCounterVec,
     /// Outgoing stream index, by sending subnet.
     pub out_stream_index: IntGaugeVec,
+    /// Outgoing cycles hi 64bit part of 128bit cycles, by receiving subnet.
+    pub out_cycles_hi: IntGaugeVec,
+    /// Outgoing cycles lo 64bit part of 128bit cycles, by receiving subnet.
+    pub out_cycles_lo: IntGaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -71,6 +76,8 @@ const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
 const METRIC_OUT_STREAM_INDEX: &str = "mr_out_stream_index";
+const METRIC_OUT_CYCLES_HI: &str = "mr_out_cycles_hi";
+const METRIC_OUT_CYCLES_LO: &str = "mr_out_cycles_lo";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -125,6 +132,16 @@ impl StreamBuilderMetrics {
             "Outgoing stream index, by sending subnet.",
             &[LABEL_REMOTE],
         );
+        let out_cycles_hi = metrics_registry.int_gauge_vec(
+            METRIC_OUT_CYCLES_HI,
+            "Outgoing cycles hi part, by receiving subnet.",
+            &[LABEL_REMOTE],
+        );
+        let out_cycles_lo = metrics_registry.int_gauge_vec(
+            METRIC_OUT_CYCLES_LO,
+            "Outgoing cycles lo part, by receiving subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
@@ -156,6 +173,8 @@ impl StreamBuilderMetrics {
             routed_payload_sizes,
             outgoing_messages,
             out_stream_index,
+            out_cycles_hi,
+            out_cycles_lo,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -465,12 +484,24 @@ impl StreamBuilderImpl {
                                 .outgoing_messages
                                 .with_label_values(&[&dst_net_id.to_string()])
                                 .inc();
-                            match streams.get(&dst_net_id) {
-                                Some(stream) => {
+                            match streams.get_mut(&dst_net_id) {
+                                Some(mut stream) => {
                                     self.metrics
                                         .out_stream_index
                                         .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.signals_end().get().try_into().unwrap());
+                                    let cycles_in_msg = msg.cycles();
+                                    let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
+                                    stream.set_sum_cycles_transferred(new_cycles_sum);
+                                    let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
+                                    self.metrics
+                                        .out_cycles_hi
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(cycles_hi as i64);
+                                    self.metrics
+                                        .out_cycles_lo
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(cycles_lo as i64);
                                 }
                                 None => {}
                             }

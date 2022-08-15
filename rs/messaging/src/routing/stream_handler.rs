@@ -26,14 +26,14 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
     },
     xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
-    SubnetId, Cycles,
+    SubnetId,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
-    convert::TryInto,
-    sync::{Arc, Mutex}, ops::Add,
+    ops::Add,
+    sync::{Arc, Mutex},
 };
 
 #[cfg(test)]
@@ -134,12 +134,12 @@ impl StreamHandlerMetrics {
         );
         let inc_cycles_hi = metrics_registry.int_gauge_vec(
             METRIC_INC_CYCLES_HI,
-            "Incoming stream index, by sending subnet.",
+            "Incoming cycles hi part, by sending subnet.",
             &[LABEL_REMOTE],
         );
         let inc_cycles_lo = metrics_registry.int_gauge_vec(
             METRIC_INC_CYCLES_LO,
-            "Incoming stream index, by sending subnet.",
+            "Incoming cycles lo part, by sending subnet.",
             &[LABEL_REMOTE],
         );
         let critical_error_reject_signals_for_request =
@@ -206,8 +206,7 @@ pub(crate) struct StreamHandlerImpl {
     max_canister_memory_size: NumBytes,
     subnet_memory_capacity: NumBytes,
     subnet_message_memory_capacity: NumBytes,
-
-    /// storing cycles per subnet (stream)
+    // storing cycles per subnet (stream)
     //cycle_map: BTreeMap<SubnetId, Cycles>,
 
     metrics: StreamHandlerMetrics,
@@ -652,6 +651,7 @@ impl StreamHandlerImpl {
                             .with_label_values(&[&remote_subnet_id.to_string()])
                             .set(stream.messages_begin().get() as i64); // option to mirror what is being sent
                             //.set(stream_index.get().try_into().unwrap()); // +1 needed, since this is actual index, not next index
+                        let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
                         //let old_cycles = &match self.cycle_map.get(&remote_subnet_id) {
                         //    Some(c) => {
                         //        *c
@@ -662,7 +662,6 @@ impl StreamHandlerImpl {
                         // };
                         // let new_cycles = old_cycles.add(cycles_in_msg);
                         // self.cycle_map.insert(remote_subnet_id, new_cycles);
-                        let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
                         stream.set_sum_cycles_transferred(new_cycles_sum);
                         let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
                         self.metrics
