@@ -10,6 +10,7 @@ from typing import Tuple
 
 from util.yaml import yaml
 
+from .es_doc import EsDoc
 from .es_doc import ReplicaDoc
 
 
@@ -19,7 +20,6 @@ class GlobalInfra:
 
         pass
 
-    known_hosts: Set[IPv6Address]
     host_addr_to_node_id_map: Dict[IPv6Address, str]
     node_id_to_host_map: Dict[str, IPv6Address]
     original_subnet_types: Dict[str, str]
@@ -29,8 +29,6 @@ class GlobalInfra:
     def __init__(self, source: str):
         # original source of this Global Infra information
         self.source = source
-        # stores host_ipv6s
-        self.known_hosts = set()
         # maps host_ipv6 to node_id
         self.host_addr_to_node_id_map = dict()
         # maps subnet_id to its initial subnet_type
@@ -44,9 +42,6 @@ class GlobalInfra:
     def get_host_dc(host_ip: IPv6Address) -> IPv6Network:
         """Maps host_ip to data center mask"""
         return IPv6Network(f"{host_ip}/64", strict=False)
-
-    def is_known_host(self, host_addr: IPv6Address) -> bool:
-        return host_addr in self.known_hosts
 
     def get_host_ip_addr(self, node_id: str) -> IPv6Address:
         """Returns host_ipv6 based on node_id"""
@@ -73,8 +68,8 @@ class GlobalInfra:
         return dcs
 
     def _get_dc_info(self) -> Dict[IPv6Network, Set[IPv6Address]]:
-        """Returns a map from data center ipv6 to set of host ipv6s"""
-        return self._get_dc_info_impl(self.known_hosts)
+        """Returns a map from data center IPv6 netweork masks to sets of host IPv6 addresses"""
+        return self._get_dc_info_impl(set(self.host_addr_to_node_id_map.keys()))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -92,7 +87,6 @@ class GlobalInfra:
         infra.original_subnet_types = d["original_subnet_types"]
         infra.original_subnet_membership = d["original_subnet_membership"]
         infra.host_addr_to_node_id_map = d["host_addr_to_node_id_mapping"]
-        infra.known_hosts = set([node_ip for node_ips in d["data_centers"].values() for node_ip in node_ips])
         infra.node_id_to_host_map = {
             node_id: host_addr for host_addr, node_id in infra.host_addr_to_node_id_map.items()
         }
@@ -166,15 +160,16 @@ class GlobalInfra:
         return Self._fromIcRegeditSnapshot(j)
 
     @classmethod
-    def fromReplicaLogs(Self, replica_docs: List[ReplicaDoc]) -> "GlobalInfra":
+    def fromLogs(Self, logs: List[EsDoc]) -> "GlobalInfra":
         infra = GlobalInfra(source="<inferred_from_replica_logs>")
-        for doc in replica_docs:
+
+        for rep_doc in (ReplicaDoc(d.repr) for d in logs if d.is_replica()):
             # Process all replica docs' node_id / subnet data
             unix_ts, node_id, subnet_id, subnet_type = (
-                doc.unix_ts(),
-                doc.get_node_id(),
-                doc.get_subnet_id(),
-                doc.get_subnet_type(),
+                rep_doc.unix_ts(),
+                rep_doc.get_node_id(),
+                rep_doc.get_subnet_id(),
+                rep_doc.get_subnet_type(),
             )
 
             if subnet_type is not None:
@@ -196,19 +191,25 @@ class GlobalInfra:
                     infra.original_subnet_membership[node_id] = subnet_id
                     infra.in_subnet_relations[node_id] = [(unix_ts, subnet_id)]
 
+        for doc in logs:
             host_addr = doc.host_addr()
-            infra.known_hosts.add(host_addr)
+            if host_addr is None:
+                continue
 
-            # Compute host_addr_to_node_id_map
+            host_id = doc.host_id()
+
             if host_addr in infra.host_addr_to_node_id_map:
-                old_node_id = infra.host_addr_to_node_id_map[host_addr]
+                old_host_id = infra.host_addr_to_node_id_map[host_addr]
                 assert (
-                    old_node_id == node_id
-                ), f"Host {str(host_addr)} is mapped to more than one node ID, e.g., {old_node_id} and {node_id}"
+                    old_host_id == host_id
+                ), f"Host {str(host_addr)} is mapped to more than one node ID, e.g., {old_host_id} and {host_id}"
             else:
-                infra.host_addr_to_node_id_map[host_addr] = node_id
+                infra.host_addr_to_node_id_map[host_addr] = host_id
 
         infra.node_id_to_host_map = {
-            node_id: host_addr for host_addr, node_id in infra.host_addr_to_node_id_map.items()
+            host_id: host_addr for host_addr, host_id in infra.host_addr_to_node_id_map.items()
         }
+        assert len(infra.node_id_to_host_map) == len(
+            infra.host_addr_to_node_id_map
+        ), "node principals and addresses are not bijective"
         return infra
