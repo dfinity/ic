@@ -343,6 +343,7 @@ def get_num_boundary_nodes():
 
 if __name__ == "__main__":
 
+    misc.load_artifacts("../artifacts/release")
     misc.parse_command_line_args()
     num_nodes, num_subnets, num_app_nodes, num_app_subnets = get_num_nodes_mainnet()
     timestamp, num_boundary_nodes = get_num_boundary_nodes()
@@ -441,14 +442,15 @@ if __name__ == "__main__":
             print("🎉 Report written")
 
         # Render the exeternal CD overview
-        with open(f"{FLAGS.asset_root}/index.html", "w") as outfile:
-            data.update(
-                {
-                    "is_external": True,
-                }
-            )
-            outfile.write(template(data))
-            print("🎉 Report written")
+        if len(FLAGS.asset_root) > 0:
+            with open(f"{FLAGS.asset_root}/index.html", "w") as outfile:
+                data.update(
+                    {
+                        "is_external": True,
+                    }
+                )
+                outfile.write(template(data))
+                print("🎉 Report written")
 
         LOGO = "fully_on_chain-default-bg_dark.svg"
         shutil.copy(os.path.join(TEMPLATE_BASEDIR, LOGO), FLAGS.experiment_data)

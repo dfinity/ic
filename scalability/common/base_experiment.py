@@ -158,38 +158,7 @@ class BaseExperiment:
         self.__store_hardware_info()
 
     def __load_artifacts(self):
-        """
-        Load artifacts.
-
-        If previously downloaded, reuse, otherwise download.
-        When downloading, store the GIT commit hash that has been used in a text file.
-        """
-        f_artifacts_hash = os.path.join(self.artifacts_path, "githash")
-        if subprocess.run(["stat", f_artifacts_hash], stdout=subprocess.DEVNULL).returncode != 0:
-            print("Could not find artifacts, downloading .. ")
-            # Delete old artifacts directory, if it exists
-            subprocess.run(["rm", "-rf", self.artifacts_path], check=True)
-            # Download new artifacts.
-            artifacts_env = os.environ.copy()
-            artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8")
-            artifacts_env["GET_GUEST_OS"] = "0"
-            output = subprocess.check_output(
-                ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
-            )
-            match = re.findall(r"Downloading artifacts for revision ([a-f0-9]*)", output)[0]
-            with open(f_artifacts_hash, "wt", encoding="utf-8") as f:
-                f.write(match)
-        else:
-            print(
-                (
-                    "⚠️  Re-using artifacts. While this is faster, there is a risk of inconsistencies."
-                    f'Call "rm -rf {self.artifacts_path}" in case something doesn\'t work.'
-                )
-            )
-        self.artifacts_hash = open(f_artifacts_hash, "r").read()
-
-        print(f"Artifacts hash is {self.artifacts_hash}")
-        print(f"Found artifacts at {self.artifacts_path}")
+        self.artifacts_hash = misc.load_artifacts(self.artifacts_path)
         self.__set_workload_generator_path()
 
     def __set_workload_generator_path(self):

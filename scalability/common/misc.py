@@ -2,6 +2,7 @@ import argparse
 import math
 import operator
 import os
+import re
 import subprocess
 import sys
 import traceback
@@ -204,3 +205,40 @@ def evaluate_stop_latency_failure_iter(latency, latency_threshold, failure, fail
 def distribute_load_to_n(load: float, n: int):
     """Distribute the given load to n entities."""
     return [math.floor(100 * load / n) / 100] * n
+
+
+def load_artifacts(artifacts_path: str):
+    """
+    Load artifacts.
+
+    If previously downloaded, reuse, otherwise download.
+    When downloading, store the GIT commit hash that has been used in a text file.
+    """
+    f_artifacts_hash = os.path.join(artifacts_path, "githash")
+    if subprocess.run(["stat", f_artifacts_hash], stdout=subprocess.DEVNULL).returncode != 0:
+        print("Could not find artifacts, downloading .. ")
+        # Delete old artifacts directory, if it exists
+        subprocess.run(["rm", "-rf", artifacts_path], check=True)
+        # Download new artifacts.
+        artifacts_env = os.environ.copy()
+        artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8")
+        artifacts_env["GET_GUEST_OS"] = "0"
+        output = subprocess.check_output(
+            ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
+        )
+        match = re.findall(r"Downloading artifacts for revision ([a-f0-9]*)", output)[0]
+        with open(f_artifacts_hash, "wt", encoding="utf-8") as f:
+            f.write(match)
+    else:
+        print(
+            (
+                "⚠️  Re-using artifacts. While this is faster, there is a risk of inconsistencies."
+                f'Call "rm -rf {artifacts_path}" in case something doesn\'t work.'
+            )
+        )
+    artifacts_hash = open(f_artifacts_hash, "r").read()
+
+    print(f"Artifacts hash is {artifacts_hash}")
+    print(f"Found artifacts at {artifacts_path}")
+
+    return artifacts_hash
