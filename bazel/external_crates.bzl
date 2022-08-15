@@ -951,7 +951,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.2",
             ),
             "wasmtime": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -960,10 +960,10 @@ def external_crates_repository(name, annotations):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",

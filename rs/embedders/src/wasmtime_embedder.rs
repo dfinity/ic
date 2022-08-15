@@ -141,8 +141,7 @@ impl WasmtimeEmbedder {
             .static_memory_maximum_size(
                 wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES as u64,
             )
-            .max_wasm_stack(self.config.max_wasm_stack_size)
-            .map_err(|_| HypervisorError::WasmEngineError(WasmEngineError::FailedToSetWasmStack))?;
+            .max_wasm_stack(self.config.max_wasm_stack_size);
 
         wasmtime::Engine::new(&config).map_err(|_| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInitializeEngine)

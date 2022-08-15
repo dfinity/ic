@@ -27,9 +27,9 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 slog-term = "2.6.0"
-wasmtime = { version = "0.38.3", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos'] }
-wasmtime-environ = "0.38.3"
-wasmtime-runtime = "0.38.3"
+wasmtime = { version = "0.39.1", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos'] }
+wasmtime-environ = "0.39.1"
+wasmtime-runtime =  "0.39.1"
 rayon = "1.5.1"
 
 
