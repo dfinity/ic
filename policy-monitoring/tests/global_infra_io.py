@@ -71,7 +71,6 @@ print("Global Infra Yaml I/O idempotentcy test passed.")
 ginfra_4 = load_gloabl_infra_json(IC_REGEDIT_SNAPSHOT)
 dump_global_infra_yaml(ginfra_4, IC_REGEDIT_SNAPSHOT_REPRO)
 
-assert_eq(len(ginfra_4.known_hosts), len(ginfra_4.host_addr_to_node_id_map))
 assert_eq(set(ginfra_4.node_id_to_host_map.keys()), set(ginfra_4.host_addr_to_node_id_map.values()))
 assert_eq(len(set(ginfra_4.original_subnet_membership.values())), len(ginfra_4.original_subnet_types))
 
