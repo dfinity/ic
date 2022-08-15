@@ -51,7 +51,7 @@ $SCRIPT_DIR/icos_deploy.sh --no-boundary-nodes --dkg-interval-length 19 "$TESTNE
 WORKING_DIR="$TMP_DIR/recovery/working_dir"
 DATA_DIR="$WORKING_DIR/data"
 mkdir -p "$DATA_DIR"
-rsync -av dev@zh1-pyr07.dc1.dfinity.network:~/nns_state/ "$DATA_DIR/"
+rsync -e "ssh $SSH_ARGS" -av dev@zh1-pyr07.dc1.dfinity.network:~/nns_state/ "$DATA_DIR/"
 scp $SSH_ARGS "admin@[$NNS_IP]:/run/ic-node/config/ic.json5" "$WORKING_DIR/"
 
 # Create a neuron followed by trusted neurons.
