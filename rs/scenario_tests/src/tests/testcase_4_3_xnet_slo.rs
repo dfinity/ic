@@ -79,11 +79,7 @@ pub async fn test_impl(
     }
 
     // Load the xnet-test-canister.
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rust_canisters/xnet_test",
-        "xnet-test-canister",
-        &[],
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
 
     // Map subnets to wallet canisters (if provided) and retain those subnets with
     // wallet canisters only.

@@ -161,11 +161,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Build and install Xnet canisters on each subnet.
     info!(ctx.logger, "Building Xnet canister wasm...");
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rust_canisters/xnet_test",
-        "xnet-test-canister",
-        &[],
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
     info!(ctx.logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
         &endpoints_runtime,

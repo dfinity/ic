@@ -10,11 +10,7 @@ use common::set_up_state_machine_with_nns;
 /// path are still available
 #[test]
 fn test_sns_wasm_upgrade() {
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/sns-wasm",
-        "sns-wasm-canister",
-        &[], // features
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
     let machine = set_up_state_machine_with_nns();
 

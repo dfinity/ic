@@ -47,7 +47,7 @@ async fn try_to_install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) -> Result<Canister<'_>, String> {
     let encoded = Encode!(&init_payload).unwrap();
-    let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+    let proj = Project::new();
     proj.cargo_bin("registry-canister", &[])
         .install(runtime)
         .bytes(encoded)
@@ -394,7 +394,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
 fn test_canister_installation_traps_on_bad_init_payload() {
     local_test_on_nns_subnet(|runtime| async move {
         assert_matches!(
-            Project::new(env!("CARGO_MANIFEST_DIR"))
+            Project::new()
             .cargo_bin("registry-canister", &[])
                 .install(&runtime)
                 .bytes(b"This is not legal candid".to_vec())

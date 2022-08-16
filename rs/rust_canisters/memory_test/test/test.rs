@@ -3,7 +3,7 @@ use canister_test::*;
 #[test]
 fn test_memory_test_canisters() {
     local_test_e(|r| async move {
-        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let proj = Project::new();
 
         println!("Start installing memory test canister");
         let canister = proj

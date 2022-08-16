@@ -55,12 +55,5 @@ fn chunked_stable_mem_ser_deser_roundtrip() {
 }
 
 async fn install_mem_utils_test_canister(canister: &mut Canister<'_>) {
-    install_rust_canister(
-        canister,
-        "nns/integration_tests",
-        "mem-utils-test-canister",
-        &[],
-        None,
-    )
-    .await;
+    install_rust_canister(canister, "mem-utils-test-canister", &[], None).await;
 }

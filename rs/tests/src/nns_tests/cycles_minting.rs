@@ -699,11 +699,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         }
 
         info!(ctx.logger, "upgrading cycles minting canister");
-        let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rosetta-api/cycles_minting_canister",
-            "cycles-minting-canister",
-            &[],
-        );
+        let wasm = Project::cargo_bin_maybe_from_env("cycles-minting-canister", &[]);
 
         upgrade_nns_canister_by_proposal(
             &Canister::new(&nns, CYCLES_MINTING_CANISTER_ID),

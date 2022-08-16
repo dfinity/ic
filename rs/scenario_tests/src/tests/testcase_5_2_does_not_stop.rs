@@ -26,11 +26,7 @@ pub async fn test_impl(
     random_seed: Option<u64>,
 ) {
     // Load the statesync-test-canister.
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rust_canisters/statesync_test",
-        "statesync-test-canister",
-        &[],
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("statesync-test-canister", &[]);
 
     println!("UTC before installing canisters is: {}", Utc::now());
     let num_canisters = num_canisters.unwrap_or(NUM_CANISTERS as u64) as usize;

@@ -12,7 +12,7 @@ fn main() {
 
             let mut group = criterion.benchmark_group("json encoding");
 
-            let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            let proj = Project::new();
 
             let canister = proj.cargo_bin("json", &[]).install_(&r, Vec::new()).await?;
 

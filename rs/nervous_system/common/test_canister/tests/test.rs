@@ -13,11 +13,7 @@ fn test_root() {
     // Step 1.b: Build and install canister.
     let canister_id = {
         // Build canister (or use pre-built).
-        let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "nervous_system/common/test_canister",
-            "ic-nervous-system-common-test-canister",
-            &[], // features
-        );
+        let wasm = Project::cargo_bin_maybe_from_env("ic-nervous-system-common-test-canister", &[]);
 
         env.install_canister(wasm.bytes(), /* args= */ vec![], None)
             .unwrap()

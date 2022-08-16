@@ -24,8 +24,7 @@ pub fn set_up_state_machine_with_nns() -> StateMachine {
 }
 
 pub fn install_sns_wasm(machine: &StateMachine, nns_init_payload: &NnsInitPayloads) -> CanisterId {
-    let sns_wasm_bin =
-        Project::cargo_bin_maybe_use_path_relative_to_rs("nns/sns-wasm", "sns-wasm-canister", &[]);
+    let sns_wasm_bin = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
     create_canister(
         machine,

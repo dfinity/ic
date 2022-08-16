@@ -5,7 +5,7 @@ use std::convert::TryInto;
 #[test]
 fn reverse_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let proj = Project::new();
 
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
@@ -19,7 +19,7 @@ fn reverse_test() {
 #[test]
 fn balance128_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let proj = Project::new();
 
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
@@ -34,7 +34,7 @@ fn balance128_test() {
 #[test]
 fn certification_api_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let proj = Project::new();
 
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
@@ -51,7 +51,7 @@ fn certification_api_test() {
 #[test]
 fn stable_memory_read_write() {
     local_test_e(|r| async move {
-        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let proj = Project::new();
 
         let canister = proj.cargo_bin("wasm", &[]).install_(&r, Vec::new()).await?;
 
