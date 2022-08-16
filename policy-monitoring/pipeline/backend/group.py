@@ -90,7 +90,7 @@ class Group:
     def _StreamFromFile(Self, log_file: Path) -> "Group":
         """Create group and set up a logs stream"""
         gname = Path(log_file).stem + "--pseudo"
-        return {gname: Group(gname, logs=Self._safe_log_stream(log_file), url="Omitted interaction with GitLab CI")}
+        return Group(gname, logs=Self._safe_log_stream(log_file))
 
     @classmethod
     def _LoadFromFile(Self, log_file: Path) -> "Group":

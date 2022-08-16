@@ -23,6 +23,13 @@ from .pre_processor import UniversalPreProcessor
 from .repro_manager import ReproManager
 
 
+def gurl(group: Group) -> str:
+    url = group.job_url()
+    if url:
+        return url
+    return "<not available>"
+
+
 class Pipeline:
     def _formula_url(self, formula: str) -> str:
         return f"<https://sourcegraph.com/github.com/dfinity/ic@{self.git_revision}/-/blob/policy-monitoring/mfotl-policies/{formula}/formula.mfotl|{formula}>"
@@ -132,7 +139,7 @@ class Pipeline:
                     f" pipeline is broken.\n"
                     f"Repro:\n"
                     f"```\n{repro(monitor)}\n"
-                    f"```\nTest logs: <{group.url}>\n"
+                    f"```\nTest logs: <{gurl(group)}>\n"
                 ),
                 short_text="💀 Policy monitoring pipeline broken 💀",
             )
@@ -216,7 +223,7 @@ class Pipeline:
                     f"```\n{viol}\n```\n"
                     f"Repro:\n"
                     f"```\n{repro(arg.session)}\n"
-                    f"```\nTest logs: <{group.url}>\n",
+                    f"```\nTest logs: <{gurl(group)}>\n",
                     short_text=f"Violation in {formula}",
                 )
 
@@ -228,7 +235,7 @@ class Pipeline:
                     f"```\n{arg.message}\n```\n"
                     f"Repro:\n"
                     f"```\n{repro(arg.session)}\n"
-                    f"```\nTest logs: <{group.url}>\n",
+                    f"```\nTest logs: <{gurl(group)}>\n",
                     short_text=f"Error from {arg.source}",
                 )
 
@@ -240,7 +247,7 @@ class Pipeline:
                         f" while checking policy `{formula}` of `{group.name}`\n"
                         f"Repro:\n"
                         f"```\n{repro(arg.session)}\n"
-                        f"```\nTest logs: <{group.url}>\n",
+                        f"```\nTest logs: <{gurl(group)}>\n",
                         short_text=f"Monpoly exited with code {arg.exit_code}",
                     )
 
