@@ -3,7 +3,9 @@
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, Seed};
-use ic_interfaces::crypto::{BasicSigner, IDkgProtocol};
+use ic_interfaces::crypto::{
+    BasicSigner, IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -12,11 +14,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
-use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, PreSignatureQuadruple};
+use ic_types::crypto::canister_threshold_sig::{
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+};
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -673,4 +677,59 @@ pub enum CorruptIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),
     NoReceivers,
+}
+
+pub fn generate_tecdsa_protocol_inputs(
+    env: &CanisterThresholdSigTestEnvironment,
+    key_transcript: &IDkgTranscript,
+    message_hash: &[u8],
+    nonce: Randomness,
+    derivation_path: ExtendedDerivationPath,
+    algorithm_id: AlgorithmId,
+) -> ThresholdEcdsaSigInputs {
+    let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript);
+
+    ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        message_hash,
+        nonce,
+        quadruple,
+        key_transcript.clone(),
+    )
+    .expect("failed to create signature inputs")
+}
+
+pub fn run_tecdsa_protocol(
+    env: &CanisterThresholdSigTestEnvironment,
+    sig_inputs: &ThresholdEcdsaSigInputs,
+) -> ThresholdEcdsaCombinedSignature {
+    let sig_shares: BTreeMap<_, _> = sig_inputs
+        .receivers()
+        .get()
+        .iter()
+        .map(|&signer_id| {
+            load_input_transcripts(&env.crypto_components, signer_id, sig_inputs);
+
+            let sig_share = crypto_for(signer_id, &env.crypto_components)
+                .sign_share(sig_inputs)
+                .expect("failed to create sig share");
+            (signer_id, sig_share)
+        })
+        .collect();
+
+    // Verify that each signature share can be verified
+    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
+    let verifier_crypto_component =
+        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    for (signer_id, sig_share) in sig_shares.iter() {
+        assert!(verifier_crypto_component
+            .verify_sig_share(*signer_id, sig_inputs, sig_share)
+            .is_ok());
+    }
+
+    let combiner_crypto_component =
+        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    combiner_crypto_component
+        .combine_sig_shares(sig_inputs, &sig_shares)
+        .expect("Failed to generate signature")
 }

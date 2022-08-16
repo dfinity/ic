@@ -9,9 +9,10 @@ use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
     create_and_verify_signed_dealing, create_signed_dealings, generate_key_transcript,
-    generate_presig_quadruple, load_input_transcripts, load_transcript, node_id, random_dealer_id,
-    random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
-    random_receiver_id, random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
+    generate_presig_quadruple, generate_tecdsa_protocol_inputs, load_input_transcripts,
+    load_transcript, node_id, random_dealer_id, random_dealer_id_excluding,
+    random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
+    random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript, run_tecdsa_protocol,
     CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
@@ -1587,6 +1588,57 @@ fn should_verify_sig_shares_and_combined_sig_successfully() {
     assert!(verifier_crypto_component
         .verify_combined_sig(&inputs, &modified_signature)
         .is_err());
+}
+
+#[test]
+fn should_run_threshold_ecdsa_protocol_with_single_node() {
+    let subnet_size = 1;
+
+    // Test environment for ECDSA
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    // Generate the key transcript containing the master key
+    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+
+    // Extract the master key from the key transcript
+    let master_ecdsa_key = get_tecdsa_master_public_key(&key_transcript);
+
+    assert!(master_ecdsa_key.is_ok());
+
+    let derivation_path = ExtendedDerivationPath {
+        caller: PrincipalId::new_user_test_id(1),
+        derivation_path: vec![],
+    };
+
+    // Derive the key for principal
+    let derived_public_key = derive_tecdsa_public_key(&master_ecdsa_key.unwrap(), &derivation_path);
+
+    assert!(derived_public_key.is_ok());
+
+    let mut rng = thread_rng();
+    let nonce = Randomness::from(rng.gen::<[u8; 32]>());
+    let message_hash = &rng.gen::<[u8; 32]>();
+
+    let sig_inputs = generate_tecdsa_protocol_inputs(
+        &env,
+        &key_transcript,
+        message_hash,
+        nonce,
+        derivation_path,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+    );
+
+    // Compute the threshold ECDSA signature
+    let signature = run_tecdsa_protocol(&env, &sig_inputs);
+
+    // Verify that the returned signature is valid.
+    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
+    let verifier_crypto_component =
+        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+
+    assert!(verifier_crypto_component
+        .verify_combined_sig(&sig_inputs, &signature)
+        .is_ok());
 }
 
 #[test]
