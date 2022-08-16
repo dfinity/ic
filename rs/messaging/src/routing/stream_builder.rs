@@ -455,16 +455,24 @@ impl StreamBuilderImpl {
                             //keep track of stream index
                             //streams.get(dst_net_id).signals_end.get().try_into().unwrap()
                             //streams.get(&dst_net_id)
-                            self.metrics
-                                .outgoing_messages
-                                .with_label_values(&[&dst_net_id.to_string()])
-                                .inc();
-                            match streams.get(&dst_net_id) {
-                                Some(stream) => {
-                                    self.metrics
-                                        .out_stream_index
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(stream.signals_end().get().try_into().unwrap());
+                            // self.metrics
+                            //     .outgoing_messages
+                            //     .with_label_values(&[&dst_net_id.to_string()])
+                            //     .inc();
+                            // match streams.get(&dst_net_id) {
+                            //     Some(stream) => {
+                            //         self.metrics
+                            //             .out_stream_index
+                            //             .with_label_values(&[&dst_net_id.to_string()])
+                            //             .set(stream.signals_end().get().try_into().unwrap());
+                            //     }
+                            //     None => {}
+                            // }
+                            let cycles_in_msg = msg.cycles();
+                            match streams.get_mut(&dst_net_id) {
+                                Some(mut stream) => {
+                                    let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
+                                    stream.set_sum_cycles_transferred(new_cycles_sum);
                                 }
                                 None => {}
                             }
@@ -493,15 +501,15 @@ impl StreamBuilderImpl {
                                     let cycles_in_msg = msg.cycles();
                                     let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
                                     stream.set_sum_cycles_transferred(new_cycles_sum);
-                                    let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
-                                    self.metrics
-                                        .out_cycles_hi
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(cycles_hi as i64);
-                                    self.metrics
-                                        .out_cycles_lo
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(cycles_lo as i64);
+                                    // let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
+                                    // self.metrics
+                                    //     .out_cycles_hi
+                                    //     .with_label_values(&[&dst_net_id.to_string()])
+                                    //     .set(cycles_hi as i64);
+                                    // self.metrics
+                                    //     .out_cycles_lo
+                                    //     .with_label_values(&[&dst_net_id.to_string()])
+                                    //     .set(cycles_lo as i64);
                                 }
                                 None => {}
                             }
@@ -566,9 +574,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.sum_cycles_transferred(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin)| {
+            .for_each(|(subnet, len, size_bytes, begin, cycles_transferred)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -581,6 +590,15 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
+                let (cycles_hi, cycles_lo) = cycles_transferred.into_parts();
+                self.metrics
+                    .out_cycles_hi
+                    .with_label_values(&[&subnet.to_string()])
+                    .set(cycles_hi as i64);
+                self.metrics
+                    .out_cycles_lo
+                    .with_label_values(&[&subnet.to_string()])
+                    .set(cycles_lo as i64);
             });
 
         {
