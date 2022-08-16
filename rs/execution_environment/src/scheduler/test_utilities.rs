@@ -3,7 +3,6 @@ use std::{
     convert::{TryFrom, TryInto},
     path::PathBuf,
     sync::{Arc, Mutex},
-    thread::{self, ThreadId},
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -154,9 +153,7 @@ impl SchedulerTest {
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
-    pub fn executed_schedule(
-        &self,
-    ) -> Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)> {
+    pub fn executed_schedule(&self) -> Vec<(ExecutionRound, CanisterId, NumInstructions)> {
         let wasm_executor = self.wasm_executor.core.lock().unwrap();
         wasm_executor.schedule.clone()
     }
@@ -834,7 +831,7 @@ struct TestWasmExecutorCore {
     install_code: HashMap<CanisterId, VecDeque<TestInstallCode>>,
     current_install_code: Option<TestInstallCode>,
     heartbeat: HashMap<CanisterId, VecDeque<TestMessage>>,
-    schedule: Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)>,
+    schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
 }
@@ -858,7 +855,6 @@ impl TestWasmExecutorCore {
         mut paused: Box<TestPausedWasmExecution>,
         execution_state: &ExecutionState,
     ) -> WasmExecutionResult {
-        let thread_id = thread::current().id();
         let canister_id = paused.sandbox_safe_system_state.canister_id();
 
         let message_limit = paused.execution_parameters.instruction_limits.message();
@@ -872,8 +868,7 @@ impl TestWasmExecutorCore {
             let slice = SliceExecutionOutput {
                 executed_instructions: slice_limit,
             };
-            self.schedule
-                .push((thread_id, self.round, canister_id, slice_limit));
+            self.schedule.push((self.round, canister_id, slice_limit));
             return WasmExecutionResult::Paused(slice, paused);
         }
 
@@ -894,7 +889,7 @@ impl TestWasmExecutorCore {
                 },
             };
             self.schedule
-                .push((thread_id, self.round, canister_id, instructions_to_execute));
+                .push((self.round, canister_id, instructions_to_execute));
             return WasmExecutionResult::Finished(slice, output, None);
         }
 
@@ -932,7 +927,7 @@ impl TestWasmExecutorCore {
             instance_stats,
         };
         self.schedule
-            .push((thread_id, self.round, canister_id, instructions_to_execute));
+            .push((self.round, canister_id, instructions_to_execute));
         WasmExecutionResult::Finished(slice, output, Some(canister_state_changes))
     }
 
