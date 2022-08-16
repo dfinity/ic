@@ -1,35 +1,66 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(
+    default_visibility = [
+        "//rs/canister_client:__pkg__",
+        "//rs/canister_client/sender:__pkg__",
+        "//rs/crypto/internal:__subpackages__",
+    ],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/secrets_containers",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:hex",
+    "@crate_index//:openssl",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:simple_asn1",
+    "@crate_index//:zeroize",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/test_vectors",
+    "@crate_index//:proptest",
+    "@crate_index//:strum",
+    "@crate_index//:wycheproof",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:proptest-derive",
+]
+
+ALIASES = {}
 
 rust_library(
     name = "ecdsa_secp256r1",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256r1",
     edition = "2018",
-    visibility = ["//rs/crypto:__subpackages__"],
-    deps = [
-        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/secrets_containers",
-        "//rs/types/types",
-        "@crate_index//:base64",
-        "@crate_index//:hex",
-        "@crate_index//:openssl",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:simple_asn1",
-        "@crate_index//:zeroize",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic_crypto_internal_basic_sig_ecdsa_secp256r1_test",
+    name = "ecdsa_secp256r1_test",
+    aliases = ALIASES,
     crate = ":ecdsa_secp256r1",
-    proc_macro_deps = [
-        "@crate_index//:proptest-derive",
-    ],
-    deps = [
-        "//rs/crypto/internal/test_vectors",
-        "@crate_index//:proptest",
-        "@crate_index//:strum",
-    ],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ecdsa_secp256r1_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":ecdsa_secp256r1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
