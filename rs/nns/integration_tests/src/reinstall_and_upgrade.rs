@@ -274,33 +274,21 @@ fn get_nns_canister_wasm<'a>(
     let encoded_init_state = encode_init_state(init_state);
     vec![
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "rosetta-api/ledger_canister",
-                "ledger-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("ledger-canister", &[]),
             use_root: true,
             canister: &nns_canisters.ledger,
             init_payload: encoded_init_state[0].clone(),
             mode: CanisterInstallMode::Reinstall,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "nns/gtc",
-                "genesis-token-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("genesis-token-canister", &[]),
             use_root: true,
             canister: &nns_canisters.genesis_token,
             init_payload: encoded_init_state[1].clone(),
             mode: CanisterInstallMode::Reinstall,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "nns/cmc",
-                "cycles-minting-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("cycles-minting-canister", &[]),
             use_root: true,
             canister: &nns_canisters.cycles_minting,
             init_payload: encoded_init_state[2].clone(),
@@ -314,33 +302,21 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "nns/governance",
-                "governance-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("governance-canister", &[]),
             use_root: true,
             canister: &nns_canisters.governance,
             init_payload: encoded_init_state[4].clone(),
             mode: CanisterInstallMode::Reinstall,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "nns/handlers/root",
-                "root-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("root-canister", &[]),
             use_root: false,
             canister: &nns_canisters.root,
             init_payload: encoded_init_state[5].clone(),
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "registry/canister",
-                "registry-canister",
-                &[],
-            ),
+            wasm: Project::cargo_bin_maybe_from_env("registry-canister", &[]),
             use_root: true,
             canister: &nns_canisters.registry,
             init_payload: encoded_init_state[6].clone(),

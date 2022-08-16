@@ -19,11 +19,8 @@ fn governance_mem_test() {
             .await
             .unwrap();
 
-        let state_initializer_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "nns/integration_tests",
-            "governance-mem-test-canister",
-            &[],
-        );
+        let state_initializer_wasm =
+            Project::cargo_bin_maybe_from_env("governance-mem-test-canister", &[]);
 
         // It's on purpose that we don't want retries here! This test is only about
         // initializing a canister with a very large state. A failure is most
@@ -34,11 +31,7 @@ fn governance_mem_test() {
         install.install(&mut governance, Vec::new()).await.unwrap();
 
         // Now let's upgrade to the real governance canister
-        let real_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "nns/governance",
-            "governance-canister",
-            &[],
-        );
+        let real_wasm = Project::cargo_bin_maybe_from_env("governance-canister", &[]);
         governance.set_wasm(real_wasm.bytes());
 
         // Exercise canister_post_upgrade of the real canister

@@ -240,8 +240,7 @@ pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) {
 
 /// Builds the SnsWasm for the root canister.
 pub fn build_root_sns_wasm() -> SnsWasm {
-    let root_wasm =
-        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
+    let root_wasm = Project::cargo_bin_maybe_from_env("sns-root-canister", &[]);
     SnsWasm {
         wasm: root_wasm.bytes(),
         canister_type: SnsCanisterType::Root.into(),
@@ -250,11 +249,7 @@ pub fn build_root_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the governance canister.
 pub fn build_governance_sns_wasm() -> SnsWasm {
-    let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "sns/governance",
-        "sns-governance-canister",
-        &[],
-    );
+    let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
     SnsWasm {
         wasm: governance_wasm.bytes(),
         canister_type: SnsCanisterType::Governance.into(),
@@ -263,11 +258,7 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the ledger canister.
 pub fn build_ledger_sns_wasm() -> SnsWasm {
-    let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rosetta-api/icrc1/ledger",
-        "ic-icrc1-ledger",
-        &[],
-    );
+    let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
     SnsWasm {
         wasm: ledger_wasm.bytes(),
         canister_type: SnsCanisterType::Ledger.into(),
@@ -276,8 +267,7 @@ pub fn build_ledger_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the Swap Canister
 pub fn build_swap_sns_wasm() -> SnsWasm {
-    let swap_wasm =
-        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+    let swap_wasm = Project::cargo_bin_maybe_from_env("sns-swap-canister", &[]);
     SnsWasm {
         wasm: swap_wasm.bytes(),
         canister_type: SnsCanisterType::Swap.into(),

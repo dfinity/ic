@@ -67,8 +67,7 @@ fn test_canisters_are_created_and_installed() {
 
         let sns_wasm = &nns_canisters.sns_wasms;
 
-        let root_wasm =
-            Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
+        let root_wasm = Project::cargo_bin_maybe_from_env("sns-root-canister", &[]);
         let root_hash = Sha256::hash(&root_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -79,11 +78,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "sns/governance",
-            "sns-governance-canister",
-            &[],
-        );
+        let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
         let governance_hash = Sha256::hash(&governance_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -94,11 +89,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rosetta-api/icrc1/ledger",
-            "ic-icrc1-ledger",
-            &[],
-        );
+        let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
         let ledger_hash = Sha256::hash(&ledger_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -109,8 +100,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let swap_wasm =
-            Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+        let swap_wasm = Project::cargo_bin_maybe_from_env("sns-swap-canister", &[]);
         let swap_hash = Sha256::hash(&swap_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {

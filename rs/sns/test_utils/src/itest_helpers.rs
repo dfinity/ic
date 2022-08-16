@@ -51,7 +51,6 @@ use ic_types::{CanisterId, PrincipalId};
 use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;
-use std::path::Path;
 use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
@@ -1124,7 +1123,6 @@ impl SnsCanisters<'_> {
 /// Installs a rust canister with the provided memory allocation.
 pub async fn install_rust_canister_with_memory_allocation(
     canister: &mut Canister<'_>,
-    relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
     cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
@@ -1132,7 +1130,6 @@ pub async fn install_rust_canister_with_memory_allocation(
 ) {
     // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
     // neither of these implement Send or have a way to clone the whole structure's data
-    let path_string = relative_path_from_rs.as_ref().to_str().unwrap().to_owned();
     let binary_name_ = binary_name.as_ref().to_string();
     let features = cargo_features
         .iter()
@@ -1149,8 +1146,7 @@ pub async fn install_rust_canister_with_memory_allocation(
             );
             // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
-            let path = Path::new(&path_string);
-            Project::cargo_bin_maybe_use_path_relative_to_rs(path, &binary_name_, &features)
+            Project::cargo_bin_maybe_from_env(&binary_name_, &features)
         })
         .await
         .unwrap();
@@ -1187,7 +1183,6 @@ where
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/governance",
         "sns-governance-canister",
         &[],
         Some(CandidOne(init_payload).into_bytes().unwrap()),
@@ -1213,7 +1208,6 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "rosetta-api/icrc1/ledger",
         "ic-icrc1-ledger",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
@@ -1233,7 +1227,6 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
 pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCanister) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/root",
         "sns-root-canister",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
@@ -1253,7 +1246,6 @@ pub async fn set_up_root_canister(runtime: &'_ Runtime, args: SnsRootCanister) -
 pub async fn install_swap_canister(canister: &mut Canister<'_>, args: SwapInit) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/swap",
         "sns-swap-canister",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),

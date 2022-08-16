@@ -58,12 +58,11 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         install_rust_canister_with_memory_allocation(
             &mut dapp_canister,
-            "sns/integration_tests",
             "sns-test-dapp-canister",
             &[],
             None,
-            1024 * 1024 * 1024, // 1GB
-        )
+            1024 * 1024 * 1024,
+        ) // 1GB
         .await;
 
         let list_nervous_system_functions_response =

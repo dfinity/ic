@@ -227,7 +227,6 @@ fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &InitArgs) {
     install_rust_canister(
         canister,
-        "rosetta-api/icrc1/ledger",
         "ic-icrc1-ledger",
         &[],
         Some(Encode!(&args).unwrap()),

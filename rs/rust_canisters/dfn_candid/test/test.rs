@@ -9,11 +9,7 @@ fn candid_test() {
             .await
             .unwrap();
 
-        let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rust_canisters/dfn_candid",
-            "candid-test-canister",
-            &[],
-        );
+        let wasm = Project::cargo_bin_maybe_from_env("candid-test-canister", &[]);
 
         let install = wasm
             .install(&runtime)

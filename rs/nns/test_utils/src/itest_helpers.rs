@@ -45,7 +45,7 @@ use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{bytes, IntoWire};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
-use std::{future::Future, path::Path, thread, time::SystemTime};
+use std::{future::Future, thread, time::SystemTime};
 
 /// All the NNS canisters that exist at genesis.
 #[derive(Clone)]
@@ -203,7 +203,6 @@ impl NnsCanisters<'_> {
 /// Installs a rust canister with the provided memory allocation.
 async fn install_rust_canister_with_memory_allocation(
     canister: &mut Canister<'_>,
-    relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
     cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
@@ -211,7 +210,6 @@ async fn install_rust_canister_with_memory_allocation(
 ) {
     // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
     // neither of these implement Send or have a way to clone the whole structure's data
-    let path_string = relative_path_from_rs.as_ref().to_str().unwrap().to_owned();
     let binary_name_ = binary_name.as_ref().to_string();
     let features = cargo_features
         .iter()
@@ -228,8 +226,7 @@ async fn install_rust_canister_with_memory_allocation(
             );
             // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
-            let path = Path::new(&path_string);
-            Project::cargo_bin_maybe_use_path_relative_to_rs(path, &binary_name_, &features)
+            Project::cargo_bin_maybe_from_env(&binary_name_, &features)
         })
         .await
         .unwrap();
@@ -253,14 +250,12 @@ async fn install_rust_canister_with_memory_allocation(
 /// Install a rust canister bytecode in a subnet.
 pub async fn install_rust_canister(
     canister: &mut Canister<'_>,
-    relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
     cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        relative_path_from_rs,
         binary_name,
         cargo_features,
         canister_init_payload,
@@ -276,14 +271,7 @@ pub async fn install_governance_canister(canister: &mut Canister<'_>, init_paylo
     init_payload
         .encode(&mut serialized)
         .expect("Couldn't serialize init payload.");
-    install_rust_canister(
-        canister,
-        "nns/governance",
-        "governance-canister",
-        &["test"],
-        Some(serialized),
-    )
-    .await;
+    install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 
 /// Creates and installs the governance canister.
@@ -302,14 +290,7 @@ pub async fn install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(
-        canister,
-        "registry/canister",
-        "registry-canister",
-        &[],
-        Some(encoded),
-    )
-    .await;
+    install_rust_canister(canister, "registry-canister", &[], Some(encoded)).await;
 }
 
 /// Creates and installs the registry canister.
@@ -329,14 +310,7 @@ pub async fn install_genesis_token_canister(canister: &mut Canister<'_>, init_pa
         .encode(&mut serialized)
         .expect("Couldn't serialize init payload.");
 
-    install_rust_canister(
-        canister,
-        "nns/gtc",
-        "genesis-token-canister",
-        &[],
-        Some(serialized),
-    )
-    .await
+    install_rust_canister(canister, "genesis-token-canister", &[], Some(serialized)).await
 }
 
 /// Creates and installs the GTC canister.
@@ -356,7 +330,6 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 ) {
     install_rust_canister(
         canister,
-        "rosetta-api/ledger_canister",
         "ledger-canister",
         &["notify-method"],
         Some(CandidOne(args).into_bytes().unwrap()),
@@ -380,14 +353,7 @@ pub async fn install_root_canister(
     init_payload: RootCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(
-        canister,
-        "nns/handlers/root",
-        "root-canister",
-        &[],
-        Some(encoded),
-    )
-    .await;
+    install_rust_canister(canister, "root-canister", &[], Some(encoded)).await;
 }
 
 /// Creates and installs the root canister.
@@ -408,7 +374,6 @@ pub async fn install_cycles_minting_canister(
 ) {
     install_rust_canister(
         canister,
-        "nns/cmc",
         "cycles-minting-canister",
         &[],
         Some(CandidOne(init_payload).into_bytes().unwrap()),
@@ -480,14 +445,7 @@ pub async fn install_sns_wasm_canister(
     init_payload: SnsWasmCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(
-        canister,
-        "nns/sns-wasm",
-        "sns-wasm-canister",
-        &[],
-        Some(encoded),
-    )
-    .await;
+    install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
 }
 
 /// Creates and installs the sns_wasm canister.

@@ -59,23 +59,7 @@ enum SnsCanisterType {
 impl SnsCanisterType {
     fn get_wasm(self) -> Vec<u8> {
         let features = [];
-        Project::cargo_bin_maybe_use_path_relative_to_rs(
-            self.cargo_package_path(),
-            self.bin_name(),
-            &features,
-        )
-        .bytes()
-    }
-
-    fn cargo_package_path(self) -> &'static str {
-        use SnsCanisterType::*;
-        match self {
-            Ledger => "rosetta-api/icrc1/ledger",
-
-            Root => "sns/root",
-            Governance => "sns/governance",
-            Swap => "sns/swap",
-        }
+        Project::cargo_bin_maybe_from_env(self.bin_name(), &features).bytes()
     }
 
     fn bin_name(self) -> &'static str {
