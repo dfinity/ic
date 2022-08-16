@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,6 +14,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_library(
@@ -24,4 +28,22 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "seed_test",
+    aliases = ALIASES,
+    crate = ":seed",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "seed_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":seed"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
