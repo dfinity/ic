@@ -176,7 +176,7 @@ pub fn execute_heartbeat(
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .on_canister_result(call_context_id, wasm_result);
+        .on_canister_result(call_context_id, None, wasm_result);
 
     let heap_delta = match heap_delta {
         Ok(heap_delta) => Ok(heap_delta),

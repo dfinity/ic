@@ -249,7 +249,7 @@ fn process_update_result(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(original.call_context_id, output.wasm_result);
+                .on_canister_result(original.call_context_id, None, output.wasm_result);
 
             let response = action_to_response(
                 &canister,

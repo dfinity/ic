@@ -449,9 +449,9 @@ impl<'a> QueryContext<'a> {
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, CallOrigin, CallContextAction) {
         let canister_id = canister.canister_id();
-        let (callback, call_context) =
-            match common::get_call_context_and_callback(&mut canister, &response, self.log) {
-                Some((callback, call_context)) => (callback, call_context),
+        let (callback, callback_id, call_context, call_context_id) =
+            match common::get_call_context_and_callback(&canister, &response, self.log) {
+                Some(r) => r,
                 None => {
                     fatal!(
                         self.log,
@@ -461,7 +461,6 @@ impl<'a> QueryContext<'a> {
                 }
             };
 
-        let call_context_id = callback.call_context_id;
         let call_responded = call_context.has_responded();
         let call_origin = call_context.call_origin().clone();
         // Validate that the canister has an `ExecutionState`.
@@ -470,7 +469,11 @@ impl<'a> QueryContext<'a> {
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(call_context_id, Err(HypervisorError::WasmModuleNotFound));
+                .on_canister_result(
+                    call_context_id,
+                    Some(callback_id),
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
             return (canister, call_origin, action);
         }
 
@@ -568,7 +571,7 @@ impl<'a> QueryContext<'a> {
             .system_state
             .call_context_manager_mut()
             .unwrap()
-            .on_canister_result(call_context_id, result);
+            .on_canister_result(call_context_id, Some(callback_id), result);
 
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
