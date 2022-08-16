@@ -283,6 +283,8 @@ export async function handleRequest(request: Request): Promise<Response> {
         httpRequest
       )) as HttpResponse;
 
+      // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
+      // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
       if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
         console.error(
           'Due to security reasons redirects are blocked on the IC until further notice!'
