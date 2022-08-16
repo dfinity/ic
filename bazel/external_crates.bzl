@@ -68,6 +68,9 @@ def external_crates_repository(name, annotations):
             "base64": crate.spec(
                 version = "^0.11.0",
             ),
+            "bech32": crate.spec(
+                version = "^0.9.0",
+            ),
             "bincode": crate.spec(
                 version = "^1.2.1",
             ),
@@ -655,6 +658,9 @@ def external_crates_repository(name, annotations):
                 features = [
                     "std",
                 ],
+            ),
+            "ripemd": crate.spec(
+                version = "^0.1.1",
             ),
             "rocksdb": crate.spec(
                 version = "^0.15.0",

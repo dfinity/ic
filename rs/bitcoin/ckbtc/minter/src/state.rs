@@ -5,6 +5,10 @@
 ///! code should use those functions instead of touching `__STATE` directly.
 use std::cell::RefCell;
 
+use ic_btc_types::Network;
+
+use crate::ECDSAPublicKey;
+
 thread_local! {
     static __STATE: RefCell<Option<CkBtcMinterState>> = RefCell::default();
 }
@@ -13,7 +17,17 @@ thread_local! {
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
 #[derive(Clone, Debug)]
-pub struct CkBtcMinterState {}
+pub struct CkBtcMinterState {
+    /// The bitcoin network that the minter will connect to
+    pub btc_network: Network,
+
+    /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
+    /// a testing key for testnet and mainnet
+    pub ecdsa_key_name: String,
+
+    /// The Minter ECDSA public key
+    pub ecdsa_public_key: Option<ECDSAPublicKey>,
+}
 
 /// Take the current state.
 ///

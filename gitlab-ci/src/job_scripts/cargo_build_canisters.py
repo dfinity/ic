@@ -19,6 +19,7 @@ BIN_CANISTERS = [
     "genesis-token-canister",
     "governance-canister",
     "governance-mem-test-canister",
+    "ic-ckbtc-minter",
     "ic-icrc1-archive",
     "ic-icrc1-ledger",
     "ic-nervous-system-common-test-canister",
@@ -56,6 +57,7 @@ LIB_CANISTERS = ["http_counter"]
 # message max size is 3MB on system subnets and 2MB on other subnets
 CANISTERS_MAX_SIZE_IN_BYTES = {
     "ledger-canister.wasm": 1_900_000,
+    "ic-ckbtc-minter.wasm": 1_900_000,
     "ic-icrc1-ledger.wasm": 1_900_000,
     "ledger-canister_notify-method.wasm": 1_900_000,
     "cycles-minting-canister.wasm": 2_500_000,
