@@ -16,7 +16,18 @@ type GetWithdrawalAccountResult = record {
     account: AccountIdentifier;
 };
 
-service : {
+type Network = variant {
+    Mainnet;
+    Testnet;
+    Regtest;
+};
+
+type InitArgs = record {
+    btc_network: Network;
+    ecdsa_key_name: text;
+};
+
+service : (InitArgs) -> {
     get_btc_address : (GetBtcAddressArgs) -> (GetBtcAddressResult);
     get_withdrawal_account: () -> (GetWithdrawalAccountResult);
 }

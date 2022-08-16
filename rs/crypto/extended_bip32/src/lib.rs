@@ -25,14 +25,14 @@ impl From<ThresholdEcdsaError> for ExtendedBip32DerivationError {
 #[derive(Debug, Clone)]
 pub struct ExtendedBip32DerivationOutput {
     pub derived_public_key: Vec<u8>,
-    pub chain_code: Vec<u8>,
+    pub derived_chain_code: Vec<u8>,
 }
 
 impl ExtendedBip32DerivationOutput {
     fn new(derived_public_key: EccPoint, chain_code: Vec<u8>) -> Self {
         Self {
             derived_public_key: derived_public_key.serialize(),
-            chain_code,
+            derived_chain_code: chain_code,
         }
     }
 }
