@@ -21,7 +21,7 @@ use ic_types::{
 };
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec, GaugeVec};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::ops::Add;
@@ -46,9 +46,9 @@ struct StreamBuilderMetrics {
     /// Outgoing stream index, by sending subnet.
     pub out_stream_index: IntGaugeVec,
     /// Outgoing cycles hi 64bit part of 128bit cycles, by receiving subnet.
-    pub out_cycles_hi: IntGaugeVec,
+    pub out_cycles_hi: GaugeVec,
     /// Outgoing cycles lo 64bit part of 128bit cycles, by receiving subnet.
-    pub out_cycles_lo: IntGaugeVec,
+    pub out_cycles_lo: GaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -132,12 +132,12 @@ impl StreamBuilderMetrics {
             "Outgoing stream index, by sending subnet.",
             &[LABEL_REMOTE],
         );
-        let out_cycles_hi = metrics_registry.int_gauge_vec(
+        let out_cycles_hi = metrics_registry.gauge_vec(
             METRIC_OUT_CYCLES_HI,
             "Outgoing cycles hi part, by receiving subnet.",
             &[LABEL_REMOTE],
         );
-        let out_cycles_lo = metrics_registry.int_gauge_vec(
+        let out_cycles_lo = metrics_registry.gauge_vec(
             METRIC_OUT_CYCLES_LO,
             "Outgoing cycles lo part, by receiving subnet.",
             &[LABEL_REMOTE],
@@ -594,11 +594,11 @@ impl StreamBuilderImpl {
                 self.metrics
                     .out_cycles_hi
                     .with_label_values(&[&subnet.to_string()])
-                    .set(cycles_hi as i64);
+                    .set(cycles_hi as f64);
                 self.metrics
                     .out_cycles_lo
                     .with_label_values(&[&subnet.to_string()])
-                    .set(cycles_lo as i64);
+                    .set(cycles_lo as f64);
             });
 
         {
