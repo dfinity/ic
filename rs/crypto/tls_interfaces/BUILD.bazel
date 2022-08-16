@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -23,4 +23,13 @@ rust_library(
     ],
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "tls_interfaces_test",
+    srcs = glob(["src/**/*.rs"]),
+    crate = ":tls_interfaces",
+    deps = [
+        "//rs/crypto/test_utils",
+        "@crate_index//:json5",
+        "@crate_index//:maplit",
+    ],
+)
