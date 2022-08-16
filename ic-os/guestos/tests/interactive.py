@@ -36,7 +36,9 @@ def main(argv):
         root_subnet=0,
     )
 
-    config_image = ictools.build_ic_prep_inject_config(machines[0], ic_config, 0, ictools.build_ssh_extra_config())
+    config_image = ictools.build_ic_prep_inject_config(
+        ic_config, 0, dict(ictools.build_ssh_extra_config(), **machines[0].get_static_network_config())
+    )
 
     vmtools.start_machine_local(machines[0], system_image, config_image, interactive=True)
 

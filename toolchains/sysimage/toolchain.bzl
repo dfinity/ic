@@ -209,15 +209,20 @@ def _upgrade_image_impl(ctx):
     in_version_file = ctx.files.version_file[0]
     out = ctx.actions.declare_file(ctx.label.name)
 
+    if ctx.attr.compression:
+        compress = "-c %s" % ctx.attr.compression
+    else:
+        compress = ""
+
     ctx.actions.run_shell(
         inputs = [in_boot_partition, in_root_partition, in_version_file],
         outputs = [out],
-        command = "python3 %s -b %s -r %s -v %s -c %s -o %s" % (
+        command = "python3 %s -b %s -r %s -v %s %s -o %s" % (
             tool_file.path,
             in_boot_partition.path,
             in_root_partition.path,
             in_version_file.path,
-            ctx.attr.compression,
+            compress,
             out.path,
         ),
     )
@@ -240,7 +245,7 @@ upgrade_image = rule(
             mandatory = True,
         ),
         "compression": attr.string(
-            default = "gz",
+            default = "",
         ),
         "_build_upgrade_image_tool": attr.label(
             allow_files = True,
