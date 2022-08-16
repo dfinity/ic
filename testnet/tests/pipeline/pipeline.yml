@@ -423,7 +423,6 @@ system-tests-short-nightly:
 system-tests-long-nightly:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "nightly_long_duration"
     cd_target_env: "NIGHTLY"
@@ -489,7 +488,6 @@ system-tests-hotfix:
 system-tests-staging-nightly:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "staging"
     SYSTEM_TESTS_TIMEOUT: "30000" #8h 20min
