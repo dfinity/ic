@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::io::BufRead;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -19,12 +19,7 @@ pub trait Dashboard {
     /// Starts listening on the port and calls handle_connection on each
     /// incoming stream, *one-by-one*.
     async fn listen(&self, exit_signal: Arc<RwLock<bool>>) {
-        // Listen on [::] so that we accept both IPv4 and IPv6 connections.
-        // See NET-524 for more details.
-        let addr = SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
-            Self::port(),
-        );
+        let addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), Self::port());
         let listener = match TcpListener::bind(addr).await {
             Ok(listener) => listener,
             Err(e) => {
