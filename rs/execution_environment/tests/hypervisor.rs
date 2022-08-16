@@ -1897,6 +1897,39 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
 }
 
 #[test]
+fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_update test")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let binary = wabt::wat2wasm(wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
+
+    test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
+        .unwrap();
+    let initial_memory_used = test.state().total_memory_taken();
+    assert_eq!(initial_memory_used.get(), memory_allocation.get());
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    // memory taken should not change
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory(),
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    );
+    assert_eq!(initial_memory_used, test.state().total_memory_taken());
+}
+
+#[test]
 fn ic0_msg_cycles_available_returns_zero_for_ingress() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"

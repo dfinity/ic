@@ -18,6 +18,7 @@ use ic_types::{
     Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
 use std::{convert::Infallible, fmt};
@@ -177,10 +178,15 @@ impl SubnetAvailableMemory {
         message_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         debug_assert!(requested >= message_requested);
-        let total_is_available =
-            requested.get() as i64 <= self.0.total_memory || requested.get() == 0;
-        let message_is_available =
-            message_requested.get() as i64 <= self.0.message_memory || message_requested.get() == 0;
+
+        let total_is_available = match i64::try_from(requested.get()) {
+            Ok(x) => x <= self.0.total_memory || x == 0,
+            Err(_) => false,
+        };
+        let message_is_available = match i64::try_from(message_requested.get()) {
+            Ok(x) => x <= self.0.message_memory || x == 0,
+            Err(_) => false,
+        };
 
         if total_is_available && message_is_available {
             self.0.total_memory -= requested.get() as i64;
@@ -985,6 +991,22 @@ mod tests {
             .is_ok());
         assert!(available
             .try_decrement(NumBytes::from(1), NumBytes::from(0))
+            .is_err());
+
+        assert!(available
+            .try_decrement(NumBytes::from(u64::MAX), NumBytes::from(0))
+            .is_err());
+        assert!(available
+            .try_decrement(NumBytes::from(u64::MAX), NumBytes::from(u64::MAX))
+            .is_err());
+        assert!(available
+            .try_decrement(NumBytes::from(i64::MAX as u64 + 1), NumBytes::from(0))
+            .is_err());
+        assert!(available
+            .try_decrement(
+                NumBytes::from(i64::MAX as u64 + 1),
+                NumBytes::from(i64::MAX as u64 + 1)
+            )
             .is_err());
 
         let mut available: SubnetAvailableMemory = AvailableMemory::new(42, 43).into();
