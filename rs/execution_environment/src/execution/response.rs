@@ -7,7 +7,8 @@ use crate::execution_environment::{
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::messages::{CallContextId, Payload, Response};
+use ic_types::ingress::WasmResult;
+use ic_types::messages::{CallContextId, CallbackId, Payload, Response};
 use ic_types::{NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
@@ -28,6 +29,7 @@ use std::sync::Arc;
 struct OriginalContext {
     callback: Callback,
     call_context_id: CallContextId,
+    callback_id: CallbackId,
     call_origin: CallOrigin,
     time: Time,
     message_instruction_limit: NumInstructions,
@@ -129,25 +131,12 @@ pub fn execute_response(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
-    let message_instruction_limit = execution_parameters.instruction_limits.message();
-    let failure = |mut canister: CanisterState, response| {
-        // Refund the canister with any cycles left after message execution.
-        round.cycles_account_manager.refund_execution_cycles(
-            &mut canister.system_state,
-            message_instruction_limit,
-            message_instruction_limit,
-        );
-        ExecuteMessageResult::Finished {
-            canister,
-            response,
-            heap_delta: NumBytes::from(0),
-        }
-    };
-
-    let (callback, call_context) =
-        match common::get_call_context_and_callback(&mut canister, &response, round.log) {
-            Some((callback, call_context)) => (callback, call_context),
+    let (callback, callback_id, call_context, call_context_id) =
+        match common::get_call_context_and_callback(&canister, &response, round.log) {
+            Some(r) => r,
             None => {
+                // This case is unreachable because the call context and
+                // callback should always exist.
                 return ExecuteMessageResult::Finished {
                     canister,
                     heap_delta: NumBytes::from(0),
@@ -155,10 +144,6 @@ pub fn execute_response(
                 };
             }
         };
-
-    let call_context_id = callback.call_context_id;
-    let call_origin = call_context.call_origin().clone();
-    let is_call_context_deleted = call_context.is_deleted();
 
     // Canister A sends a request to canister B with some cycles.
     // Canister B can accept a subset of the cycles in the request.
@@ -198,9 +183,36 @@ pub fn execute_response(
         &response,
     );
 
+    let original = OriginalContext {
+        callback,
+        call_context_id,
+        callback_id,
+        call_origin: call_context.call_origin().clone(),
+        time,
+        message_instruction_limit: execution_parameters.instruction_limits.message(),
+        message: Arc::clone(&response),
+    };
+
     // If the call context was deleted (e.g. in uninstall), then do not execute anything.
-    if is_call_context_deleted {
-        return failure(canister, ExecutionResponse::Empty);
+    if call_context.is_deleted() {
+        if !call_context.has_responded() {
+            // This case is unreachable because `is_deleted() => has_responded()`
+            // is a critical invariant and should hold.
+            error!(
+                round.log,
+                "[EXC-BUG] Canister {} has a deleted context that has not responded",
+                canister.system_state.canister_id,
+            );
+            return ExecuteMessageResult::Finished {
+                canister,
+                heap_delta: NumBytes::from(0),
+                response: ExecutionResponse::Empty,
+            };
+        }
+        // Since the call context has responded, passing `Ok(None)` will produce
+        // an empty response and take care of all other bookkeeping.
+        let result: Result<Option<WasmResult>, HypervisorError> = Ok(None);
+        return early_finish(canister, result, original, round);
     }
 
     // Validate that the canister has an `ExecutionState`.
@@ -210,25 +222,16 @@ pub fn execute_response(
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
                 canister.system_state.canister_id,
             );
-
-        let action = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(
-                callback.call_context_id,
-                Err(HypervisorError::WasmModuleNotFound),
-            );
-        let response = action_to_response(&canister, action, call_origin, time, round.log);
-        return failure(canister, response);
+        let result = Err(HypervisorError::WasmModuleNotFound);
+        return early_finish(canister, result, original, round);
     }
 
     let closure = match response.response_payload {
-        Payload::Data(_) => callback.on_reply.clone(),
-        Payload::Reject(_) => callback.on_reject.clone(),
+        Payload::Data(_) => original.callback.on_reply.clone(),
+        Payload::Reject(_) => original.callback.on_reject.clone(),
     };
 
-    let func_ref = match call_origin {
+    let func_ref = match original.call_origin {
         CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::Heartbeat => {
             FuncRef::UpdateClosure(closure)
         }
@@ -265,15 +268,6 @@ pub fn execute_response(
         round.network_topology,
     );
 
-    let original = OriginalContext {
-        callback,
-        call_context_id,
-        call_origin,
-        time,
-        message_instruction_limit,
-        message: response,
-    };
-
     process_response_result(
         result,
         canister,
@@ -282,6 +276,37 @@ pub fn execute_response(
         round,
         round_limits,
     )
+}
+
+// Helper function for finishing the response execution before calling any Wasm.
+fn early_finish(
+    mut canister: CanisterState,
+    result: Result<Option<WasmResult>, HypervisorError>,
+    original: OriginalContext,
+    round: RoundContext,
+) -> ExecuteMessageResult {
+    let action = canister
+        .system_state
+        .call_context_manager_mut()
+        .unwrap()
+        .on_canister_result(original.call_context_id, Some(original.callback_id), result);
+    let response = action_to_response(
+        &canister,
+        action,
+        original.call_origin,
+        original.time,
+        round.log,
+    );
+    round.cycles_account_manager.refund_execution_cycles(
+        &mut canister.system_state,
+        original.message_instruction_limit,
+        original.message_instruction_limit,
+    );
+    ExecuteMessageResult::Finished {
+        canister,
+        response,
+        heap_delta: NumBytes::from(0),
+    }
 }
 
 // Helper function to execute response cleanup.
@@ -412,7 +437,7 @@ fn process_response_result(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(original.call_context_id, result);
+                .on_canister_result(original.call_context_id, Some(original.callback_id), result);
             let response = action_to_response(
                 &canister,
                 action,
@@ -502,7 +527,7 @@ fn process_cleanup_result(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(original.call_context_id, result);
+                .on_canister_result(original.call_context_id, Some(original.callback_id), result);
             let response = action_to_response(
                 &canister,
                 action,

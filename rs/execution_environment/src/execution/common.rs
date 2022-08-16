@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
-use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
+use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::{Cycles, Time, UserId};
 
@@ -278,16 +278,12 @@ pub(crate) fn validate_method(
 }
 
 // Helper function that extracts the corresponding callback and call context
-// from the `CallContextManager`.
-//
-// Calling this function will unregister the callback identified based on the callback id.
-// When the call context is marked as deleted, and there are no more outstanding
-// callbacks, it will also unregister the call context.
+// from the `CallContextManager` without changing its state.
 pub fn get_call_context_and_callback(
-    canister: &mut CanisterState,
+    canister: &CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
-) -> Option<(Callback, CallContext)> {
+) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
     let call_context_manager = match canister.status() {
         CanisterStatusType::Stopped => {
             // A canister by definition can only be stopped when no open call contexts.
@@ -304,14 +300,14 @@ pub fn get_call_context_and_callback(
         }
         CanisterStatusType::Running | CanisterStatusType::Stopping => {
             // We are sure there's a call context manager since the canister isn't stopped.
-            canister.system_state.call_context_manager_mut().unwrap()
+            canister.system_state.call_context_manager().unwrap()
         }
     };
 
-    let callback = match call_context_manager
-        .unregister_callback(response.originator_reply_callback)
-    {
-        Some(callback) => callback,
+    let callback_id = response.originator_reply_callback;
+
+    let callback = match call_context_manager.peek_callback(callback_id) {
+        Some(callback) => callback.clone(),
         None => {
             // Received an unknown callback ID. Nothing to do.
             error!(
@@ -341,13 +337,7 @@ pub fn get_call_context_and_callback(
         }
     };
 
-    // The call context is completely removed if there are no outstanding callbacks.
-    let num_outstanding_calls = call_context_manager.outstanding_calls(call_context_id);
-    if call_context.is_deleted() && num_outstanding_calls == 0 {
-        call_context_manager.unregister_call_context(call_context_id);
-    }
-
-    Some((callback, call_context))
+    Some((callback, callback_id, call_context, call_context_id))
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {

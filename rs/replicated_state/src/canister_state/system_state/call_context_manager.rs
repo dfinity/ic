@@ -388,6 +388,7 @@ impl CallContextManager {
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
     ) -> CallContextAction {
         enum OutstandingCalls {
@@ -397,6 +398,10 @@ impl CallContextManager {
         enum Responded {
             Yes,
             No,
+        }
+
+        if let Some(callback_id) = callback_id {
+            self.unregister_callback(callback_id);
         }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {
@@ -495,13 +500,6 @@ impl CallContextManager {
     /// the callback and return it.
     pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Callback> {
         self.callbacks.remove(&callback_id)
-    }
-
-    pub fn unregister_call_context(
-        &mut self,
-        call_context_id: CallContextId,
-    ) -> Option<CallContext> {
-        self.call_contexts.remove(&call_context_id)
     }
 
     /// Returns the call origin, which is either the message id of the ingress
