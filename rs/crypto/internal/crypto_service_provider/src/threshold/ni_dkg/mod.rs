@@ -90,7 +90,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
     fn create_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,

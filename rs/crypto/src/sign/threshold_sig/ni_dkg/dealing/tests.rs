@@ -368,16 +368,14 @@ mod create_dealing_with_resharing_transcript {
         csp.expect_create_resharing_dealing()
             .withf(
                 move |algorithm_id,
-                      dkg_id,
                       dealer_index,
                       threshold,
                       epoch_,
                       receiver_keys,
                       resharing_public_coefficients| {
-                    *dkg_id == DKG_ID
-                        // The dealer index is the index of NODE_3 in the set of dealers.
-                        // Note that the nodes are sorted lexicographically.
-                        && *dealer_index == 2
+                    // The dealer index is the index of NODE_3 in the set of dealers.
+                    // Note that the nodes are sorted lexicographically.
+                    *dealer_index == 2
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)

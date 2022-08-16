@@ -175,7 +175,6 @@ mock! {
         fn create_resharing_dealing(
             &self,
             algorithm_id: AlgorithmId,
-            dkg_id: NiDkgId,
             dealer_resharing_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,
