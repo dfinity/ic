@@ -1,0 +1,11 @@
+py_library(
+    name = "ictools",
+    srcs = ["ictools.py"],
+    imports = ["ictools"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "ictools.py",
+    "vmtools.py",
+])

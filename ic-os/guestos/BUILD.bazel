@@ -1,5 +1,5 @@
 load("//bazel:artifacts.bzl", "upload_artifacts", "urls_test")
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "summary_sha256sum", "tar_extract", "upgrade_image", "vfat_image")
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image", "vfat_image")
 
 docker_tar(
     name = "bootloader-tree.tar",
@@ -173,17 +173,45 @@ disk_image(
 )
 
 upgrade_image(
-    name = "upgrade.tar.gz",
+    name = "upgrade.tar",
     boot_partition = ":partition-boot.tar",
     root_partition = ":partition-root.tar",
+    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
+    tags = ["no-cache"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     version_file = ":version.txt",
+)
+
+genrule(
+    name = "disk.img.tar_zstd",
+    srcs = [":disk.img.tar"],
+    outs = [":disk.img.tar.zstd"],
+    cmd = "zstd --threads=0 -10 -f -z $(location disk.img.tar) -o \"$@\"",
+    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
+    tags = ["no-cache"],
+)
+
+sha256sum(
+    name = "disk.img.tar.zstd.sha256",
+    srcs = [":disk.img.tar.zstd"],
+)
+
+genrule(
+    name = "upgrade.tar_zstd",
+    srcs = [":upgrade.tar"],
+    outs = [":upgrade.tar.zstd"],
+    cmd = "zstd --threads=0 -10 -f -z $(location upgrade.tar) -o \"$@\"",
+    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
+    tags = ["no-cache"],
 )
 
 upload_artifacts(
     name = "upload_guestos",
     inputs = [
-        ":disk.img.tar",
-        ":upgrade.tar.gz",
+        ":disk.img.tar.zstd",
+        ":upgrade.tar.zstd",
     ],
     remote_subdir = "ic-os/guestos",
 )
@@ -191,4 +219,35 @@ upload_artifacts(
 urls_test(
     name = "upload_guestos_test",
     inputs = [":upload_guestos"],
+)
+
+# I have no clue why I cannot use these labels directly in the data section of the
+# python binary below. When I try to, the files simply do not get added to the
+# runfiles of the executable.
+genrule(
+    name = "version_wrap",
+    srcs = [":version.txt"],
+    outs = [":version.txt.wrapped"],
+    cmd = "cat $(location version.txt) > \"$@\"",
+)
+
+genrule(
+    name = "hash_wrap",
+    srcs = [":disk.img.tar.zstd.sha256"],
+    outs = [":disk.img.tar.zstd.sha256.wrapped"],
+    cmd = "cat $(location disk.img.tar.zstd.sha256) > \"$@\"",
+)
+
+py_binary(
+    name = "launch_single_vm",
+    srcs = [
+        "launch_single_vm.py",
+        "//ic-os/guestos/tests:ictools.py",
+    ],
+    data = [
+        "upload_guestos.urls",
+        ":disk.img.tar.zstd.sha256.wrapped",
+        ":version.txt.wrapped",
+        "//rs/prep:ic-prep",
+    ],
 )
