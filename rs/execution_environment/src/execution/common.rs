@@ -17,7 +17,7 @@ use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::{Callback, WasmMethod};
-use ic_types::{Cycles, Time, UserId};
+use ic_types::{Cycles, MemoryAllocation, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, RoundLimits};
@@ -357,9 +357,12 @@ fn try_apply_canister_state_changes(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
 ) -> HypervisorResult<()> {
-    subnet_available_memory
-        .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
-        .map_err(|_| HypervisorError::OutOfMemory)?;
+    match &system_state.memory_allocation {
+        MemoryAllocation::BestEffort => subnet_available_memory
+            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+            .map_err(|_| HypervisorError::OutOfMemory)?,
+        MemoryAllocation::Reserved(_) => (),
+    }
 
     system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
