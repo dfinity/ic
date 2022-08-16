@@ -75,7 +75,6 @@ impl MockNode {
         if let Some(resharing_public_coefficients) = resharing_public_coefficients {
             self.csp.create_resharing_dealing(
                 algorithm_id,
-                dkg_id,
                 dealer_index,
                 threshold,
                 epoch,

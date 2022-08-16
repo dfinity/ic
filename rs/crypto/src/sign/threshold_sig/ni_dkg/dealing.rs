@@ -88,7 +88,6 @@ mod creation {
     ) -> Result<CspNiDkgDealing, DkgCreateDealingError> {
         Ok(ni_dkg_csp_client.create_resharing_dealing(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            config.dkg_id(),
             index_in_resharing_committee_or_panic(self_node_id, &transcript.committee),
             config.threshold().get(),
             epoch(config.registry_version()),
