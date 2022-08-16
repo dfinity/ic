@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "der_utils",
@@ -13,4 +13,10 @@ rust_library(
     ],
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "der_utils_test",
+    crate = ":der_utils",
+    deps = [
+        "//rs/crypto/internal/test_vectors",
+    ],
+)
