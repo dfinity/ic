@@ -70,7 +70,7 @@ class ArtifactManager:
             fout.write("[")  # the entire output should respresent a syntactically correct python object, e.g., a list
             pp = pprint.PrettyPrinter(indent=2, stream=fout)
             for log in group.logs:
-                raw = pp.pformat(log)[:-1]  # avoid the \n after the comma
+                raw = pp.pformat(log).strip()  # avoid the \n after the comma
                 fout.write(f"{raw},\n")
             fout.write("]")
 

@@ -59,16 +59,21 @@ class EsDoc:
         return self.repr["_source"]["host"]
 
     @staticmethod
-    def _parse_ip_address(addr: str) -> ipaddress.IPv6Address:
-        ip = addr[3:] if addr.startswith("ip6") else addr
-        return ipaddress.IPv6Address(ip.replace("-", ":"))
+    def _parse_ip_address(addr: str) -> Optional[ipaddress.IPv6Address]:
+        if not addr.startswith("ip6"):
+            return None
+        return ipaddress.IPv6Address(addr[3:].replace("-", ":"))
 
     def host_addr(self) -> Optional[ipaddress.IPv6Address]:
         host = self.host()
         assert "ip" in host, "host address not found"
         addr_field = host["ip"]
         if isinstance(addr_field, list):
-            ext_addrs = [addr for addr in addr_field if not self._parse_ip_address(addr).is_link_local]
+            ext_addrs = []
+            for addr in addr_field:
+                ip = self._parse_ip_address(addr)
+                if ip and not ip.is_link_local:
+                    ext_addrs.append(addr)
             if len(ext_addrs) == 0:
                 # This may happen early after the host is booted
                 return None
