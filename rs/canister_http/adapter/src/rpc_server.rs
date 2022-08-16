@@ -12,32 +12,7 @@ use ic_canister_http_service::{
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_logger::{debug, ReplicaLogger};
-use itertools::Itertools;
-use std::{fmt, ops::RangeInclusive};
 use tonic::{Request, Response, Status};
-
-// Ports that the adapter is allowed to connect to. The ports are restricted to prevent access to
-// internal (inside firewall) resources (prometheus, etc.)
-struct AllowedPorts([RangeInclusive<u16>; 3]);
-const ALLOWED_DESTINATION_PORTS: AllowedPorts = AllowedPorts([80..=80, 443..=443, 20000..=65_535]);
-
-// Pretty print port ranges. I.e "80, 443, 20000-65535"
-impl fmt::Display for AllowedPorts {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}, {}",
-            self.0
-                .iter()
-                .filter(|&e| e.start() == e.end())
-                .format_with(", ", |elt, f| f(&format!("{}", elt.start()))),
-            self.0
-                .iter()
-                .filter(|&e| e.start() != e.end())
-                .format_with(", ", |elt, f| f(&format!("{}-{}", elt.start(), elt.end())))
-        )
-    }
-}
 
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
@@ -66,16 +41,6 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 format!("Failed to parse URL: {}", err),
             )
         })?;
-
-        if !is_allowed_destination_port(uri.port_u16()) {
-            return Err(Status::new(
-                tonic::Code::InvalidArgument,
-                format!(
-                    "Invalid port specified. Only {} allowed",
-                    ALLOWED_DESTINATION_PORTS
-                ),
-            ));
-        }
 
         let method = HttpMethod::from_i32(req.method)
             .ok_or_else(|| {
@@ -157,31 +122,5 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             headers,
             content: body_bytes.to_vec(),
         }))
-    }
-}
-
-fn is_allowed_destination_port(port: Option<u16>) -> bool {
-    match &port {
-        None => true,
-        Some(p) => ALLOWED_DESTINATION_PORTS
-            .0
-            .iter()
-            .any(|allowed| allowed.contains(p)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_allowed_destination_port;
-    #[test]
-    fn valid_port() {
-        assert!(is_allowed_destination_port(Some(443)));
-        assert!(is_allowed_destination_port(Some(80)));
-        assert!(is_allowed_destination_port(Some(20003)));
-    }
-    #[test]
-    fn invalid_port() {
-        assert!(!is_allowed_destination_port(Some(8080)));
-        assert!(!is_allowed_destination_port(Some(19999)));
     }
 }
