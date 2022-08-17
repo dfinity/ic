@@ -1,33 +1,47 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/monitoring/logger",
+    "//rs/protobuf",
+    "//rs/replicated_state",
+    "//rs/sys",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "//rs/types/wasm_types",
+    "//rs/utils",
+    "@crate_index//:bitcoin",
+    "@crate_index//:hex",
+    "@crate_index//:libc",
+    "@crate_index//:prost",
+    "@crate_index//:scoped_threadpool",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces",
+    "//rs/test_utilities",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "state_layout",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_layout",
     edition = "2018",
-    deps = [
-        "//rs/monitoring/logger",
-        "//rs/protobuf",
-        "//rs/replicated_state",
-        "//rs/sys",
-        "//rs/types/base_types",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "//rs/types/wasm_types",
-        "//rs/utils",
-        "@crate_index//:bitcoin",
-        "@crate_index//:hex",
-        "@crate_index//:libc",
-        "@crate_index//:prost",
-        "@crate_index//:scoped_threadpool",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:slog",
-        "@crate_index//:tempfile",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 # Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
@@ -35,3 +49,10 @@ rust_library(
 #     name = "state_layout_doc_test",
 #     crate = ":state_layout",
 # )
+
+rust_test(
+    name = "state_layout_test",
+    crate = ":state_layout",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
