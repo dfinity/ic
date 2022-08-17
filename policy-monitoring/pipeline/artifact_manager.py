@@ -68,7 +68,7 @@ class ArtifactManager:
 
         with open(output_file, "w") as fout:
             fout.write("[")  # the entire output should respresent a syntactically correct python object, e.g., a list
-            pp = pprint.PrettyPrinter(indent=2, stream=fout)
+            pp = pprint.PrettyPrinter(indent=2)
             for log in group.logs:
                 raw = pp.pformat(log).strip()  # avoid the \n after the comma
                 fout.write(f"{raw},\n")

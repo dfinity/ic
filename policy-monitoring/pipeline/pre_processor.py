@@ -1,6 +1,8 @@
 import functools
+import pprint
 import time
 from abc import abstractmethod
+from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import FrozenSet
@@ -89,11 +91,16 @@ NORMAL = OutcomeHandler(0, False, False)
 class PreProcessor:
 
     K = 10_000  # One progress indication per K logs processed
+    BUFFER_SIZE = 10_000
 
     stat: Dict[str, Any]
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, raw_logs_file: Optional[Path]):
         self.name = name
+        self.raw_logs_file = raw_logs_file
+        self._ever_flushed = False
+        self._pp = pprint.PrettyPrinter(indent=2)
+        self._buf: List[str] = []
         self.stat = {
             "test_runtime_milliseconds": 0.0,
             "pre_processing": Timed.default(),
@@ -138,6 +145,25 @@ class PreProcessor:
         """
         return []
 
+    def _flush(self, is_final=False) -> None:
+        assert self.raw_logs_file, "raw_logs_file is not specified"
+        with open(self.raw_logs_file, "a") as fout:
+            if not self._ever_flushed:
+                fout.write(
+                    "["
+                )  # the entire output should respresent a syntactically correct python object, e.g., a list
+                self._ever_flushed = True
+            fout.writelines(self._buf)
+            self._buf = []
+            if is_final:
+                fout.write("]")
+
+    def _forward_to_file(self, doc: EsDoc) -> None:
+        datum = self._pp.pformat(doc).strip()  # avoid the \n after the comma
+        self._buf.append(f"{datum},\n")
+        if len(self._buf) >= self.BUFFER_SIZE:
+            self._flush()
+
     def run(self, logs: Iterable[EsDoc]) -> Iterable[str]:
         """Returns a generator of events corresponding to [logs]"""
         eprint(f"Running pre-processor {self.name} ...")
@@ -159,7 +185,15 @@ class PreProcessor:
                 first_timestamp = timestamp
 
             with Timed(self.stat["pre_processing"]):
+                if self.raw_logs_file:
+                    self._forward_to_file(doc)
                 yield from self.process_log_entry(doc)
+
+        # In case we were forwarding the consumer stream of raw logs to a file,
+        #  the buffer needs to be flushed one last time.
+        if self.raw_logs_file:
+            self._flush(is_final=True)
+            eprint(f"Raw logs saved into '{self.raw_logs_file.absolute()}'")
 
         # synthetic event added as the very last event of the testnet run
         with Timed(self.stat["pre_processing"]):
@@ -381,11 +415,12 @@ class DeclarativePreProcessor(PreProcessor):
     def __init__(
         self,
         name: str,
+        raw_logs_file: Optional[Path],
         required_regular_events: FrozenSet[str],
         infra: Optional[GlobalInfra],
         required_preamble_events: FrozenSet[str] = frozenset(),
     ):
-        super().__init__(name)
+        super().__init__(name=name, raw_logs_file=raw_logs_file)
         self.required_predicates = required_regular_events
         self.required_preamble_events = required_preamble_events
         self._infra = infra
@@ -640,11 +675,17 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         return sorted(list(UniversalPreProcessor._POLICIES.keys()))
 
     @staticmethod
-    def get_supported_formulas_wo_global_infra() -> List[str]:
+    def get_enabled_formulas() -> List[str]:
+        return sorted(
+            list(map(lambda p: p[0], filter(lambda p: p[1]["enabled"], UniversalPreProcessor._POLICIES.items())))
+        )
+
+    @staticmethod
+    def get_formulas_wo_global_infra() -> List[str]:
         return list(
             filter(
                 lambda f: not UniversalPreProcessor.is_global_infra_required(set([f])),
-                UniversalPreProcessor.get_supported_formulas(),
+                UniversalPreProcessor.get_enabled_formulas(),
             )
         )
 
@@ -666,13 +707,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         )
         return sorted(list(res))
 
-    def __init__(self, infra: Optional[GlobalInfra], formulas: Optional[Set[str]] = None):
+    def __init__(
+        self, infra: Optional[GlobalInfra], raw_logs_file: Optional[Path] = None, formulas: Optional[Set[str]] = None
+    ):
+
+        all_formulas = UniversalPreProcessor.get_enabled_formulas()
 
         if formulas is None:
-            formulas = set(UniversalPreProcessor._POLICIES.keys())
-
-        all_formulas = UniversalPreProcessor.get_supported_formulas()
-        assert_with_trace(formulas.issubset(all_formulas), "unexpected formulas")
+            formulas = set(UniversalPreProcessor.get_enabled_formulas())
+        else:
+            assert_with_trace(formulas.issubset(all_formulas), "unexpected formulas")
 
         unit: FrozenSet[str] = frozenset()
         required_preamble_events = functools.reduce(
@@ -688,6 +732,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
 
         super().__init__(
             name="unipol",
+            raw_logs_file=raw_logs_file,
             infra=infra,
             required_preamble_events=required_preamble_events,
             required_regular_events=required_regular_events,

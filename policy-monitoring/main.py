@@ -226,9 +226,10 @@ def main():
             print(f"{event}{attrs_str}")
 
         print("--- Supported IC policies ---")
+        enabled_formulas = set(UniversalPreProcessor.get_enabled_formulas())
         for formula in UniversalPreProcessor.get_supported_formulas():
             attrs = []
-            if not UniversalPreProcessor.is_formula_enabled(formula):
+            if formula not in enabled_formulas:
                 attrs.append("DISABLED")
             if UniversalPreProcessor.is_dbg_log_level_required(formula):
                 attrs.append("requires DEBUG-level logs")
@@ -400,7 +401,7 @@ def main():
                     )
                 else:
                     # Obtain Global Infra from initial registry snapshot GitLab artifact
-                    assert gitlab is not None
+                    assert gitlab is not None, "Did you forget to specify --global_infra?"
                     try:
                         snap_bulb = gitlab.get_registry_snapshot_for_group(group)
                         group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb)

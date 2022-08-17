@@ -3,7 +3,6 @@ import subprocess
 import sys
 from datetime import datetime
 from datetime import timedelta
-from threading import Thread
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -15,27 +14,11 @@ from typing import Tuple
 import psutil
 from func_timeout import func_timeout
 from func_timeout import FunctionTimedOut
+from util.threads import PropagatingThread
 
 
 class DebugMode:
     flag = False
-
-
-# Inspired by https://stackoverflow.com/a/31614591/4342379
-class PropagatingThread(Thread):
-    def run(self):
-        self.exc = None
-        self.ret = None
-        try:
-            self.ret = self._target(*self._args, **self._kwargs)
-        except BaseException as e:
-            self.exc = e
-
-    def join(self, timeout=None):
-        super().join(timeout)
-        if self.exc:
-            raise self.exc
-        return self.ret
 
 
 class MonpolyException(Exception):
@@ -336,7 +319,7 @@ class Monpoly:
             maximal number of seconds to wait for Monpoly to close STDOUT
             and STDERR after closing STDIN.
         """
-        self.name = name
+        self.name = f"{name}--{datetime.now().strftime('%d%m%y-%H%M%S-%f')}"
         self.workdir = workdir
         self.reprodir = reprodir
         self.local_sig_file = local_sig_file
@@ -353,10 +336,14 @@ class Monpoly:
         self._proc = None
 
         self._alert_handler = alert_handler
-        self._stdout_listener_thread = PropagatingThread(target=self._stdout_listener)
+        self._stdout_listener_thread = PropagatingThread(
+            target=self._stdout_listener, name=f"MonpolyStdOutThread_{self.name}"
+        )
 
         self._error_handler = error_handler
-        self._stderr_listener_thread = PropagatingThread(target=self._stderr_listener)
+        self._stderr_listener_thread = PropagatingThread(
+            target=self._stderr_listener, name=f"MonpolyStdErrThread_{self.name}"
+        )
 
         self._exit_handler = exit_handler
 
