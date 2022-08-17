@@ -5,11 +5,12 @@ use crate::{
 use bech32::{u5, Variant};
 use candid::{CandidType, Deserialize};
 use ic_base_types::ic_types::Principal;
+use ic_base_types::PrincipalId;
 use ic_btc_types::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
-use ic_ledger_types::Subaccount;
+use ic_icrc1::{Account, Subaccount};
 use ripemd::{Digest, Ripemd160};
 use serde::Serialize;
 
@@ -26,15 +27,15 @@ pub struct GetBtcAddressResult {
 }
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
-fn derive_public_key(principal: Principal, subaccount: Option<Subaccount>) -> ECDSAPublicKey {
+fn derive_public_key(account: Account) -> ECDSAPublicKey {
     let ECDSAPublicKey {
         public_key,
         chain_code,
     } = read_state(|s| s.ecdsa_public_key.clone().unwrap());
     let derivation_schema = vec![
         DerivationIndex(vec![SCHEMA_V1]),
-        DerivationIndex(principal.as_slice().to_vec()),
-        DerivationIndex(subaccount.map_or(vec![], |s| s.0.to_vec())),
+        DerivationIndex(account.owner.as_slice().to_vec()),
+        DerivationIndex(account.effective_subaccount().to_vec()),
     ];
     let ExtendedBip32DerivationOutput {
         derived_public_key,
@@ -71,9 +72,13 @@ fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> St
 }
 
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
-    let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
-    let public_key = derive_public_key(caller, args.subaccount).public_key;
+    let caller = PrincipalId(ic_cdk::caller());
+    let public_key = derive_public_key(Account {
+        owner: caller,
+        subaccount: args.subaccount,
+    })
+    .public_key;
     let address = network_and_public_key_to_p2wpkh(read_state(|s| s.btc_network), public_key);
     GetBtcAddressResult { address }
 }
