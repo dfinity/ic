@@ -2,8 +2,8 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_transport::{
     FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
 };
-use ic_protobuf::registry::node::v1::NodeRecord;
 use mockall::*;
+use std::net::SocketAddr;
 
 mock! {
     pub Transport {}
@@ -16,8 +16,8 @@ mock! {
 
         fn start_connection(
             &self,
-            peer: &NodeId,
-            record: &NodeRecord,
+            peer_id: &NodeId,
+            peer_addr: SocketAddr,
             registry_version: RegistryVersion,
         ) -> Result<(), TransportErrorCode>;
 

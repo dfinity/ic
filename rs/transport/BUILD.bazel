@@ -17,7 +17,6 @@ rust_library(
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/phantom_newtype",
-        "//rs/protobuf",
         "//rs/types/base_types",
         "@crate_index//:prometheus",
         "@crate_index//:serde",

@@ -3,10 +3,10 @@ use ic_interfaces_transport::{
     TransportMessage, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use tower::Service;
 
@@ -176,7 +176,7 @@ impl Transport for ThreadPort {
     fn start_connection(
         &self,
         node_id: &NodeId,
-        _record: &NodeRecord,
+        _peer_addr: SocketAddr,
         _registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
         info!(

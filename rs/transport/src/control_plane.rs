@@ -8,10 +8,10 @@ use crate::{
     data_plane::create_connected_state,
     metrics::{IntGaugeResource, STATUS_ERROR, STATUS_SUCCESS},
     types::{
-        Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
+        Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize,
         ServerPortState, TransportImpl,
     },
-    utils::{get_flow_ips, get_flow_label},
+    utils::get_flow_label,
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
@@ -19,13 +19,7 @@ use ic_interfaces_transport::{
     FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportStateChange,
 };
 use ic_logger::{error, warn};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use std::{
-    collections::HashMap,
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    time::Duration,
-};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use strum::AsRefStr;
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream},
@@ -67,7 +61,7 @@ impl TransportImpl {
     pub(crate) fn start_peer_connection(
         &self,
         peer_id: &NodeId,
-        peer_record: &NodeRecord,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
         let role = connection_role(&self.node_id, peer_id);
@@ -85,13 +79,9 @@ impl TransportImpl {
         };
 
         // TODO: P2P-514
-        let flow_ips = get_flow_ips(peer_record)?;
         let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
         if role == ConnectionRole::Server {
-            let peer_ip = flow_ips
-                .get(&flow_tag)
-                .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
-            let flow_label = get_flow_label(&peer_ip, peer_id);
+            let flow_label = get_flow_label(&peer_addr.ip().to_string(), peer_id);
             let flow_state = FlowState::new(
                 self.log.clone(),
                 flow_tag,
@@ -110,48 +100,24 @@ impl TransportImpl {
             return Ok(());
         }
 
-        for flow_endpoint in &peer_record.p2p_flow_endpoints {
-            let endpoint = match &flow_endpoint.endpoint {
-                Some(x) => x,
-                None => {
-                    warn!(
-                        self.log,
-                        "ControlPlane::start_peer(): missing endpoint flow_tag = {:?}",
-                        flow_endpoint.flow_tag
-                    );
-                    continue;
-                }
-            };
-
-            let flow_tag = FlowTag::from(flow_endpoint.flow_tag);
-
-            let peer_ip = IpAddr::from_str(endpoint.ip_addr.as_str())
-                .unwrap_or_else(|_| panic!("Invalid node IP: {}", endpoint.ip_addr));
-            let flow_label = get_flow_label(endpoint.ip_addr.as_str(), peer_id);
-            let server_port = endpoint.port as u16;
-            let connecting_task = self.spawn_connect_task(
-                flow_endpoint.flow_tag.into(),
-                *peer_id,
-                peer_ip,
-                ServerPort::from(server_port),
-            );
-            let connecting_state = Connecting {
-                peer_addr: SocketAddr::new(peer_ip, server_port),
-                connecting_task,
-            };
-            let flow_state = FlowState::new(
-                self.log.clone(),
-                flow_tag,
-                flow_label.clone(),
-                ConnectionState::Connecting(connecting_state),
-                QueueSize::from(self.config.send_queue_size),
-                self.send_queue_metrics.clone(),
-                self.control_plane_metrics.clone(),
-            );
-            peer_state
-                .flow_map
-                .insert(flow_endpoint.flow_tag.into(), RwLock::new(flow_state));
-        }
+        let flow_label = get_flow_label(&peer_addr.ip().to_string(), peer_id);
+        let connecting_task = self.spawn_connect_task(flow_tag, *peer_id, peer_addr);
+        let connecting_state = Connecting {
+            peer_addr,
+            connecting_task,
+        };
+        let flow_state = FlowState::new(
+            self.log.clone(),
+            flow_tag,
+            flow_label,
+            ConnectionState::Connecting(connecting_state),
+            QueueSize::from(self.config.send_queue_size),
+            self.send_queue_metrics.clone(),
+            self.control_plane_metrics.clone(),
+        );
+        peer_state
+            .flow_map
+            .insert(flow_tag, RwLock::new(flow_state));
 
         peer_map.insert(*peer_id, peer_state);
         Ok(())
@@ -293,8 +259,7 @@ impl TransportImpl {
         &self,
         flow_tag: FlowTag,
         peer_id: NodeId,
-        peer_ip: IpAddr,
-        server_port: ServerPort,
+        peer_addr: SocketAddr,
     ) -> JoinHandle<()> {
         let node_ip = self.node_ip;
         let weak_self = self.weak_self.read().unwrap().clone();
@@ -303,7 +268,6 @@ impl TransportImpl {
             let gauge = async_tasks_gauge_vec.with_label_values(&[CONNECT_TASK_NAME]);
             let _raii_gauge_vec = IntGaugeResource::new(gauge);
             let local_addr = SocketAddr::new(node_ip, 0);
-            let peer_addr = SocketAddr::new(peer_ip, server_port.get());
 
             // Loop till connection is established
             let mut retries: u32 = 0;
@@ -468,12 +432,7 @@ impl TransportImpl {
             ConnectionState::Listening
         } else {
             // reconnect if we have a listener
-            let connecting_task = self.spawn_connect_task(
-                flow_tag,
-                peer_id,
-                socket_addr.ip(),
-                ServerPort::from(socket_addr.port()),
-            );
+            let connecting_task = self.spawn_connect_task(flow_tag, peer_id, socket_addr);
             let connecting_state = Connecting {
                 peer_addr: socket_addr,
                 connecting_task,
@@ -628,9 +587,6 @@ mod tests {
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces_transport::{TransportEvent, TransportStateChange};
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
-    };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_crypto_tls_cert_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -638,7 +594,9 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use std::convert::Infallible;
     use std::future::Future;
+    use std::net::SocketAddr;
     use std::pin::Pin;
+    use std::str::FromStr;
     use std::sync::Arc;
     use std::task::{Context, Poll};
     use tokio::sync::mpsc::{channel, Sender};
@@ -728,36 +686,19 @@ mod tests {
                 connected: connected_1,
             });
             control_plane_1.set_event_handler(fake_event_handler_1);
-            let mut node_record_1: NodeRecord = Default::default();
-            node_record_1.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: FLOW_TAG_1,
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: PORT_2 as u32,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-            control_plane_1
-                .start_connection(&NODE_ID_2, &node_record_1, REG_V1)
-                .expect("start_connection");
-
+            let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_2)).unwrap();
+            assert!(control_plane_1
+                .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
+                .is_ok());
             let (connected_2, mut done_2) = channel(1);
             let fake_event_handler_2 = BoxCloneService::new(FakeEventHandler {
                 connected: connected_2,
             });
             control_plane_2.set_event_handler(fake_event_handler_2);
-            let mut node_record_2: NodeRecord = Default::default();
-            node_record_2.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: FLOW_TAG_2,
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: PORT_1 as u32,
-                    protocol: Protocol::P2p1Tls13 as i32,
-                }),
-            });
-            control_plane_2
-                .start_connection(&NODE_ID_1, &node_record_2, REG_V1)
-                .expect("start_connection");
+            let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_1)).unwrap();
+            assert!(control_plane_2
+                .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
+                .is_ok());
             assert_eq!(done_1.blocking_recv(), Some(true));
             assert_eq!(done_2.blocking_recv(), Some(true));
         });

@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",

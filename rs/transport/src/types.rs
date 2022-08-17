@@ -8,7 +8,7 @@ use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
@@ -22,12 +22,6 @@ use tokio::{
     task::JoinHandle,
     time::Duration,
 };
-
-/// A tag for the server port
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ServerPortTag;
-/// Type definition for a server port
-pub type ServerPort = Id<ServerPortTag, u16>;
 
 /// A tag for the queue size
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

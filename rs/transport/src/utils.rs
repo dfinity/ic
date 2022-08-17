@@ -4,9 +4,7 @@ use crate::metrics::SendQueueMetrics;
 use crate::types::{QueueSize, SendQueue, SendQueueReader};
 use async_trait::async_trait;
 use ic_base_types::NodeId;
-use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportPayload};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use std::collections::HashMap;
+use ic_interfaces_transport::{FlowTag, TransportPayload};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
@@ -275,111 +273,9 @@ impl SendQueueReader for SendQueueReaderImpl {
     }
 }
 
-/// Returns a map of flow_tag -> peer_ip for that flow.
-pub(crate) fn get_flow_ips(
-    node_record: &NodeRecord,
-) -> Result<HashMap<FlowTag, String>, TransportErrorCode> {
-    let mut ret = HashMap::new();
-    for flow_endpoint in &node_record.p2p_flow_endpoints {
-        let flow_tag = FlowTag::from(flow_endpoint.flow_tag);
-        if ret.contains_key(&flow_tag) {
-            return Err(TransportErrorCode::NodeRecordDuplicateFlowTag);
-        }
-
-        match &flow_endpoint.endpoint {
-            Some(connection_endpoint) => ret.insert(flow_tag, connection_endpoint.ip_addr.clone()),
-            None => return Err(TransportErrorCode::NodeRecordMissingConnectionEndpoint),
-        };
-    }
-
-    Ok(ret)
-}
-
 /// Builds the flow label to use for metrics, from the IP address and the NodeId
 pub(crate) fn get_flow_label(node_ip: &str, node_id: &NodeId) -> String {
     // 35: Includes the first 6 groups of 5 chars each + the 5 separators
     let prefix = node_id.to_string().chars().take(35).collect::<String>();
     return format!("{}_{}", node_ip, prefix);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_protobuf::registry::node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
-    };
-
-    #[test]
-    fn test_get_flow_ips() {
-        let mut node_record: NodeRecord = Default::default();
-
-        let ip_map = get_flow_ips(&node_record).unwrap();
-        assert_eq!(ip_map.len(), 0);
-
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: 1000,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: "10.0.0.1".to_string(),
-                port: 100,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: 2000,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: "20.0.0.1".to_string(),
-                port: 200,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-
-        let ip_map = get_flow_ips(&node_record).unwrap();
-        assert_eq!(ip_map.len(), 2);
-        assert_eq!(
-            *ip_map.get(&FlowTag::from(1000)).unwrap(),
-            "10.0.0.1".to_string()
-        );
-        assert_eq!(
-            *ip_map.get(&FlowTag::from(2000)).unwrap(),
-            "20.0.0.1".to_string()
-        );
-    }
-
-    #[test]
-    fn test_get_flow_ips_duplicate_flow_tags() {
-        let mut node_record: NodeRecord = Default::default();
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: 1000,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: "10.0.0.1".to_string(),
-                port: 100,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: 1000,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: "20.0.0.1".to_string(),
-                port: 200,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-        assert_eq!(
-            get_flow_ips(&node_record),
-            Err(TransportErrorCode::NodeRecordDuplicateFlowTag)
-        );
-    }
-
-    #[test]
-    fn test_get_flow_ips_missing_endpoint() {
-        let mut node_record: NodeRecord = Default::default();
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: 1000,
-            ..Default::default()
-        });
-        assert_eq!(
-            get_flow_ips(&node_record),
-            Err(TransportErrorCode::NodeRecordMissingConnectionEndpoint)
-        );
-    }
 }
