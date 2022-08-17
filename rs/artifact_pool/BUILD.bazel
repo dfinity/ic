@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/consensus/ecdsa_object",
     "//rs/consensus/message",
@@ -40,6 +41,21 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/constants",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/registry",
+    "@crate_index//:criterion",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-envlogger",
+    "@crate_index//:slog-term",
+]
+
+DEV_MACRO_DEPENDENCIES = []
+
 rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
@@ -61,4 +77,19 @@ rust_binary(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":artifact_pool"],
+)
+
+rust_test(
+    name = "artifact_pool_test",
+    crate = ":artifact_pool",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "load_blocks_bench",
+    srcs = ["benches/load_blocks.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":artifact_pool"],
 )
