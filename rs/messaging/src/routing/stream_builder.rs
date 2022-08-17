@@ -471,8 +471,8 @@ impl StreamBuilderImpl {
                             let cycles_in_msg = msg.cycles();
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
-                                    stream.set_sum_cycles_transferred(new_cycles_sum);
+                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
+                                    stream.set_sum_cycles_out(new_cycles_sum);
                                 }
                                 None => {}
                             }
@@ -499,8 +499,8 @@ impl StreamBuilderImpl {
                                         .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.signals_end().get().try_into().unwrap());
                                     let cycles_in_msg = msg.cycles();
-                                    let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
-                                    stream.set_sum_cycles_transferred(new_cycles_sum);
+                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
+                                    stream.set_sum_cycles_out(new_cycles_sum);
                                     // let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
                                     // self.metrics
                                     //     .out_cycles_hi
@@ -574,7 +574,7 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
-                    stream.sum_cycles_transferred(),
+                    stream.sum_cycles_out(),
                 )
             })
             .for_each(|(subnet, len, size_bytes, begin, cycles_transferred)| {

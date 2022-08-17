@@ -651,10 +651,10 @@ impl StreamHandlerImpl {
                         //     .with_label_values(&[&remote_subnet_id.to_string()])
                         //     .set(stream.messages_begin().get() as i64); // option to mirror what is being sent
                         //    //.set(stream_index.get().try_into().unwrap()); // +1 needed, since this is actual index, not next index
-                        let new_cycles_sum = stream.sum_cycles_transferred().add(cycles_in_msg);
+                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
                         // let new_cycles = old_cycles.add(cycles_in_msg);
                         // self.cycle_map.insert(remote_subnet_id, new_cycles);
-                        stream.set_sum_cycles_transferred(new_cycles_sum);
+                        stream.set_sum_cycles_inc(new_cycles_sum);
                         let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
                         self.metrics
                             .inc_cycles_hi
