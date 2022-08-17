@@ -833,7 +833,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .expect_error("sslv3 alert bad certificate")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, malformed_cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -858,7 +858,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .expect_error("sslv3 alert bad certificate")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             // deliberately not adding server.cert() to the registry
             .add_cert(CLIENT_ID_1, client.cert())
@@ -927,8 +927,7 @@ mod client {
     fn should_allow_connection_to_custom_server_with_valid_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
-        let server = CustomServer::builder()
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+        let server = CustomServer::builder().build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -947,7 +946,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .with_allowed_cipher_suites(AES_128_ONLY_CIPHER_SUITE)
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -966,7 +965,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .with_allowed_cipher_suites(AES_256_ONLY_CIPHER_SUITE)
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -988,7 +987,6 @@ mod client {
                 .not_before("10121224075600Z")
                 .cn(SERVER_ID_1.to_string())
                 .build_ed25519(),
-            vec![client.cert()],
         );
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1008,7 +1006,7 @@ mod client {
         let server = CustomServer::builder()
             .with_max_protocol_version(SslVersion::TLS1_2)
             .expect_error("tls_early_post_process_client_hello:unsupported protocol")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -1031,7 +1029,7 @@ mod client {
         let server = CustomServer::builder()
             .with_allowed_cipher_suites(CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT)
             .expect_error("no shared cipher")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -1053,7 +1051,7 @@ mod client {
         let server = CustomServer::builder()
             .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256")
             .expect_error("no suitable signature algorithm")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
@@ -1079,7 +1077,6 @@ mod client {
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
                     .build_prime256v1(),
-                vec![client.cert()],
             );
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1106,7 +1103,6 @@ mod client {
                 CertWithPrivateKey::builder()
                     .cn(WRONG_NODE_ID.to_string())
                     .build_ed25519(),
-                vec![client.cert()],
             );
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1128,7 +1124,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .expect_error("sslv3 alert bad certificate")
-            .build_with_default_server_cert(SERVER_ID_1, vec![client.cert()]);
+            .build_with_default_server_cert(SERVER_ID_1);
         let different_server_cert_in_registry = x509_public_key_cert(
             &CertWithPrivateKey::builder()
                 .cn(SERVER_ID_1.to_string())
@@ -1161,7 +1157,6 @@ mod client {
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
                     .build(ed25519_key_pair.clone(), MessageDigest::null()),
-                vec![client.cert()],
             );
         let different_server_cert_in_registry_with_same_key = x509_public_key_cert(
             &CertWithPrivateKey::builder()
@@ -1202,7 +1197,7 @@ mod client {
             .build(leaf_cert_key_pair, MessageDigest::null());
         let server = CustomServer::builder()
             .expect_error("sslv3 alert bad certificate")
-            .build(leaf_cert, vec![client.cert()]);
+            .build(leaf_cert);
         let ca_cert = CertWithPrivateKey::builder()
             .set_ca_key_usage_extension()
             .cn(SERVER_CA_ID.to_string())
@@ -1233,7 +1228,6 @@ mod client {
                     .cn(SERVER_ID_1.to_string())
                     .validity_days(0) // current time
                     .build_ed25519(),
-                vec![client.cert()],
             );
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1260,7 +1254,6 @@ mod client {
                     .cn(SERVER_ID_1.to_string())
                     .not_before_days_from_now(3) // 3 days in the future
                     .build_ed25519(),
-                vec![client.cert()],
             );
         registry
             .add_cert(SERVER_ID_1, server.cert())
@@ -1287,7 +1280,6 @@ mod client {
                     .cn(SERVER_ID_1.to_string())
                     .self_sign_with_wrong_secret_key()
                     .build_ed25519(),
-                vec![client.cert()],
             );
         registry
             .add_cert(SERVER_ID_1, server.cert())
