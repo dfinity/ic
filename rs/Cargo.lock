@@ -6046,6 +6046,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-transport-mocks"
+version = "0.8.0"
+dependencies = [
+ "ic-base-types",
+ "ic-interfaces-transport",
+ "mockall 0.7.2",
+]
+
+[[package]]
 name = "ic-ledger-canister-blocks-synchronizer"
 version = "0.1.0"
 dependencies = [
@@ -6671,6 +6680,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-p2p",
  "ic-interfaces-transport",
+ "ic-interfaces-transport-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",

@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/message",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/interfaces/transport/mocks",
     "//rs/registry/client",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
