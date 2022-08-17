@@ -1,6 +1,19 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:prost",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/proto/generator",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:tempfile",
+]
 
 rust_library(
     name = "proto",
@@ -10,9 +23,28 @@ rust_library(
     ]),
     crate_name = "ic_registry_common_proto",
     edition = "2018",
-    deps = [
-        "@crate_index//:prost",
-    ],
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): add rust_test after unblocking its dependencies.
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = [
+        ":protos",
+    ] + glob([
+        "gen/**",
+    ]),
+    manifest_dir = "rs/registry/proto",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "proto_test",
+    crate = ":proto",
+    deps = DEV_DEPENDENCIES,
+)
