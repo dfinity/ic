@@ -38,6 +38,7 @@ ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-consensus-message = { path = "../consensus/message" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-interfaces-transport-mocks = { path = "../interfaces/transport/mocks" }
 ic-logger = { path = "../monitoring/logger" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
