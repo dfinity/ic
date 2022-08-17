@@ -11,6 +11,7 @@ from monpoly.monpoly import ExitHandlerParams
 from monpoly.monpoly import Monpoly
 from monpoly.monpoly import MonpolyException
 from monpoly.monpoly import MonpolyIoClosed
+from monpoly.multi_monitor import MultiMonitor
 from util.print import eprint
 
 from .alert import AlertService
@@ -47,13 +48,8 @@ class Pipeline:
         formulas: Optional[Set[str]] = None,
         fail=False,  # if True, raise exceptions instead of just sending Slack alerts
     ):
-        # Corresponds to the name of
-        # the [https://gitlab.com/ic-monitoring/mfotl-policies] repo
         self.policies_path = policies_path
-
-        # Ensure file structure
         self.art_manager = art_manager
-
         self.slack = alert_service
         self.liveness_channel = liveness_channel
         self.docker = docker
@@ -68,8 +64,6 @@ class Pipeline:
 
         # maps formula to tuple of variable names
         self.var_seq: Dict[str, Tuple[str, ...]] = dict()
-
-        self.liveness_checked = False
 
         self.formulas = formulas
 
@@ -144,21 +138,17 @@ class Pipeline:
                 short_text="💀 Policy monitoring pipeline broken 💀",
             )
 
-    def stream_into_monpoly(
+    def _get_monpoly_builders(
         self,
         group: Group,
         pproc: PreProcessor,
-        event_stream: Iterable[str],
-    ) -> None:
+    ) -> Iterable[Monpoly]:
+        eprint(f"Forming Monpoly builders for {group} with pre-processor {pproc.name}...")
 
         assert group.name in self.stat and "monpoly" in self.stat[group.name]
-
-        eprint(f"Checking MFOTL policy from `{self.policies_path}` ...")
-
         self.stat[group.name]["monpoly"] = dict()
 
         for formula in pproc.get_formulas():
-
             # Obtain variable name mapping
             if formula not in self.var_seq:
                 self.var_seq[formula] = Monpoly.get_variables(
@@ -251,7 +241,7 @@ class Pipeline:
                         short_text=f"Monpoly exited with code {arg.exit_code}",
                     )
 
-            with Monpoly(
+            yield Monpoly(
                 name=session_name,
                 docker=self.docker,
                 workdir=self.policies_path,
@@ -263,28 +253,29 @@ class Pipeline:
                 alert_handler=alert_h,
                 error_handler=error_h,
                 exit_handler=exit_h,
-            ) as monitor:
-                try:
-                    for datum in event_stream:
-                        monitor.submit(datum)
-                except MonpolyIoClosed:
-                    # Monpoly closes STDIN after the first violation if
-                    # the -stop_at_first_viol flag is set
-                    pass
-                except MonpolyException as e:
-                    if self.fail:
-                        raise e
-                    self.slack.alert(
-                        level="🏮",
-                        text=f"Monpoly raised exception while running command `{e.cmd}`:\n```\n{str(e)}\n```",
-                        short_text=f"Exception from Monpoly: {e.msg}",
-                    )
+            )
+
+    def _monpoly_exception_handler(self, e: MonpolyException) -> None:
+        if isinstance(e, MonpolyIoClosed):
+            # Monpoly closes STDIN after the first violation if
+            # the -stop_at_first_viol flag is set
+            pass
+        else:
+            if self.fail:
+                raise e
+            self.slack.alert(
+                level="🏮",
+                text=f"Monpoly raised exception while running command `{e.cmd}`:\n```\n{str(e)}\n```",
+                short_text=f"Exception from Monpoly: {e.msg}",
+            )
 
     def _run_single_group(self, group: Group) -> None:
         # Check preconditions
         assert (
             not UniversalPreProcessor.is_global_infra_required(self.formulas) or group.global_infra is not None
         ), f"Global Infra is required but not available for {str(group)}"
+
+        eprint(f"Starting monitoring for {group} ...")
 
         # Init statistics object for this group name
         self.stat[group.name] = {
@@ -293,39 +284,38 @@ class Pipeline:
             "global_infra": None if group.global_infra is None else group.global_infra.to_dict(),
         }
 
-        if Mode.raw in self.modes:
-            self.art_manager.save_raw_logs(group)
+        # Create a PreProcessor instance
+        pproc = UniversalPreProcessor(
+            infra=group.global_infra,
+            raw_logs_file=(self.art_manager.raw_logs_file(group) if Mode.raw in self.modes else None),
+            formulas=(None if Mode.pre_processor_test in self.modes else self.formulas),
+        )
 
-        if self.modes == set([Mode.raw]):
-            # nothing else to do for this group name
-            return
+        # Process the event stream
+        with MultiMonitor(
+            single_formula_monitors=(
+                list(self._get_monpoly_builders(group, pproc)) if Mode.universal_policy in self.modes else []
+            ),
+            exception_handlers=(lambda e: self._monpoly_exception_handler(e)),
+            event_stream_file=(
+                self.art_manager.event_stream_file(group, pproc.name) if Mode.save_event_stream in self.modes else None
+            ),
+        ) as monitor:
+            for datum in pproc.run(group.logs):
+                monitor.submit(datum)
 
-        if Mode.pre_processor_test in self.modes:
-            pproc = UniversalPreProcessor(group.global_infra, None)
-        else:
-            pproc = UniversalPreProcessor(group.global_infra, self.formulas)
-
-        event_stream = pproc.run(group.logs)
-
-        if Mode.save_event_stream in self.modes:
-            self.art_manager.save_event_stream(group, pproc.name, event_stream)
-
-        if Mode.universal_policy in self.modes:
-            self.stream_into_monpoly(
-                group,
-                pproc,
-                event_stream,
-            )
         # Save test runtime statistics
         self.stat[group.name]["pre_processor"] = pproc.stat
+
+        eprint(f"Monitoring completed for {group}.")
 
     def _run_liveness_check(self, group: Group):
         eprint("Starting liveness check ...")
         # Pre-process events that don't require global infra
-        pproc = UniversalPreProcessor(
-            infra=None, formulas=set(UniversalPreProcessor.get_supported_formulas_wo_global_infra())
-        )
-        event_stream = pproc.run(group.logs)
+        pproc = UniversalPreProcessor(infra=None, formulas=set(UniversalPreProcessor.get_formulas_wo_global_infra()))
+        # Although the input stream is empty, at least one final event should still be generated
+        event_stream = pproc.run(logs=[])
+        # Run a dummy policy that is expected to fail for any non-empty log
         self.check_pipeline_alive(group, pproc, event_stream)
         eprint("Liveness check completed.")
 
@@ -339,12 +329,15 @@ class Pipeline:
         # Ensure that groups are processed in a deterministic order
         det_groups = list(map(lambda x: x[1], sorted(groups.items(), key=lambda x: x[0])))
 
+        # Indicate that the pipeline is healthy end-to-end.
+        # TODO: leveness typically means something else (safety vs. liveness);
+        # TODO: use a different term, like e2e_checking
+        if Mode.check_pipeline_liveness in self.modes:
+            self._run_liveness_check(det_groups[0])  # pick single arbitrary group
+
+        # Main loop
         for group in det_groups:
             self._run_single_group(group)
-
-        if Mode.check_pipeline_liveness in self.modes and not self.liveness_checked:
-            self._run_liveness_check(det_groups[0])  # pick single arbitrary group
-            self.liveness_checked = True
 
         eprint("Policy monitoring completed.")
 
