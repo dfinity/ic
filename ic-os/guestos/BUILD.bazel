@@ -20,7 +20,8 @@ docker_tar(
         "--build-arg",
         "BASE_IMAGE=dfinity/guestos-base-dev@sha256:e881a9bea411cd5b4035a0e8edfd0108ff674d4336acef9c8fbf51dd7a0c352c",
     ],
-    # This image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
     tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
@@ -146,8 +147,8 @@ ext4_image(
         "/run",
         "/boot",
     ],
-    # This image currently depends on //:binaries that changes almost always as it depends on //rs:all_sources,
-    # therefore cache hits are very rare. Do not upload it to the remote cache for now as it takes long.
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
     tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
@@ -164,9 +165,9 @@ disk_image(
         ":partition-boot.tar",
         ":partition-root.tar",
     ],
-    # This image is not currently used by anything else - do not upload it to the cache for now as it takes long.
-    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
-    tags = ["no-cache"],
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -176,8 +177,9 @@ upgrade_image(
     name = "upgrade.tar",
     boot_partition = ":partition-boot.tar",
     root_partition = ":partition-root.tar",
-    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
-    tags = ["no-cache"],
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -189,8 +191,9 @@ genrule(
     srcs = [":disk.img.tar"],
     outs = [":disk.img.tar.zstd"],
     cmd = "zstd --threads=0 -10 -f -z $(location disk.img.tar) -o \"$@\"",
-    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
-    tags = ["no-cache"],
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
 )
 
 sha256sum(
@@ -203,8 +206,9 @@ genrule(
     srcs = [":upgrade.tar"],
     outs = [":upgrade.tar.zstd"],
     cmd = "zstd --threads=0 -10 -f -z $(location upgrade.tar) -o \"$@\"",
-    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
-    tags = ["no-cache"],
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
 )
 
 upload_artifacts(
