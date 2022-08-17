@@ -1,7 +1,10 @@
 //! Proofs of correct sharing
+#![allow(clippy::needless_range_loop)]
 
 use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
-use crate::ni_dkg::fs_ni_dkg::utils::*;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofShare;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
@@ -19,36 +22,117 @@ const DOMAIN_PROOF_OF_SHARING_CHALLENGE: &str = "ic-zk-proof-of-sharing-challeng
 ///   g_1 is the generator of G1
 ///   g_2 is the generator of G2
 pub struct SharingInstance {
-    pub g1_gen: ECP,
-    pub g2_gen: ECP2,
-    pub public_keys: Vec<ECP>,
-    pub public_coefficients: Vec<ECP2>,
-    pub combined_randomizer: ECP,
-    pub combined_ciphertexts: Vec<ECP>,
+    g1_gen: G1Affine,
+    g2_gen: G2Affine,
+    public_keys: Vec<G1Affine>,
+    public_coefficients: Vec<G2Affine>,
+    combined_randomizer: G1Affine,
+    combined_ciphertexts: Vec<G1Affine>,
+}
+
+impl SharingInstance {
+    pub fn new(
+        public_keys: Vec<G1Affine>,
+        public_coefficients: Vec<G2Affine>,
+        combined_randomizer: G1Affine,
+        combined_ciphertexts: Vec<G1Affine>,
+    ) -> Self {
+        Self {
+            g1_gen: G1Affine::generator(),
+            g2_gen: G2Affine::generator(),
+            public_keys,
+            public_coefficients,
+            combined_randomizer,
+            combined_ciphertexts,
+        }
+    }
+
+    pub fn from_miracl(
+        public_keys: Vec<ECP>,
+        public_coeff: Vec<ECP2>,
+        combined_randomizer: ECP,
+        combined_ctext: Vec<ECP>,
+    ) -> Self {
+        Self::new(
+            public_keys.iter().map(G1Affine::from_miracl).collect(),
+            public_coeff.iter().map(G2Affine::from_miracl).collect(),
+            G1Affine::from_miracl(&combined_randomizer),
+            combined_ctext.iter().map(G1Affine::from_miracl).collect(),
+        )
+    }
 }
 
 /// Witness for the validity of a sharing instance.
 ///
 ///   Witness = (r, s= [s_1..s_n])
 pub struct SharingWitness {
-    pub scalar_r: BIG,
-    pub scalars_s: Vec<BIG>,
+    scalar_r: Scalar,
+    scalars_s: Vec<Scalar>,
+}
+
+impl SharingWitness {
+    pub fn new(scalar_r: Scalar, scalars_s: Vec<Scalar>) -> Self {
+        Self {
+            scalar_r,
+            scalars_s,
+        }
+    }
+
+    pub fn from_miracl(scalar_r: BIG, scalars_s: Vec<BIG>) -> Self {
+        Self::new(
+            Scalar::from_miracl(&scalar_r),
+            scalars_s.iter().map(Scalar::from_miracl).collect(),
+        )
+    }
 }
 
 /// Zero-knowledge proof of sharing.
 pub struct ProofSharing {
-    pub ff: ECP,
-    pub aa: ECP2,
-    pub yy: ECP,
-    pub z_r: BIG,
-    pub z_alpha: BIG,
+    pub ff: G1Affine,
+    pub aa: G2Affine,
+    pub yy: G1Affine,
+    pub z_r: Scalar,
+    pub z_alpha: Scalar,
+}
+
+impl ProofSharing {
+    /// Convert the sharing proof into a serializable form
+    pub fn serialize(&self) -> ZKProofShare {
+        ZKProofShare {
+            first_move_f: G1Bytes(self.ff.serialize()),
+            first_move_a: G2Bytes(self.aa.serialize()),
+            first_move_y: G1Bytes(self.yy.serialize()),
+            response_z_r: FrBytes(self.z_r.serialize()),
+            response_z_a: FrBytes(self.z_alpha.serialize()),
+        }
+    }
+
+    pub fn deserialize(proof: &ZKProofShare) -> Option<Self> {
+        let ff = G1Affine::deserialize(proof.first_move_f.as_bytes());
+        let aa = G2Affine::deserialize(proof.first_move_a.as_bytes());
+        let yy = G1Affine::deserialize(proof.first_move_y.as_bytes());
+        let z_r = Scalar::deserialize(proof.response_z_r.as_bytes());
+        let z_alpha = Scalar::deserialize(proof.response_z_a.as_bytes());
+
+        if let (Ok(ff), Ok(aa), Ok(yy), Ok(z_r), Ok(z_alpha)) = (ff, aa, yy, z_r, z_alpha) {
+            Some(Self {
+                ff,
+                aa,
+                yy,
+                z_r,
+                z_alpha,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// First move of the prover in the zero-knowledge proof of sharing
 struct FirstMoveSharing {
-    pub blinder_g1: ECP,
-    pub blinder_g2: ECP2,
-    pub blinded_instance: ECP,
+    blinder_g1: G1Affine,
+    blinder_g2: G2Affine,
+    blinded_instance: G1Affine,
 }
 
 /// Creating or verifying a proof of sharing failed.
@@ -73,8 +157,8 @@ impl UniqueHash for SharingInstance {
 
 impl SharingInstance {
     // Computes the hash of the instance.
-    pub fn hash_to_scalar(&self) -> BIG {
-        random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_INSTANCE, self).to_miracl()
+    pub fn hash_to_scalar(&self) -> Scalar {
+        random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_INSTANCE, self)
     }
     pub fn check_instance(&self) -> Result<(), ZkProofSharingError> {
         if self.public_keys.is_empty() || self.public_coefficients.is_empty() {
@@ -89,9 +173,9 @@ impl SharingInstance {
 impl From<&ProofSharing> for FirstMoveSharing {
     fn from(proof: &ProofSharing) -> Self {
         Self {
-            blinder_g1: proof.ff.to_owned(),
-            blinder_g2: proof.aa.to_owned(),
-            blinded_instance: proof.yy.to_owned(),
+            blinder_g1: proof.ff,
+            blinder_g2: proof.aa,
+            blinded_instance: proof.yy,
         }
     }
 }
@@ -106,11 +190,11 @@ impl UniqueHash for FirstMoveSharing {
     }
 }
 
-fn sharing_proof_challenge(hashed_instance: &BIG, first_move: &FirstMoveSharing) -> BIG {
+fn sharing_proof_challenge(hashed_instance: &Scalar, first_move: &FirstMoveSharing) -> Scalar {
     let mut map = HashedMap::new();
     map.insert_hashed("instance-hash", hashed_instance);
     map.insert_hashed("first-move", first_move);
-    random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_CHALLENGE, &map).to_miracl()
+    random_oracle_to_scalar(DOMAIN_PROOF_OF_SHARING_CHALLENGE, &map)
 }
 
 /// Create a proof of correct sharing
@@ -126,28 +210,31 @@ pub fn prove_sharing(
     instance
         .check_instance()
         .expect("The sharing proof instance is invalid");
+    assert_eq!(instance.public_keys.len(), witness.scalars_s.len());
+
     // Hash of instance: x = oracle(instance)
     let x = instance.hash_to_scalar();
 
+    let xpow = xpowers(&x, witness.scalars_s.len());
+
     // First move (prover)
     // alpha, rho <- random Z_p
-    let alpha: BIG = BIG::randomnum(&curve_order(), rng);
-    let rho: BIG = BIG::randomnum(&curve_order(), rng);
+    let alpha = Scalar::miracl_random_using_miracl_rand(rng);
+    let rho = Scalar::miracl_random_using_miracl_rand(rng);
     // F = g_1^rho
     // A = g_2^alpha
     // Y = product [y_i^x^i | i <- [1..n]]^rho * g_1^alpha
-    let ff: ECP = instance.g1_gen.mul(&rho);
-    let aa: ECP2 = instance.g2_gen.mul(&alpha);
-    let mut yy: ECP = instance
+    let ff = (instance.g1_gen * rho).to_affine();
+    let aa = (instance.g2_gen * alpha).to_affine();
+
+    let pk_terms = instance
         .public_keys
         .iter()
-        .rev()
-        .fold(ecp_inf(), |mut acc, point| {
-            acc.add(point);
-            acc.mul(&x)
-        });
-
-    yy = yy.mul2(&rho, &instance.g1_gen, &alpha);
+        .map(G1Projective::from)
+        .zip(xpow.clone())
+        .collect::<Vec<_>>();
+    let pk_mul_xi = G1Projective::muln_vartime(&pk_terms);
+    let yy = G1Projective::mul2(&pk_mul_xi, &rho, &instance.g1_gen.into(), &alpha).to_affine();
 
     let first_move = FirstMoveSharing {
         blinder_g1: ff,
@@ -157,32 +244,40 @@ pub fn prove_sharing(
 
     // Second move (verifier's challenge)
     // x' = oracle(x, F, A, Y)
-    let x_challenge: BIG = sharing_proof_challenge(&x, &first_move);
+    let x_challenge = sharing_proof_challenge(&x, &first_move);
 
     // Third move (prover)
     // z_r = r * x' + rho mod p
     // z_alpha = x' * sum [s_i*x^i | i <- [1..n]] + alpha mod p
-    let mut z_r: BIG = field_mul(&witness.scalar_r, &x_challenge);
-    z_r = field_add(&z_r, &rho);
+    let z_r = witness.scalar_r * x_challenge + rho;
 
-    let mut z_alpha: BIG = witness
+    let terms = witness
         .scalars_s
         .iter()
-        .rev()
-        .fold(big_zero(), |mut acc, scalar| {
-            acc = field_add(&acc, scalar);
-            field_mul(&acc, &x)
-        });
+        .cloned()
+        .zip(xpow)
+        .collect::<Vec<_>>();
+    let z_alpha = Scalar::muln_vartime(&terms) * x_challenge + alpha;
 
-    z_alpha = field_mul(&z_alpha, &x_challenge);
-    z_alpha = field_add(&z_alpha, &alpha);
     ProofSharing {
-        ff: first_move.blinder_g1,
-        aa: first_move.blinder_g2,
-        yy: first_move.blinded_instance,
+        ff,
+        aa,
+        yy,
         z_r,
         z_alpha,
     }
+}
+
+fn xpowers(x: &Scalar, cnt: usize) -> Vec<Scalar> {
+    let mut r = Vec::with_capacity(cnt);
+
+    let mut xpow = Scalar::one();
+    for _ in 0..cnt {
+        xpow *= x;
+        r.push(xpow);
+    }
+
+    r
 }
 
 /// Verify a proof of correct sharing
@@ -195,74 +290,77 @@ pub fn verify_sharing(
     instance.check_instance()?;
     // Hash of Instance
     // x = oracle(instance)
-    let x: BIG = instance.hash_to_scalar();
+    let x = instance.hash_to_scalar();
 
     let first_move = FirstMoveSharing::from(nizk);
     // Verifier's challenge
     // x' = oracle(x, F, A, Y)
-    let x_challenge: BIG = sharing_proof_challenge(&x, &first_move);
+    let x_challenge = sharing_proof_challenge(&x, &first_move);
 
     // First verification equation
     // R^x' * F == g_1^z_r
-    let mut lhs: ECP = instance.combined_randomizer.mul(&x_challenge);
-    lhs.add(&first_move.blinder_g1);
-    let rhs = instance.g1_gen.mul(&nizk.z_r);
-    if !lhs.equals(&rhs) {
+    let lhs = instance.combined_randomizer * x_challenge + first_move.blinder_g1;
+    let rhs = instance.g1_gen * nizk.z_r;
+    if lhs != rhs {
         return Err(ZkProofSharingError::InvalidProof);
     }
 
     // Second verification equation
     // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
     // == g_2^z_alpha
-    let mut kbig: BIG = big_zero();
-    let one: BIG = big_one();
-    let mut lhs: ECP2 = ecp2_inf();
-    instance.public_coefficients.iter().for_each(|aa_k| {
-        let mut acc = big_zero();
-        let mut xpow = x;
-        let mut ibig = big_one();
-        instance.public_keys.iter().for_each(|_| {
-            let tmp = field_mul(&ibig.powmod(&kbig, &curve_order()), &xpow);
-            acc = field_add(&acc, &tmp);
-            xpow = field_mul(&xpow, &x);
-            ibig = field_add(&ibig, &one);
-        });
-        lhs.add(&aa_k.mul(&acc));
-        kbig = field_add(&kbig, &one);
-    });
-    lhs = lhs.mul(&x_challenge);
-    lhs.add(&nizk.aa);
-    let rhs = instance.g2_gen.mul(&nizk.z_alpha);
 
-    if !lhs.equals(&rhs) {
+    let xpow = xpowers(&x, instance.public_keys.len());
+
+    let mut xpow_ik = Vec::with_capacity(instance.public_keys.len());
+    for i in 1..=instance.public_keys.len() {
+        xpow_ik.push((xpow[i - 1], Scalar::one()));
+    }
+
+    let mut terms = Vec::with_capacity(instance.public_coefficients.len());
+    for pc in &instance.public_coefficients {
+        let acc = Scalar::muln_vartime(&xpow_ik);
+        terms.push((pc.into(), acc));
+
+        for i in 0..xpow_ik.len() {
+            xpow_ik[i].1 *= Scalar::from_u64((i + 1) as u64);
+        }
+    }
+    let lhs = G2Projective::muln_vartime(&terms) * x_challenge + nizk.aa;
+
+    let rhs = instance.g2_gen * nizk.z_alpha;
+
+    if lhs != rhs {
         return Err(ZkProofSharingError::InvalidProof);
     }
 
     // Third verification equation
     // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
     // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
-    let mut lhs: ECP =
-        instance
-            .combined_ciphertexts
-            .iter()
-            .rev()
-            .fold(ecp_inf(), |mut acc, point| {
-                acc.add(point);
-                acc.mul(&x)
-            });
-    lhs = lhs.mul(&x_challenge);
-    lhs.add(&nizk.yy);
 
-    let mut rhs: ECP = instance
+    let cc_terms = instance
+        .combined_ciphertexts
+        .iter()
+        .map(G1Projective::from)
+        .zip(xpow.clone())
+        .collect::<Vec<_>>();
+    let cc_mul_xi = G1Projective::muln_vartime(&cc_terms);
+    let lhs = cc_mul_xi * x_challenge + nizk.yy;
+
+    let pk_terms = instance
         .public_keys
         .iter()
-        .rev()
-        .fold(ecp_inf(), |mut acc, point| {
-            acc.add(point);
-            acc.mul(&x)
-        });
-    rhs = rhs.mul2(&nizk.z_r, &instance.g1_gen, &nizk.z_alpha);
-    if !lhs.equals(&rhs) {
+        .map(G1Projective::from)
+        .zip(xpow)
+        .collect::<Vec<_>>();
+    let pk_mul_xi = G1Projective::muln_vartime(&pk_terms);
+    let rhs = G1Projective::mul2(
+        &pk_mul_xi,
+        &nizk.z_r,
+        &instance.g1_gen.into(),
+        &nizk.z_alpha,
+    );
+
+    if lhs != rhs {
         return Err(ZkProofSharingError::InvalidProof);
     }
     Ok(())

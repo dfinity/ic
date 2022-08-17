@@ -1,7 +1,7 @@
 //! Type conversion for using the Miracl-based FS library.
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
-use crate::ni_dkg::fs_ni_dkg::{nizk_chunking::ProofChunking, nizk_sharing::ProofSharing};
+use crate::ni_dkg::fs_ni_dkg::nizk_chunking::ProofChunking;
 use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked,
@@ -9,12 +9,10 @@ use ic_crypto_internal_bls12381_serde_miracl::{
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey,
     NUM_CHUNKS,
-};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    ZKProofDec, ZKProofShare,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
@@ -364,32 +362,4 @@ pub fn chunking_proof_into_miracl(proof: &ZKProofDec) -> Result<ProofChunking, (
         return Err(());
     }
     Ok(chunking_proof)
-}
-
-/// Serialises a sharing proof from a miracl-compatible representation to the
-/// standard form.
-pub fn sharing_proof_from_miracl(sharing_proof: &ProofSharing) -> ZKProofShare {
-    ZKProofShare {
-        first_move_f: miracl_g1_to_bytes(&sharing_proof.ff),
-        first_move_a: miracl_g2_to_bytes(&sharing_proof.aa),
-        first_move_y: miracl_g1_to_bytes(&sharing_proof.yy),
-        response_z_r: miracl_fr_to_bytes(&sharing_proof.z_r),
-        response_z_a: miracl_fr_to_bytes(&sharing_proof.z_alpha),
-    }
-}
-
-/// Parses a sharing proof into a miracl-compatible form.
-///
-/// # Errors
-/// Returns an error if any of the supposed group elements is not a valid group
-/// element.
-pub fn sharing_proof_into_miracl(proof: &ZKProofShare) -> Result<ProofSharing, ()> {
-    // TODO: Error type
-    Ok(ProofSharing {
-        ff: miracl_g1_from_bytes(proof.first_move_f.as_bytes())?,
-        aa: miracl_g2_from_bytes(proof.first_move_a.as_bytes())?,
-        yy: miracl_g1_from_bytes(proof.first_move_y.as_bytes())?,
-        z_r: miracl_fr_from_bytes(proof.response_z_r.as_bytes())?,
-        z_alpha: miracl_fr_from_bytes(proof.response_z_a.as_bytes())?,
-    })
 }

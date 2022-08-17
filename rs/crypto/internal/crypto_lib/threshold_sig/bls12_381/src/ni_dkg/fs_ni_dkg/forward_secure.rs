@@ -16,7 +16,6 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::CHALLENGE_BITS;
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS;
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
-use crate::ni_dkg::fs_ni_dkg::utils::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, G2Prepared, Gt, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
@@ -963,7 +962,8 @@ pub fn mk_sys_params() -> SysParam {
 pub fn negative_safe_new_int(n: isize) -> BIG {
     if n < 0 {
         let mut tmp = BIG::new_int(-n);
-        tmp.rsub(&curve_order());
+        let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
+        tmp.rsub(&spec_r);
         tmp
     } else {
         BIG::new_int(n)

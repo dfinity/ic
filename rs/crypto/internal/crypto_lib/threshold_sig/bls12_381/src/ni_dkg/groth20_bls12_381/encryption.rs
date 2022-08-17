@@ -12,10 +12,10 @@ use crate::api::ni_dkg_errors::{
 use conversions::{
     chunking_proof_from_miracl, chunking_proof_into_miracl, ciphertext_from_miracl,
     ciphertext_into_miracl, epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
-    public_coefficients_to_miracl, public_key_from_miracl, secret_key_from_miracl,
-    sharing_proof_from_miracl, sharing_proof_into_miracl, Tau,
+    public_coefficients_to_miracl, public_key_from_miracl, secret_key_from_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
+use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPublicKey, NodeIndex,
@@ -54,10 +54,7 @@ mod miracl {
     pub use miracl_core::bls12381::big::BIG;
     pub use miracl_core::bls12381::ecp::ECP;
     pub use miracl_core::bls12381::ecp2::ECP2;
-    pub use miracl_core::bls12381::fp::FP;
-    pub use miracl_core::bls12381::fp12::FP12;
     pub use miracl_core::bls12381::rom;
-    pub use miracl_core::hmac;
 }
 
 #[cfg(test)]
@@ -209,14 +206,12 @@ pub fn encrypt_and_prove(
 
         assert_eq!(
             crypto::verify_sharing(
-                &crypto::SharingInstance {
-                    g1_gen: miracl::ECP::generator(),
-                    g2_gen: miracl::ECP2::generator(),
+                &crypto::SharingInstance::from_miracl(
                     public_keys,
-                    public_coefficients: miracl_public_coefficients,
-                    combined_randomizer: util::ecp_from_big_endian_chunks(&ciphertext.rr),
+                    miracl_public_coefficients,
+                    util::ecp_from_big_endian_chunks(&ciphertext.rr),
                     combined_ciphertexts,
-                },
+                ),
                 &sharing_proof,
             ),
             Ok(()),
@@ -227,7 +222,7 @@ pub fn encrypt_and_prove(
     Ok((
         ciphertext_from_miracl(&ciphertext),
         chunking_proof_from_miracl(&chunking_proof),
-        sharing_proof_from_miracl(&sharing_proof),
+        sharing_proof.serialize(),
     ))
 }
 
@@ -319,34 +314,36 @@ fn prove_sharing(
         .iter()
         .map(util::ecp_from_big_endian_chunks)
         .collect();
-    let combined_r_scalar: miracl::BIG = util::big_from_big_endian_chunks(&toxic_waste.spec_r);
-    let combined_r = util::ecp_from_big_endian_chunks(&ciphertext.rr);
-    let combined_plaintexts: Vec<miracl::BIG> = plaintext_chunks
+
+    let combined_r = util::g1_from_big_endian_chunks(
+        &ciphertext
+            .rr
+            .iter()
+            .map(G1Affine::from_miracl)
+            .collect::<Vec<_>>(),
+    );
+
+    let combined_r_scalar = util::scalar_from_big_endian_chunks(
+        &toxic_waste
+            .spec_r
+            .iter()
+            .map(Scalar::from_miracl)
+            .collect::<Vec<_>>(),
+    );
+
+    let combined_plaintexts = plaintext_chunks
         .iter()
-        .map(|receiver_chunks| {
-            util::big_from_big_endian_chunks(
-                &receiver_chunks
-                    .iter()
-                    .copied()
-                    .map(miracl::BIG::new_int)
-                    .collect(),
-            )
-        })
-        .collect();
+        .map(|s| util::scalar_from_big_endian_chunks_isize(s))
+        .collect::<Vec<_>>();
 
     crypto::prove_sharing(
-        &crypto::SharingInstance {
-            g1_gen: miracl::ECP::generator(),
-            g2_gen: miracl::ECP2::generator(),
-            public_keys: receiver_fs_public_keys.to_vec(),
-            public_coefficients: public_coefficients.to_vec(),
-            combined_randomizer: combined_r,
+        &crypto::SharingInstance::from_miracl(
+            receiver_fs_public_keys.to_vec(),
+            public_coefficients.to_vec(),
+            combined_r.to_miracl(),
             combined_ciphertexts,
-        },
-        &crypto::SharingWitness {
-            scalar_r: combined_r_scalar,
-            scalars_s: combined_plaintexts,
-        },
+        ),
+        &crypto::SharingWitness::new(combined_r_scalar, combined_plaintexts),
         rng,
     )
 }
@@ -449,21 +446,19 @@ pub fn verify_zk_proofs(
         .iter()
         .map(util::ecp_from_big_endian_chunks)
         .collect();
-    let sharing_proof = sharing_proof_into_miracl(sharing_proof).map_err(|_| {
+    let sharing_proof = crypto::ProofSharing::deserialize(sharing_proof).ok_or_else(|| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: "Could not parse proof of correct sharing".to_string(),
         })
     })?;
 
     crypto::verify_sharing(
-        &crypto::SharingInstance {
-            g1_gen: miracl::ECP::generator(),
-            g2_gen: miracl::ECP2::generator(),
+        &crypto::SharingInstance::from_miracl(
             public_keys,
-            public_coefficients: miracl_public_coefficients,
-            combined_randomizer: combined_r,
+            miracl_public_coefficients,
+            combined_r,
             combined_ciphertexts,
-        },
+        ),
         &sharing_proof,
     )
     .map_err(|_| {
@@ -476,6 +471,7 @@ pub fn verify_zk_proofs(
 
 mod util {
     use super::miracl;
+    use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 
     /// Combine a big endian array of group elements (first chunk is the
     /// most significant) into a single group element.
@@ -492,25 +488,48 @@ mod util {
             acc
         })
     }
+
+    /// Combine a big endian array of group elements (first chunk is the
+    /// most significant) into a single group element.
+    pub fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
+        let mut acc = G1Projective::identity();
+
+        for term in terms {
+            for _ in 0..16 {
+                acc = acc.double();
+            }
+
+            acc += term;
+        }
+
+        acc.to_affine()
+    }
+
     /// Combine a big endian array of field elements (first chunk is the
     /// most significant) into a single field element.
-    ///     
-    /// Note: The field elements stored as Miracl miracl::BIG types, so we
-    /// have to do the modular reduction ourselves.  As the array length is
-    /// unbounded and miracl::BIG has finite size we cannot do the reduction
-    /// safely at the end, so it is done on every iteration.  This is not
-    /// cheap.
-    #[allow(clippy::ptr_arg)] // Vec is the only type we need this for.  Being specific reduces repeated code.
-    pub fn big_from_big_endian_chunks(data: &Vec<miracl::BIG>) -> miracl::BIG {
-        // Note: Relies on miracl::BIG::new() being zero.
-        let curve_order = miracl::BIG::new_ints(&miracl::rom::CURVE_ORDER);
-        data.iter().fold(miracl::BIG::new(), |mut acc, term| {
-            acc.shl(16);
-            let mut reduced_term = miracl::BIG::new_big(term);
-            reduced_term.rmod(&curve_order);
-            acc.add(&reduced_term);
-            acc.rmod(&curve_order); // Needed to avoid getting a buffer overflow.
-            acc
-        })
+    pub fn scalar_from_big_endian_chunks(terms: &[Scalar]) -> Scalar {
+        let factor = Scalar::from_u64(1 << 16);
+
+        let mut acc = Scalar::zero();
+        for term in terms {
+            acc *= factor;
+            acc += term;
+        }
+
+        acc
+    }
+
+    /// Combine a big endian array of field elements (first chunk is the
+    /// most significant) into a single field element.
+    pub fn scalar_from_big_endian_chunks_isize(terms: &[isize]) -> Scalar {
+        let factor = Scalar::from_u64(1 << 16);
+
+        let mut acc = Scalar::zero();
+        for term in terms {
+            acc *= factor;
+            acc += Scalar::from_isize(*term);
+        }
+
+        acc
     }
 }

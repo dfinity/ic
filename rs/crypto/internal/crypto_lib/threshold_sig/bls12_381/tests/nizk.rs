@@ -9,6 +9,7 @@ use dkg::nizk_sharing::{
     ZkProofSharingError,
 };
 use dkg::utils::RAND_ChaCha20;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
@@ -56,24 +57,71 @@ fn setup_sharing_instance_and_witness(
     (pk, aa, rr, cc, r, s)
 }
 
+fn assert_expected_g1(pt: &G1Affine, expected: &'static str) {
+    assert_eq!(hex::encode(pt.serialize()), expected);
+}
+
+fn assert_expected_g2(pt: &G2Affine, expected: &'static str) {
+    assert_eq!(hex::encode(pt.serialize()), expected);
+}
+
+fn assert_expected_scalar(scalar: &Scalar, expected: &'static str) {
+    assert_eq!(hex::encode(scalar.serialize()), expected);
+}
+
 #[test]
 fn sharing_nizk_should_verify() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk,
-        public_coefficients: aa,
-        combined_randomizer: rr,
-        combined_ciphertexts: cc,
-    };
-    let witness = SharingWitness {
-        scalar_r: r,
-        scalars_s: s,
-    };
+    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+
+    let witness = SharingWitness::from_miracl(r, s);
     let sharing_proof = prove_sharing(&instance, &witness, rng);
+    assert_eq!(
+        Ok(()),
+        verify_sharing(&instance, &sharing_proof),
+        "verify_sharing verifies NIZK proof"
+    );
+}
+
+#[test]
+fn sharing_nizk_is_stable() {
+    let rng = &mut RAND_ChaCha20::new([23; 32]);
+    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+
+    assert_expected_scalar(
+        &Scalar::from_miracl(&r),
+        "4fa6457b6d2e3fb03c251766c0967127b4f9e5ece7d54741187191a88ce0e047",
+    );
+
+    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+
+    assert_expected_scalar(
+        &instance.hash_to_scalar(),
+        "63fe81e364eab9c3ceae0c715e31c75e8c4e0dfa96c144f635a2e524326e2ace",
+    );
+
+    let witness = SharingWitness::from_miracl(r, s);
+
+    let sharing_proof = prove_sharing(&instance, &witness, rng);
+
+    assert_expected_g2(&sharing_proof.aa,
+                       "8a64c96d5e3d4292ef6081a1b849ff70cf0dcb374eaf2149c539ff4e438661a73f1c3c08b7797ac5b926bc1d14cbfb3c183403feb57bea05486542e6f9e377b0f1cf3ca23982ad4b455831bc4a89e5301ce48103f2342fe9e7ec15a73e251088");
+
+    assert_expected_g1(&sharing_proof.ff,
+                       "84725ecf07cc1425e3daff4f71612a5cf87e9109499297c8662d322fb51e75090553782927233890bb9de4ce53355845");
+    assert_expected_g1(&sharing_proof.yy,
+                       "8d46f294d7b13a5ba6590bd4ea7839b29959d3264bda4b8037758e23ff15cdbc7649426e822437db90e9e98835f7ab6f");
+    assert_expected_scalar(
+        &sharing_proof.z_alpha,
+        "06ef8486a4c8284201f3c1bfbba5d2b9a0d0132040eb44b954e7278f66d11ac4",
+    );
+    assert_expected_scalar(
+        &sharing_proof.z_r,
+        "13c306c8bf02384c68a78db7ff39069339ef337d0ed146ea791d5cfb46c52cee",
+    );
+
     assert_eq!(
         Ok(()),
         verify_sharing(&instance, &sharing_proof),
@@ -87,19 +135,8 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk,
-        public_coefficients: vec![],
-        combined_randomizer: rr,
-        combined_ciphertexts: cc,
-    };
-
-    let witness = SharingWitness {
-        scalar_r: r,
-        scalars_s: s,
-    };
+    let instance = SharingInstance::from_miracl(pk, vec![], rr, cc);
+    let witness = SharingWitness::from_miracl(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 }
 
@@ -109,19 +146,10 @@ fn sharing_prover_should_panic_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
     pk.push(ECP::generator());
-    let instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk,
-        public_coefficients: aa,
-        combined_randomizer: rr,
-        combined_ciphertexts: cc,
-    };
 
-    let witness = SharingWitness {
-        scalar_r: r,
-        scalars_s: s,
-    };
+    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+
+    let witness = SharingWitness::from_miracl(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 }
 
@@ -130,28 +158,13 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk.clone(),
-        public_coefficients: aa.clone(),
-        combined_randomizer: rr.clone(),
-        combined_ciphertexts: cc.clone(),
-    };
-    pk.push(ECP::generator());
-    let invalid_instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk,
-        public_coefficients: aa,
-        combined_randomizer: rr,
-        combined_ciphertexts: cc,
-    };
+    let instance = SharingInstance::from_miracl(pk.clone(), aa.clone(), rr.clone(), cc.clone());
 
-    let witness = SharingWitness {
-        scalar_r: r,
-        scalars_s: s,
-    };
+    pk.push(ECP::generator());
+
+    let invalid_instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+
+    let witness = SharingWitness::from_miracl(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng);
@@ -167,26 +180,16 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance {
-        g1_gen: ECP::generator(),
-        g2_gen: ECP2::generator(),
-        public_keys: pk,
-        public_coefficients: aa,
-        combined_randomizer: rr,
-        combined_ciphertexts: cc,
-    };
+    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
 
-    let witness = SharingWitness {
-        scalar_r: r,
-        scalars_s: s,
-    };
+    let witness = SharingWitness::from_miracl(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng);
     let invalid_proof = ProofSharing {
         ff: sharing_proof.ff,
         aa: sharing_proof.aa,
-        yy: ECP::generator(),
+        yy: G1Affine::generator(),
         z_r: sharing_proof.z_r,
         z_alpha: sharing_proof.z_alpha,
     };

@@ -1,51 +1,8 @@
 //! Utility functions for the NI-DKG code
 
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
-use miracl_core::bls12381::rom::CURVE_ORDER;
 use miracl_core::rand::RAND;
 use rand_chacha::rand_core::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-
-/// Order of the prime order subgroup of curve BLS12_381.
-pub(crate) fn curve_order() -> BIG {
-    BIG::new_ints(&CURVE_ORDER)
-}
-
-/// Point at infinity on G1 of curve BLS12_381.
-pub(crate) fn ecp_inf() -> ECP {
-    let mut new = ECP::new();
-    new.inf();
-    new
-}
-
-/// Point at infinity on G2 of curve BLS12_381.
-pub(crate) fn ecp2_inf() -> ECP2 {
-    let mut new = ECP2::new();
-    new.inf();
-    new
-}
-
-/// Zero element in the scalar field of curve BLS12_381.
-pub(crate) fn big_zero() -> BIG {
-    BIG::new_int(0)
-}
-
-/// Identity element in the scalar field of curve BLS12_381.
-pub(crate) fn big_one() -> BIG {
-    BIG::new_int(1)
-}
-
-/// Addition of two field elements modulo the prime order of the group.
-pub(crate) fn field_add(left: &BIG, right: &BIG) -> BIG {
-    BIG::modadd(left, right, &curve_order())
-}
-
-/// Multiplication of two field elements modulo the prime order of the group.
-pub(crate) fn field_mul(left: &BIG, right: &BIG) -> BIG {
-    BIG::modmul(left, right, &curve_order())
-}
 
 /// A random number generator based on the ChaCha20 stream cipher
 #[allow(non_camel_case_types)]

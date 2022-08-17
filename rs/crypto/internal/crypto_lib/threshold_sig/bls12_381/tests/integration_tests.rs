@@ -297,18 +297,13 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             );
         }
 
-        let sharing_instance = SharingInstance {
-            g1_gen: ECP::generator(),
-            g2_gen: ECP2::generator(),
-            public_keys: receiver_fs_public_keys,
-            public_coefficients: polynomial_exp,
-            combined_randomizer: combined_r_exp,
+        let sharing_instance = SharingInstance::from_miracl(
+            receiver_fs_public_keys,
+            polynomial_exp,
+            combined_r_exp,
             combined_ciphertexts,
-        };
-        let sharing_witness = SharingWitness {
-            scalar_r: combined_r,
-            scalars_s: combined_plaintexts,
-        };
+        );
+        let sharing_witness = SharingWitness::from_miracl(combined_r, combined_plaintexts);
 
         let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, rng);
 

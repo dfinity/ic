@@ -25,6 +25,10 @@ strum_macros = "0.23.0"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"] }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 
+[[bench]]
+name = "zk"
+harness = false
