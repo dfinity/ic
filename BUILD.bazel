@@ -43,6 +43,13 @@ buildifier_test(
     ],
 )
 
+test_suite(
+    name = "precommit",
+    tests = [
+        ":buildifier_test",
+    ],
+)
+
 alias(
     name = "bazelifier",
     actual = "//rs/bazelifier",
