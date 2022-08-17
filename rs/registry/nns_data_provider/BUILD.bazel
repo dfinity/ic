@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
     "//rs/crypto/tree_hash",
@@ -29,10 +30,23 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/certification/test-utils",
+    "//rs/crypto",
+    "@crate_index//:leb128",
+]
+
 rust_library(
     name = "nns_data_provider",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_nns_data_provider",
     edition = "2018",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "nns_data_provider_test",
+    crate = ":nns_data_provider",
+    deps = DEV_DEPENDENCIES,
 )
