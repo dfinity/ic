@@ -8,9 +8,15 @@
 ///
 /// Note: The NodeOperatorRecord is defined in:
 /// rs/protobuf/def/registry/node_operator/v1/node_operator.proto.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct NodeProvider {
     /// The ID of the node provider.
     #[prost(message, optional, tag = "1")]
@@ -31,8 +37,8 @@ pub struct UpdateNodeProvider {
 }
 /// How did a neuron vote in the recent past? This data is used by
 /// other neurons to determine what neurons to follow.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BallotInfo {
     #[prost(message, optional, tag = "1")]
@@ -83,9 +89,14 @@ pub struct NeuronInfo {
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
 }
 /// A transfer performed from some account to stake a new neuron.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct NeuronStakeTransfer {
     /// When the transfer arrived at the governance canister.
     #[prost(uint64, tag = "1")]
@@ -111,8 +122,8 @@ pub struct NeuronStakeTransfer {
 }
 /// This structure represents a neuron "at rest" in governance system of
 /// the Internet Computer IC.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Neuron {
     /// The id of the neuron.
@@ -235,9 +246,14 @@ pub struct Neuron {
 pub mod neuron {
     /// Protobuf representing a list of followees of a neuron for a
     /// specific topic.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Followees {
         #[prost(message, repeated, tag = "1")]
         pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
@@ -256,9 +272,14 @@ pub mod neuron {
     /// (b) `dissolve_delay` is set to zero, (c) neither value is set.
     ///
     /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum DissolveState {
         /// When the dissolve timer is running, this stores the timestamp,
         /// in seconds from the Unix epoch, at which the neuron becomes
@@ -285,9 +306,14 @@ pub mod neuron {
 /// Payload of a proposal that calls a function on another NNS
 /// canister. The canister and function to call is derived from the
 /// `nns_function`.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ExecuteNnsFunction {
     /// This enum value determines what canister to call and what NNS
     /// function to call on that canister.
@@ -299,8 +325,8 @@ pub struct ExecuteNnsFunction {
 }
 /// If adopted, a motion should guide the future strategy of the
 /// Internet Computer ecosystem.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Motion {
     /// The text of the motion. Maximum 100kib.
@@ -309,27 +335,44 @@ pub struct Motion {
 }
 /// For all Neurons controlled by the given principals, set their
 /// KYC status to `kyc_verified=true`.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ApproveGenesisKyc {
     #[prost(message, repeated, tag = "1")]
     pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 /// Adds and/or removes NodeProviders from the list of current
 /// node providers.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct AddOrRemoveNodeProvider {
     #[prost(oneof = "add_or_remove_node_provider::Change", tags = "1, 2")]
     pub change: ::core::option::Option<add_or_remove_node_provider::Change>,
 }
 /// Nested message and enum types in `AddOrRemoveNodeProvider`.
 pub mod add_or_remove_node_provider {
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum Change {
         #[prost(message, tag = "1")]
         ToAdd(super::NodeProvider),
@@ -340,9 +383,14 @@ pub mod add_or_remove_node_provider {
 /// This proposal payload is used to reward a node provider by minting
 /// ICPs directly to the node provider's ledger account, or into a new
 /// neuron created on behalf of the node provider.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct RewardNodeProvider {
     /// The NodeProvider to reward.
     #[prost(message, optional, tag = "1")]
@@ -375,23 +423,38 @@ pub mod reward_node_provider {
     /// - All other values are set as for other neurons: timestamp is
     ///   now, following is set up per default, maturity is 0, neuron fee
     ///   is 0.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct RewardToNeuron {
         #[prost(uint64, tag = "1")]
         pub dissolve_delay_seconds: u64,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct RewardToAccount {
         #[prost(message, optional, tag = "1")]
         pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum RewardMode {
         /// If this is specified, executing this proposal will create a
         /// neuron instead of directly minting ICP into the node provider's
@@ -404,9 +467,14 @@ pub mod reward_node_provider {
         RewardToAccount(RewardToAccount),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct RewardNodeProviders {
     #[prost(message, repeated, tag = "1")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
@@ -418,17 +486,27 @@ pub struct RewardNodeProviders {
 /// Changes the default followees to match the one provided.
 /// This completely replaces the default followees so entries for all
 /// Topics (except ManageNeuron) must be provided on each proposal.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
 }
 /// Calls the set_open_time_window Candid method on a swap canister.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct SetSnsTokenSwapOpenTimeWindow {
     /// The swap canister to send the request to.
     #[prost(message, optional, tag = "1")]
@@ -442,8 +520,8 @@ pub struct SetSnsTokenSwapOpenTimeWindow {
 /// all the information from the original proposal submission.
 ///
 /// Making a proposal implicitly votes yes.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Proposal {
     /// Must be present (enforced at the application layer, not by PB).
@@ -474,9 +552,14 @@ pub struct Proposal {
 pub mod proposal {
     /// This section describes the action that the proposal proposes to
     /// take.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum Action {
         /// This type of proposal calls a major function on a specified
         /// target neuron. Only the followees of the target neuron (on the
@@ -546,9 +629,14 @@ pub mod proposal {
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct Empty {}
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
@@ -557,9 +645,14 @@ pub struct Empty {}
 /// addition, commands related to voting, i.g., \[manage_neuron::Follow\]
 /// and \[manage_neuron::RegisterVote\], are also available to the
 /// registered hot keys of the neuron.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ManageNeuron {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     #[prost(message, optional, tag = "1")]
@@ -577,20 +670,35 @@ pub struct ManageNeuron {
 pub mod manage_neuron {
     /// The dissolve delay of a neuron can be increased up to a maximum
     /// of 8 years.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct IncreaseDissolveDelay {
         #[prost(uint32, tag = "1")]
         pub additional_dissolve_delay_seconds: u32,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct StartDissolving {}
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct StopDissolving {}
     /// Add a new hot key that can be used to manage the neuron. This
     /// provides an alternative to using the controller principal’s cold key to
@@ -598,55 +706,90 @@ pub mod manage_neuron {
     /// secure, especially if it is used regularly. A hot key might be a
     /// WebAuthn key that is maintained inside a user device, such as a
     /// smartphone.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct AddHotKey {
         #[prost(message, optional, tag = "1")]
         pub new_hot_key: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
     /// Remove a hot key that has been previously assigned to the neuron.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct RemoveHotKey {
         #[prost(message, optional, tag = "1")]
         pub hot_key_to_remove: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
     /// An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
     /// is passed as an absolute timestamp in seconds since the unix epoch.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct SetDissolveTimestamp {
         #[prost(uint64, tag = "1")]
         pub dissolve_timestamp_seconds: u64,
     }
     /// Join the Internet Computer's community fund with this neuron's present and future maturity.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct JoinCommunityFund {}
     /// Leave the Internet Computer's community fund.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct LeaveCommunityFund {}
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
     /// controller of the neuron.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Configure {
         #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
     pub mod configure {
-        #[derive(candid::CandidType, candid::Deserialize)]
-        #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
         pub enum Operation {
             #[prost(message, tag = "1")]
             IncreaseDissolveDelay(super::IncreaseDissolveDelay),
@@ -668,9 +811,14 @@ pub mod manage_neuron {
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the
     /// specified account.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Disburse {
         /// The (optional) amount to transfer. If not specified the cached
         /// stake is used.
@@ -682,9 +830,14 @@ pub mod manage_neuron {
     }
     /// Nested message and enum types in `Disburse`.
     pub mod disburse {
-        #[derive(candid::CandidType, candid::Deserialize)]
-        #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-        #[derive(Clone, PartialEq, ::prost::Message)]
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
         pub struct Amount {
             #[prost(uint64, tag = "1")]
             pub e8s: u64,
@@ -693,18 +846,28 @@ pub mod manage_neuron {
     /// Split this neuron into two neurons.
     ///
     /// The child neuron retains the parent neuron's properties.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Split {
         /// The amount to split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
     }
     /// Merge another neuron into this neuron.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Merge {
         /// The neuron to merge stake and maturity from.
         #[prost(message, optional, tag = "1")]
@@ -715,9 +878,14 @@ pub mod manage_neuron {
     /// that locks a new balance of ICP on the ledger. The new neuron can
     /// remain controlled by the same principal as its parent, or be
     /// assigned to a new principal.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Spawn {
         /// If not set, the spawned neuron will have the same controller as
         /// this neuron.
@@ -734,9 +902,14 @@ pub mod manage_neuron {
     /// The caller can choose a percentage of the current maturity to merge into
     /// the existing stake. The resulting amount to merge must be greater than
     /// or equal to the transaction fee.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct MergeMaturity {
         /// The percentage to merge, from 1 to 100 (inclusive).
         #[prost(uint32, tag = "1")]
@@ -745,9 +918,14 @@ pub mod manage_neuron {
     /// Disburse a portion of this neuron's stake into another neuron.
     /// This allows to split a neuron but with a new dissolve delay
     /// and owned by someone else.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct DisburseToNeuron {
         /// The controller of the new neuron (must be set).
         #[prost(message, optional, tag = "1")]
@@ -786,9 +964,14 @@ pub mod manage_neuron {
     ///
     /// If the list 'followees' is empty, this removes following for a
     /// specific topic.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct Follow {
         /// Topic UNSPECIFIED means add following for the 'catch all'.
         #[prost(enumeration = "super::Topic", tag = "1")]
@@ -798,9 +981,14 @@ pub mod manage_neuron {
     }
     /// Have the neuron vote to either adopt or reject a proposal with a specified
     /// id.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct RegisterVote {
         #[prost(message, optional, tag = "1")]
         pub proposal: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
@@ -808,27 +996,42 @@ pub mod manage_neuron {
         pub vote: i32,
     }
     /// Claim a new neuron or refresh the stake of an existing neuron.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct ClaimOrRefresh {
         #[prost(oneof = "claim_or_refresh::By", tags = "1, 2, 3")]
         pub by: ::core::option::Option<claim_or_refresh::By>,
     }
     /// Nested message and enum types in `ClaimOrRefresh`.
     pub mod claim_or_refresh {
-        #[derive(candid::CandidType, candid::Deserialize)]
-        #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-        #[derive(Clone, PartialEq, ::prost::Message)]
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
         pub struct MemoAndController {
             #[prost(uint64, tag = "1")]
             pub memo: u64,
             #[prost(message, optional, tag = "2")]
             pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         }
-        #[derive(candid::CandidType, candid::Deserialize)]
-        #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
         pub enum By {
             /// DEPRECATED: Use MemoAndController and omit the controller.
             #[prost(uint64, tag = "1")]
@@ -848,18 +1051,28 @@ pub mod manage_neuron {
         }
     }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum NeuronIdOrSubaccount {
         #[prost(bytes, tag = "11")]
         Subaccount(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag = "12")]
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum Command {
         #[prost(message, tag = "2")]
         Configure(Configure),
@@ -888,9 +1101,14 @@ pub mod manage_neuron {
 /// The response of the ManageNeuron command
 ///
 /// There is a dedicated response type for each `ManageNeuron.command` field
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
@@ -900,81 +1118,141 @@ pub struct ManageNeuronResponse {
 }
 /// Nested message and enum types in `ManageNeuronResponse`.
 pub mod manage_neuron_response {
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct ConfigureResponse {}
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct DisburseResponse {
         /// The block height at which the disburse transfer happened
         #[prost(uint64, tag = "1")]
         pub transfer_block_height: u64,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct SpawnResponse {
         /// The ID of the Neuron created from spawning a Neuron
         #[prost(message, optional, tag = "1")]
         pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct MergeMaturityResponse {
         #[prost(uint64, tag = "1")]
         pub merged_maturity_e8s: u64,
         #[prost(uint64, tag = "2")]
         pub new_stake_e8s: u64,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct FollowResponse {}
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct MakeProposalResponse {
         /// The ID of the created proposal
         #[prost(message, optional, tag = "1")]
         pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct RegisterVoteResponse {}
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct SplitResponse {
         /// The ID of the Neuron created from splitting another Neuron
         #[prost(message, optional, tag = "1")]
         pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct MergeResponse {}
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct DisburseToNeuronResponse {
         /// The ID of the Neuron created from disbursing a Neuron
         #[prost(message, optional, tag = "1")]
         pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct ClaimOrRefreshResponse {
         #[prost(message, optional, tag = "1")]
         pub refreshed_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum Command {
         #[prost(message, tag = "1")]
         Error(super::GovernanceError),
@@ -1002,8 +1280,8 @@ pub mod manage_neuron_response {
         Merge(MergeResponse),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GovernanceError {
     #[prost(enumeration = "governance_error::ErrorType", tag = "1")]
@@ -1074,8 +1352,8 @@ pub mod governance_error {
         NotInTheCommunityFund = 18,
     }
 }
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ballot {
     #[prost(enumeration = "Vote", tag = "1")]
@@ -1084,8 +1362,8 @@ pub struct Ballot {
     pub voting_power: u64,
 }
 /// A tally of votes.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Tally {
     /// When was this tally made
@@ -1105,8 +1383,8 @@ pub struct Tally {
 /// A ProposalData contains everything related to an open proposal:
 /// the proposal itself (immutable), as well as mutable data such as
 /// ballots.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProposalData {
     /// This is stored here temporarily. It is also stored on the map
@@ -1172,9 +1450,14 @@ pub struct ProposalData {
     pub wait_for_quiet_state: ::core::option::Option<WaitForQuietState>,
 }
 /// Stores data relevant to the "wait for quiet" implementation.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct WaitForQuietState {
     #[prost(uint64, tag = "1")]
     pub current_deadline_timestamp_seconds: u64,
@@ -1182,9 +1465,14 @@ pub struct WaitForQuietState {
 /// This is a view of the ProposalData returned by API queries and is NOT used
 /// for storage. The ballots are restricted to those of the caller's neurons and
 /// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ProposalInfo {
     /// The unique id for this proposal.
     #[prost(message, optional, tag = "1")]
@@ -1244,8 +1532,8 @@ pub struct ProposalInfo {
 ///
 /// NOTE: If adding a value to this proto, make sure there is a corresponding
 /// `if` in Governance::perform_action().
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
@@ -1295,9 +1583,14 @@ pub struct NetworkEconomics {
     pub max_proposals_to_keep_per_topic: u32,
 }
 /// A reward event is an event at which neuron maturity is increased
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct RewardEvent {
     /// This reward event correspond to a time interval that ends at the end of
     /// genesis + day_after_genesis days.
@@ -1330,9 +1623,14 @@ pub struct RewardEvent {
     #[prost(uint64, tag = "4")]
     pub distributed_e8s_equivalent: u64,
 }
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct KnownNeuron {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
@@ -1340,8 +1638,8 @@ pub struct KnownNeuron {
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
 }
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KnownNeuronData {
     #[prost(string, tag = "1")]
@@ -1352,8 +1650,8 @@ pub struct KnownNeuronData {
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
     /// Current set of neurons.
@@ -1447,9 +1745,14 @@ pub struct Governance {
 /// Nested message and enum types in `Governance`.
 pub mod governance {
     /// The possible commands that require interaction with the ledger.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct NeuronInFlightCommand {
         /// The timestamp at which the command was issued, for debugging
         /// purposes.
@@ -1463,9 +1766,14 @@ pub mod governance {
     }
     /// Nested message and enum types in `NeuronInFlightCommand`.
     pub mod neuron_in_flight_command {
-        #[derive(candid::CandidType, candid::Deserialize)]
-        #[cfg_attr(feature = "test", derive(comparable::Comparable))]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
         pub enum Command {
             #[prost(message, tag = "2")]
             Disburse(super::super::manage_neuron::Disburse),
@@ -1487,8 +1795,8 @@ pub mod governance {
     }
     /// Stores metrics that are too costly to compute each time metrics are
     /// requested
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[compare_default]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct GovernanceCachedMetrics {
         #[prost(uint64, tag = "1")]
@@ -1650,9 +1958,14 @@ pub mod claim_or_refresh_neuron_from_account_response {
     }
 }
 /// The most recent monthly Node Provider rewards
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct MostRecentMonthlyNodeProviderRewards {
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
@@ -1800,9 +2113,20 @@ pub enum NeuronState {
     Spawning = 4,
 }
 /// The types of votes the Neuron can issue.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum Vote {
     /// This exists because proto3 defaults to the 0 value on enums.
@@ -1938,9 +2262,20 @@ pub enum NnsFunction {
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum ProposalStatus {
     Unspecified = 0,

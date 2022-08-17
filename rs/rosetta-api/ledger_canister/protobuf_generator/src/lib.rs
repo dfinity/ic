@@ -15,8 +15,7 @@ pub fn generate_prost_files(paths: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_ledger.pb.v1.AccountIdentifier",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]",
         ]
         .join(" "),
     );

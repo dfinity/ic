@@ -500,8 +500,8 @@ impl CMC for NNSFixture {
 /// The NNSState is used to capture all of the salient details of the NNS
 /// environment, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(Clone, Default)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
+#[derive(Clone, Default, comparable::Comparable)]
+#[compare_default]
 pub struct NNSState {
     now: u64,
     accounts: LedgerMap,

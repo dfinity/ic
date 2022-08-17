@@ -340,9 +340,15 @@ pub struct Burn {
     #[prost(message, optional, tag = "3")]
     pub amount: ::core::option::Option<Tokens>,
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct AccountIdentifier {
     /// Can contain either:
     ///  * the 32 byte identifier (4 byte checksum + 28 byte hash)

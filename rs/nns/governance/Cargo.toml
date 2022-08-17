@@ -69,12 +69,9 @@ build-info-build = { version="0.0.26", default-features = false, features = [] }
 [dev-dependencies]
 criterion = "0.3"
 futures = "0.3.13"
-ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-config = { path = "../../config" }
-ic-nns-common = { path = "../common", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
@@ -82,4 +79,4 @@ tokio = { version = "1.15.0", features = [ "full" ] }
 tokio-test = "0.4.2"
 
 [features]
-test = ["ic-base-types/test", "ic-nns-common/test", "ledger-canister/test", "ic-sns-swap/test"]
+test = ["ic-sns-swap/test"]

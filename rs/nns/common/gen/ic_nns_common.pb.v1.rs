@@ -1,7 +1,7 @@
 /// A PB container for a CanisterId, which uniquely identifies
 /// a principal.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterId {
     #[prost(bytes = "vec", tag = "1")]
@@ -9,16 +9,16 @@ pub struct CanisterId {
 }
 /// A container for a NeuronId blob, which uniquely identifies
 /// a Neuron.
-#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(uint64, tag = "2")]
     pub id: u64,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Copy)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
+#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]
+#[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProposalId {
     #[prost(uint64, tag = "1")]

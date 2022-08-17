@@ -15,32 +15,32 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_nns_common.pb.v1.CanisterId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.PrincipalId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.ProposalId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
