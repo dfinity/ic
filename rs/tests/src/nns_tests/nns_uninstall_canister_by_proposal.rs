@@ -23,7 +23,7 @@ use crate::util::{assert_create_agent, delay, runtime_from_url, UniversalCaniste
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
     types::CanisterIdRecord,
-    util::{assert_endpoints_reachability, block_on, EndpointsStatus},
+    util::{assert_endpoints_health, block_on, EndpointsStatus},
 };
 use ic_agent::{export::Principal, Agent};
 use ic_fondue::ic_manager::IcHandle;
@@ -42,7 +42,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     block_on(async {
-        assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await
+        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await
     });
     // Install a test canister.
     let agent = block_on(assert_create_agent(endpoints[0].url.as_str()));

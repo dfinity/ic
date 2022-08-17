@@ -23,9 +23,7 @@ use crate::{
 };
 use crate::{
     nns::NnsExt,
-    util::{
-        assert_endpoints_reachability, assert_subnet_can_make_progress, block_on, EndpointsStatus,
-    },
+    util::{assert_endpoints_health, assert_subnet_can_make_progress, block_on, EndpointsStatus},
 };
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_registry_subnet_type::SubnetType;
@@ -50,7 +48,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     block_on(async {
-        assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await
+        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await
     });
     // Randomly select X=floor(N/3)+1 nodes for removal.
     let endpoint_to_remain = endpoints.pop().unwrap();
@@ -66,9 +64,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     ctx.remove_nodes(&handle, node_ids.as_slice());
     // Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status
     block_on(async {
-        assert_endpoints_reachability(
+        assert_endpoints_health(
             endpoints_to_remove.as_slice(),
-            EndpointsStatus::AllUnreachable,
+            EndpointsStatus::AllUnhealthy,
         )
         .await
     });

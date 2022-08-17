@@ -22,7 +22,7 @@ end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::NnsExt;
-use crate::util::{assert_endpoints_reachability, block_on, runtime_from_url, EndpointsStatus};
+use crate::util::{assert_endpoints_health, block_on, runtime_from_url, EndpointsStatus};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
@@ -126,9 +126,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     let mut endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
     assert_eq!(endpoints.len(), config.subnets * config.nodes_per_subnet);
     // Assert all nodes are reachable after IC setup.
-    block_on(assert_endpoints_reachability(
+    block_on(assert_endpoints_health(
         endpoints.as_slice(),
-        EndpointsStatus::AllReachable,
+        EndpointsStatus::AllHealthy,
     ));
     info!(
         ctx.logger,

@@ -45,11 +45,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     util::block_on(async {
-        util::assert_endpoints_reachability(
-            endpoints.as_slice(),
-            util::EndpointsStatus::AllReachable,
-        )
-        .await
+        util::assert_endpoints_health(endpoints.as_slice(), util::EndpointsStatus::AllHealthy).await
     });
     info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
     ctx.install_nns_canisters(&handle, true);

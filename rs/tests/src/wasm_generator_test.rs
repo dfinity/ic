@@ -23,11 +23,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     util::block_on(async move {
         info!(ctx.logger, "Asserting reachability of all nodes..");
         // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
-        util::assert_endpoints_reachability(
-            endpoints.as_slice(),
-            util::EndpointsStatus::AllReachable,
-        )
-        .await;
+        util::assert_endpoints_health(endpoints.as_slice(), util::EndpointsStatus::AllHealthy)
+            .await;
 
         info!(ctx.logger, "All nodes are reachable, creating agent..");
         let agent = util::assert_create_agent(node.url.as_str()).await;
