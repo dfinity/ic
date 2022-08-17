@@ -20,16 +20,12 @@ use std::{
 /// Principals have variable length, bounded by 29 bytes. Since we
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
-#[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "test",
-    derive(comparable::Comparable),
-    describe_type(String),
-    describe_body(self.to_string())
-)]
+#[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize, comparable::Comparable)]
+#[describe_type(String)]
+#[describe_body(self.to_string())]
 #[repr(transparent)]
 #[serde(transparent)]
-pub struct PrincipalId(#[cfg_attr(feature = "test", comparable_ignore)] pub Principal);
+pub struct PrincipalId(#[comparable_ignore] pub Principal);
 
 impl PartialEq for PrincipalId {
     fn eq(&self, other: &PrincipalId) -> bool {

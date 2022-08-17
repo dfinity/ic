@@ -70,4 +70,3 @@ path = "test/notified.rs"
 
 [features]
 notify-method = []
-test = ["ic-base-types/test"]

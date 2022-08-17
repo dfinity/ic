@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/sns/swap",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:comparable",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",

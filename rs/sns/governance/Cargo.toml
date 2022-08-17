@@ -66,7 +66,6 @@ prost-build = "0.10.4"
 [dev-dependencies]
 criterion = "0.3"
 futures = "0.3.13"
-ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
@@ -83,4 +82,4 @@ tempfile = "3.1.0"
 tokio = { version = "1.18.0", features = [ "full" ] }
 
 [features]
-test = ["ic-base-types/test"]
+test = []

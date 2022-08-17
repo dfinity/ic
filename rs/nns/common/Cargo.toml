@@ -30,6 +30,3 @@ serial_test = "0.8.0"
 ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-
-[features]
-test = ["ic-base-types/test"]

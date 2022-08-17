@@ -29,8 +29,18 @@ impl From<CanisterIdProto> for CanisterId {
 }
 
 // A unique Id for a Neuron.
-#[cfg_attr(test, derive(comparable::Comparable))]
-#[derive(CandidType, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(
+    CandidType,
+    Clone,
+    Copy,
+    Debug,
+    Serialize,
+    Deserialize,
+    Eq,
+    Hash,
+    PartialEq,
+    comparable::Comparable,
+)]
 pub struct NeuronId(pub u64);
 
 impl From<NeuronIdProto> for NeuronId {

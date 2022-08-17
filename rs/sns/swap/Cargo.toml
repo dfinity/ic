@@ -67,11 +67,11 @@ criterion = "0.3"
 ic-config = { path = "../../config" }
 proptest = "1.0"
 pretty_assertions = "1.0"
-ic-base-types = { path = "../../types/base_types", features = ["test"] }
-ic-nns-common = { path = "../../nns/common", features = ["test"] }
+ic-base-types = { path = "../../types/base_types" }
+ic-nns-common = { path = "../../nns/common" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 futures = "0.3.13"
 maplit = "1.0.2"
 tempfile = "3.1.0"
@@ -79,7 +79,6 @@ tokio = { version = "1.15.0", features = [ "full" ] }
 
 [features]
 test = [
-    "ic-base-types/test",
     # TODO(NNS1-1589): Uncomment.
     # "ic-sns-root/test",
 ]
