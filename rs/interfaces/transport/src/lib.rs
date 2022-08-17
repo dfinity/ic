@@ -1,9 +1,8 @@
 //! Transport layer public interface.
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_protobuf::registry::node::v1::NodeRecord;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, fmt::Debug};
+use std::{convert::Infallible, fmt::Debug, net::SocketAddr};
 use tower::util::BoxCloneService;
 
 /// Transport component API
@@ -46,8 +45,8 @@ pub trait Transport: Send + Sync {
     /// once it received the PeerFlowUp event.
     fn start_connection(
         &self,
-        peer: &NodeId,
-        node_record: &NodeRecord,
+        peer_id: &NodeId,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode>;
 

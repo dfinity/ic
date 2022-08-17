@@ -27,6 +27,7 @@ use std::collections::HashSet;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
@@ -43,12 +44,10 @@ use ic_interfaces_transport::{
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
-};
 use ic_transport::transport::create_transport;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::Duration;
 use tower::util::BoxCloneService;
@@ -94,8 +93,8 @@ struct TestClient {
     transport: Arc<dyn Transport>,
     prev: NodeId,
     next: NodeId,
-    prev_node_record: NodeRecord,
-    next_node_record: NodeRecord,
+    prev_node_record: SocketAddr,
+    next_node_record: SocketAddr,
     receiver: MpscReceiver,
     active_flows: Arc<Mutex<HashSet<NodeId>>>,
     registry_version: RegistryVersion,
@@ -106,7 +105,7 @@ struct TestClient {
 impl TestClient {
     fn new(
         transport: Arc<dyn Transport>,
-        registry_node_list: &[(NodeId, NodeRecord)],
+        node_socket_list: &[(NodeId, SocketAddr)],
         prev: &NodeId,
         next: &NodeId,
         registry_version: RegistryVersion,
@@ -121,12 +120,12 @@ impl TestClient {
         });
         transport.set_event_handler(event_handler);
 
-        let prev_node_record = match registry_node_list.iter().position(|n| n.0 == *prev) {
-            Some(pos) => registry_node_list[pos].1.clone(),
+        let prev_node_record = match node_socket_list.iter().position(|n| n.0 == *prev) {
+            Some(pos) => node_socket_list[pos].1,
             None => panic!("Failed to find prev record"),
         };
-        let next_node_record = match registry_node_list.iter().position(|n| n.0 == *next) {
-            Some(pos) => registry_node_list[pos].1.clone(),
+        let next_node_record = match node_socket_list.iter().position(|n| n.0 == *next) {
+            Some(pos) => node_socket_list[pos].1,
             None => panic!("Failed to find next record"),
         };
 
@@ -146,7 +145,7 @@ impl TestClient {
 
     fn start_connection(&self) -> Result<(), TransportErrorCode> {
         self.transport
-            .start_connection(&self.prev, &self.prev_node_record, self.registry_version)
+            .start_connection(&self.prev, self.prev_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -155,7 +154,7 @@ impl TestClient {
                 e
             })?;
         self.transport
-            .start_connection(&self.next, &self.next_node_record, self.registry_version)
+            .start_connection(&self.next, self.next_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -422,15 +421,15 @@ fn cmd_line_matches() -> ArgMatches {
 }
 
 #[derive(Debug)]
-struct ConfigAndRecords {
+struct ConfigAndPeerSockets {
     config: TransportConfig,
-    node_records: Vec<(NodeId, NodeRecord)>,
+    peer_sockets: Vec<(NodeId, SocketAddr)>,
 }
 
 // Generates the config and the registry node records for the three nodes
 // Returns a map of NodeId -> (TransportConfig, NodeRecord)
 // TODO: P2P-517 read from a config file
-fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
+fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndPeerSockets {
     // Tuples: (NodeId, IP, server port 1, server port 2)
     let node_info = vec![
         (to_node_id(1), "127.0.0.1".to_string(), 4100),
@@ -439,7 +438,7 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
     ];
 
     let mut config = None;
-    let mut node_records = Vec::new();
+    let mut peer_sockets = Vec::new();
     for n in node_info.iter() {
         if *node_id == n.0 {
             config = Some(TransportConfig {
@@ -450,31 +449,22 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
             });
         }
 
-        let mut node_record: NodeRecord = Default::default();
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: FLOW_TAG,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: n.1.clone(),
-                port: n.2 as u32,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-
-        node_records.push((n.0, node_record));
+        let peer_socket = SocketAddr::from_str(&format!("{}:{}", n.1.clone(), n.2)).unwrap();
+        peer_sockets.push((n.0, peer_socket));
     }
 
-    ConfigAndRecords {
+    ConfigAndPeerSockets {
         config: config.unwrap(),
-        node_records,
+        peer_sockets,
     }
 }
 
 // Returns the peers: prev/next in the ring.
 fn parse_topology(
-    registry_node_list: &[(NodeId, NodeRecord)],
+    node_socket_list: &[(NodeId, SocketAddr)],
     node_id: &NodeId,
 ) -> (NodeId, NodeId, Role) {
-    let node_ids: Vec<NodeId> = registry_node_list.iter().map(|n| n.0).collect();
+    let node_ids: Vec<NodeId> = node_socket_list.iter().map(|n| n.0).collect();
     assert!(node_ids.contains(node_id));
 
     let l = node_ids.len();
@@ -484,7 +474,7 @@ fn parse_topology(
     } else {
         Role::Relay
     };
-    match registry_node_list.iter().position(|n| n.0 == *node_id) {
+    match node_socket_list.iter().position(|n| n.0 == *node_id) {
         Some(pos) => {
             let prev = if pos == 0 { l - 1 } else { pos - 1 };
             let next = (pos + 1) % l;
@@ -534,7 +524,7 @@ fn task_main(
     let log = ReplicaLogger::new(logger.root.clone().into());
     let config_and_records = generate_config_and_registry(&node_id);
 
-    let (prev, next, role) = parse_topology(config_and_records.node_records.as_slice(), &node_id);
+    let (prev, next, role) = parse_topology(config_and_records.peer_sockets.as_slice(), &node_id);
     info!(log, "subnet_id = {:?} node_id = {:?}", subnet_id, node_id,);
     info!(
         log,
@@ -565,7 +555,7 @@ fn task_main(
     println!("starting test client... [Node: {}]", node_id_val);
     let test_client = TestClient::new(
         transport,
-        config_and_records.node_records.as_slice(),
+        config_and_records.peer_sockets.as_slice(),
         &prev,
         &next,
         registry_version,

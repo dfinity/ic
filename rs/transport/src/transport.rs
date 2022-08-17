@@ -76,10 +76,9 @@ use ic_interfaces_transport::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node::v1::NodeRecord;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
 use tokio::{
@@ -164,14 +163,14 @@ impl Transport for TransportImpl {
     fn start_connection(
         &self,
         peer_id: &NodeId,
-        node_record: &NodeRecord,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
         info!(
             self.log,
             "Transport::start_connection(): peer_id = {:?}", peer_id
         );
-        self.start_peer_connection(peer_id, node_record, registry_version)
+        self.start_peer_connection(peer_id, peer_addr, registry_version)
     }
 
     /// Remove the peer from the set of valid neighbors, and tear down the

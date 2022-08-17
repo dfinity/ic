@@ -6038,7 +6038,6 @@ name = "ic-interfaces-transport"
 version = "0.8.0"
 dependencies = [
  "ic-base-types",
- "ic-protobuf",
  "phantom_newtype",
  "serde",
  "serde_bytes",
@@ -8342,7 +8341,6 @@ dependencies = [
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
- "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
@@ -8372,7 +8370,6 @@ dependencies = [
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
- "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
