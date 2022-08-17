@@ -1,6 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:private"])
+package(default_visibility = [
+    "//rs/crypto:__subpackages__",
+])
 
 DEPENDENCIES = [
     "//rs/config",

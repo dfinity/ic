@@ -2191,6 +2191,7 @@ dependencies = [
  "miracl_core_bls12381",
  "mockall 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockall 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockall 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "native-tls",
  "nix 0.23.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "nonblock",
@@ -2409,9 +2410,9 @@ checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
 name = "ecdsa"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bd46e0c364655e5baf2f5e99b603e7a09905da9966d7928d7470af393b28670"
+checksum = "e852f4174d2a8646a0fa8a34b55797856c722f86267deb0aa1e93f7f247f800e"
 dependencies = [
  "der 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "elliptic-curve 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3449,9 +3450,9 @@ checksum = "71a816c97c42258aa5834d07590b718b4c9a598944cd39a52dc25b351185d678"
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.44"
+version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808cf7d67cf4a22adc5be66e75ebdf769b3f2ea032041437a7061f97a63dad4b"
+checksum = "ef5528d9c2817db4e10cc78f8d4c8228906e5854f389ff6b076cee3572a09d35"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -4491,6 +4492,21 @@ dependencies = [
 
 [[package]]
 name = "mockall"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41cabea45a7fc0e37093f4f30a5e2b62602253f91791c057d5f0470c63260c3d"
+dependencies = [
+ "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "downcast 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fragile",
+ "lazy_static",
+ "mockall_derive 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "predicates 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "predicates-tree",
+]
+
+[[package]]
+name = "mockall"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2be9a9090bc1cac2930688fa9478092a64c6a92ddc6ae0692d46b37d9cab709"
@@ -4509,6 +4525,18 @@ name = "mockall_derive"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a673cb441f78cd9af4f5919c28576a3cc325fb6b54e42f7047dacce3c718c17b"
+dependencies = [
+ "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proc-macro2 1.0.43 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.99 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "mockall_derive"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c461918bf7f59eefb1459252756bf2351a995d6bd510d0b2061bd86bcdabfa6"
 dependencies = [
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.43 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4911,9 +4939,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "oorandom"
