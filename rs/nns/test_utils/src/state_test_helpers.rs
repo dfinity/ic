@@ -3,7 +3,7 @@ use crate::common::{
     build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
     NnsInitPayloads,
 };
-use candid::Encode;
+use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
@@ -22,6 +22,12 @@ use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
 use std::default::Default;
 use std::env;
+
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{self},
+    ManageNeuron, ManageNeuronResponse, Proposal,
+};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
 pub fn reduce_state_machine_logging_unless_env_set() {
@@ -334,4 +340,34 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         }),
     );
     assert_eq!(sns_wasms_canister_id, SNS_WASM_CANISTER_ID);
+}
+
+pub fn nns_governance_make_proposal(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal: &Proposal,
+) -> ManageNeuronResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "manage_neuron",
+            Encode!(&ManageNeuron {
+                id: Some(neuron_id),
+                command: Some(manage_neuron::Command::MakeProposal(Box::new(
+                    proposal.clone()
+                ))),
+                neuron_id_or_subaccount: None
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Failed to make proposal: {:#?}", s),
+    };
+
+    Decode!(&result, ManageNeuronResponse).unwrap()
 }

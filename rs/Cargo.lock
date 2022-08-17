@@ -6578,6 +6578,8 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-registry-transport",
+ "ic-sns-swap",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types 0.8.0",
  "lazy_static",
