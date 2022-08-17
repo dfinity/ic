@@ -1,44 +1,88 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/artifact_manager",
+    "//rs/config",
+    "//rs/crypto/hash",
+    "//rs/interfaces",
+    "//rs/interfaces/p2p",
+    "//rs/interfaces/transport",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/registry/subnet_type",
+    "//rs/types/types",
+    "@crate_index//:bincode",
+    "@crate_index//:futures",
+    "@crate_index//:linked-hash-map",
+    "@crate_index//:lru",
+    "@crate_index//:parking_lot",
+    "@crate_index//:prometheus",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+    "@crate_index//:threadpool",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:strum_macros",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/canister_http/client",
+    "//rs/consensus/message",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/registry/client",
+    "//rs/registry/fake",
+    "//rs/registry/nns_data_provider",
+    "//rs/replica/setup_ic_network",
+    "//rs/test_utilities",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/registry",
+    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:proptest",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "p2p",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_p2p",
     edition = "2018",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-        "@crate_index//:strum_macros",
-    ],
-    deps = [
-        "//rs/artifact_manager",
-        "//rs/config",
-        "//rs/crypto/hash",
-        "//rs/interfaces",
-        "//rs/interfaces/p2p",
-        "//rs/interfaces/transport",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/phantom_newtype",
-        "//rs/protobuf",
-        "//rs/registry/helpers",
-        "//rs/registry/subnet_type",
-        "//rs/types/types",
-        "@crate_index//:bincode",
-        "@crate_index//:futures",
-        "@crate_index//:linked-hash-map",
-        "@crate_index//:lru",
-        "@crate_index//:parking_lot",
-        "@crate_index//:prometheus",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:serde",
-        "@crate_index//:slog",
-        "@crate_index//:strum",
-        "@crate_index//:threadpool",
-        "@crate_index//:tokio",
-        "@crate_index//:tower",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "p2p_test",
+    aliases = ALIASES,
+    crate = ":p2p",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "p2p_integration_tests",
+    srcs = glob(["tests/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    extra_srcs = glob(["tests/framework/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":p2p"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
