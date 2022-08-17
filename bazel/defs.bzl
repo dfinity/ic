@@ -2,7 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 def gzip_compress(name, srcs):
     """GZip-compresses source files.
@@ -58,4 +58,22 @@ def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
         name = name,
         tests = tests,
         tags = kwargs.get("tags", None),
+    )
+
+def rust_bench(name, env = {}, data = [], **kwargs):
+    """A rule for defining a rust benchmark.
+
+    Args:
+      name: the name of the executable target.
+      env: additional environment variables to pass to the benchmark binary.
+      data: data dependencies required to run the benchmark.
+      **kwargs: see docs for `rust_binary`.
+    """
+    binary_name = "_" + name + "_bin"
+    rust_binary(name = binary_name, **kwargs)
+    native.sh_binary(
+        srcs = ["//bazel:generic_rust_bench.sh"],
+        name = name,
+        env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name}.items()),
+        data = data + [":" + binary_name],
     )
