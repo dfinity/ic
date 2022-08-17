@@ -39,11 +39,10 @@ LET in_subnet(node_id, node_addr, subnet) =
       The node was possibly not originally in this subnet, but it has been assigned to it.
     *)
     (
-      NOT node_removed_from_subnet(node_id, node_addr)
+      (NOT node_removed_from_subnet(node_id, node_addr))
       SINCE node_added_to_subnet(node_id, node_addr, subnet)
     )
   )
 IN
 in_subnet(dest_id, dest_addr, subnet) AND in_subnet(sender_id, sender_addr, subnet)
-AND
-unauthorized_connection_attempt(sender_addr, dest_addr)
+AND unauthorized_connection_attempt(sender_addr, dest_addr)

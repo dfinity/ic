@@ -615,8 +615,12 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         },
         "clean_logs": {
             "enabled": True,
-            "preamble_dependencies": frozenset([]),
-            "regular_dependencies": frozenset(["log"]),
+            "preamble_dependencies": frozenset(
+                [
+                    "originally_in_ic",
+                ]
+            ),
+            "regular_dependencies": frozenset(["registry__node_removed_from_ic", "registry__node_added_to_ic", "log"]),
             "needs_end_event": False,
         },
     }
