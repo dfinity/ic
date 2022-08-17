@@ -335,6 +335,31 @@ pub fn test(env: TestEnv) {
             )
             .await,
         );
+        // Verifies HTTPS call to replica HTTPS service fails
+        test_results.push(
+            test_canister_http_property(
+                "No HTTP calls to IC",
+                &logger,
+                &proxy_canister,
+                RemoteHttpRequest {
+                    request: CanisterHttpRequestArgs {
+                        url: format!("https://[{}]:9090", node.get_ip_addr()),
+                        headers: vec![],
+                        http_method: HttpMethod::GET,
+                        body: Some("".as_bytes().to_vec()),
+                        transform_method_name: Some("transform".to_string()),
+                        max_response_bytes: None,
+                    },
+                    cycles: 500_000_000_000,
+                },
+                |response| {
+                    let err_response = response.clone().unwrap_err();
+                    matches!(err_response.0, RejectionCode::SysTransient)
+                        && err_response.1.contains("Connection refused")
+                },
+            )
+            .await,
+        );
 
         // Check tests results
         assert!(
