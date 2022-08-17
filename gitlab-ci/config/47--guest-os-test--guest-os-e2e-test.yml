@@ -255,6 +255,8 @@ upgrade-compatibility-pre-master:
       artifacts: false
     - job: guest-os-updateimg-build-dev
       artifacts: false
+    - job: boundary-os-diskimg-dev
+      artifacts: false
   artifacts:
     paths:
     - "working_dir/"
