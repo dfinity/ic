@@ -1,11 +1,18 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:hex-literal",
     "@crate_index//:serde",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha",
+    "//rs/types/types",
 ]
 
 rust_library(
@@ -26,3 +33,10 @@ rust_library(
 #         "//rs/types/types",
 #     ],
 # )
+
+rust_test(
+    name = "lib_test",
+    crate = ":lib",
+    data = ["src/universal_canister.wasm"],
+    deps = DEV_DEPENDENCIES,
+)
