@@ -4,6 +4,7 @@ package(
     default_visibility = [
         "//rs/canister_client:__pkg__",
         "//rs/canister_client/sender:__pkg__",
+        "//rs/crypto:__subpackages__",
         "//rs/crypto/internal:__subpackages__",
     ],
 )
