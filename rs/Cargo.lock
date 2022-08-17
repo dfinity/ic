@@ -4583,6 +4583,7 @@ dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-icrc1",
  "ic-ledger-types",
  "ic-metrics-encoder",
  "ic-state-machine-tests",
