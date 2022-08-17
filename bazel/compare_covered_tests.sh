@@ -13,31 +13,54 @@ print_blue() {
 }
 
 info() {
-    print_blue $*
+    print_blue "$*"
+}
+
+count_total() {
+    summary=$(cat $1 | grep '^[0-9]* test' | cut -d ' ' -f 1 | awk '{ sum += $1 } END { print sum }')
+    total="$summary"
+    echo $total
 }
 
 LONG_OUTPUT="false"
+OUT_CARGO='out_cargo.txt'
+OUT_BAZEL='out_bazel.txt'
 
 if [ "$1" == "--long_output" ]; then
     LONG_OUTPUT="true"
 fi
 
 info "---- enumerating CARGO tests..."
-cargo test -- --list >out_cargo.txt
+cargo test -- --list >$OUT_CARGO
+CARGO_COUNT=$(count_total $OUT_CARGO)
+info "     Cargo found $CARGO_COUNT test(s)."
 
 info "---- enumerating BAZEL tests..."
-bazel test :all --test_arg=--list --test_output=all >out_bazel.txt
+bazel test :all --test_arg=--list --test_output=all >$OUT_BAZEL
+BAZEL_COUNT=$(count_total $OUT_BAZEL)
+info "     Bazel found $BAZEL_COUNT test(s)."
+
+if [ $CARGO_COUNT == $BAZEL_COUNT ]; then
+    print_green "SUCCESS: both Cargo and Bazel report $CARGO_COUNT tests"
+    if [ "$LONG_OUTPUT" != "true" ]; then
+        exit
+    fi
+else
+    print_red "FAILURE: Cargo and Bazel report different numbers of tests"
+fi
 
 info "---- CARGO stats:"
+print_red "Cargo reports $CARGO_COUNT test(s)"
 if [ "$LONG_OUTPUT" == "true" ]; then
     cat out_cargo.txt
 else
-    cat out_cargo.txt | grep '^[0-9]* tests'
+    cat out_cargo.txt | grep '^[0-9]* test'
 fi
 
 info "---- BAZEL stats:"
+print_red "Bazel reports $BAZEL_COUNT test(s)"
 if [ "$LONG_OUTPUT" == "true" ]; then
     cat out_bazel.txt
 else
-    cat out_bazel.txt | grep -e 'Test output for' -e '^[0-9]* tests'
+    cat out_bazel.txt | grep '^[0-9]* test'
 fi
