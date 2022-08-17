@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/interfaces",
     "//rs/nns/common",
@@ -27,6 +28,13 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "init",
@@ -54,4 +62,11 @@ rust_binary(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":init"],
+)
+
+rust_test(
+    name = "init_test",
+    crate = ":init",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
 )
