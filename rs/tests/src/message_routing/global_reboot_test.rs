@@ -28,8 +28,8 @@ end::catalog[] */
 use std::time::Duration;
 
 use crate::util::{
-    self, assert_endpoints_reachability, assert_subnet_can_make_progress, block_on,
-    runtime_from_url, EndpointsStatus,
+    self, assert_endpoints_health, assert_subnet_can_make_progress, block_on, runtime_from_url,
+    EndpointsStatus,
 };
 
 use crate::driver::{ic::InternetComputer, vm_control::IcControl};
@@ -60,9 +60,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         .map(|i| runtime_from_url(endpoints[i].url.clone()))
         .collect::<Vec<_>>();
     // Assert all nodes are reachable after IC setup.
-    block_on(assert_endpoints_reachability(
+    block_on(assert_endpoints_health(
         endpoints.as_slice(),
-        EndpointsStatus::AllReachable,
+        EndpointsStatus::AllHealthy,
     ));
     info!(ctx.logger, "All status endpoints are reachable over http.");
     // Step 1: Build and install Xnet canisters on each subnet.
@@ -100,15 +100,15 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     for ep in endpoints.iter() {
         ep.restart_node(ctx.logger.clone());
         // Confirm node reboot success by asserting it is unreachable.
-        block_on(assert_endpoints_reachability(
+        block_on(assert_endpoints_health(
             &[ep],
-            util::EndpointsStatus::AllUnreachable,
+            util::EndpointsStatus::AllUnhealthy,
         ));
     }
     info!(ctx.logger, "Waiting for endpoints to be reachable again...");
-    block_on(assert_endpoints_reachability(
+    block_on(assert_endpoints_health(
         endpoints.as_slice(),
-        util::EndpointsStatus::AllReachable,
+        util::EndpointsStatus::AllHealthy,
     ));
     // Step 6: Wait another 15 secs for canisters to exchange messages.
     info!(
