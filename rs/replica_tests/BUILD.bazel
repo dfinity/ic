@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto",
@@ -44,6 +45,32 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha",
+    "//rs/rust_canisters/canister_test",
+    "//rs/sys",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid",
+    "@crate_index//:maplit",
+    "@crate_index//:predicates",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+DEV_DATA = [
+    # Keep sorted.
+    ":replica_tests",
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+}
+
 rust_library(
     name = "replica_tests",
     srcs = glob(["src/**"]),
@@ -52,4 +79,34 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_lifecycle_test",
+    srcs = ["tests/canister_lifecycle.rs"],
+    data = DEV_DATA,
+    edition = "2018",
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
+)
+
+rust_test(
+    name = "funds_test",
+    srcs = ["tests/funds.rs"],
+    data = DEV_DATA,
+    edition = "2018",
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
+)
+
+rust_test(
+    name = "tests_test",
+    srcs = ["tests/tests.rs"],
+    data = DEV_DATA,
+    edition = "2018",
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
 )
