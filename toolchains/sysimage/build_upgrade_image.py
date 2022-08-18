@@ -13,9 +13,10 @@ import sys
 import tempfile
 
 COMPRESSOR_PROGRAMS = {
-    "gz": "gzip",
-    "gzip": "gzip",
-    "zstd": "zstd --threads=0 -10",
+    "gz": ["--use-compress-program=gzip"],
+    "gzip": ["--use-compress-program=gzip"],
+    "zstd": ["--use-compress-program=zstd --threads=0 -10"],
+    "": [],
 }
 
 
@@ -25,7 +26,7 @@ def main():
     parser.add_argument("-b", "--boot", help="The (tarred) boot filesystem image", type=str)
     parser.add_argument("-r", "--root", help="The (tarred) root filesystem image", type=str)
     parser.add_argument("-v", "--versionfile", help="The version file in the upgrade image", type=str)
-    parser.add_argument("-c", "--compression", help="Compression format of upgrade package", type=str, default="gz")
+    parser.add_argument("-c", "--compression", help="Compression format of upgrade package", type=str, default="")
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -51,7 +52,9 @@ def main():
             "--owner=root:0",
             "--group=root:0",
             "--mtime=UTC 1970-01-01 00:00:00",
-            "--use-compress-program=" + COMPRESSOR_PROGRAMS[compression],
+        ]
+        + COMPRESSOR_PROGRAMS[compression]
+        + [
             "--sparse",
             "-C",
             tmpdir,
