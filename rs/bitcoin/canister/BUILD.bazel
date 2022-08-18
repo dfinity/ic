@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/stable-structures",
     "//rs/state_layout",
+    "//rs/types/types",
     "@crate_index//:bitcoin",
     "@crate_index//:byteorder",
     "@crate_index//:candid",

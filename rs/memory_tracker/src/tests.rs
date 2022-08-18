@@ -3,6 +3,7 @@ use std::{io::Write, ops::Range};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_types::Height;
 use libc::c_void;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 
@@ -28,7 +29,7 @@ fn with_setup<F>(
             .unwrap();
     }
     tmpfile.as_file().sync_all().unwrap();
-    let mut page_map = PageMap::open(tmpfile.path(), None).unwrap();
+    let mut page_map = PageMap::open(tmpfile.path(), Height::new(0)).unwrap();
     let pages: Vec<(PageIndex, PageBytes)> = page_delta
         .into_iter()
         .map(|i| (i, [i.get() as u8; PAGE_SIZE]))

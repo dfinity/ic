@@ -486,14 +486,14 @@ pub fn load_canister_state<P: ReadPolicy>(
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
             let wasm_memory = Memory::new(
-                PageMap::open(&canister_layout.vmemory_0(), Some(height))?,
+                PageMap::open(&canister_layout.vmemory_0(), height)?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
             let stable_memory = Memory::new(
-                PageMap::open(&canister_layout.stable_memory_blob(), Some(height))?,
+                PageMap::open(&canister_layout.stable_memory_blob(), height)?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -602,9 +602,9 @@ fn load_bitcoin_state<P: ReadPolicy>(
         BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
             .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
 
-    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), Some(height))?;
-    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), Some(height))?;
-    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), Some(height))?;
+    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), height)?;
+    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), height)?;
+    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), height)?;
 
     Ok(BitcoinState {
         adapter_queues: bitcoin_state_bits.adapter_queues,
@@ -621,10 +621,7 @@ fn load_bitcoin_state<P: ReadPolicy>(
     })
 }
 
-fn load_or_create_pagemap(
-    path: &Path,
-    height: Option<Height>,
-) -> Result<PageMap, PersistenceError> {
+fn load_or_create_pagemap(path: &Path, height: Height) -> Result<PageMap, PersistenceError> {
     if path.exists() {
         PageMap::open(path, height)
     } else {
