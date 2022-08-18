@@ -25,20 +25,24 @@ mod tests;
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspKeyGenerator
     for Csp<R, S, C>
 {
-    fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError> {
+    fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError> {
         match alg_id {
             AlgorithmId::MultiBls12_381 => {
-                let (key_id, csp_pk, _pop) = self.csp_vault.gen_key_pair_with_pop(alg_id)?;
-                Ok((key_id, csp_pk))
+                let (_key_id, csp_pk, _pop) = self.csp_vault.gen_key_pair_with_pop(alg_id)?;
+                Ok(csp_pk)
             }
-            _ => Ok(self.csp_vault.gen_key_pair(alg_id)?),
+            _ => {
+                let (_key_id, csp_pk) = self.csp_vault.gen_key_pair(alg_id)?;
+                Ok(csp_pk)
+            }
         }
     }
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError> {
-        Ok(self.csp_vault.gen_key_pair_with_pop(algorithm_id)?)
+    ) -> Result<(CspPublicKey, CspPop), CryptoError> {
+        let (_key_id, csp_pk, pop) = self.csp_vault.gen_key_pair_with_pop(algorithm_id)?;
+        Ok((csp_pk, pop))
     }
 
     fn gen_tls_key_pair(

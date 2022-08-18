@@ -14,7 +14,8 @@ fn should_correctly_generate_ed25519_keys() {
     let csprng = csprng_seeded_with(42);
     let csp = Csp::of(csprng, volatile_key_store());
 
-    let (key_id, pk) = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+    let pk = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+    let key_id = public_key_hash_as_key_id(&pk);
 
     assert_eq!(
         key_id,
@@ -34,7 +35,8 @@ fn should_correctly_generate_ed25519_keys() {
 fn should_retrieve_newly_generated_secret_key_from_store() {
     let csprng = csprng_seeded_with(42);
     let csp = Csp::of(csprng, volatile_key_store());
-    let (key_id, _) = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+    let public_key = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
+    let key_id = public_key_hash_as_key_id(&public_key);
 
     let retrieved_sk = csp.csp_vault.get_secret_key(&key_id);
 
@@ -128,7 +130,8 @@ mod multi {
         let test_vector = test_vector_42();
         let csprng = csprng_seeded_with(test_vector.seed);
         let csp = Csp::of(csprng, volatile_key_store());
-        let (key_id, public_key) = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
+        let public_key = csp.gen_key_pair(AlgorithmId::MultiBls12_381).unwrap();
+        let key_id = public_key_hash_as_key_id(&public_key);
 
         assert_eq!(key_id, test_vector.key_id);
         assert_eq!(public_key, test_vector.public_key);
@@ -141,9 +144,10 @@ mod multi {
         let test_vector = test_vector_42();
         let csprng = csprng_seeded_with(test_vector.seed);
         let csp = Csp::of(csprng, volatile_key_store());
-        let (key_id, public_key, pop) = csp
+        let (public_key, pop) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
+        let key_id = public_key_hash_as_key_id(&public_key);
 
         assert_eq!(key_id, test_vector.key_id);
         assert_eq!(public_key, test_vector.public_key);

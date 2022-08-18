@@ -165,7 +165,7 @@ fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("Could not generate node signing keys");
     match generated {
-        (_key_id, CspPublicKey::Ed25519(pk)) => PublicKeyProto {
+        CspPublicKey::Ed25519(pk) => PublicKeyProto {
             algorithm: AlgorithmIdProto::Ed25519 as i32,
             key_value: pk.0.to_vec(),
             version: 0,
@@ -297,7 +297,7 @@ fn generate_committee_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKey
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("Could not generate committee signing keys");
     match generated {
-        (_key_id, CspPublicKey::MultiBls12_381(pk_bytes), CspPop::MultiBls12_381(pop_bytes)) => {
+        (CspPublicKey::MultiBls12_381(pk_bytes), CspPop::MultiBls12_381(pop_bytes)) => {
             PublicKeyProto {
                 algorithm: AlgorithmIdProto::MultiBls12381 as i32,
                 key_value: pk_bytes.0.to_vec(),

@@ -16,7 +16,7 @@ pub trait CspKeyGenerator {
     /// * `CryptoError::InvalidArgument` if the algorithm is not supported by
     ///   the trait implementation. (Note: Currently only BLS12-381 and Ed25519
     ///   are supported by implementations of this trait)
-    fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError>;
+    fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError>;
 
     /// Generate a public/private key pair with proof of possession.
     ///
@@ -31,7 +31,7 @@ pub trait CspKeyGenerator {
     fn gen_key_pair_with_pop(
         &self,
         algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError>;
+    ) -> Result<(CspPublicKey, CspPop), CryptoError>;
 
     /// Generates TLS key material for node with ID `node_id`.
     ///
