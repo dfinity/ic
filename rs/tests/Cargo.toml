@@ -101,9 +101,9 @@ prost = "0.10.4"
 quickcheck = "1.0.3"
 rand = "0.8.3"
 rand_chacha = "0.3.0"
-rand_chacha-02 = { package = "rand_chacha", version = "0.2" }
+rand_chacha_02 = { package = "rand_chacha", version = "0.2" }
 rand_core = "0.6.1"
-rand_core-05 = { package = "rand_core", version = "0.5.1" }
+rand_core_05 = { package = "rand_core", version = "0.5.1" }
 regex = "1.5.0"
 registry-canister = { path = "../registry/canister" }
 reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }

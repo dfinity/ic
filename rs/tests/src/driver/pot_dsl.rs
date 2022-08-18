@@ -73,7 +73,7 @@ where
 
 pub fn get_ic_handle_and_ctx(test_env: TestEnv) -> (IcHandle, Context) {
     let log = test_env.logger();
-    let rng = rand_core::SeedableRng::seed_from_u64(42);
+    let rng = rand::SeedableRng::seed_from_u64(42);
     let test_ctx = Context::new(rng, log);
     let ic_handle = test_env
         .ic_handle()

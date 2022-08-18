@@ -20,7 +20,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "proxy_canister_lib",
+    name = "proxy_canister",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "proxy_canister",
     edition = "2018",
@@ -29,15 +29,15 @@ rust_library(
 )
 
 rust_canister(
-    name = "proxy_canister",
+    name = "proxy_canister_canister",
     srcs = ["src/main.rs"],
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":proxy_canister_lib"] + DEPENDENCIES,
+    deps = [":proxy_canister"] + DEPENDENCIES,
 )
 
 rust_test(
     name = "proxy_canister_test",
-    crate = ":proxy_canister_lib",
+    crate = ":proxy_canister",
     edition = "2018",
 )

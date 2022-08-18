@@ -220,6 +220,10 @@ upload_artifacts(
     remote_subdir = "ic-os/guestos",
 )
 
+exports_files([
+    "rootfs/opt/ic/share/ic.json5.template",
+])
+
 urls_test(
     name = "upload_guestos_test",
     inputs = [":upload_guestos"],

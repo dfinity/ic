@@ -24,15 +24,13 @@ use ic_fondue::{
 use ic_registry_subnet_type::SubnetType;
 use slog::Logger;
 
+use ic_tests::cli::Options;
 use ic_tests::consensus::cow_safety_test;
 use ic_tests::execution;
 use ic_tests::execution::system_api_security_test;
 use ic_tests::nns_tests::nns_voting_fuzzing_poc_test;
 use ic_tests::tecdsa;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
-
-mod cli;
-use cli::Options;
 
 use std::time::Instant;
 
@@ -174,7 +172,7 @@ fn tecdsa_complaint_test_pot() -> pot::Pot {
 
 fn main() {
     let started_at = Instant::now();
-    let opt = cli::Options::parse();
+    let opt = Options::parse();
     // Here we create a default fondue config but then randomize the rng_seed.
     // If the user specified their own seed 's', then 's' will be used when we
     // `modify_fondue_exec_config`.

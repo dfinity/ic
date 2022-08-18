@@ -248,7 +248,7 @@ pub fn test(env: TestEnv, config: Config) {
         "At least one node needs to be stressed on each subnet."
     );
     // We stress (modify node's traffic) using random parameters.
-    let rng: ChaCha8Rng = rand_core::SeedableRng::seed_from_u64(RND_SEED);
+    let rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
     // Stress function for each node is executed in a separate thread.
     let stress_nns_handles: Vec<_> = subnet_nns
         .nodes()
