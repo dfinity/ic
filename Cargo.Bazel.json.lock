@@ -1,5 +1,5 @@
 {
-  "checksum": "b0fd7a553f3f7d598c121d788ba13a3ce10fd988ff0aa9bca70c61786ca1f6e4",
+  "checksum": "fe4c1697d8c3773d94f4be4ba06d0a685a73c5592ce6564955f76c86570a757c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2243,6 +2243,39 @@
         "version": "2.0.2"
       },
       "license": "MIT"
+    },
+    "assert_approx_eq 1.1.0": {
+      "name": "assert_approx_eq",
+      "version": "1.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/assert_approx_eq/1.1.0/download",
+          "sha256": "3c07dab4369547dbe5114677b33fbbf724971019f3818172d59a97a61c774ffd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "assert_approx_eq",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "assert_approx_eq",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.1.0"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "assert_cmd 0.12.2": {
       "name": "assert_cmd",
@@ -11046,6 +11079,10 @@
             {
               "id": "assert-json-diff 2.0.2",
               "target": "assert_json_diff"
+            },
+            {
+              "id": "assert_approx_eq 1.1.0",
+              "target": "assert_approx_eq"
             },
             {
               "id": "assert_cmd 0.12.2",
@@ -34603,13 +34640,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rustix 0.35.8": {
+    "rustix 0.35.9": {
       "name": "rustix",
-      "version": "0.35.8",
+      "version": "0.35.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.35.8/download",
-          "sha256": "0d2b64e76b8da597d38473a277e87b91c3747d0cf9922be989e68fc1c046adf9"
+          "url": "https://crates.io/api/v1/crates/rustix/0.35.9/download",
+          "sha256": "72c825b8aa8010eb9ee99b75f05e10180b9278d161583034d7574c9d617aeada"
         }
       },
       "targets": [
@@ -34647,7 +34684,6 @@
           "default",
           "io-lifetimes",
           "libc",
-          "linux-raw-sys",
           "mm",
           "process",
           "std",
@@ -34664,7 +34700,7 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.35.8",
+              "id": "rustix 0.35.9",
               "target": "build_script_build"
             }
           ],
@@ -34705,7 +34741,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.35.8"
+        "version": "0.35.9"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -45862,7 +45898,7 @@
           "selects": {
             "cfg(target_os = \"linux\")": [
               {
-                "id": "rustix 0.35.8",
+                "id": "rustix 0.35.9",
                 "target": "rustix"
               }
             ],
@@ -46042,7 +46078,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "rustix 0.35.8",
+                "id": "rustix 0.35.9",
                 "target": "rustix"
               }
             ]
