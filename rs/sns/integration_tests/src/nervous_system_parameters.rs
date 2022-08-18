@@ -92,29 +92,60 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await; // slow
 
             // Create neurons.
+            let transaction_fee_e8s = system_params.transaction_fee_e8s();
+            let stake_amount =
+                Tokens::from_e8s(user_1_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_1_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_1, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_1,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_1_subaccount = user_1_neuron_id.subaccount().unwrap();
 
+            let stake_amount =
+                Tokens::from_e8s(user_2_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_2_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_2, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_2,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_2_subaccount = user_2_neuron_id.subaccount().unwrap();
 
             // Need a third neuron or the vote ends too soon
+            let stake_amount =
+                Tokens::from_e8s(user_3_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let _user_3_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_3, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_3,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
 
             // These two are required for the two inconsequential votes for process_proposal
+            let stake_amount =
+                Tokens::from_e8s(user_4_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_4_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_4, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_4,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_4_subaccount = user_4_neuron_id.subaccount().unwrap();
 
+            let stake_amount =
+                Tokens::from_e8s(user_5_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_5_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_5, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_5,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_5_subaccount = user_5_neuron_id.subaccount().unwrap();
 
