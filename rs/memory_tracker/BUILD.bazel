@@ -28,6 +28,7 @@ rust_test(
     crate = ":memory_tracker",
     edition = "2018",
     deps = [
+        "//rs/types/types",
         "@crate_index//:tempfile",
     ],
 )

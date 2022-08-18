@@ -1,4 +1,5 @@
 use ic_replicated_state::page_map::{Buffer, PageMap, PersistenceError};
+use ic_types::Height;
 use stable_structures::Memory;
 use std::sync::{Arc, Mutex};
 
@@ -28,7 +29,9 @@ impl PageMapMemory {
 
     /// Opens a memory from a file.
     pub fn open(path: &std::path::Path) -> Result<Self, PersistenceError> {
-        let page_map = PageMap::open(path, None)?;
+        // Since this code is only used in local scripts, we can set
+        // the (IC) height to a dummy value
+        let page_map = PageMap::open(path, Height::new(0))?;
         Ok(Self::new(page_map))
     }
 
@@ -36,7 +39,7 @@ impl PageMapMemory {
     pub fn persist_and_sync_delta(&self, path: &std::path::Path) -> Result<(), PersistenceError> {
         let page_delta: PageMap = self.buffer.lock().unwrap().into_page_map();
         page_delta.persist_and_sync_delta(path)?;
-        let new_page_map = PageMap::open(path, None)?;
+        let new_page_map = PageMap::open(path, Height::new(0))?;
         *self.buffer.lock().unwrap() = Buffer::new(new_page_map);
         Ok(())
     }

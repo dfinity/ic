@@ -22,6 +22,7 @@ default = []
 sigsegv_handler_checksum = []
 
 [dev-dependencies]
+ic-types = { path = "../types/types" }
 tempfile = "3.1.0"
 criterion = "0.3"
 

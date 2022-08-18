@@ -4,6 +4,7 @@ use super::{
     Buffer, FileDescriptor, PageAllocator, PageDelta, PageIndex, PageMap, PageMapSerialization,
 };
 use ic_sys::PAGE_SIZE;
+use ic_types::Height;
 use nix::unistd::dup;
 use std::fs::OpenOptions;
 
@@ -119,7 +120,7 @@ fn persisted_map_is_equivalent_to_the_original() {
     base_map.update(base_pages.as_slice());
     base_map.persist_delta(&heap_file).unwrap();
 
-    let mut original_map = PageMap::open(&heap_file, None).unwrap();
+    let mut original_map = PageMap::open(&heap_file, Height::new(0)).unwrap();
 
     assert_eq!(base_map, original_map);
 
@@ -142,7 +143,7 @@ fn persisted_map_is_equivalent_to_the_original() {
     original_map.update(pages);
 
     original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map = PageMap::open(&heap_file, None).unwrap();
+    let persisted_map = PageMap::open(&heap_file, Height::new(0)).unwrap();
 
     assert_eq!(persisted_map, original_map);
 }
@@ -158,8 +159,9 @@ fn can_persist_and_load_an_empty_page_map() {
     let original_map = PageMap::default();
     original_map.persist_delta(&heap_file).unwrap();
     let persisted_map =
-        PageMap::open(&heap_file, None).expect("opening an empty page map must succeed");
+        PageMap::open(&heap_file, Height::new(0)).expect("opening an empty page map must succeed");
 
+    // base_height will be different, but is not part of eq
     assert_eq!(original_map, persisted_map);
 }
 
@@ -180,7 +182,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match PageMap::open(&heap_file, None) {
+    match PageMap::open(&heap_file, Height::new(0)) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",
