@@ -24,9 +24,11 @@ use std::default::Default;
 use std::env;
 
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance::pb::v1::manage_neuron::configure::Operation;
+use ic_nns_governance::pb::v1::manage_neuron::{AddHotKey, Configure, RemoveHotKey};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self},
-    ManageNeuron, ManageNeuronResponse, Proposal,
+    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
 };
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -342,11 +344,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     assert_eq!(sns_wasms_canister_id, SNS_WASM_CANISTER_ID);
 }
 
-pub fn nns_governance_make_proposal(
+fn manage_neuron(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    proposal: &Proposal,
+    command: manage_neuron::Command,
 ) -> ManageNeuronResponse {
     let result = state_machine
         .execute_ingress_as(
@@ -355,9 +357,7 @@ pub fn nns_governance_make_proposal(
             "manage_neuron",
             Encode!(&ManageNeuron {
                 id: Some(neuron_id),
-                command: Some(manage_neuron::Command::MakeProposal(Box::new(
-                    proposal.clone()
-                ))),
+                command: Some(command),
                 neuron_id_or_subaccount: None
             })
             .unwrap(),
@@ -366,8 +366,71 @@ pub fn nns_governance_make_proposal(
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Failed to make proposal: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
     };
 
     Decode!(&result, ManageNeuronResponse).unwrap()
+}
+
+pub fn nns_governance_make_proposal(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal: &Proposal,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::MakeProposal(Box::new(proposal.clone()));
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_add_hot_key(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    new_hot_key: PrincipalId,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Configure(Configure {
+        operation: Some(Operation::AddHotKey(AddHotKey {
+            new_hot_key: Some(new_hot_key),
+        })),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_remove_hot_key(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    hot_key_to_remove: PrincipalId,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Configure(Configure {
+        operation: Some(Operation::RemoveHotKey(RemoveHotKey {
+            hot_key_to_remove: Some(hot_key_to_remove),
+        })),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn list_neurons(state_machine: &mut StateMachine, sender: PrincipalId) -> ListNeuronsResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "list_neurons",
+            Encode!(&ListNeurons {
+                neuron_ids: vec![],
+                include_neurons_readable_by_caller: true,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+    };
+
+    Decode!(&result, ListNeuronsResponse).unwrap()
 }

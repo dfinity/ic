@@ -7,7 +7,7 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::pb::v1::manage_neuron::Command;
@@ -23,9 +23,11 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
+    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    state_test_helpers::{list_neurons, nns_add_hot_key, nns_remove_hot_key, setup_nns_canisters},
 };
+use ic_state_machine_tests::StateMachine;
 use ledger_canister::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 
 #[test]
@@ -247,4 +249,51 @@ fn test_spawn_neuron() {
 
         Err("Spawned neuron's stake did not show up.".to_string())
     });
+}
+
+/// If a neuron's controller is added as a hot key and then removed, assert that Governance
+/// still associates this neuron with the given controller (e.g. returns the neuron in a call
+/// to list_neurons).
+#[test]
+fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
+    let mut state_machine = StateMachine::new();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    assert_eq!(list_neurons_response.full_neurons.len(), 1);
+
+    let neuron_id = NeuronIdProto {
+        id: TEST_NEURON_2_ID,
+    };
+
+    let response = nns_add_hot_key(
+        &mut state_machine,
+        *TEST_NEURON_2_OWNER_PRINCIPAL,
+        neuron_id.clone(),
+        *TEST_NEURON_2_OWNER_PRINCIPAL,
+    );
+
+    match response.command {
+        Some(manage_neuron_response::Command::Configure(_)) => (),
+        _ => panic!("Failed to add hot key: {:#?}", response),
+    };
+
+    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    assert_eq!(list_neurons_response.full_neurons.len(), 1);
+
+    let response = nns_remove_hot_key(
+        &mut state_machine,
+        *TEST_NEURON_2_OWNER_PRINCIPAL,
+        neuron_id,
+        *TEST_NEURON_2_OWNER_PRINCIPAL,
+    );
+
+    match response.command {
+        Some(manage_neuron_response::Command::Configure(_)) => (),
+        _ => panic!("Failed to remove hot key: {:#?}", response),
+    };
+
+    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    assert_eq!(list_neurons_response.full_neurons.len(), 1);
 }
