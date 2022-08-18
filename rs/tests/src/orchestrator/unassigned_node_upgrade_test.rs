@@ -23,7 +23,10 @@ end::catalog[] */
 use super::utils::rw_message::await_all_nodes_are_healthy;
 use crate::{
     driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes,
+    orchestrator::utils::{
+        ssh_access::update_ssh_keys_for_all_unassigned_nodes,
+        upgrade::fetch_update_file_sha256_with_retry,
+    },
 };
 use crate::{
     nns::{
@@ -35,8 +38,8 @@ use crate::{
         wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{
-        fetch_unassigned_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
-        get_update_image_url, UpdateImageType,
+        fetch_unassigned_node_version, get_blessed_replica_versions, get_update_image_url,
+        UpdateImageType,
     },
     util::{block_on, get_nns_node, runtime_from_url},
 };
@@ -107,7 +110,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256(&original_version, true).await;
+        let sha256 = fetch_update_file_sha256_with_retry(&logger, &original_version, true).await;
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal

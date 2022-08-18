@@ -67,7 +67,8 @@ pub fn test(test_env: TestEnv) {
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
-    let target_version = get_assigned_replica_version(&nns_node).unwrap();
+    let target_version =
+        get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
     block_on(bless_replica_version(
@@ -87,7 +88,9 @@ pub fn test(test_env: TestEnv) {
     ));
     info!(logger, "Upgrade started");
 
-    let sess = nns_node.get_ssh_session(ADMIN).unwrap();
+    let sess = nns_node
+        .block_on_ssh_session(ADMIN)
+        .expect("Failed to establish SSH session");
 
     info!(logger, "Wait for 'hash mismatch' in the replica's log.");
     retry(test_env.logger(), secs(600), secs(20), || {
@@ -111,7 +114,9 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Stopping orchestrator...");
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
         execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string());
     }
 
@@ -128,13 +133,17 @@ pub fn test(test_env: TestEnv) {
         target_version,
     );
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
         execute_bash_command(&s, command.clone());
     }
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
         execute_bash_command(&s, "sudo systemctl start ic-replica".to_string());
     }
 
