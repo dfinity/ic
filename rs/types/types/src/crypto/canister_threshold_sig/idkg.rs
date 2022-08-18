@@ -1,5 +1,6 @@
 //! Defines interactive distributed key generation (IDkg) types.
 use crate::consensus::get_faults_tolerated;
+use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::error::{
     IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
@@ -11,7 +12,7 @@ use ic_crypto_internal_types::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub mod conversions;
@@ -80,6 +81,8 @@ impl IDkgTranscriptId {
         })
     }
 }
+
+impl_display_using_debug!(IDkgTranscriptId);
 
 /// A set of receivers for IDkg.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -524,6 +527,8 @@ impl IDkgTranscriptParams {
     }
 }
 
+impl_display_using_debug!(IDkgTranscriptParams);
+
 /// Initial params and dealings for a set of receivers assigned to a different subnet.
 /// Only dealings intended for resharing an unmasked transcript can be included in InitialIDkgDealings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -633,7 +638,7 @@ pub enum IDkgTranscriptType {
 }
 
 /// Collection of verified IDkg dealings, together with metadata.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
@@ -649,12 +654,35 @@ pub struct IDkgTranscript {
 ///
 /// If earlier transcripts are used in the creation, these are included here.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgTranscriptOperation {
     Random,
     ReshareOfMasked(IDkgTranscript),
     ReshareOfUnmasked(IDkgTranscript),
     UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
+}
+
+impl Debug for IDkgTranscriptOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Random => write!(f, "IDkgTranscriptOperation::Random"),
+            Self::ReshareOfMasked(transcript) => write!(
+                f,
+                "IDkgTranscriptOperation::ReshareOfMasked({:?})",
+                transcript.transcript_id
+            ),
+            Self::ReshareOfUnmasked(transcript) => write!(
+                f,
+                "IDkgTranscriptOperation::ReshareOfUnmasked({:?})",
+                transcript.transcript_id
+            ),
+            Self::UnmaskedTimesMasked(unmasked_transcript, masked_transcript) => write!(
+                f,
+                "UnmaskedTimesMasked::ReshareOfMasked({}, {:?})",
+                unmasked_transcript.transcript_id, masked_transcript.transcript_id
+            ),
+        }
+    }
 }
 
 impl IDkgTranscript {
@@ -814,12 +842,50 @@ impl IDkgTranscript {
     }
 }
 
+impl Debug for IDkgTranscript {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "IDkgTranscript {{ ")?;
+        write!(f, "transcript_id: {:?}", self.transcript_id)?;
+        write!(f, ", receivers: {:?}", self.receivers)?;
+        write!(f, ", registry_version: {:?}", self.registry_version)?;
+        write!(
+            f,
+            ", verified_dealings: {:?}",
+            self.verified_dealings.keys()
+        )?;
+        write!(f, ", transcript_type: {:?}", self.transcript_type)?;
+        write!(f, ", algorithm_id: {:?}", self.algorithm_id)?;
+        write!(
+            f,
+            ", internal_transcript_raw: 0x{}",
+            hex::encode(&self.internal_transcript_raw)
+        )?;
+        write!(f, " }}")?;
+        Ok(())
+    }
+}
+
+impl_display_using_debug!(IDkgTranscript);
+
 /// Dealing of an IDkg sharing.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
     #[serde(with = "serde_bytes")]
     pub internal_dealing_raw: Vec<u8>,
+}
+
+impl Debug for IDkgDealing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "IDkgDealing {{ transcript_id: {}", self.transcript_id)?;
+        write!(
+            f,
+            ", internal_dealing_raw: 0x{}",
+            hex::encode(&self.internal_dealing_raw)
+        )?;
+        write!(f, " }}")?;
+        Ok(())
+    }
 }
 
 impl Display for IDkgDealing {
@@ -914,7 +980,7 @@ impl BatchSignedIDkgDealing {
 }
 
 /// Complaint against an individual IDkg dealing in a transcript.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
@@ -922,13 +988,39 @@ pub struct IDkgComplaint {
     pub internal_complaint_raw: Vec<u8>,
 }
 
+impl_display_using_debug!(IDkgComplaint);
+
+impl Debug for IDkgComplaint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "IDkgComplaint {{ transcript_id: {}", self.transcript_id)?;
+        write!(f, ", dealer_id: {}", self.dealer_id)?;
+        // Not including internal_complaint_raw in the output, since it may potentially leak some
+        // information that we do not want included in logs that may stay around for a long time.
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
 /// Opening created in response to an IDkgComplaint.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
     #[serde(with = "serde_bytes")]
     pub internal_opening_raw: Vec<u8>,
+}
+
+impl_display_using_debug!(IDkgOpening);
+
+impl Debug for IDkgOpening {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "IDkgOpening {{ transcript_id: {}", self.transcript_id)?;
+        write!(f, ", dealer_id: {}", self.dealer_id)?;
+        // Not including internal_opening_raw in the output, since it may potentially leak some
+        // information that we do not want included in logs that may stay around for a long time.
+        write!(f, "}}")?;
+        Ok(())
+    }
 }
 
 fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {

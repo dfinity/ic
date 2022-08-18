@@ -5,8 +5,10 @@ use crate::crypto::canister_threshold_sig::idkg::{
 };
 use crate::crypto::AlgorithmId;
 use crate::{NumberOfNodes, Randomness};
+use core::fmt;
 use ic_base_types::PrincipalId;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 pub mod error;
 pub mod idkg;
@@ -41,20 +43,62 @@ pub struct MasterEcdsaPublicKey {
 /// A combined threshold ECDSA signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
 }
 
+impl Display for ThresholdEcdsaCombinedSignature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for ThresholdEcdsaCombinedSignature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ThresholdEcdsaCombinedSignature {{ signature: 0x{} }}",
+            hex::encode(&self.signature)
+        )
+    }
+}
+
 /// Quadruple of signature-specific IDKG transcripts required to generate a
 /// canister threshold signature (not including the secret key transcript).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
     lambda_masked: IDkgTranscript,
     kappa_times_lambda: IDkgTranscript,
     key_times_lambda: IDkgTranscript,
+}
+
+impl Display for PreSignatureQuadruple {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for PreSignatureQuadruple {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "PreSignatureQuadruple {{ ")?;
+        write!(f, "kappa_unmasked: {:?}", self.kappa_unmasked.transcript_id)?;
+        write!(f, ", lambda_masked: {:?}", self.lambda_masked.transcript_id)?;
+        write!(
+            f,
+            ", kappa_times_lambda: {:?}",
+            self.kappa_times_lambda.transcript_id
+        )?;
+        write!(
+            f,
+            ", key_times_lambda: {:?}",
+            self.key_times_lambda.transcript_id
+        )?;
+        write!(f, " }}")?;
+        Ok(())
+    }
 }
 
 impl PreSignatureQuadruple {
@@ -224,14 +268,38 @@ impl PreSignatureQuadruple {
 }
 
 /// Metadata used to derive a specific ECDSA keypair.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
     pub derivation_path: Vec<Vec<u8>>,
 }
 
+impl Display for ExtendedDerivationPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for ExtendedDerivationPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "ExtendedDerivationPath {{ caller: {:?}", self.caller)?;
+        write!(f, ", derivation_path: {{ ")?;
+        let mut first_path = true;
+        for path in &self.derivation_path {
+            if !first_path {
+                write!(f, ", ")?;
+                first_path = false;
+            }
+            write!(f, "{}", hex::encode(path))?;
+        }
+        write!(f, " }}")?;
+        write!(f, " }}")?;
+        Ok(())
+    }
+}
+
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
@@ -243,6 +311,29 @@ pub struct ThresholdEcdsaSigInputs {
 
 // The byte length of an hashed message for ECDSA signatures over the curve secp256k1.
 pub const ECDSA_SECP256K1_HASH_BYTE_LENGTH: usize = 32;
+
+impl Display for ThresholdEcdsaSigInputs {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for ThresholdEcdsaSigInputs {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "ThresholdEcdsaSigInputs {{ ")?;
+        write!(f, "derivation_path: {:?}", self.derivation_path)?;
+        write!(
+            f,
+            ", hashed_message: 0x{}",
+            hex::encode(&self.hashed_message)
+        )?;
+        write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
+        write!(f, ", presig_quadruple: {}", self.presig_quadruple)?;
+        write!(f, ", key_transcript: {}", self.key_transcript.transcript_id)?;
+        write!(f, " }}")?;
+        Ok(())
+    }
+}
 
 impl ThresholdEcdsaSigInputs {
     /// Creates the inputs to the threshold ECDSA signing protocol.
@@ -370,8 +461,24 @@ impl ThresholdEcdsaSigInputs {
 }
 
 /// A single threshold ECDSA signature share.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,
+}
+
+impl Display for ThresholdEcdsaSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for ThresholdEcdsaSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ThresholdEcdsaSigShare {{ sig_share_raw: 0x{} }}",
+            hex::encode(&self.sig_share_raw)
+        )
+    }
 }

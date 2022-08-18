@@ -16,6 +16,8 @@ macro_rules! impl_display_using_debug {
     };
 }
 
+pub(crate) use impl_display_using_debug;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgTranscriptIdError {
     DecreasedBlockHeight {
