@@ -51,6 +51,7 @@ const EMBEDDER_CACHE_HIT_SUCCESS: &str = "embedder_cache_hit_success";
 const EMBEDDER_CACHE_HIT_SANDBOX_EVICTED: &str = "embedder_cache_hit_sandbox_evicted";
 const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilation_error";
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
+const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
 
 struct SandboxedExecutionMetrics {
@@ -651,17 +652,31 @@ impl WasmExecutor for SandboxedExecutionController {
                         })
                         .sync()
                         .unwrap()
-                        .0?;
-                    let serialized_module = Arc::new(reply.serialized_module);
-                    compilation_cache.insert(&wasm_binary.binary, Arc::clone(&serialized_module));
-                    (
-                        reply.wasm_memory_modifications,
-                        reply.exported_globals,
-                        serialized_module,
-                        Some(reply.compilation_result),
-                    )
+                        .0;
+                    match reply {
+                        Err(err) => {
+                            compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                            return Err(err);
+                        }
+                        Ok(reply) => {
+                            let serialized_module = Arc::new(reply.serialized_module);
+                            compilation_cache
+                                .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
+                            (
+                                reply.wasm_memory_modifications,
+                                reply.exported_globals,
+                                serialized_module,
+                                Some(reply.compilation_result),
+                            )
+                        }
+                    }
                 }
-                Some(serialized_module) => {
+                Some(Err(err)) => {
+                    self.metrics
+                        .inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
+                    return Err(err);
+                }
+                Some(Ok(serialized_module)) => {
                     self.metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
                     let _deserialization_timer = self
                         .metrics
@@ -1134,16 +1149,22 @@ fn open_wasm(
             {
                 Ok((compilation_result, serialized_module)) => {
                     cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
-                    compilation_cache.insert(&wasm_binary.binary, Arc::new(serialized_module));
+                    compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
                 }
                 Err(err) => {
+                    compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
                     cache_errored_wasm(&mut *embedder_cache, err.clone());
                     Err(err)
                 }
             }
         }
-        Some(serialized_module) => {
+        Some(Err(err)) => {
+            metrics.inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
+            cache_errored_wasm(&mut *embedder_cache, err.clone());
+            Err(err)
+        }
+        Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
             sandbox_process
                 .history

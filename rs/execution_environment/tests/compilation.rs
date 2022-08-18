@@ -336,6 +336,182 @@ mod execution_tests {
             }
         );
     }
+
+    #[test]
+    fn compilation_error_shared_from_update_to_update() {
+        let mut test = ExecutionTestBuilder::new().build();
+
+        // Create two canisters with invalid wasm. This can't be done through the
+        // normal install because the install would be rejected.
+        let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
+        let canister_state = test.canister_state_mut(canister_id1);
+        assert!(canister_state.execution_state.is_none());
+        canister_state.execution_state = Some(ExecutionState::new(
+            PathBuf::new(),
+            WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            ExportedFunctions::new(
+                vec![WasmMethod::Update("go".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            Memory::default(),
+            Memory::default(),
+            Vec::new(),
+            WasmMetadata::default(),
+        ));
+        let canister_id2 = test.create_canister(Cycles::new(1_000_000_000_000));
+        let canister_state = test.canister_state_mut(canister_id2);
+        assert!(canister_state.execution_state.is_none());
+        canister_state.execution_state = Some(ExecutionState::new(
+            PathBuf::new(),
+            WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            ExportedFunctions::new(
+                vec![WasmMethod::Update("go".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            Memory::default(),
+            Memory::default(),
+            Vec::new(),
+            WasmMetadata::default(),
+        ));
+
+        // Execute an update on each canister.
+        assert_eq!(
+            test.ingress(canister_id1, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+        assert_eq!(
+            test.ingress(canister_id2, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Only the first update should trigger a compilation.
+        let cache_lookup_metric = fetch_int_counter_vec(
+            test.metrics_registry(),
+            "sandboxed_execution_replica_cache_lookups",
+        );
+        assert_eq!(
+            cache_lookup_metric,
+            btreemap! {
+                btreemap!{
+                    "lookup_result".to_string() => "cache_miss".to_string(),
+                } => 1,
+                btreemap!{
+                    "lookup_result".to_string() => "compilation_cache_hit_compilation_error".to_string(),
+                } => 1,
+            }
+        );
+    }
+
+    #[test]
+    fn compilation_error_shared_from_install_to_update() {
+        let mut test = ExecutionTestBuilder::new().build();
+
+        // Create a canister with invalid wasm. This can't be done through the
+        // normal install because the install would be rejected.
+        let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
+        let canister_state = test.canister_state_mut(canister_id1);
+        assert!(canister_state.execution_state.is_none());
+        canister_state.execution_state = Some(ExecutionState::new(
+            PathBuf::new(),
+            WasmBinary::new(CanisterModule::new(b"\x00asm invalid wasm".to_vec())),
+            ExportedFunctions::new(
+                vec![WasmMethod::Update("go".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            Memory::default(),
+            Memory::default(),
+            Vec::new(),
+            WasmMetadata::default(),
+        ));
+        // Install a canister with the same invalid wasm.
+        assert_eq!(
+            test.canister_from_binary(b"\x00asm invalid wasm".to_vec())
+                .unwrap_err()
+                .code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Execute an update on the first canister.
+        assert_eq!(
+            test.ingress(canister_id1, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Only the install should trigger a compilation.
+        let cache_lookup_metric = fetch_int_counter_vec(
+            test.metrics_registry(),
+            "sandboxed_execution_replica_cache_lookups",
+        );
+        assert_eq!(
+            cache_lookup_metric,
+            btreemap! {
+                btreemap!{
+                    "lookup_result".to_string() => "cache_miss".to_string(),
+                } => 1,
+                btreemap!{
+                    "lookup_result".to_string() => "compilation_cache_hit_compilation_error".to_string(),
+                } => 1,
+            }
+        );
+    }
+
+    /// When computation of the wasm code size fails, we don't even attempt to
+    /// compile the wasm in the sandbox. Even in this case the error should we
+    /// stored in the compilation cache.
+    #[test]
+    fn compilation_error_shared_from_install_to_update_when_size_computation_fails() {
+        let mut test = ExecutionTestBuilder::new().build();
+
+        // Create a canister with invalid wasm. This can't be done through the
+        // normal install because the install would be rejected.
+        let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
+        let canister_state = test.canister_state_mut(canister_id1);
+        assert!(canister_state.execution_state.is_none());
+        canister_state.execution_state = Some(ExecutionState::new(
+            PathBuf::new(),
+            // Without the '\x00asm' prefix, the check for wasm code lengt will fail.
+            WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
+            ExportedFunctions::new(
+                vec![WasmMethod::Update("go".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            Memory::default(),
+            Memory::default(),
+            Vec::new(),
+            WasmMetadata::default(),
+        ));
+        // Install a canister with the same invalid wasm.
+        assert_eq!(
+            test.canister_from_binary(b"invalid wasm".to_vec())
+                .unwrap_err()
+                .code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Execute an update on the first canister.
+        assert_eq!(
+            test.ingress(canister_id1, "go", vec![]).unwrap_err().code(),
+            ErrorCode::CanisterInvalidWasm
+        );
+
+        // Only the install should trigger a compilation.
+        let cache_lookup_metric = fetch_int_counter_vec(
+            test.metrics_registry(),
+            "sandboxed_execution_replica_cache_lookups",
+        );
+        assert_eq!(
+            cache_lookup_metric,
+            btreemap! {
+                btreemap!{
+                    "lookup_result".to_string() => "compilation_cache_hit_compilation_error".to_string(),
+                } => 1,
+            }
+        );
+    }
 }
 
 mod state_machine_tests {
