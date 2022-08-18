@@ -572,11 +572,10 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
-                let (cycles_hi, cycles_lo) = cycles_transferred.into_parts();
                 self.metrics
                     .out_cycles
                     .with_label_values(&[&subnet.to_string()])
-                    .set(cycles_hi as f64);
+                    .set(cycles_transferred.get() as f64);
             });
 
         {
