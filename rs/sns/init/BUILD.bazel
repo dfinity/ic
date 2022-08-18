@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,6 +9,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nns/constants",
@@ -38,6 +39,17 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common/test_keys",
+    "//rs/sns/init/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:assert_approx_eq",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 rust_library(
     name = "init",
     srcs = glob([
@@ -59,9 +71,12 @@ generated_files_check(
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/init",
-    deps = [
-        "//rs/sns/init/protobuf_generator:lib",
-        "//rs/test_utilities/compare_dirs",
-        "@crate_index//:tempfile",
-    ],
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "init_test",
+    crate = ":init",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
 )
