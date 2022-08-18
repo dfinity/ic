@@ -60,8 +60,8 @@ use crate::{
 };
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_transport::{FlowTag, Transport, TransportStateChange};
-use ic_logger::{replica_logger::ReplicaLogger, warn};
+use ic_interfaces_transport::{FlowTag, Transport};
+use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::p2p::v1::gossip_chunk::Response;
@@ -122,8 +122,7 @@ pub trait Gossip {
         node_id: Self::NodeId,
     );
 
-    /// The method reacts to a *Transport* state change message due to
-    /// a peer connecting or disconnecting.
+    /// The following two methods react to a peer connecting or disconnecting.
     ///
     /// Missing disconnect events in case of dropped connections are
     /// detected and handled using request timeouts. Timeouts thus
@@ -131,8 +130,8 @@ pub trait Gossip {
     /// connections.  P2P guarantees liveness relying on a) timeouts
     /// for each request and b) *Transport* having an additional error
     /// detection mechanism (not implemented yet).
-    fn on_transport_state_change(&self, transport_state_change: TransportStateChange);
-
+    fn on_peer_up(&self, peer_id: NodeId);
+    fn on_peer_down(&self, peer_id: NodeId);
     /// The method is called periodically from a dedicated thread.
     fn on_timer(&self);
 }
@@ -432,21 +431,14 @@ impl Gossip for GossipImpl {
             .on_retransmission_request(&gossip_retransmission_request, peer_id);
     }
 
-    /// The method reacts to a *Transport* state change message due to a peer
-    /// connecting or disconnecting.
-    fn on_transport_state_change(&self, transport_state_change: TransportStateChange) {
-        warn!(
-            self.log,
-            "Transport state change: {:?}", transport_state_change
-        );
-        match transport_state_change {
-            TransportStateChange::PeerFlowDown(peer_id) => {
-                self.download_manager.peer_connection_down(peer_id)
-            }
-            TransportStateChange::PeerFlowUp(peer_id) => {
-                self.download_manager.peer_connection_up(peer_id)
-            }
-        }
+    fn on_peer_up(&self, peer_id: NodeId) {
+        info!(self.log, "Peer is up: {:?}", peer_id);
+        self.download_manager.peer_connection_up(peer_id)
+    }
+
+    fn on_peer_down(&self, peer_id: NodeId) {
+        info!(self.log, "Peer is down: {:?}", peer_id);
+        self.download_manager.peer_connection_down(peer_id)
     }
 
     /// The method is called on a periodic timer event.

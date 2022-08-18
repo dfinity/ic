@@ -15,9 +15,7 @@ use crate::{
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{
-    FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportStateChange,
-};
+use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use strum::AsRefStr;
@@ -229,9 +227,7 @@ impl TransportImpl {
 
                             event_handler
                                 // Notify the client that peer flow is up.
-                                .call(TransportEvent::StateChange(
-                                    TransportStateChange::PeerFlowUp(peer_id),
-                                ))
+                                .call(TransportEvent::PeerFlowUp(peer_id))
                                 .await
                                 .expect("Can't panic on infallible");
                             flow_state.update(ConnectionState::Connected(connected_state));
@@ -347,9 +343,7 @@ impl TransportImpl {
                         );
                         event_handler
                             // Notify the client that peer flow is up.
-                            .call(TransportEvent::StateChange(
-                                TransportStateChange::PeerFlowUp(peer_id),
-                            ))
+                            .call(TransportEvent::PeerFlowUp(peer_id))
                             .await
                             .expect("Can't panic on infallible");
                         flow_state.update(ConnectionState::Connected(connected_state));
@@ -451,9 +445,7 @@ impl TransportImpl {
             ConnectionState::Connecting(connecting_state)
         };
         event_handler
-            .call(TransportEvent::StateChange(
-                TransportStateChange::PeerFlowDown(peer_id),
-            ))
+            .call(TransportEvent::PeerFlowDown(peer_id))
             .await
             .expect("Can't panic on infallible");
         flow_state.update(connection_state);
@@ -585,7 +577,7 @@ mod tests {
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::TransportConfig;
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces_transport::{TransportEvent, TransportStateChange};
+    use ic_interfaces_transport::TransportEvent;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_crypto_tls_cert_key;
@@ -629,7 +621,7 @@ mod tests {
         }
 
         fn call(&mut self, event: TransportEvent) -> Self::Future {
-            if let TransportEvent::StateChange(TransportStateChange::PeerFlowUp(_)) = event {
+            if let TransportEvent::PeerFlowUp(_) = event {
                 self.connected.try_send(true).unwrap()
             }
             Box::pin(async { Ok(()) })
