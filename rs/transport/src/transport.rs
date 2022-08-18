@@ -194,11 +194,11 @@ impl Transport for TransportImpl {
         let peer_map = self.peer_map.blocking_read();
         let peer_state = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
-            None => return Err(TransportErrorCode::TransportClientNotFound),
+            None => return Err(TransportErrorCode::NotFound),
         };
         let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
             Some(flow_state) => flow_state,
-            None => return Err(TransportErrorCode::FlowNotFound),
+            None => return Err(TransportErrorCode::NotFound),
         };
         let flow_state = flow_state_mu.blocking_read();
         match flow_state.send_queue.enqueue(message) {
