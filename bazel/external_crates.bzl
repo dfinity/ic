@@ -96,6 +96,9 @@ def external_crates_repository(name, annotations):
                     "use-serde",
                 ],
             ),
+            "bitcoincore-rpc": crate.spec(
+                version = "^0.15.0",
+            ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
@@ -142,7 +145,7 @@ def external_crates_repository(name, annotations):
             ),
             "cfg-if": crate.spec(version = "^0.1.10"),
             "chrono": crate.spec(
-                version = "^0.4.19",
+                version = "=0.4.20",
             ),
             "ciborium": crate.spec(
                 git = "https://github.com/enarx/ciborium",
