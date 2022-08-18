@@ -3,8 +3,9 @@
 ///! The state is stored in the global thread-level variable `__STATE`.
 ///! This module provides utility functions to manage the state. Most
 ///! code should use those functions instead of touching `__STATE` directly.
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeSet};
 
+use candid::Principal;
 use ic_btc_types::Network;
 
 use crate::ECDSAPublicKey;
@@ -27,6 +28,9 @@ pub struct CkBtcMinterState {
 
     /// The Minter ECDSA public key
     pub ecdsa_public_key: Option<ECDSAPublicKey>,
+
+    /// Per-principal lock for update_balance
+    pub update_balance_principals: BTreeSet<Principal>,
 }
 
 /// Take the current state.
