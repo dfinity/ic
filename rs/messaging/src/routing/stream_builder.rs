@@ -43,10 +43,8 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Outgoing XNet messages, by destination subnet
     pub outgoing_messages: IntCounterVec,
-    /// Outgoing cycles hi 64bit part of 128bit cycles, by receiving subnet.
-    pub out_cycles_hi: GaugeVec,
-    /// Outgoing cycles lo 64bit part of 128bit cycles, by receiving subnet.
-    pub out_cycles_lo: GaugeVec,
+    /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
+    pub out_cycles: GaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -73,8 +71,7 @@ const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
-const METRIC_OUT_CYCLES_HI: &str = "mr_out_cycles_hi";
-const METRIC_OUT_CYCLES_LO: &str = "mr_out_cycles_lo";
+const METRIC_OUT_CYCLES: &str = "mr_out_cycles";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -124,14 +121,9 @@ impl StreamBuilderMetrics {
             "Outgoing XNet messages, by destination subnet.",
             &[LABEL_REMOTE],
         );
-        let out_cycles_hi = metrics_registry.gauge_vec(
-            METRIC_OUT_CYCLES_HI,
-            "Outgoing cycles hi part, by receiving subnet.",
-            &[LABEL_REMOTE],
-        );
-        let out_cycles_lo = metrics_registry.gauge_vec(
-            METRIC_OUT_CYCLES_LO,
-            "Outgoing cycles lo part, by receiving subnet.",
+        let out_cycles = metrics_registry.gauge_vec(
+            METRIC_OUT_CYCLES,
+            "Outgoing cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
@@ -164,8 +156,7 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             outgoing_messages,
-            out_cycles_hi,
-            out_cycles_lo,
+            out_cycles,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -583,13 +574,9 @@ impl StreamBuilderImpl {
                     .set(begin.get() as i64);
                 let (cycles_hi, cycles_lo) = cycles_transferred.into_parts();
                 self.metrics
-                    .out_cycles_hi
+                    .out_cycles
                     .with_label_values(&[&subnet.to_string()])
                     .set(cycles_hi as f64);
-                self.metrics
-                    .out_cycles_lo
-                    .with_label_values(&[&subnet.to_string()])
-                    .set(cycles_lo as f64);
             });
 
         {

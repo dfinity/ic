@@ -191,8 +191,8 @@ pub async fn test_impl(
     }
     let canisters_to_start = canisters
         .iter()
-        .enumerate().
-        filter(|(i, _)| *i == 1)
+        .enumerate()
+        .filter(|(i, _)| *i == 1)
         .map(|(_, c)| c)
         .collect::<Vec<_>>();
     //exchange canisters with canisters_to_start below
