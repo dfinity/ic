@@ -4,7 +4,7 @@ type = "internal_metrics"
 [sinks.vector_exporter]
 type = "prometheus_exporter"
 inputs = ["vector_metrics"]
-address = "0.0.0.0:9598"
+address = "${VECTOR_PROMETHUS_ADDR}"
 default_namespace = "vector"
 
 # nginx
