@@ -6,7 +6,7 @@ After=syslog.target network.target
 User=node_exporter
 Group=node_exporter
 Restart=always
-ExecStart=/usr/local/bin/node_exporter
+ExecStart=/usr/local/bin/node_exporter $OPTIONS
 ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]

@@ -279,6 +279,12 @@ function generate_boundary_node_config() {
             echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
             echo DOMAIN=${NGINX_DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
             echo TLD=${NGINX_TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
+            mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
+            cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
+# HELP bn_version_info version information for the boundary node
+# TYPE bn_version_info counter
+bn_version_info{git_revision="${GIT_REVISION}"} 1
+EOF
         done
     done
 }
