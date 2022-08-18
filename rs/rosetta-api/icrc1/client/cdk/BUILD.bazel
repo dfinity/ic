@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/rosetta-api/icrc1/client",
+    "@crate_index//:ic-cdk",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+rust_library(
+    name = "cdk",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_icrc1_client_cdk",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
