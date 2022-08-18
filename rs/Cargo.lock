@@ -5876,6 +5876,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1-client-cdk"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "ic-cdk 0.5.5",
+ "ic-icrc1-client",
+]
+
+[[package]]
 name = "ic-icrc1-ledger"
 version = "0.8.0"
 dependencies = [
