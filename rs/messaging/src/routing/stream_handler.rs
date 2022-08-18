@@ -28,7 +28,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
     SubnetId,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec, GaugeVec};
+use prometheus::{GaugeVec, Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
@@ -206,8 +206,6 @@ pub(crate) struct StreamHandlerImpl {
     max_canister_memory_size: NumBytes,
     subnet_memory_capacity: NumBytes,
     subnet_message_memory_capacity: NumBytes,
-    // storing cycles per subnet (stream)
-    //cycle_map: BTreeMap<SubnetId, Cycles>,
 
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the

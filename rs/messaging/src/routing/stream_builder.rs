@@ -21,7 +21,7 @@ use ic_types::{
 };
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec, GaugeVec};
+use prometheus::{GaugeVec, Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::ops::Add;
@@ -43,8 +43,6 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Outgoing XNet messages, by destination subnet
     pub outgoing_messages: IntCounterVec,
-    /// Outgoing stream index, by sending subnet.
-    pub out_stream_index: IntGaugeVec,
     /// Outgoing cycles hi 64bit part of 128bit cycles, by receiving subnet.
     pub out_cycles_hi: GaugeVec,
     /// Outgoing cycles lo 64bit part of 128bit cycles, by receiving subnet.
@@ -75,7 +73,6 @@ const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
-const METRIC_OUT_STREAM_INDEX: &str = "mr_out_stream_index";
 const METRIC_OUT_CYCLES_HI: &str = "mr_out_cycles_hi";
 const METRIC_OUT_CYCLES_LO: &str = "mr_out_cycles_lo";
 
@@ -127,11 +124,6 @@ impl StreamBuilderMetrics {
             "Outgoing XNet messages, by destination subnet.",
             &[LABEL_REMOTE],
         );
-        let out_stream_index = metrics_registry.int_gauge_vec(
-            METRIC_OUT_STREAM_INDEX,
-            "Outgoing stream index, by sending subnet.",
-            &[LABEL_REMOTE],
-        );
         let out_cycles_hi = metrics_registry.gauge_vec(
             METRIC_OUT_CYCLES_HI,
             "Outgoing cycles hi part, by receiving subnet.",
@@ -172,7 +164,6 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             outgoing_messages,
-            out_stream_index,
             out_cycles_hi,
             out_cycles_lo,
             critical_error_infinite_loops,
@@ -468,14 +459,14 @@ impl StreamBuilderImpl {
                             //     }
                             //     None => {}
                             // }
-                            let cycles_in_msg = msg.cycles();
-                            match streams.get_mut(&dst_net_id) {
-                                Some(mut stream) => {
-                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
-                                    stream.set_sum_cycles_out(new_cycles_sum);
-                                }
-                                None => {}
-                            }
+                            // let cycles_in_msg = msg.cycles();
+                            // match streams.get_mut(&dst_net_id) {
+                            //     Some(mut stream) => {
+                            //         let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
+                            //         stream.set_sum_cycles_out(new_cycles_sum);
+                            //     }
+                            //     None => {}
+                            // }
                             streams.push(dst_net_id, msg);
                         }
 
@@ -494,10 +485,10 @@ impl StreamBuilderImpl {
                                 .inc();
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    self.metrics
-                                        .out_stream_index
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(stream.signals_end().get().try_into().unwrap());
+                                    // self.metrics
+                                    //     .out_stream_index
+                                    //     .with_label_values(&[&dst_net_id.to_string()])
+                                    //     .set(stream.signals_end().get().try_into().unwrap());
                                     let cycles_in_msg = msg.cycles();
                                     let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
                                     stream.set_sum_cycles_out(new_cycles_sum);
