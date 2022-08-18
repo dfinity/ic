@@ -5,13 +5,14 @@ use std::{
 
 use crate::SerializedModule;
 use ic_config::flag_status::FlagStatus;
+use ic_interfaces::execution_environment::HypervisorResult;
 use ic_wasm_types::{CanisterModule, WasmHash};
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
 pub struct CompilationCache {
     enabled: FlagStatus,
-    cache: RwLock<HashMap<WasmHash, Arc<SerializedModule>>>,
+    cache: RwLock<HashMap<WasmHash, HypervisorResult<Arc<SerializedModule>>>>,
 }
 
 impl CompilationCache {
@@ -25,7 +26,7 @@ impl CompilationCache {
     pub fn insert(
         &self,
         canister_module: &CanisterModule,
-        serialized_module: Arc<SerializedModule>,
+        serialized_module: HypervisorResult<Arc<SerializedModule>>,
     ) {
         if self.enabled == FlagStatus::Enabled {
             self.cache
@@ -35,13 +36,16 @@ impl CompilationCache {
         }
     }
 
-    pub fn get(&self, canister_module: &CanisterModule) -> Option<Arc<SerializedModule>> {
+    pub fn get(
+        &self,
+        canister_module: &CanisterModule,
+    ) -> Option<HypervisorResult<Arc<SerializedModule>>> {
         if self.enabled == FlagStatus::Enabled {
             self.cache
                 .read()
                 .unwrap()
                 .get(&WasmHash::from(canister_module))
-                .map(Arc::clone)
+                .map(|o| o.as_ref().map(Arc::clone).map_err(|e| e.clone()))
         } else {
             None
         }
