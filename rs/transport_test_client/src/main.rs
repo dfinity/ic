@@ -217,7 +217,7 @@ impl TestClient {
             }
 
             if msg.peer_id != self.prev {
-                return Err(TransportErrorCode::FlowNotFound);
+                return Err(TransportErrorCode::NotFound);
             }
 
             let msg_len = msg.payload.0.len();

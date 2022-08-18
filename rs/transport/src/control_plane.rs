@@ -72,7 +72,7 @@ impl TransportImpl {
         *self.registry_version.blocking_write() = registry_version;
         let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
-            return Err(TransportErrorCode::PeerAlreadyRegistered);
+            return Err(TransportErrorCode::AlreadyExists);
         }
         let mut peer_state = PeerState {
             flow_map: HashMap::new(),
