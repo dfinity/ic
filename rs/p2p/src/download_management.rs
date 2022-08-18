@@ -89,7 +89,7 @@ use ic_interfaces::{
         registry::RegistryClient,
     },
 };
-use ic_interfaces_transport::{FlowTag, Transport, TransportErrorCode, TransportPayload};
+use ic_interfaces_transport::{FlowTag, Transport, TransportError, TransportPayload};
 use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
@@ -942,7 +942,7 @@ impl DownloadManagerImpl {
         message: GossipMessage,
         peer_id: NodeId,
         flow_tag: FlowTag,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let _timer = self
             .metrics
             .op_duration

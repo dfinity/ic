@@ -15,7 +15,7 @@ use crate::{
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler};
+use ic_interfaces_transport::{FlowTag, TransportError, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use strum::AsRefStr;
@@ -61,7 +61,7 @@ impl TransportImpl {
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let role = connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
@@ -70,7 +70,7 @@ impl TransportImpl {
         *self.registry_version.blocking_write() = registry_version;
         let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
-            return Err(TransportErrorCode::AlreadyExists);
+            return Err(TransportError::AlreadyExists);
         }
         let mut peer_state = PeerState {
             flow_map: HashMap::new(),
@@ -226,8 +226,7 @@ impl TransportImpl {
                             );
 
                             event_handler
-                                // Notify the client that peer flow is up.
-                                .call(TransportEvent::PeerFlowUp(peer_id))
+                                .call(TransportEvent::PeerUp(peer_id))
                                 .await
                                 .expect("Can't panic on infallible");
                             flow_state.update(ConnectionState::Connected(connected_state));
@@ -342,8 +341,7 @@ impl TransportImpl {
 
                         );
                         event_handler
-                            // Notify the client that peer flow is up.
-                            .call(TransportEvent::PeerFlowUp(peer_id))
+                            .call(TransportEvent::PeerUp(peer_id))
                             .await
                             .expect("Can't panic on infallible");
                         flow_state.update(ConnectionState::Connected(connected_state));
@@ -445,7 +443,7 @@ impl TransportImpl {
             ConnectionState::Connecting(connecting_state)
         };
         event_handler
-            .call(TransportEvent::PeerFlowDown(peer_id))
+            .call(TransportEvent::PeerDown(peer_id))
             .await
             .expect("Can't panic on infallible");
         flow_state.update(connection_state);
@@ -621,7 +619,7 @@ mod tests {
         }
 
         fn call(&mut self, event: TransportEvent) -> Self::Future {
-            if let TransportEvent::PeerFlowUp(_) = event {
+            if let TransportEvent::PeerUp(_) = event {
                 self.connected.try_send(true).unwrap()
             }
             Box::pin(async { Ok(()) })

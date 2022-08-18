@@ -72,7 +72,7 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
+    FlowTag, Transport, TransportError, TransportEventHandler, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -165,7 +165,7 @@ impl Transport for TransportImpl {
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         info!(
             self.log,
             "Transport::start_connection(): peer_id = {:?}", peer_id
@@ -190,19 +190,19 @@ impl Transport for TransportImpl {
         peer_id: &NodeId,
         flow_tag: FlowTag,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let peer_map = self.peer_map.blocking_read();
         let peer_state = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
-            None => return Err(TransportErrorCode::NotFound),
+            None => return Err(TransportError::NotFound),
         };
         let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
             Some(flow_state) => flow_state,
-            None => return Err(TransportErrorCode::NotFound),
+            None => return Err(TransportError::NotFound),
         };
         let flow_state = flow_state_mu.blocking_read();
         match flow_state.send_queue.enqueue(message) {
-            Some(unsent) => Err(TransportErrorCode::TransportBusy(unsent)),
+            Some(unsent) => Err(TransportError::SendQueueFull(unsent)),
             None => Ok(()),
         }
     }
