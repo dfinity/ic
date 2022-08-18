@@ -397,7 +397,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     }
                 }
             }
-            TransportEvent::PeerFlowUp(peer_id) => {
+            TransportEvent::PeerUp(peer_id) => {
                 let consume_fn = move |item, _peer_id| {
                     c_gossip.on_peer_up(item);
                 };
@@ -408,7 +408,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     Ok(())
                 })
             }
-            TransportEvent::PeerFlowDown(peer_id) => {
+            TransportEvent::PeerDown(peer_id) => {
                 let consume_fn = move |item, _peer_id| {
                     c_gossip.on_peer_down(item);
                 };

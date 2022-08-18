@@ -40,7 +40,7 @@ use ic_config::{
     transport::TransportConfig,
 };
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportPayload,
+    FlowTag, Transport, TransportError, TransportEvent, TransportPayload,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -82,7 +82,7 @@ enum Role {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TestClientErrorCode {
-    TransportError(TransportErrorCode),
+    TransportError(TransportError),
     MessageMismatch,
     NotAllFlowsUp,
     Timeout,
@@ -143,7 +143,7 @@ impl TestClient {
         }
     }
 
-    fn start_connection(&self) -> Result<(), TransportErrorCode> {
+    fn start_connection(&self) -> Result<(), TransportError> {
         self.transport
             .start_connection(&self.prev, self.prev_node_record, self.registry_version)
             .map_err(|e| {
@@ -191,7 +191,7 @@ impl TestClient {
     }
 
     // Relay processing. Receives the messages and relays it to next peer.
-    fn relay_loop(&self) -> Result<(), TransportErrorCode> {
+    fn relay_loop(&self) -> Result<(), TransportError> {
         loop {
             if !self.active.load(Ordering::Relaxed) {
                 info!(self.log, "Relay thread exiting");
@@ -217,7 +217,7 @@ impl TestClient {
             }
 
             if msg.peer_id != self.prev {
-                return Err(TransportErrorCode::NotFound);
+                return Err(TransportError::NotFound);
             }
 
             let msg_len = msg.payload.0.len();
@@ -379,10 +379,10 @@ impl Service<TransportEvent> for TestClientEventHandler {
                 TransportEvent::Message(msg) => {
                     Self::on_message(sender, msg.peer_id, msg.payload);
                 }
-                TransportEvent::PeerFlowUp(peer_id) => {
+                TransportEvent::PeerUp(peer_id) => {
                     active_flows.lock().unwrap().insert(peer_id);
                 }
-                TransportEvent::PeerFlowDown(peer_id) => {
+                TransportEvent::PeerDown(peer_id) => {
                     active_flows.lock().unwrap().remove(&peer_id);
                 }
             }

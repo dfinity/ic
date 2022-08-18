@@ -1,6 +1,6 @@
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportEventHandler,
-    TransportMessage, TransportPayload,
+    FlowTag, Transport, TransportError, TransportEvent, TransportEventHandler, TransportMessage,
+    TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{NodeId, RegistryVersion};
@@ -102,7 +102,7 @@ impl ThreadPort {
         src_node_id: NodeId,
         dest_node_id: NodeId,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         // Dispatch  or defer send a message to a node.
         // Dispatch happens only if all 3 conditions are met
         //.
@@ -178,7 +178,7 @@ impl Transport for ThreadPort {
         node_id: &NodeId,
         _peer_addr: SocketAddr,
         _registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         info!(
             self.log,
             "Node{} -> Connections to peer {} started", self.id, node_id
@@ -204,7 +204,7 @@ impl Transport for ThreadPort {
         peer_id: &NodeId,
         _flow_tag: FlowTag,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let peer_id = *peer_id;
         let id = self.id;
         let weak_self = self.weak_self.read().unwrap().clone();

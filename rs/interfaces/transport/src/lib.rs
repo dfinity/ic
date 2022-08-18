@@ -42,13 +42,13 @@ pub trait Transport: Send + Sync {
     /// waiting for connection and it can be acceptable for the client to block until a
     /// connection is established.
     /// Since this method is non-blocking, the callee can send messages to the peer
-    /// once it received the PeerFlowUp event.
+    /// once it received the PeerUp event.
     fn start_connection(
         &self,
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode>;
+    ) -> Result<(), TransportError>;
 
     /// Terminates the connection with the peer.
     fn stop_connection(&self, peer_id: &NodeId);
@@ -60,7 +60,7 @@ pub trait Transport: Send + Sync {
         peer_id: &NodeId,
         flow_tag: FlowTag,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode>;
+    ) -> Result<(), TransportError>;
 
     /// Clear any queued messages in all the send queues for the peer.
     fn clear_send_queues(&self, peer_id: &NodeId);
@@ -85,10 +85,10 @@ pub struct TransportPayload(#[serde(with = "serde_bytes")] pub Vec<u8>);
 #[derive(Debug)]
 pub enum TransportEvent {
     /// Peer flow was established
-    PeerFlowUp(NodeId),
+    PeerUp(NodeId),
 
     /// Peer flow went down
-    PeerFlowDown(NodeId),
+    PeerDown(NodeId),
 
     /// Message received
     Message(TransportMessage),
@@ -102,7 +102,7 @@ pub struct TransportMessage {
 
 /// Error codes returned by transport manager functions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TransportErrorCode {
+pub enum TransportError {
     /// E.g. the the peer connection already is initiated,
     /// the event handler is already set, etc.
     AlreadyExists,
@@ -110,7 +110,6 @@ pub enum TransportErrorCode {
     /// E.g. the peer is missing, the peer connection is missing, etc.
     NotFound,
 
-    /// Failed to enqueue/submit a message/request. The error code contains the
-    /// entry that could not be submitted.
-    TransportBusy(TransportPayload),
+    /// Failed to add a message to the send queue because the queue is full.
+    SendQueueFull(TransportPayload),
 }
