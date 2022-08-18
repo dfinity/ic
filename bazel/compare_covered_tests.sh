@@ -1,7 +1,7 @@
 #!/bin/bash
 
 print_red() {
-    echo -e "\033[0;31m$*\033[0m" 1>&2
+    echo -e "\033[0;31m$*\033[0m"
 }
 
 print_green() {
@@ -9,7 +9,7 @@ print_green() {
 }
 
 print_blue() {
-    echo -e "\033[0;34m$*\033[0m"
+    echo -e "\033[1;34m$*\033[0m"
 }
 
 info() {
