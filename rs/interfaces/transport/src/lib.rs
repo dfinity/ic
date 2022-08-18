@@ -84,7 +84,13 @@ pub struct TransportPayload(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 #[derive(Debug)]
 pub enum TransportEvent {
-    StateChange(TransportStateChange),
+    /// Peer flow was established
+    PeerFlowUp(NodeId),
+
+    /// Peer flow went down
+    PeerFlowDown(NodeId),
+
+    /// Message received
     Message(TransportMessage),
 }
 
@@ -92,16 +98,6 @@ pub enum TransportEvent {
 pub struct TransportMessage {
     pub peer_id: NodeId,
     pub payload: TransportPayload,
-}
-
-/// State changes that can happen in the transport layer.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TransportStateChange {
-    /// Peer flow was established
-    PeerFlowUp(NodeId),
-
-    /// Peer flow went down
-    PeerFlowDown(NodeId),
 }
 
 /// Error codes returned by transport manager functions.

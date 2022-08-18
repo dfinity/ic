@@ -40,7 +40,7 @@ use ic_config::{
     transport::TransportConfig,
 };
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportPayload, TransportStateChange,
+    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportPayload,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -359,17 +359,6 @@ impl TestClientEventHandler {
         });
         None
     }
-
-    fn on_state_change(active_flows: Arc<Mutex<HashSet<NodeId>>>, change: TransportStateChange) {
-        match change {
-            TransportStateChange::PeerFlowUp(peer_id) => {
-                active_flows.lock().unwrap().insert(peer_id);
-            }
-            TransportStateChange::PeerFlowDown(peer_id) => {
-                active_flows.lock().unwrap().remove(&peer_id);
-            }
-        }
-    }
 }
 
 impl Service<TransportEvent> for TestClientEventHandler {
@@ -390,8 +379,11 @@ impl Service<TransportEvent> for TestClientEventHandler {
                 TransportEvent::Message(msg) => {
                     Self::on_message(sender, msg.peer_id, msg.payload);
                 }
-                TransportEvent::StateChange(state_change) => {
-                    Self::on_state_change(active_flows, state_change)
+                TransportEvent::PeerFlowUp(peer_id) => {
+                    active_flows.lock().unwrap().insert(peer_id);
+                }
+                TransportEvent::PeerFlowDown(peer_id) => {
+                    active_flows.lock().unwrap().remove(&peer_id);
                 }
             }
             Ok(())
