@@ -1,30 +1,53 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/tls_interfaces",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/types/types",
+    "//rs/xnet/hyper",
+    "//rs/xnet/uri",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:hyper",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:socket2",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces/state_manager",
+    "//rs/registry/keys",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/registry",
+    "@crate_index//:bytes",
+    "@crate_index//:maplit",
+    "@crate_index//:prost",
+    "@crate_index//:reqwest",
+]
 
 rust_library(
     name = "endpoint",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_endpoint",
     edition = "2018",
-    deps = [
-        "//rs/crypto/tls_interfaces",
-        "//rs/interfaces",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/protobuf",
-        "//rs/registry/helpers",
-        "//rs/types/types",
-        "//rs/xnet/hyper",
-        "//rs/xnet/uri",
-        "@crate_index//:crossbeam-channel",
-        "@crate_index//:hyper",
-        "@crate_index//:prometheus",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:slog",
-        "@crate_index//:socket2",
-        "@crate_index//:tokio",
-        "@crate_index//:url",
-    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "endpoint_test",
+    crate = ":endpoint",
+    deps = DEV_DEPENDENCIES,
 )
