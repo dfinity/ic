@@ -94,12 +94,12 @@ mock! {
     }
 
     pub trait CspKeyGenerator {
-        fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError>;
+        fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError>;
 
         fn gen_key_pair_with_pop(
             &self,
             algorithm_id: AlgorithmId,
-        ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError>;
+        ) -> Result<(CspPublicKey, CspPop), CryptoError>;
 
         fn gen_tls_key_pair(
             &self,

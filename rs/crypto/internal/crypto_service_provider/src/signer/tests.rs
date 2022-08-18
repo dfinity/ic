@@ -362,6 +362,7 @@ fn should_panic_when_panicking_secret_key_store_is_used() {
 mod multi {
     use super::*;
     use crate::api::CspKeyGenerator;
+    use crate::keygen::public_key_hash_as_key_id;
     use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 
     #[test]
@@ -370,7 +371,7 @@ mod multi {
             ChaCha20Rng::seed_from_u64(42),
             VolatileSecretKeyStore::new(),
         );
-        let (_key_id, public_key, pop) = csp
+        let (public_key, pop) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
         assert!(csp
@@ -384,10 +385,10 @@ mod multi {
             ChaCha20Rng::seed_from_u64(42),
             VolatileSecretKeyStore::new(),
         );
-        let (_key_id1, public_key1, _pop1) = csp
+        let (public_key1, _pop1) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
-        let (_key_id2, _public_key2, pop2) = csp
+        let (_public_key2, pop2) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
         match csp.verify_pop(&pop2, AlgorithmId::MultiBls12_381, public_key1) {
@@ -403,10 +404,10 @@ mod multi {
             ChaCha20Rng::seed_from_u64(42),
             VolatileSecretKeyStore::new(),
         );
-        let (_key_id, _public_key, pop) = csp
+        let (_public_key, pop) = csp
             .gen_key_pair_with_pop(algorithm)
             .expect("PoP creation failed");
-        let (_key_id, incompatible_public_key) = csp.gen_key_pair(incompatible_algorithm).unwrap();
+        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
         let verifier = Csp::of(
             ChaCha20Rng::seed_from_u64(69),
             secret_key_store_panicking_on_usage(),
@@ -422,7 +423,7 @@ mod multi {
             ChaCha20Rng::seed_from_u64(42),
             VolatileSecretKeyStore::new(),
         );
-        let (_key_id, public_key, pop) = csp
+        let (public_key, pop) = csp
             .gen_key_pair_with_pop(algorithm)
             .expect("PoP creation failed");
         let verifier = Csp::of(
@@ -439,10 +440,11 @@ mod multi {
             ChaCha20Rng::seed_from_u64(69),
             VolatileSecretKeyStore::new(),
         );
-        let (key_id, public_key, _pop) = csp
+        let (public_key, _pop) = csp
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
         let message = b"Three turtle doves";
+        let key_id = public_key_hash_as_key_id(&public_key);
         let signature = csp
             .sign(AlgorithmId::MultiBls12_381, message, key_id)
             .expect("Signing failed");
@@ -464,10 +466,10 @@ mod multi {
             ChaCha20Rng::seed_from_u64(69),
             VolatileSecretKeyStore::new(),
         );
-        let (_key_id, public_key) = csp.gen_key_pair(algorithm).unwrap();
+        let public_key = csp.gen_key_pair(algorithm).unwrap();
         let incompatible_signature = {
-            let (incompatible_key_id, _public_key) =
-                csp.gen_key_pair(incompatible_algorithm).unwrap();
+            let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
+            let incompatible_key_id = public_key_hash_as_key_id(&incompatible_public_key);
             csp.sign(incompatible_algorithm, message, incompatible_key_id)
                 .expect("Signing failed")
         };
@@ -487,8 +489,9 @@ mod multi {
             ChaCha20Rng::seed_from_u64(42),
             VolatileSecretKeyStore::new(),
         );
-        let (key_id, _public_key) = csp.gen_key_pair(algorithm).unwrap();
-        let (_key_id, incompatible_public_key) = csp.gen_key_pair(incompatible_algorithm).unwrap();
+        let public_key = csp.gen_key_pair(algorithm).unwrap();
+        let key_id = public_key_hash_as_key_id(&public_key);
+        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
         let message = b"Three turtle doves";
         let signature = csp
             .sign(algorithm, message, key_id)
@@ -518,12 +521,14 @@ mod multi {
         );
 
         // The signatories need keys:
-        let (key_id1, public_key1, _pop1) = csp1
+        let (public_key1, _pop1) = csp1
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
-        let (key_id2, public_key2, _pop2) = csp2
+        let key_id1 = public_key_hash_as_key_id(&public_key1);
+        let (public_key2, _pop2) = csp2
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
+        let key_id2 = public_key_hash_as_key_id(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -570,12 +575,14 @@ mod multi {
         );
 
         // The signatories need keys:
-        let (key_id1, public_key1, _pop1) = csp1
+        let (public_key1, _pop1) = csp1
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
-        let (key_id2, public_key2, _pop2) = csp2
+        let key_id1 = public_key_hash_as_key_id(&public_key1);
+        let (public_key2, _pop2) = csp2
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
+        let key_id2 = public_key_hash_as_key_id(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -617,9 +624,10 @@ mod multi {
         );
 
         // The signatories need keys:
-        let (key_id1, public_key1, _pop1) = csp1
+        let (public_key1, _pop1) = csp1
             .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
             .expect("Failed to generate key pair with PoP");
+        let key_id1 = public_key_hash_as_key_id(&public_key1);
 
         // An incompatible signature:
         let (_, incompatible_public_key2, message, incompatible_signature2) =
