@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -14,6 +14,14 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/test_vectors",
+    "@crate_index//:hex",
+    "@crate_index//:openssl",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_library(
@@ -27,11 +35,19 @@ rust_library(
 )
 
 rust_test(
-    name = "ic_crypto_internal_basic_sig_cose_test",
+    name = "cose_test",
+    aliases = ALIASES,
     crate = ":cose",
-    deps = [
-        "//rs/crypto/internal/test_vectors",
-        "@crate_index//:hex",
-        "@crate_index//:openssl",
-    ],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "cose_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":cose"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
