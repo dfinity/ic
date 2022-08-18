@@ -1,28 +1,51 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
-rust_library(
-    name = "hmac",
-    srcs = glob(["src/**"]),
-    crate_name = "ic_crypto_internal_hmac",
-    edition = "2018",
-    visibility = ["//rs/crypto:__subpackages__"],
-    deps = [
-        "//rs/crypto/internal/crypto_lib/sha2",
-    ],
-)
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/sha2",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:hex",
+    "@crate_index//:wycheproof",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_doc_test(
     name = "hmac_doc_test",
     crate = ":hmac",
 )
 
+rust_library(
+    name = "hmac",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_internal_hmac",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
 rust_test(
     name = "hmac_test",
-    srcs = glob(["tests/**"]),
+    aliases = ALIASES,
+    crate = ":hmac",
     edition = "2018",
-    deps = [
-        ":hmac",
-        "@crate_index//:hex",
-        "@crate_index//:wycheproof",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "hmac_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":hmac"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
