@@ -18,5 +18,6 @@ pub fn init(args: InitArgs) {
         btc_network: args.btc_network,
         ecdsa_key_name: args.ecdsa_key_name,
         ecdsa_public_key: None,
+        update_balance_principals: Default::default(),
     });
 }

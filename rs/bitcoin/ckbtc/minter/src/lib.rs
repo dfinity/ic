@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
+pub mod guard;
 pub mod lifecycle;
 pub mod metrics;
 pub mod state;
