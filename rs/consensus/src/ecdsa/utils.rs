@@ -524,20 +524,23 @@ pub(crate) mod test_utils {
     }
 
     pub(crate) struct TestEcdsaSignatureBuilder {
-        pub(crate) signatures: Vec<(RequestId, ThresholdEcdsaCombinedSignature)>,
+        pub(crate) signatures: BTreeMap<RequestId, ThresholdEcdsaCombinedSignature>,
     }
 
     impl TestEcdsaSignatureBuilder {
         pub(crate) fn new() -> Self {
             Self {
-                signatures: Vec::new(),
+                signatures: BTreeMap::new(),
             }
         }
     }
 
     impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
-        fn get_completed_signatures(&self) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
-            self.signatures.clone()
+        fn get_completed_signature(
+            &self,
+            request_id: &RequestId,
+        ) -> Option<ThresholdEcdsaCombinedSignature> {
+            self.signatures.get(request_id).cloned()
         }
     }
 

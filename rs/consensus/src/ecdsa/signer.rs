@@ -377,9 +377,12 @@ impl EcdsaSigner for EcdsaSignerImpl {
 }
 
 pub(crate) trait EcdsaSignatureBuilder {
-    /// Returns the signatures that can be successfully built from
-    /// the current entries in the ECDSA pool
-    fn get_completed_signatures(&self) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)>;
+    /// Returns the specified signature if it can be successfully
+    /// built from the current sig shares in the ECDSA pool
+    fn get_completed_signature(
+        &self,
+        request_id: &RequestId,
+    ) -> Option<ThresholdEcdsaCombinedSignature>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
@@ -446,43 +449,44 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
 }
 
 impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
-    fn get_completed_signatures(&self) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
-        let requested_signatures = resolve_sig_inputs_refs(
-            self.block_reader,
-            "purge_artifacts",
-            self.metrics.payload_errors.clone(),
-            &self.log,
-        );
+    fn get_completed_signature(
+        &self,
+        request_id: &RequestId,
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        // Find the sig inputs for the request and translate the refs.
+        let (request_id, sig_inputs_ref) = self
+            .block_reader
+            .requested_signatures()
+            .find(|(cur_request_id, _)| **cur_request_id == *request_id)?;
+        let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
+            Ok(sig_inputs) => sig_inputs,
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "get_completed_signature(): translate failed: sig_inputs_ref = {:?}, error = {:?}",
+                    sig_inputs_ref,
+                    error
+                );
+                self.metrics.payload_errors_inc("sig_inputs_translate");
+                return None;
+            }
+        };
 
-        // RequestId -> signature inputs
-        let mut sig_input_map = BTreeMap::new();
-        for (request_id, sig_inputs) in &requested_signatures {
-            sig_input_map.insert(*request_id, SignatureState::new(sig_inputs));
-        }
-
-        // Step 1: collect per request signature shares
+        // Collect the signature shares for the request.
+        let mut sig_shares = BTreeMap::new();
         for (_, share) in self.ecdsa_pool.validated().signature_shares() {
-            let signature_state = match sig_input_map.get_mut(&share.request_id) {
-                Some(state) => state,
-                None => continue,
-            };
-            signature_state.add_signature_share(&share.signer_id, &share.share);
-        }
-
-        // Step 2: combine the per request signature shares
-        let mut completed_signatures = Vec::new();
-        for (request_id, state) in sig_input_map.iter() {
-            if let Some(signature) = self.crypto_combine_signature_shares(
-                request_id,
-                state.signature_inputs,
-                &state.signature_shares,
-                self.ecdsa_pool.stats(),
-            ) {
-                completed_signatures.push((*request_id, signature));
+            if share.request_id == *request_id {
+                sig_shares.insert(share.signer_id, share.share.clone());
             }
         }
 
-        completed_signatures
+        // Combine the signatures.
+        self.crypto_combine_signature_shares(
+            request_id,
+            &sig_inputs,
+            &sig_shares,
+            self.ecdsa_pool.stats(),
+        )
     }
 }
 
@@ -542,31 +546,6 @@ impl<'a> Debug for Action<'a> {
             Self::Defer => write!(f, "Action::Defer"),
             Self::Drop => write!(f, "Action::Drop"),
         }
-    }
-}
-
-/// Helper to hold the per-signature request state during the signature
-/// building process
-struct SignatureState<'a> {
-    signature_inputs: &'a ThresholdEcdsaSigInputs,
-    signature_shares: BTreeMap<NodeId, ThresholdEcdsaSigShare>,
-}
-
-impl<'a> SignatureState<'a> {
-    fn new(signature_inputs: &'a ThresholdEcdsaSigInputs) -> Self {
-        Self {
-            signature_inputs,
-            signature_shares: BTreeMap::new(),
-        }
-    }
-
-    fn add_signature_share(
-        &mut self,
-        signer_id: &NodeId,
-        signature_share: &ThresholdEcdsaSigShare,
-    ) {
-        self.signature_shares
-            .insert(*signer_id, signature_share.clone());
     }
 }
 

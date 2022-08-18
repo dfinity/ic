@@ -352,7 +352,7 @@ pub fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)>,
+    signatures: BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>,
 }
 
 impl EcdsaTranscriptBuilder for CachedBuilder {
@@ -369,8 +369,11 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
 }
 
 impl EcdsaSignatureBuilder for CachedBuilder {
-    fn get_completed_signatures(&self) -> Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)> {
-        self.signatures.clone()
+    fn get_completed_signature(
+        &self,
+        request_id: &ecdsa::RequestId,
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        self.signatures.get(request_id).cloned()
     }
 }
 
@@ -482,9 +485,9 @@ fn validate_new_signature_agreements(
     block_reader: &dyn EcdsaBlockReader,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
-) -> Result<Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)>, EcdsaValidationError> {
+) -> Result<BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError> {
     use PermanentError::*;
-    let mut new_signatures = Vec::new();
+    let mut new_signatures = BTreeMap::new();
     for (request_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.response_payload {
@@ -507,7 +510,7 @@ fn validate_new_signature_agreements(
                 crypto
                     .verify_combined_sig(&input, &signature)
                     .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                new_signatures.push((*request_id, signature.clone()));
+                new_signatures.insert(*request_id, signature.clone());
             }
         }
     }
@@ -810,31 +813,29 @@ mod test {
         .unwrap();
 
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
-        signature_builder.signatures.push((
+        signature_builder.signatures.insert(
             *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
-        ));
+        );
         update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             &mut ecdsa_payload,
-            no_op_logger(),
         );
 
         let prev_payload = ecdsa_payload.clone();
-        signature_builder.signatures.push((
+        signature_builder.signatures.insert(
             *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
-        ));
+        );
         update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             &mut ecdsa_payload,
-            no_op_logger(),
         );
 
         let res =

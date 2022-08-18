@@ -9,7 +9,7 @@ use crate::consensus::{
     crypto::ConsensusCrypto, metrics::EcdsaPayloadMetrics, pool_reader::PoolReader,
 };
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
-use ic_ic00_types::EcdsaKeyId;
+use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool, registry::RegistryClient,
 };
@@ -600,12 +600,7 @@ pub(crate) fn create_data_payload_helper(
         .sign_with_ecdsa_contexts;
 
     let new_signing_requests = get_signing_requests(height, &ecdsa_payload, all_signing_requests);
-    update_signature_agreements(
-        all_signing_requests,
-        signature_builder,
-        &mut ecdsa_payload,
-        log.clone(),
-    );
+    update_signature_agreements(all_signing_requests, signature_builder, &mut ecdsa_payload);
     update_ongoing_signatures(
         new_signing_requests,
         current_key_transcript.as_ref(),
@@ -859,7 +854,6 @@ pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     signature_builder: &dyn EcdsaSignatureBuilder,
     payload: &mut ecdsa::EcdsaPayload,
-    log: ReplicaLogger,
 ) {
     let all_random_ids = all_requests
         .iter()
@@ -878,37 +872,41 @@ pub(crate) fn update_signature_agreements(
         }
     }
     payload.signature_agreements = new_agreements;
+
     // Then we collect new signatures into the signature_agreements
-    for (request_id, signature) in signature_builder.get_completed_signatures() {
-        if payload.ongoing_signatures.remove(&request_id).is_none() {
-            warn!(
-                log,
-                "ECDSA signing request {:?} is not found in payload but we have a signature for it",
-                request_id
-            );
-        } else if let Some(&(callback_id, context)) =
-            all_random_ids.get(&request_id.pseudo_random_id)
-        {
-            use ic_ic00_types::{Payload, SignWithECDSAReply};
-            let response = ic_types::messages::Response {
-                originator: context.request.sender,
-                respondent: ic_types::CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                // Execution is responsible for burning the appropriate cycles
-                // before pushing the new context, so any remaining cycles can
-                // be refunded to the canister.
-                refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Data(
-                    SignWithECDSAReply {
-                        signature: signature.signature.clone(),
-                    }
-                    .encode(),
-                ),
-            };
-            payload
-                .signature_agreements
-                .insert(request_id, ecdsa::CompletedSignature::Unreported(response));
-        }
+    let mut completed = BTreeMap::new();
+    for request_id in payload.ongoing_signatures.keys() {
+        let (callback_id, context) = match all_random_ids.get(&request_id.pseudo_random_id) {
+            Some((callback_id, context)) => (callback_id, context),
+            None => continue,
+        };
+
+        let signature = match signature_builder.get_completed_signature(request_id) {
+            Some(signature) => signature,
+            None => continue,
+        };
+
+        let response = ic_types::messages::Response {
+            originator: context.request.sender,
+            respondent: ic_types::CanisterId::ic_00(),
+            originator_reply_callback: **callback_id,
+            // Execution is responsible for burning the appropriate cycles
+            // before pushing the new context, so any remaining cycles can
+            // be refunded to the canister.
+            refund: context.request.payment,
+            response_payload: ic_types::messages::Payload::Data(
+                SignWithECDSAReply {
+                    signature: signature.signature.clone(),
+                }
+                .encode(),
+            ),
+        };
+        completed.insert(*request_id, ecdsa::CompletedSignature::Unreported(response));
+    }
+
+    for (request_id, signature) in completed {
+        payload.ongoing_signatures.remove(&request_id);
+        payload.signature_agreements.insert(request_id, signature);
     }
 }
 
@@ -2382,12 +2380,7 @@ mod tests {
         let signature_builder = TestEcdsaSignatureBuilder::new();
         // old signature in the agreement AND in state is replaced by ReportedToExecution
         // old signature in the agreement but NOT in state is removed.
-        update_signature_agreements(
-            all_requests,
-            &signature_builder,
-            &mut ecdsa_payload,
-            no_op_logger(),
-        );
+        update_signature_agreements(all_requests, &signature_builder, &mut ecdsa_payload);
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
         assert_eq!(
             ecdsa_payload
