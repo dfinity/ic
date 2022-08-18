@@ -1657,23 +1657,32 @@ impl GovernanceProto {
     /// principals.
     pub fn remove_neuron_from_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
-        neuron_id: u64,
         neuron: &Neuron,
     ) {
         let principals = neuron.hot_keys.iter().chain(neuron.controller.iter());
 
         for principal in principals {
             Self::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                index, neuron_id, principal,
+                index, neuron, principal,
             );
         }
     }
 
     pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
-        neuron_id: u64,
+        neuron: &Neuron,
         principal: &PrincipalId,
     ) {
+        let neuron_id = match neuron.id.as_ref() {
+            Some(id) => id.id,
+            None => return,
+        };
+
+        // Don't remove the controller of the neuron from the principal-to-neuron-ids index
+        if neuron.controller.as_ref() == Some(principal) {
+            return;
+        }
+
         let neuron_ids = index.get_mut(principal);
         // Shouldn't fail if the index is broken, so just continue.
         if neuron_ids.is_none() {
@@ -2278,7 +2287,6 @@ impl Governance {
 
         GovernanceProto::remove_neuron_from_principal_to_neuron_ids_index(
             &mut self.principal_to_neuron_ids_index,
-            neuron_id,
             &neuron,
         );
 
@@ -2434,7 +2442,7 @@ impl Governance {
             neuron.created_timestamp_seconds = self.env.now();
             GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                 &mut self.principal_to_neuron_ids_index,
-                neuron_id.id,
+                neuron,
                 &old_controller,
             );
 
@@ -5653,7 +5661,7 @@ impl Governance {
                     let hot_key = k.hot_key_to_remove.as_ref().expect("Must have a hot key");
                     GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                         &mut self.principal_to_neuron_ids_index,
-                        id.id,
+                        neuron,
                         hot_key,
                     );
                 }
