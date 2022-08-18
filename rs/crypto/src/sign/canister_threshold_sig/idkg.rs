@@ -1,4 +1,5 @@
 use crate::sign::log_err;
+use crate::sign::log_ok_content;
 use crate::CryptoComponentFatClient;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
@@ -11,10 +12,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams,
+    IDkgTranscriptId, IDkgTranscriptParams,
 };
 use ic_types::NodeId;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 mod complaint;
 mod dealing;
@@ -38,7 +39,6 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_dealing",
-            crypto.registry_version => params.registry_version().get(),
             crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
@@ -56,6 +56,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.dkg_dealing => log_ok_content(&result),
         );
         result
     }
@@ -69,6 +70,9 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_dealing_public",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealer => format!("{:?}", dealer_id),
+            crypto.dkg_dealing => format!("{:?}", dealing),
         );
         debug!(logger;
             crypto.description => "start",
@@ -97,6 +101,9 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_dealing_private",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealer => format!("{:?}", dealer_id),
+            crypto.dkg_dealing => format!("{:?}", dealing),
         );
         debug!(logger;
             crypto.description => "start",
@@ -131,8 +138,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_transcript",
-            crypto.registry_version => params.registry_version().get(),
             crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("dealings: {{ {:?} }}", dealings.keys()),
         );
         debug!(logger;
             crypto.description => "start",
@@ -149,6 +156,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.dkg_transcript => log_ok_content(&result),
         );
         result
     }
@@ -161,6 +169,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_transcript",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_transcript => format!("{:?}", transcript),
         );
         debug!(logger;
             crypto.description => "start",
@@ -188,6 +198,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "load_transcript",
+            crypto.dkg_transcript => format!("{:?}", transcript),
         );
         debug!(logger;
             crypto.description => "start",
@@ -208,6 +219,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.complaint => if let Ok(ref content) = result {
+                Some(format!("{:?}", content))
+            } else {
+                None
+            },
         );
         result
     }
@@ -221,6 +237,9 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_complaint",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.complainer => format!("{:?}", complainer_id),
+            crypto.complaint => format!("{:?}", complaint),
         );
         debug!(logger;
             crypto.description => "start",
@@ -255,6 +274,9 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "open_transcript",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.complainer => format!("{:?}", complainer_id),
+            crypto.complaint => format!("{:?}", complaint),
         );
         debug!(logger;
             crypto.description => "start",
@@ -277,6 +299,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.opening => log_ok_content(&result),
         );
         result
     }
@@ -291,6 +314,10 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_opening",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.opener => format!("{:?}", opener),
+            crypto.opening => format!("{:?}", opening),
+            crypto.complaint => format!("{:?}", complaint),
         );
         debug!(logger;
             crypto.description => "start",
@@ -318,6 +345,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "load_transcript_with_openings",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.opening => format!("{:?}", openings),
         );
         debug!(logger;
             crypto.description => "start",
@@ -347,9 +376,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
+        let transcript_ids: BTreeSet<IDkgTranscriptId> = active_transcripts
+            .iter()
+            .map(|transcript| transcript.transcript_id)
+            .collect();
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "retain_active_transcripts",
+            crypto.dkg_transcript => format!("{:?}", transcript_ids),
         );
         debug!(logger;
             crypto.description => "start",
@@ -363,8 +397,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         );
         debug!(logger;
             crypto.description => "end",
-            crypto.is_ok => true,
-            crypto.error => "none".to_string(),
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
         );
         result
     }

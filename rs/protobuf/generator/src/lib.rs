@@ -105,7 +105,16 @@ fn build_log_proto(def: &Path, out: &Path) {
         dkg_transcript,
         allowed_tls_clients,
         tls_server,
-        dkg_epoch
+        dkg_epoch,
+        complainer,
+        complaint,
+        opener,
+        opening,
+        transcript_id,
+        signer,
+        signature,
+        signature_shares,
+        signature_inputs
     );
 
     add_log_proto_derives!(

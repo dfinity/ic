@@ -5,7 +5,7 @@ Folder structure:
 - `def/` contains protobuf message definitions;
 - `gen/` contains rust code generated from protobuf messages;
 - `src/` exports generated protobuf Rust structs;
-- `build.rs` controls code generation (i.e. transforms def/ => gen/).
+- `generator/` controls code generation (i.e. transforms def/ => gen/).
 
 ## Generation of Rust files
 
