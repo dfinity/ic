@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/constants",
     "//rs/crypto",
     "//rs/crypto/sha",
@@ -12,10 +13,31 @@ DEPENDENCIES = [
     "@crate_index//:hex",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/test_utilities",
+    "@crate_index//:assert_matches",
+    "@crate_index//:base64",
+    "@crate_index//:maplit",
+]
+
 rust_library(
     name = "validator",
     srcs = glob(["src/**"]),
     crate_name = "ic_validator",
     edition = "2018",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "validator_test",
+    crate = ":validator",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "ingress_validation_test",
+    srcs = ["tests/ingress_validation.rs"],
+    edition = "2018",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":validator"],
 )
