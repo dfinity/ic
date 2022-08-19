@@ -577,7 +577,7 @@ impl CanisterManager {
         context: InstallCodeContext,
         message: RequestOrIngress,
         state: &mut ReplicatedState,
-        execution_parameters: ExecutionParameters,
+        mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> (
@@ -597,6 +597,11 @@ impl CanisterManager {
                 );
             }
             Some(canister) => canister,
+        };
+        execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
+        execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => bytes,
+            MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
         };
         let dts_result = self.install_code_dts(
             context,
@@ -659,7 +664,7 @@ impl CanisterManager {
         canister_layout_path: PathBuf,
         compute_allocation_used: u64,
         network_topology: &NetworkTopology,
-        mut execution_parameters: ExecutionParameters,
+        execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
         subnet_size: usize,
@@ -728,17 +733,11 @@ impl CanisterManager {
         // All validation checks have passed. Reserve cycles on the old canister
         // for executing the various hooks such as `start`, `pre_upgrade`,
         // `post_upgrade`.
-        let memory_usage = canister.memory_usage(self.config.own_subnet_type);
-        let compute_allocation = canister.scheduler_state.compute_allocation;
-        if let MemoryAllocation::Reserved(bytes) = canister.memory_allocation() {
-            execution_parameters.canister_memory_limit = bytes;
-        }
-        execution_parameters.compute_allocation = compute_allocation;
-
+        let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
         if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
             &mut canister.system_state,
             memory_usage,
-            compute_allocation,
+            execution_parameters.compute_allocation,
             message_instruction_limit,
             subnet_size,
         ) {
