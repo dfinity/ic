@@ -1049,7 +1049,7 @@ fn parse_initial_ecdsa_config_options(
                         let subnet_id = btree
                             .get("subnet_id")
                             .map(|x| Some(PrincipalId::from_str(x).unwrap()))
-                            .unwrap_or_default();
+                            .expect("subnet_id is required in EcdsaKeyRequest.");
 
                         EcdsaKeyRequest { key_id, subnet_id }
                     })

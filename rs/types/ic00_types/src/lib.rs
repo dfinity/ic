@@ -880,14 +880,14 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 /// Argument of the compute_initial_ecdsa_dealings API.
 /// `(record {
 ///     key_id: ecdsa_key_id;
-///     subnet_id: opt principal;
+///     subnet_id: principal;
 ///     nodes: vec principal;
 ///     registry_version: nat;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
     pub key_id: EcdsaKeyId,
-    pub subnet_id: Option<SubnetId>,
+    pub subnet_id: SubnetId,
     nodes: Vec<PrincipalId>,
     registry_version: u64,
 }
@@ -895,7 +895,7 @@ pub struct ComputeInitialEcdsaDealingsArgs {
 impl ComputeInitialEcdsaDealingsArgs {
     pub fn new(
         key_id: EcdsaKeyId,
-        subnet_id: Option<SubnetId>,
+        subnet_id: SubnetId,
         nodes: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Self {

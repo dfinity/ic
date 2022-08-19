@@ -138,7 +138,7 @@ pub(super) fn resolve_destination(
             route_ecdsa_message(
                 &args.key_id,
                 network_topology,
-                &args.subnet_id,
+                &Some(args.subnet_id),
                 EcdsaSubnetKind::OnlyHoldsKey,
             )
         }
@@ -243,14 +243,17 @@ mod tests {
     fn network_with_ecdsa_subnets() -> NetworkTopology {
         let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
+            // Only subnet 0 can sign with the first key.
             ecdsa_signing_subnets: btreemap! {
                 key_id1() => vec![subnet_id0],
             },
             subnets: btreemap! {
+                // Subnet 0 holds both keys
                 subnet_id0 => SubnetTopology {
                     ecdsa_keys_held: vec![key_id1(), key_id2()].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
+                // Subnet 1 holds only the first key.
                 subnet_test_id(1) => SubnetTopology {
                     ecdsa_keys_held: vec![key_id1()].into_iter().collect(),
                     ..SubnetTopology::default()
@@ -265,10 +268,7 @@ mod tests {
         NetworkTopology::default()
     }
 
-    fn compute_initial_ecdsa_dealings_req(
-        key_id: EcdsaKeyId,
-        subnet_id: Option<SubnetId>,
-    ) -> Vec<u8> {
+    fn compute_initial_ecdsa_dealings_req(key_id: EcdsaKeyId, subnet_id: SubnetId) -> Vec<u8> {
         let args = ComputeInitialEcdsaDealingsArgs::new(
             key_id,
             subnet_id,
@@ -302,42 +302,45 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), None),
+                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(1)),
                 subnet_test_id(2),
             )
             .unwrap(),
-            subnet_test_id(0)
+            subnet_test_id(1)
         )
     }
 
     #[test]
-    fn resolve_compute_initial_ecdsa_dealings_error() {
+    fn resolve_compute_initial_ecdsa_dealings_key_not_held_error() {
         assert_matches!(
             resolve_destination(
-                &network_without_ecdsa_subnet(),
+                &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), None),
+                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(2)),
                 subnet_test_id(2),
             )
             .unwrap_err(),
             ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("No subnet was found with requested ECDSA key: {}", key_id1())
+                format!("Requested ECDSA key {} on subnet {}, subnet has keys: {{}}", key_id1(), subnet_test_id(2))
             )
         )
     }
 
     #[test]
-    fn resolve_compute_initial_ecdsa_dealings_with_subnet() {
-        assert_eq!(
+    fn resolve_compute_initial_ecdsa_dealings_unknown_subnet_error() {
+        assert_matches!(
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), Some(subnet_test_id(1))),
+                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(3)),
                 subnet_test_id(2),
             )
-            .unwrap(),
-            subnet_test_id(1)
+            .unwrap_err(),
+            ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+                err,
+                format!("Requested ECDSA key {} from unknown subnet {}", key_id1(), subnet_test_id(3))
+            )
         )
     }
 
@@ -348,7 +351,7 @@ mod tests {
                     &network_with_ecdsa_subnets(),
                     &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
                     // Subnet 2 doesn't have the requested key.
-                    &compute_initial_ecdsa_dealings_req(key_id1(), Some(subnet_test_id(2))),
+                    &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(2)),
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
@@ -369,7 +372,7 @@ mod tests {
                     &network_with_ecdsa_subnets(),
                     &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
                     // Subnet 3 doesn't exist
-                    &compute_initial_ecdsa_dealings_req(key_id1(), Some(subnet_test_id(3))),
+                    &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(3)),
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
@@ -433,7 +436,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id2(), None),
+                &compute_initial_ecdsa_dealings_req(key_id2(), subnet_test_id(0)),
                 subnet_test_id(1),
             )
             .unwrap(),

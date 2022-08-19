@@ -1585,7 +1585,7 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("secp256k1"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
@@ -1615,7 +1615,7 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("secp256k1"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
@@ -1650,7 +1650,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("foo"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
