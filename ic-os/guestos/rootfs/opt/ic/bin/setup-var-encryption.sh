@@ -24,4 +24,6 @@ else
     cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
     echo "Populating /var filesystem in ${VAR_PARTITION} on first boot."
     mkfs.ext4 -F /dev/mapper/var_crypt -d /var
+    # Fix root inode (mkfs fails to set correct security context).
+    echo "ea_set / security.selinux system_u:object_r:var_t:s0\\000" | debugfs -w /dev/mapper/var_crypt
 fi
