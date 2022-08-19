@@ -215,7 +215,7 @@ pub fn prove_sharing(
     // Hash of instance: x = oracle(instance)
     let x = instance.hash_to_scalar();
 
-    let xpow = xpowers(&x, witness.scalars_s.len());
+    let xpow = Scalar::xpowers(&x, witness.scalars_s.len());
 
     // First move (prover)
     // alpha, rho <- random Z_p
@@ -227,13 +227,7 @@ pub fn prove_sharing(
     let ff = (instance.g1_gen * rho).to_affine();
     let aa = (instance.g2_gen * alpha).to_affine();
 
-    let pk_terms = instance
-        .public_keys
-        .iter()
-        .map(G1Projective::from)
-        .zip(xpow.clone())
-        .collect::<Vec<_>>();
-    let pk_mul_xi = G1Projective::muln_vartime(&pk_terms);
+    let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
     let yy = G1Projective::mul2(&pk_mul_xi, &rho, &instance.g1_gen.into(), &alpha).to_affine();
 
     let first_move = FirstMoveSharing {
@@ -268,18 +262,6 @@ pub fn prove_sharing(
     }
 }
 
-fn xpowers(x: &Scalar, cnt: usize) -> Vec<Scalar> {
-    let mut r = Vec::with_capacity(cnt);
-
-    let mut xpow = Scalar::one();
-    for _ in 0..cnt {
-        xpow *= x;
-        r.push(xpow);
-    }
-
-    r
-}
-
 /// Verify a proof of correct sharing
 ///
 /// See section 6.4 of <https://eprint.iacr.org/2021/339.pdf>
@@ -309,7 +291,7 @@ pub fn verify_sharing(
     // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
     // == g_2^z_alpha
 
-    let xpow = xpowers(&x, instance.public_keys.len());
+    let xpow = Scalar::xpowers(&x, instance.public_keys.len());
 
     let mut xpow_ik = Vec::with_capacity(instance.public_keys.len());
     for i in 1..=instance.public_keys.len() {
@@ -337,22 +319,10 @@ pub fn verify_sharing(
     // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
     // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
 
-    let cc_terms = instance
-        .combined_ciphertexts
-        .iter()
-        .map(G1Projective::from)
-        .zip(xpow.clone())
-        .collect::<Vec<_>>();
-    let cc_mul_xi = G1Projective::muln_vartime(&cc_terms);
+    let cc_mul_xi = G1Projective::muln_affine_vartime(&instance.combined_ciphertexts, &xpow);
     let lhs = cc_mul_xi * x_challenge + nizk.yy;
 
-    let pk_terms = instance
-        .public_keys
-        .iter()
-        .map(G1Projective::from)
-        .zip(xpow)
-        .collect::<Vec<_>>();
-    let pk_mul_xi = G1Projective::muln_vartime(&pk_terms);
+    let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
     let rhs = G1Projective::mul2(
         &pk_mul_xi,
         &nizk.z_r,

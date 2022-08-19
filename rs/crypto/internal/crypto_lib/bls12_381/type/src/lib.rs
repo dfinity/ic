@@ -107,12 +107,30 @@ impl Scalar {
     }
 
     /// Create a scalar from a small integer value
+    pub fn from_usize(v: usize) -> Self {
+        Self::from_u64(v as u64)
+    }
+
+    /// Create a scalar from a small integer value
     pub fn from_isize(v: isize) -> Self {
         if v < 0 {
             Self::from_u64((v as i64).abs() as u64).neg()
         } else {
             Self::from_u64(v.abs() as u64)
         }
+    }
+
+    /// Return `cnt` consecutive powers of `x`
+    pub fn xpowers(x: &Self, cnt: usize) -> Vec<Self> {
+        let mut r = Vec::with_capacity(cnt);
+
+        let mut xpow = Self::one();
+        for _ in 0..cnt {
+            xpow *= x;
+            r.push(xpow);
+        }
+
+        r
     }
 
     /// Deterministically hash an input onto a BLS12-381 scalar
@@ -240,6 +258,32 @@ impl Scalar {
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
     /// This should not be used for new code but only for compatability in
+    /// situations where MIRACL's BIG::randomnum was previously used with
+    /// a limited range
+    pub fn miracl_random_within_range_using_miracl_rand(
+        rng: &mut impl miracl_core_bls12381::rand::RAND,
+        n: u64,
+    ) -> Self {
+        let n_bits = 64 - n.leading_zeros();
+        let mut d = 0u128;
+        let mut j = 0;
+        let mut r: u8 = 0;
+        for _ in 0..2 * n_bits {
+            r = if j == 0 { rng.getbyte() } else { r >> 1 };
+
+            let b = (r & 1) as u128;
+            d <<= 1;
+            d += b;
+            j = (j + 1) % 8;
+        }
+
+        d %= n as u128; // after this operation, d is < u64::MAX
+        Self::from_u64(d as u64) // so this cast is safe
+    }
+
+    /// Randomly generate a scalar in a way that is compatible with MIRACL
+    ///
+    /// This should not be used for new code but only for compatability in
     /// situations where MIRACL's BIG::randomnum was previously used
     pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         use rand::Rng;
@@ -306,6 +350,38 @@ impl Scalar {
         }
     }
 
+    /// Return a random scalar within a small range
+    ///
+    /// Returns a scalar in range [0,n) using rejection sampling.
+    pub fn random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
+        if n <= 1 {
+            return Self::zero();
+        }
+
+        let t_bits = std::mem::size_of::<u64>() * 8;
+        let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
+        let n_bytes = (n_bits + 7) / 8;
+        let n_mask = if n_bits % 8 == 0 {
+            0xFF
+        } else {
+            0xFF >> (8 - n_bits % 8)
+        };
+
+        let n = Scalar::from_u64(n);
+
+        loop {
+            let mut buf = [0u8; Self::BYTES];
+            rng.fill_bytes(&mut buf[Self::BYTES - n_bytes..]);
+            buf[Self::BYTES - n_bytes] &= n_mask;
+
+            if let Ok(s) = Self::deserialize(&buf) {
+                if s < n {
+                    return s;
+                }
+            }
+        }
+    }
+
     /// Decode a scalar as a big-endian byte string, accepting out of range elements
     ///
     /// Out of range elements are reduced modulo the group order
@@ -320,8 +396,9 @@ impl Scalar {
     }
 
     /// Deserialize a scalar from a big-endian byte string
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidScalar> {
+    pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidScalar> {
         let mut bytes: [u8; Self::BYTES] = bytes
+            .as_ref()
             .try_into()
             .map_err(|_| PairingInvalidScalar::InvalidScalar)?;
         bytes.reverse();
@@ -329,11 +406,30 @@ impl Scalar {
         ctoption_ok_or!(scalar, PairingInvalidScalar::InvalidScalar)
     }
 
+    /// Deserialize multiple scalars
+    ///
+    /// This function returns Ok only if all of the provided inputs
+    /// represent a valid scalar.
+    pub fn batch_deserialize<B: AsRef<[u8]>>(
+        inputs: &[B],
+    ) -> Result<Vec<Self>, PairingInvalidScalar> {
+        let mut r = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            r.push(Self::deserialize(input)?);
+        }
+        Ok(r)
+    }
+
     /// Serialize the scalar to a big-endian byte string
     pub fn serialize(&self) -> [u8; Self::BYTES] {
         let mut bytes = self.value.to_bytes();
         bytes.reverse();
         bytes
+    }
+
+    /// Serialize the scalar to a big-endian byte string in some specific type
+    pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+        T::from(self.serialize())
     }
 
     /// Multiscalar multiplication
@@ -586,12 +682,25 @@ macro_rules! define_affine_and_projective_types {
             ///
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
-                let bytes : &[u8; Self::BYTES] = bytes
+            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+                let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
                 let pt = bls12_381::$affine::from_compressed(bytes);
                 ctoption_ok_or!(pt, PairingInvalidPoint::InvalidPoint)
+            }
+
+            /// Deserialize multiple point (compressed format only)
+            ///
+            /// This version verifies that the decoded point is within the prime order
+            /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
+            /// if all of the provided bytes represent a valid point.
+            pub fn batch_deserialize<B: AsRef<[u8]>>(inputs: &[B]) -> Result<Vec<Self>, PairingInvalidPoint> {
+                let mut r = Vec::with_capacity(inputs.len());
+                for input in inputs {
+                    r.push(Self::deserialize(input)?);
+                }
+                Ok(r)
             }
 
             /// Deserialize a point (compressed format only), trusted bytes edition
@@ -600,8 +709,8 @@ macro_rules! define_affine_and_projective_types {
             /// create a point which is not on the curve. However it is possible
             /// using this function to create a point which is not within the
             /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
-                let bytes : &[u8; Self::BYTES] = bytes
+            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+                let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
                 let pt = bls12_381::$affine::from_compressed_unchecked(bytes);
@@ -611,6 +720,11 @@ macro_rules! define_affine_and_projective_types {
             /// Serialize this point in compressed format
             pub fn serialize(&self) -> [u8; Self::BYTES] {
                 self.value.to_compressed()
+            }
+
+            /// Serialize a point in compressed format in some specific type
+            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+                T::from(self.serialize())
             }
 
             /// Return true if this is the identity element
@@ -688,9 +802,14 @@ macro_rules! define_affine_and_projective_types {
             ///
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
+            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
                 let pt = $affine::deserialize(bytes)?;
                 Ok(pt.into())
+            }
+
+            /// Serialize a point in compressed format in some specific type
+            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+                T::from(self.serialize())
             }
 
             /// Deserialize a point (compressed format only), trusted bytes edition
@@ -699,7 +818,7 @@ macro_rules! define_affine_and_projective_types {
             /// create a point which is not on the curve. However it is possible
             /// using this function to create a point which is not within the
             /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
+            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
                 let pt = $affine::deserialize_unchecked(bytes)?;
                 Ok(pt.into())
             }
@@ -945,12 +1064,39 @@ macro_rules! declare_muln_vartime_impl_for {
     };
 }
 
+macro_rules! declare_muln_vartime_affine_impl_for {
+    ( $proj:ty, $affine:ty ) => {
+        impl $proj {
+            /// Multiscalar multiplication
+            ///
+            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+            ///
+            /// Returns the identity element if terms is empty.
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn muln_affine_vartime(points: &[$affine], scalars: &[Scalar]) -> Self {
+                let count = std::cmp::min(points.len(), scalars.len());
+                let mut terms = Vec::with_capacity(count);
+
+                for i in 0..count {
+                    terms.push((<$proj>::from(points[i]), scalars[i]));
+                }
+
+                Self::muln_vartime(&terms)
+            }
+        }
+    };
+}
+
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
 declare_mixed_addition_ops_for!(G1Projective, G1Affine);
 declare_mul_scalar_ops_for!(G1Projective);
 declare_mul2_impl_for!(G1Projective, 2);
 declare_muln_vartime_impl_for!(G1Projective, 4);
+declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
 

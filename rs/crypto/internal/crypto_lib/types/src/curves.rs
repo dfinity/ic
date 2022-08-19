@@ -48,6 +48,17 @@ pub mod bls12_381 {
     }
     impl DefaultIsZeroes for Fr {}
 
+    impl AsRef<[u8]> for Fr {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
+    }
+    impl From<[u8; Fr::SIZE]> for Fr {
+        fn from(b: [u8; Fr::SIZE]) -> Self {
+            Self(b)
+        }
+    }
+
     /// A point in the group "G1" in serialised, library independent form.
     ///
     /// # Content
@@ -111,6 +122,11 @@ pub mod bls12_381 {
         }
     }
     impl DefaultIsZeroes for G1 {}
+    impl From<[u8; G1::SIZE]> for G1 {
+        fn from(b: [u8; G1::SIZE]) -> Self {
+            Self(b)
+        }
+    }
 
     /// A point in the group "G2".
     ///
@@ -181,6 +197,11 @@ pub mod bls12_381 {
         }
     }
     impl DefaultIsZeroes for G2 {}
+    impl From<[u8; G2::SIZE]> for G2 {
+        fn from(b: [u8; G2::SIZE]) -> Self {
+            Self(b)
+        }
+    }
 }
 
 #[cfg(test)]

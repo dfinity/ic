@@ -10,9 +10,9 @@ use crate::api::ni_dkg_errors::{
     DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
 };
 use conversions::{
-    chunking_proof_from_miracl, chunking_proof_into_miracl, ciphertext_from_miracl,
-    ciphertext_into_miracl, epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
-    public_coefficients_to_miracl, public_key_from_miracl, secret_key_from_miracl, Tau,
+    ciphertext_from_miracl, ciphertext_into_miracl, epoch_from_miracl_secret_key,
+    plaintext_from_bytes, plaintext_to_bytes, public_coefficients_to_miracl,
+    public_key_from_miracl, secret_key_from_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
@@ -187,12 +187,11 @@ pub fn encrypt_and_prove(
     {
         assert_eq!(
             crypto::verify_chunking(
-                &crypto::ChunkingInstance {
-                    g1_gen: miracl::ECP::generator(),
-                    public_keys: public_keys.clone(),
-                    ciphertext_chunks: ciphertext.cc.clone(),
-                    randomizers_r: ciphertext.rr.clone(),
-                },
+                &crypto::ChunkingInstance::from_miracl(
+                    public_keys.clone(),
+                    ciphertext.cc.clone(),
+                    ciphertext.rr.clone(),
+                ),
                 &chunking_proof,
             ),
             Ok(()),
@@ -221,7 +220,7 @@ pub fn encrypt_and_prove(
 
     Ok((
         ciphertext_from_miracl(&ciphertext),
-        chunking_proof_from_miracl(&chunking_proof),
+        chunking_proof.serialize(),
         sharing_proof.serialize(),
     ))
 }
@@ -279,22 +278,25 @@ fn prove_chunking(
     toxic_waste: &crypto::ToxicWaste,
     rng: &mut crypto::RAND_ChaCha20,
 ) -> crypto::ProofChunking {
-    let big_plaintext_chunks: Vec<Vec<miracl::BIG>> = plaintext_chunks
+    let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
         .iter()
-        .map(|chunks| chunks.iter().copied().map(miracl::BIG::new_int).collect())
+        .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
         .collect();
 
-    let chunking_instance = crypto::ChunkingInstance {
-        g1_gen: miracl::ECP::generator(),
-        public_keys: receiver_fs_public_keys.to_vec(),
-        ciphertext_chunks: ciphertext.cc.clone(),
-        randomizers_r: ciphertext.rr.clone(),
-    };
+    let chunking_instance = crypto::ChunkingInstance::from_miracl(
+        receiver_fs_public_keys.to_vec(),
+        ciphertext.cc.clone(),
+        ciphertext.rr.clone(),
+    );
 
-    let chunking_witness = crypto::ChunkingWitness {
-        scalars_r: toxic_waste.spec_r.clone(),
-        scalars_s: big_plaintext_chunks,
-    };
+    let chunking_witness = crypto::ChunkingWitness::new(
+        toxic_waste
+            .spec_r
+            .iter()
+            .map(Scalar::from_miracl)
+            .collect::<Vec<_>>(),
+        big_plaintext_chunks,
+    );
 
     crypto::prove_chunking(&chunking_instance, &chunking_witness, rng)
 }
@@ -410,7 +412,7 @@ pub fn verify_zk_proofs(
             })
         })?;
 
-    let chunking_proof = chunking_proof_into_miracl(chunking_proof).map_err(|_| {
+    let chunking_proof = crypto::ProofChunking::deserialize(chunking_proof).ok_or_else(|| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: "Could not parse proof of correct encryption".to_string(),
         })
@@ -418,12 +420,11 @@ pub fn verify_zk_proofs(
 
     // Verify proof
     crypto::verify_chunking(
-        &crypto::ChunkingInstance {
-            g1_gen: miracl::ECP::generator(),
-            public_keys: public_keys.clone(),
-            ciphertext_chunks: ciphertext.cc.clone(),
-            randomizers_r: ciphertext.rr.clone(),
-        },
+        &crypto::ChunkingInstance::from_miracl(
+            public_keys.clone(),
+            ciphertext.cc.clone(),
+            ciphertext.rr.clone(),
+        ),
         &chunking_proof,
     )
     .map_err(|_| {

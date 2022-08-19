@@ -1,15 +1,12 @@
 //! Type conversion for using the Miracl-based FS library.
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::ProofChunking;
-use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_from_bytes, miracl_fr_to_bytes, miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked,
-    miracl_g1_to_bytes, miracl_g2_from_bytes, miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
+    miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes, miracl_g2_from_bytes,
+    miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey,
     NUM_CHUNKS,
@@ -285,81 +282,4 @@ pub fn public_coefficients_to_miracl(
         .iter()
         .map(|public_key| miracl_g2_from_bytes(&public_key.0).map_err(|_| ()))
         .collect()
-}
-
-/// Serialises a chunking proof from the miracl-compatible form to the stanard
-/// form.
-///
-/// # Panics
-/// This will panic if the miracl proof is malformed.  Given that the miracl
-/// representation is created internally, such an error can only be caused by an
-/// error in implementation.
-pub fn chunking_proof_from_miracl(chunking_proof: &ProofChunking) -> ZKProofDec {
-    ZKProofDec {
-        first_move_y0: miracl_g1_to_bytes(&chunking_proof.y0),
-        first_move_b: chunking_proof
-            .bb
-            .iter()
-            .map(miracl_g1_to_bytes)
-            .collect::<ArrayVec<_>>()
-            .into_inner()
-            .expect("Wrong size of first_move_b==bb in chunking proof"),
-        first_move_c: chunking_proof
-            .cc
-            .iter()
-            .map(miracl_g1_to_bytes)
-            .collect::<ArrayVec<_>>()
-            .into_inner()
-            .expect("Wrong size of first_move_c==cc in chunking proof"),
-        second_move_d: chunking_proof.dd.iter().map(miracl_g1_to_bytes).collect(),
-        second_move_y: miracl_g1_to_bytes(&chunking_proof.yy),
-        response_z_r: chunking_proof.z_r.iter().map(miracl_fr_to_bytes).collect(),
-        response_z_s: chunking_proof
-            .z_s
-            .iter()
-            .map(miracl_fr_to_bytes)
-            .collect::<ArrayVec<_>>()
-            .into_inner()
-            .expect("Wrong size of response_z_s==z_s in chunking proof"),
-        response_z_b: miracl_fr_to_bytes(&chunking_proof.z_beta),
-    }
-}
-
-/// Parses a chunking proof from the standard form into a miracl-compatible
-/// type.
-///
-/// # Errors
-/// This will return an error if any of the group elements is invalid.
-pub fn chunking_proof_into_miracl(proof: &ZKProofDec) -> Result<ProofChunking, ()> {
-    // TODO: return type
-    let chunking_proof = ProofChunking {
-        y0: miracl_g1_from_bytes(proof.first_move_y0.as_bytes())?,
-        bb: proof.first_move_b[..]
-            .iter()
-            .map(|g1| miracl_g1_from_bytes(g1.as_bytes()))
-            .collect::<Result<_, _>>()?,
-        cc: proof.first_move_c[..]
-            .iter()
-            .map(|g1| miracl_g1_from_bytes(g1.as_bytes()))
-            .collect::<Result<_, _>>()?,
-        dd: proof.second_move_d[..]
-            .iter()
-            .map(|g1| miracl_g1_from_bytes(g1.as_bytes()))
-            .collect::<Result<_, _>>()?,
-        yy: miracl_g1_from_bytes(proof.second_move_y.as_bytes())?,
-        z_r: proof
-            .response_z_r
-            .iter()
-            .map(|fr| miracl_fr_from_bytes(fr.as_bytes()))
-            .collect::<Result<_, _>>()?,
-        z_s: proof.response_z_s[..]
-            .iter()
-            .map(|fr| miracl_fr_from_bytes(fr.as_bytes()))
-            .collect::<Result<_, _>>()?,
-        z_beta: miracl_fr_from_bytes(proof.response_z_b.as_bytes())?,
-    };
-    if chunking_proof.dd.len() != chunking_proof.z_r.len() + 1 {
-        return Err(());
-    }
-    Ok(chunking_proof)
 }

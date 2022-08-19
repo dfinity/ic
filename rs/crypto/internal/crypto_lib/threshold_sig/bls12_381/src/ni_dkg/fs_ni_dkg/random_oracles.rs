@@ -3,9 +3,7 @@ use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
 use std::collections::BTreeMap;
 
-use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
 
 const DOMAIN_RO_INT: &str = "ic-random-oracle-integer";
 const DOMAIN_RO_STRING: &str = "ic-random-oracle-string";
@@ -63,18 +61,6 @@ impl UniqueHash for Vec<u8> {
     }
 }
 
-/// Computes the unique digest of an element in the scalar field of the
-/// curve BLS12_381.
-///
-/// The scalar is reduced modulo the order of the group and serialized in 32
-/// bytes using big-endian order. The digest is the hash of the domain separator
-/// appended with the serialization of the scalar.
-impl UniqueHash for BIG {
-    fn unique_hash(&self) -> [u8; 32] {
-        Scalar::from_miracl(self).unique_hash()
-    }
-}
-
 /// Computes the unique digest of a group element in G1 of the BLS12_381 curve.
 ///
 /// The group element is serialized according to the IETF draft of BLS signatures: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
@@ -83,17 +69,6 @@ impl UniqueHash for BIG {
 impl UniqueHash for ECP {
     fn unique_hash(&self) -> [u8; 32] {
         G1Affine::from_miracl(self).unique_hash()
-    }
-}
-
-/// Computes the unique digest of a group element in G2 of the BLS12_381 curve.
-///
-/// The group element is serialized according to the IETF draft of BLS signatures: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
-/// The digest is the hash of the domain separator appended with the
-/// serialization of the group element.
-impl UniqueHash for ECP2 {
-    fn unique_hash(&self) -> [u8; 32] {
-        G2Affine::from_miracl(self).unique_hash()
     }
 }
 
