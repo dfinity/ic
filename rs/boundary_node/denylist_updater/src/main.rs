@@ -2,6 +2,7 @@ use std::{
     io::ErrorKind,
     net::SocketAddr,
     path::PathBuf,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -14,7 +15,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use clap::Parser;
+use clap::{ArgEnum, Parser};
 use futures::future::TryFutureExt;
 use mockall::automock;
 use nix::{
@@ -38,18 +39,27 @@ mod metrics;
 use metrics::{MetricParams, WithMetrics};
 
 mod decode;
-use decode::{Decode, Decoder};
+use decode::{Decode, Decoder, NopDecoder};
 
 const SERVICE_NAME: &str = "denylist-updater";
 
 const MINUTE: Duration = Duration::from_secs(60);
 
+#[derive(Clone, ArgEnum)]
+enum DecodeMode {
+    Nop,
+    Decrypt,
+}
+
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
 #[clap(author = "Boundary Node Team <boundary-nodes@dfinity.org>")]
 struct Cli {
-    #[clap(long, default_value = "http://localhost:8000/denylist.tar.gz")]
+    #[clap(long, default_value = "http://localhost:8000/denylist.json")]
     remote_url: String,
+
+    #[clap(long, arg_enum, default_value = "nop")]
+    decode_mode: DecodeMode,
 
     #[clap(long, default_value = "key.pem")]
     private_key_path: PathBuf,
@@ -87,9 +97,14 @@ async fn main() -> Result<(), Error> {
 
     let http_client = reqwest::Client::builder().build()?;
 
-    let private_key_pem = std::fs::read_to_string(cli.private_key_path)?;
-    let private_key = RsaPrivateKey::from_pkcs8_pem(&private_key_pem)?;
-    let decoder = Decoder::new(private_key);
+    let decoder: Arc<dyn Decode> = match cli.decode_mode {
+        DecodeMode::Nop => Arc::new(NopDecoder),
+        DecodeMode::Decrypt => {
+            let private_key_pem = std::fs::read_to_string(cli.private_key_path)?;
+            let private_key = RsaPrivateKey::from_pkcs8_pem(&private_key_pem)?;
+            Arc::new(Decoder::new(private_key))
+        }
+    };
 
     let remote_lister = RemoteLister::new(http_client, decoder, cli.remote_url.clone());
     let remote_lister = WithNormalize(remote_lister);
@@ -218,14 +233,14 @@ impl List for LocalLister {
     }
 }
 
-struct RemoteLister<D> {
+struct RemoteLister {
     http_client: reqwest::Client,
-    decoder: D,
+    decoder: Arc<dyn Decode>,
     remote_url: String,
 }
 
-impl<D: Decode> RemoteLister<D> {
-    fn new(http_client: reqwest::Client, decoder: D, remote_url: String) -> Self {
+impl RemoteLister {
+    fn new(http_client: reqwest::Client, decoder: Arc<dyn Decode>, remote_url: String) -> Self {
         Self {
             http_client,
             decoder,
@@ -235,7 +250,7 @@ impl<D: Decode> RemoteLister<D> {
 }
 
 #[async_trait]
-impl<D: Decode> List for RemoteLister<D> {
+impl List for RemoteLister {
     async fn list(&self) -> Result<Vec<Entry>, Error> {
         let request = self
             .http_client
