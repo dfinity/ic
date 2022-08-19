@@ -50,7 +50,15 @@ rust_library(
 rust_test(
     name = "execution_test",
     srcs = ["tests/execution_test.rs"],
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
     edition = "2018",
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
     deps = [
         ":state_machine_tests",
         "//rs/config",

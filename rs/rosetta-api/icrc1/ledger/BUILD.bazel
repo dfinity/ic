@@ -78,6 +78,8 @@ rust_test(
     data = [
         ":block.cddl",
         ":ledger_canister.wasm",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm",
     ],
     edition = "2018",
@@ -85,6 +87,8 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister.wasm)",
         "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister.wasm)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
         ":ledger",
