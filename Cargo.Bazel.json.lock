@@ -1,5 +1,5 @@
 {
-  "checksum": "e74d81b69198ca242b7b7c8fddefe0155c9a0dfe8134b9b602c6b0c902165786",
+  "checksum": "3449d65ca19c419f345f9a3f8f0832e1a0ac4afb0fa912928b60bb1cd859e461",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8608,7 +8608,7 @@
               "target": "oorandom"
             },
             {
-              "id": "plotters 0.3.2",
+              "id": "plotters 0.3.3",
               "target": "plotters"
             },
             {
@@ -29038,13 +29038,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "plotters 0.3.2": {
+    "plotters 0.3.3": {
       "name": "plotters",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/plotters/0.3.2/download",
-          "sha256": "9428003b84df1496fb9d6eeee9c5f8145cb41ca375eb0dad204328888832811f"
+          "url": "https://crates.io/api/v1/crates/plotters/0.3.3/download",
+          "sha256": "716b4eeb6c4a1d3ecc956f75b43ec2e8e8ba80026413e70a3f41fd3313d3492b"
         }
       },
       "targets": [
@@ -29083,7 +29083,7 @@
               "target": "plotters_backend"
             },
             {
-              "id": "plotters-svg 0.3.2",
+              "id": "plotters-svg 0.3.3",
               "target": "plotters_svg"
             }
           ],
@@ -29100,8 +29100,8 @@
             ]
           }
         },
-        "edition": "2021",
-        "version": "0.3.2"
+        "edition": "2018",
+        "version": "0.3.3"
       },
       "license": "MIT"
     },
@@ -29138,13 +29138,13 @@
       },
       "license": "MIT"
     },
-    "plotters-svg 0.3.2": {
+    "plotters-svg 0.3.3": {
       "name": "plotters-svg",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/plotters-svg/0.3.2/download",
-          "sha256": "e0918736323d1baff32ee0eade54984f6f201ad7e97d5cfb5d6ab4a358529615"
+          "url": "https://crates.io/api/v1/crates/plotters-svg/0.3.3/download",
+          "sha256": "f9a81d2759aae1dae668f783c308bc5c8ebd191ff4184aaa1b37f65a6ae5a56f"
         }
       },
       "targets": [
@@ -29176,7 +29176,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.2"
+        "version": "0.3.3"
       },
       "license": "MIT"
     },

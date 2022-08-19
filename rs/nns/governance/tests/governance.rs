@@ -5725,7 +5725,11 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
 
 #[test]
 fn test_not_for_profit_neurons() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
+
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5795,7 +5799,10 @@ fn test_not_for_profit_neurons() {
 
 #[test]
 fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5866,7 +5873,10 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
 
 #[test]
 fn test_add_and_remove_hot_key() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5946,7 +5956,10 @@ fn test_add_and_remove_hot_key() {
 
 #[test]
 fn test_manage_and_reward_node_providers() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6292,7 +6305,10 @@ fn test_manage_and_reward_node_providers() {
 
 #[test]
 fn test_manage_and_reward_multiple_node_providers() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6667,7 +6683,10 @@ fn test_manage_and_reward_multiple_node_providers() {
 
 #[test]
 fn test_network_economics_proposal() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6735,7 +6754,10 @@ fn test_network_economics_proposal() {
 
 #[test]
 fn test_default_followees() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 

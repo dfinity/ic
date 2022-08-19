@@ -1,24 +1,46 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/monitoring/adapter_metrics",
+    "//rs/monitoring/logger",
+    "@crate_index//:futures",
+    "@crate_index//:libc",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:tokio",
+] + select({
+    "@rules_rust//rust/platform:linux": [
+        "@crate_index//:procfs",
+    ],
+    "//conditions:default": [],
+})
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "metrics",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_metrics",
     edition = "2018",
-    deps = [
-        "//rs/monitoring/adapter_metrics",
-        "@crate_index//:futures",
-        "@crate_index//:libc",
-        "@crate_index//:prometheus",
-        "@crate_index//:tokio",
-    ] + select({
-        "@rules_rust//rust/platform:linux": [
-            "@crate_index//:procfs",
-        ],
-        "//conditions:default": [],
-    }),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): add rust_test after unblocking ic-logger.
+rust_test(
+    name = "metrics_test",
+    aliases = ALIASES,
+    crate = ":metrics",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -1,7 +1,8 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -54,6 +55,29 @@ MACRO_DEPENDENCIES = [
 BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
 ]
+
+DEV_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/nns/governance/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:criterion",
+    "@crate_index//:futures",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:proptest",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-test",
+    "//rs/sns/swap/protobuf_generator:lib",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+        "//rs/types/types",
+    ],
+})
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -153,5 +177,44 @@ generated_files_check(
         "//rs/nns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+rust_test(
+    name = "governance_test",
+    aliases = ALIASES,
+    crate = ":governance",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "governance_integration_test",
+    srcs = glob(
+        ["tests/*.rs"],
+        exclude = [
+            # fake.rs is a module dependency, not a test
+            "tests/fake.rs",
+            # check generated files is handed in the generated_files_check rule above
+            "tests/check_generated_files.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    data = ["tests/neurons.csv"],
+    edition = "2018",
+    env = {
+        "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
+    },
+    extra_srcs = glob([
+        "tests/*/*.rs",
+    ]) + ["tests/fake.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance-test"] + DEPENDENCIES + DEV_DEPENDENCIES + [
+        "//rs/sns/swap:swap_test_feature",
+        ":build_script",
     ],
 )

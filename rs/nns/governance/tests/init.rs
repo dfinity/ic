@@ -4,7 +4,10 @@ use std::path::PathBuf;
 
 #[test]
 fn neurons_from_csv() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let init_payload = GovernanceCanisterInitPayloadBuilder::new()
         .add_all_neurons_from_csv_file(&p)
         .build();
