@@ -18,9 +18,7 @@ def main(argv):
 
     img_hash = open("ic-os/guestos/disk.img.tar.zstd.sha256.wrapped", "r").read().strip()
 
-    urls = open("ic-os/guestos/upload_guestos.urls", "r").read().split("\n")
-
-    url = [url for url in urls if url.count("disk.img.tar") != 0][0]
+    url = open("ic-os/guestos/upload_guestos_disk.img.tar.zstd.url", "r").read().split()[0]
 
     FLAGS.ic_prep_bin = "rs/prep/ic-prep"
 

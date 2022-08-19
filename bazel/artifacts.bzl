@@ -36,7 +36,7 @@ def _upload_artifact_impl(ctx):
         outputs = [out],
     )
 
-    return [DefaultInfo(files = depset([out]))]
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
 
 _upload_artifact = rule(
     implementation = _upload_artifact_impl,
