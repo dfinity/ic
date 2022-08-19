@@ -88,11 +88,15 @@ rust_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ckbtc_minter.wasm",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
     ],
     edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter.wasm)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
         ":ckbtc_minter_lib",

@@ -1,3 +1,4 @@
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
@@ -281,10 +282,11 @@ impl StateMachine {
             make_single_node_registry(subnet_id, subnet_type, node_id);
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
-        let hypervisor_config = ic_config::execution_environment::Config {
-            canister_sandboxing_flag: ic_config::flag_status::FlagStatus::Disabled,
-            ..Default::default()
-        };
+
+        let mut hypervisor_config = ic_config::execution_environment::Config::default();
+        if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
+            hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
+        }
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
