@@ -305,8 +305,9 @@ fn test_canister_out_of_cycles() {
         Some(CanisterSettingsArgs {
             controller: None,
             controllers: None,
-            compute_allocation: Some(candid::Nat::from(1)),
-            memory_allocation: None,
+            // TODO(RUN-314): Increase compute allocation to 1%.
+            compute_allocation: Some(candid::Nat::from(0)),
+            memory_allocation: Some(candid::Nat::from(1024 * 1024 * 1024)),
             freezing_threshold: None,
         }),
     );
@@ -315,10 +316,10 @@ fn test_canister_out_of_cycles() {
     // succeed.
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
 
-    // Modify the config so that compute allocations are charged for.
+    // Modify the config so that memory allocations are charged for.
     config
         .cycles_account_manager_config
-        .compute_percent_allocated_per_second_fee = Cycles::new(1);
+        .gib_storage_per_second_fee = Cycles::new(1);
 
     // Restart the node to pick up the new node configuration.
     let env = env.restart_node_with_config(config);

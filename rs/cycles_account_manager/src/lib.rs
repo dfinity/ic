@@ -754,6 +754,10 @@ impl CyclesAccountManager {
             return Err(err);
         }
 
+        // TODO(RUN-314): Remove this clearing of compute allocation after the
+        // preparation step for compute allocation fee increase is rolled out.
+        canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
+
         let compute_allocation = canister.compute_allocation();
         if let Err(err) = self.charge_for_compute_allocation(
             &mut canister.system_state,
