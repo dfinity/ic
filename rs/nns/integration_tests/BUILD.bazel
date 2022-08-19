@@ -1,0 +1,202 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/nervous_system/common",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
+    "//rs/nns/governance",
+    "//rs/nns/handlers/lifeline",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/sns/swap",
+    "//rs/types/base_types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+    "@crate_index//:strum",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/canister_client/sender",
+        "//rs/config",
+        "//rs/crypto",
+        "//rs/crypto/sha",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nervous_system/root",
+        "//rs/nns/constants",
+        "//rs/nns/gtc",
+        "//rs/nns/handlers/root",
+        "//rs/nns/test_utils",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/keys",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/registry/transport",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/on_wire",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:crossbeam",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:ed25519-dalek",
+        "@crate_index//:futures-util",
+        "@crate_index//:hex",
+        "@crate_index//:libsecp256k1",
+        "@crate_index//:maplit",
+        "@crate_index//:rand_0_7_3",
+        "@crate_index//:rand_core",
+        # "@crate_index//:randomkit",
+        "@crate_index//:rustc-hash",
+        "@crate_index//:serde",
+        "@crate_index//:statrs",
+        "@crate_index//:tokio",
+        "@wabt_rs//:wabt",
+    ],
+})
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [
+    ],
+    "//conditions:default": [
+        "//rs/nns/test_utils_macros",
+    ],
+})
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+DEV_DATA = [
+    ":governance-mem-test-canister",
+    ":mem-utils-test-canister",
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/nns/governance:governance-canister",
+    "//rs/nns/governance:governance-canister-test",
+    "//rs/nns/gtc:genesis-token-canister",
+    "//rs/nns/handlers/root:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/registry/canister:registry-canister",
+    "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
+    "//rs/rosetta-api/ledger_canister:ledger-canister-wasm",
+    "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
+    "src/neurons.csv",
+]
+
+DEV_ENV = {
+    "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/ledger_canister:ledger-canister-wasm)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method)",
+    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm)",
+    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+    "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
+    "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
+    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
+}
+
+rust_library(
+    name = "integration_tests",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_nns_integration_tests",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "mem-utils-test-canister-raw",
+    srcs = ["test_canisters/mem_utils_test.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":integration_tests"],
+)
+
+optimized_canister(
+    name = "mem-utils-test-canister",
+    wasm = "mem-utils-test-canister-raw",
+)
+
+rust_canister(
+    name = "governance-mem-test-canister-raw",
+    srcs = ["test_canisters/governance_mem_test_canister.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":integration_tests"],
+)
+
+optimized_canister(
+    name = "governance-mem-test-canister",
+    wasm = "governance-mem-test-canister-raw",
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "integration_tests_test",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/lib.rs",
+            # randmkit is broken under Bazel - uncomment this line when its fixed / replaced.
+            "src/fuzz.rs",
+            # governance mem test is tested in a separate rule below, it needs 5+ minutes to finish.
+            "src/governance_mem_test.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    data = DEV_DATA,
+    edition = "2018",
+    env = DEV_ENV,
+    extra_srcs = ["src/lib.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
+# See the .bazelrc for more configuration information.
+rust_test(
+    name = "governance_mem_test",
+    size = "large",
+    srcs = [
+        "src/governance_mem_test.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/governance_mem_test.rs",
+    data = DEV_DATA,
+    edition = "2018",
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["post_master"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

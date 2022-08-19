@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -12,23 +12,20 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
+# TODO foobar
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
     "//rs/nns/cmc",
-    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rosetta-api/ledger_canister",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/swap",
-    "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -37,6 +34,9 @@ DEPENDENCIES = [
     "@crate_index//:rand_core",
     "@crate_index//:serde",
     "@crate_index//:strum",
+    "//rs/types/base_types",
+    "//rs/nns/common",
+    "//rs/rosetta-api/ledger_canister",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -77,11 +77,31 @@ rust_library(
     crate_name = "ic_nns_governance",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "//rs/sns/swap",
+    ],
+)
+
+rust_library(
+    name = "governance-test",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_governance",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "//rs/sns/swap:swap_test_feature",
+    ],
 )
 
 rust_canister(
-    name = "governance-canister",
+    name = "governance-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
@@ -91,6 +111,30 @@ rust_canister(
         ":governance",
         ":build_script",
     ],
+)
+
+optimized_canister(
+    name = "governance-canister",
+    wasm = ":governance-canister-raw",
+)
+
+rust_canister(
+    name = "governance-canister-test-raw",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    crate_features = ["test"],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":governance-test",
+        ":build_script",
+    ],
+)
+
+optimized_canister(
+    name = "governance-canister-test",
+    wasm = ":governance-canister-test-raw",
 )
 
 generated_files_check(

@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -48,13 +48,18 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-wasm-canister",
+    name = "sns-wasm-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/sns-wasm.did"],
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":sns-wasm"],
+)
+
+optimized_canister(
+    name = "sns-wasm-canister",
+    wasm = "sns-wasm-canister-raw",
 )
 
 generated_files_check(

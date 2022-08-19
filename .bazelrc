@@ -33,7 +33,7 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test"
-test --test_tag_filters="-system_test"
+test --test_tag_filters="-system_test,-post_master"
 
 test:alltests --test_tag_filters=""
 

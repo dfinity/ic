@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -69,7 +69,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "root-canister",
+    name = "root-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     edition = "2018",
@@ -77,13 +77,23 @@ rust_canister(
     deps = DEPENDENCIES + [":root"] + [":build_script"],
 )
 
+optimized_canister(
+    name = "root-canister",
+    wasm = "root-canister-raw",
+)
+
 rust_canister(
-    name = "upgrade-test-canister",
+    name = "upgrade-test-canister-raw",
     srcs = ["test_canisters/upgrade_test_canister.rs"],
     aliases = ALIASES,
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "upgrade-test-canisterr",
+    wasm = "upgrade-test-canister-raw",
 )
 
 generated_files_check(
