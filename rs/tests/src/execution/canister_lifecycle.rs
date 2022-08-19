@@ -963,7 +963,8 @@ pub fn total_compute_allocation_cannot_be_exceeded(
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     // See the corresponding field in the execution environment config.
-    let allocatable_compute_capacity_in_percent = 50;
+    // TODO(RUN-314): Set the compute allocation capacity to 50%.
+    let allocatable_compute_capacity_in_percent = 0;
     let app_sched_cores = ic_config::subnet_config::SchedulerConfig::application_subnet()
         .scheduler_cores
         * allocatable_compute_capacity_in_percent
@@ -1232,7 +1233,8 @@ pub fn create_canister_with_empty_settings(handle: IcHandle, ctx: &ic_fondue::po
 /// Sending a field with some settings
 pub fn create_canister_with_settings(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let settings = CanisterSettingsArgs {
-        compute_allocation: Some(candid::Nat::from(50)),
+        // TODO(RUN-314): Increase the compute allocation to 50%.
+        compute_allocation: Some(candid::Nat::from(0)),
         ..Default::default()
     };
     let records = CreateCanisterArgs {

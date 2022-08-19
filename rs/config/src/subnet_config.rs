@@ -291,7 +291,7 @@ impl CyclesAccountManagerConfig {
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
-            compute_percent_allocated_per_second_fee: Cycles::new(100_000),
+            compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a

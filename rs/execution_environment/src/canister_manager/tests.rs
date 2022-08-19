@@ -529,7 +529,7 @@ fn can_update_compute_allocation_during_upgrade() {
             .create_canister(
                 sender,
                 sender_subnet_id,
-                *INITIAL_CYCLES,
+                Cycles::new(2_000_000_000_000_000),
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
@@ -4446,7 +4446,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     test.canister_state_mut(uc)
         .scheduler_state
         .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(2_000_000_000_000_000);
 
     // Create a canister with default settings.
     let args = CreateCanisterArgs::default();
@@ -4520,7 +4520,7 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(0)
         .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(2_000_000_000_000_000));
 
     // Manually set the compute allocation higher to emulate the state after
     // replica upgrade that decreased compute capacity.
