@@ -236,3 +236,4 @@
 /experimental/            @dfinity-lab/teams/ghost
 *.lock                    @dfinity-lab/teams/ghost
 /rs/Cargo.toml            @dfinity-lab/teams/ghost
+.gitignore                @dfinity-lab/teams/ghost
