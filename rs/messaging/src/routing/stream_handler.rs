@@ -33,7 +33,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, VecDeque},
     ops::Add,
-    sync::{Arc, Mutex}, convert::TryInto,
+    sync::{Arc, Mutex},
 };
 
 #[cfg(test)]
@@ -635,7 +635,7 @@ impl StreamHandlerImpl {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
                         // #### XNet cycle transfer monitoring
-                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
+                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
                         stream.set_sum_cycles_inc(new_cycles_sum);
                         self.metrics
                             .inc_cycles
@@ -647,7 +647,7 @@ impl StreamHandlerImpl {
                     Err((err, msg)) => {
                         self.observe_inducted_message_status(msg_type, err.to_label_value());
                         // #### XNet cycle transfer monitoring
-                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
+                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
                         stream.set_sum_cycles_inc(new_cycles_sum);
                         self.metrics
                             .inc_cycles
@@ -683,7 +683,7 @@ impl StreamHandlerImpl {
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
                     // #### XNet cycle transfer monitoring
-                    let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
+                    let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
                     stream.set_sum_cycles_inc(new_cycles_sum);
                     self.metrics
                         .inc_cycles
