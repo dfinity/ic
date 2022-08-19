@@ -253,8 +253,8 @@ py_binary(
         "//ic-os/guestos/tests:ictools.py",
     ],
     data = [
-        "upload_guestos.urls",
         ":disk.img.tar.zstd.sha256.wrapped",
+        ":upload_guestos_disk.img.tar.zstd",
         ":version.txt.wrapped",
         "//rs/prep:ic-prep",
     ],
