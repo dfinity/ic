@@ -732,11 +732,14 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
         let mut sign_with_ecdsa_contexts = BTreeMap::new();
+        let mut valid_keys = BTreeSet::new();
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        valid_keys.insert(key_id.clone());
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                key_id: key_id.clone(),
                 pseudo_random_id: [1; 32],
                 message_hash: vec![0; 32],
                 derivation_path: vec![],
@@ -747,7 +750,7 @@ mod test {
             CallbackId::from(2),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                key_id,
                 pseudo_random_id: [2; 32],
                 message_hash: vec![0; 32],
                 derivation_path: vec![],
@@ -801,8 +804,12 @@ mod test {
             sig_inputs_2.sig_inputs_ref.presig_quadruple_ref,
         );
 
-        let all_requests =
-            get_signing_requests(Height::from(0), &ecdsa_payload, &sign_with_ecdsa_contexts);
+        let all_requests = get_signing_requests(
+            Height::from(0),
+            &mut ecdsa_payload,
+            &sign_with_ecdsa_contexts,
+            &valid_keys,
+        );
 
         update_ongoing_signatures(
             all_requests,
