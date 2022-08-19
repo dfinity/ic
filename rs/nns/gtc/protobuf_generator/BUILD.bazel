@@ -3,6 +3,11 @@ load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//visibility:public"])
 
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],

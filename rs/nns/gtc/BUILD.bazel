@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -28,10 +28,10 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rand_0_7_3",
     "@crate_index//:rand_core",
-    "@crate_index//:hex-literal",
     "@crate_index//:serde",
     "@crate_index//:sha3",
     "@crate_index//:simple_asn1",
+    "@crate_index//:hex-literal",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -41,6 +41,25 @@ MACRO_DEPENDENCIES = [
 BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
 ]
+
+DEV_DEPENDENCIES = [
+    "//rs/nns/gtc/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:tempfile",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/rust_canisters/canister_test",
+        "//rs/nns/test_utils",
+    ],
+})
+
+MACRO_DEV_DEPENDENCIES = select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/test_utils_macros",
+    ],
+})
 
 ALIASES = {}
 
@@ -79,6 +98,38 @@ rust_canister(
 optimized_canister(
     name = "genesis-token-canister",
     wasm = "genesis-token-canister-raw",
+)
+
+rust_test(
+    name = "gtc_test",
+    aliases = ALIASES,
+    crate = ":gtc",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test_suite(
+    name = "gtc_integration_test",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/check_generated_files.rs"],
+    ),
+    aliases = ALIASES,
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/gtc:genesis-token-canister",
+    ],
+    edition = "2018",
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "CARGO_MANIFEST_DIR": "rs/nns/gtc",
+        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":gtc"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

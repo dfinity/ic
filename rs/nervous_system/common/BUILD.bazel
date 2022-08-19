@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
 package(default_visibility = ["//visibility:public"])
@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:num",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
 ]
@@ -24,19 +23,44 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-rust_library(
-    name = "common",
-    srcs = glob(["src/**"]),
-    crate_name = "ic_nervous_system_common",
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":build_script"] + DEPENDENCIES,
-)
+BUILD_DEPENDENCIES = [
+    "@crate_index//:build-info-build",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/nns/governance",
+    "@crate_index//:prost",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = [],  # build script data (e.g. template files) goes here
     edition = "2018",
     version = "0.8.0",
-    deps = ["@crate_index//:build-info-build"],
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_library(
+    name = "common",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_nervous_system_common",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_test(
+    name = "common_test",
+    aliases = ALIASES,
+    crate = ":common",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
