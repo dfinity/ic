@@ -1,0 +1,4 @@
+[package]
+name = "ic-registry-local-store-artifacts"
+edition = "2018"
+version = "0.8.0"

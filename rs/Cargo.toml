@@ -157,6 +157,7 @@ members = [
   "registry/helpers",
   "registry/local_registry",
   "registry/local_store",
+  "registry/local_store/artifacts",
   "registry/keys",
   "registry/proto",
   "registry/proto/generator",
