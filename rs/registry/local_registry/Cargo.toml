@@ -17,4 +17,5 @@ tokio = { version = "1.15.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
+ic-registry-local-store-artifacts = { path = "../local_store/artifacts" }
 tempfile = "3.0"

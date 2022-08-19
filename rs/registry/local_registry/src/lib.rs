@@ -380,11 +380,10 @@ mod tests {
     fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mainnet_delta_raw =
-            include_bytes!("../../local_store/artifacts/mainnet_delta_00-6d-c1.pb");
-        let changelog = compact_delta_to_changelog(&mainnet_delta_raw[..])
-            .expect("")
-            .1;
+        let changelog =
+            compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
+                .expect("")
+                .1;
 
         for (v, changelog_entry) in changelog.into_iter().enumerate() {
             let v = RegistryVersion::from((v + 1) as u64);

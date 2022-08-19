@@ -6737,6 +6737,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-local-registry",
  "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
  "ic-registry-nns-data-provider",
  "ic-test-utilities",
  "ic-types 0.8.0",
@@ -7031,6 +7032,7 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
  "ic-registry-nns-data-provider",
  "ic-registry-transport",
  "ic-types 0.8.0",
@@ -7047,6 +7049,7 @@ dependencies = [
  "bytes",
  "ic-interfaces",
  "ic-registry-common-proto",
+ "ic-registry-local-store-artifacts",
  "ic-registry-transport",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
@@ -7054,6 +7057,10 @@ dependencies = [
  "rand 0.8.5",
  "tempfile",
 ]
+
+[[package]]
+name = "ic-registry-local-store-artifacts"
+version = "0.8.0"
 
 [[package]]
 name = "ic-registry-nns-data-provider"
