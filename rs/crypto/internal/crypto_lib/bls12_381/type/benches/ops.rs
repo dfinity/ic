@@ -79,7 +79,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
             || random_scalar().serialize(),
-            |bytes| Scalar::deserialize(bytes.as_slice()),
+            |bytes| Scalar::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -127,7 +127,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
             || random_g1().serialize(),
-            |bytes| G1Projective::deserialize(bytes.as_slice()),
+            |bytes| G1Projective::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -135,7 +135,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
             || random_g1().serialize(),
-            |bytes| G1Projective::deserialize_unchecked(bytes.as_slice()),
+            |bytes| G1Projective::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -256,7 +256,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
             || random_g2().serialize(),
-            |bytes| G2Projective::deserialize(bytes.as_slice()),
+            |bytes| G2Projective::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -264,7 +264,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
             || random_g2().serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes.as_slice()),
+            |bytes| G2Projective::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });

@@ -8,6 +8,7 @@ use dkg::nizk_sharing::{
     prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
     ZkProofSharingError,
 };
+use dkg::random_oracles::UniqueHash;
 use dkg::utils::RAND_ChaCha20;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use miracl_core::bls12381::big::BIG;
@@ -231,16 +232,8 @@ fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance
         chunk.push(chunk_i);
     }
 
-    let instance = ChunkingInstance {
-        g1_gen: ECP::generator(),
-        public_keys: y,
-        ciphertext_chunks: chunk,
-        randomizers_r: rr,
-    };
-    let witness = ChunkingWitness {
-        scalars_r: r,
-        scalars_s: s,
-    };
+    let instance = ChunkingInstance::from_miracl(y, chunk, rr);
+    let witness = ChunkingWitness::from_miracl(r, s);
     (instance, witness)
 }
 
@@ -261,16 +254,33 @@ fn chunking_nizk_should_verify() {
 #[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
 fn chunking_prover_should_panic_on_empty_chunks() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
+    let (mut instance, witness) = setup_chunking_instance_and_witness(rng);
+
+    // invalidate the instance:
+    instance.ciphertext_chunks = vec![];
+
+    let _panic = prove_chunking(&instance, &witness, rng);
+}
+
+#[test]
+fn chunking_nizk_is_stable() {
+    let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (instance, witness) = setup_chunking_instance_and_witness(rng);
 
-    let invalid_instance = ChunkingInstance {
-        g1_gen: instance.g1_gen,
-        public_keys: instance.public_keys,
-        ciphertext_chunks: vec![],
-        randomizers_r: instance.randomizers_r,
-    };
+    assert_eq!(
+        hex::encode(instance.unique_hash()),
+        "d416b0537ed3ff323d508f87bc5d79475ef850026c0333e5bff4ba80286aa3f6"
+    );
 
-    let _panic = prove_chunking(&invalid_instance, &witness, rng);
+    let nizk_cbor =
+        serde_cbor::to_vec(&prove_chunking(&instance, &witness, rng).serialize()).unwrap();
+
+    assert_eq!(nizk_cbor.len(), 6942);
+    let sha256_nizk_cbor = ic_crypto_sha::Sha256::hash(&nizk_cbor);
+    assert_eq!(
+        hex::encode(&sha256_nizk_cbor),
+        "45352f825e1e1f03eee5eae368f6e7ed9e6fad3bb0665c6005a7efdf070ab4f5"
+    );
 }
 
 #[test]
@@ -279,7 +289,7 @@ fn chunking_prover_should_panic_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (mut instance, witness) = setup_chunking_instance_and_witness(rng);
 
-    instance.public_keys.push(ECP::generator());
+    instance.public_keys.push(G1Affine::generator());
 
     let _panic = prove_chunking(&instance, &witness, rng);
 }
@@ -287,16 +297,10 @@ fn chunking_prover_should_panic_on_invalid_instance() {
 #[test]
 fn chunking_nizk_should_fail_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (mut instance, witness) = setup_chunking_instance_and_witness(rng);
+    let (valid_instance, witness) = setup_chunking_instance_and_witness(rng);
 
-    let valid_instance = ChunkingInstance {
-        g1_gen: instance.g1_gen.clone(),
-        public_keys: instance.public_keys.clone(),
-        ciphertext_chunks: instance.ciphertext_chunks.clone(),
-        randomizers_r: instance.randomizers_r.clone(),
-    };
-    instance.public_keys.push(ECP::generator());
-    let invalid_instance = instance;
+    let mut invalid_instance = valid_instance.clone();
+    invalid_instance.public_keys.push(G1Affine::generator());
 
     let chunking_proof = prove_chunking(&valid_instance, &witness, rng);
     assert_eq!(
@@ -308,20 +312,17 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
 
 #[test]
 fn chunking_nizk_should_fail_on_invalid_proof() {
+    use ic_crypto_internal_bls12_381_type::G1Affine;
+
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (instance, witness) = setup_chunking_instance_and_witness(rng);
 
     let chunking_proof = prove_chunking(&instance, &witness, rng);
 
-    let invalid_proof = ProofChunking {
-        y0: ECP::generator(),
-        bb: chunking_proof.bb,
-        cc: chunking_proof.cc,
-        dd: chunking_proof.dd,
-        yy: chunking_proof.yy,
-        z_r: chunking_proof.z_r,
-        z_s: chunking_proof.z_s,
-        z_beta: chunking_proof.z_beta,
+    let invalid_proof = {
+        let mut zkproof = chunking_proof.serialize();
+        zkproof.first_move_y0.0 = G1Affine::generator().serialize();
+        ProofChunking::deserialize(&zkproof).expect("Parseable")
     };
 
     assert_eq!(

@@ -199,17 +199,14 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .map(|chunks| chunks.iter().copied().map(BIG::new_int).collect())
             .collect();
 
-        let chunking_instance = ChunkingInstance {
-            g1_gen: ECP::generator(),
-            public_keys: receiver_fs_public_keys.clone(),
-            ciphertext_chunks: crsz.cc.clone(),
-            randomizers_r: crsz.rr.clone(),
-        };
+        let chunking_instance = ChunkingInstance::from_miracl(
+            receiver_fs_public_keys.clone(),
+            crsz.cc.clone(),
+            crsz.rr.clone(),
+        );
 
-        let chunking_witness = ChunkingWitness {
-            scalars_r: toxic_waste.spec_r.clone(),
-            scalars_s: big_plaintext_chunks,
-        };
+        let chunking_witness =
+            ChunkingWitness::from_miracl(toxic_waste.spec_r.clone(), big_plaintext_chunks);
 
         let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, rng);
 

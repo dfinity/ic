@@ -209,6 +209,47 @@ fn test_scalar_from_integer_type() {
 }
 
 #[test]
+fn test_scalar_small_random() {
+    let mut rng = seeded_rng();
+
+    for bit_size in 1..32 {
+        let n = u64::MAX >> (64 - bit_size);
+        assert_eq!(bit_size, 64 - n.leading_zeros());
+        let s = Scalar::random_within_range(&mut rng, n);
+        assert!(s < Scalar::from_u64(n));
+    }
+
+    for n in 1..1024 {
+        let s = Scalar::random_within_range(&mut rng, n);
+        assert!(s < Scalar::from_u64(n));
+    }
+
+    let range = 1039; // small prime
+
+    /*
+    This upper bound is arbitrary and as the test is probabalistic it
+    might occasionally fail. However over 10000 iterations the largest
+    number of attempts required was range*15, so using range*30 if the
+    test fails it probably does indicate a problem.
+    */
+    let max_attempts = range * 30;
+
+    let mut seen = std::collections::HashSet::new();
+
+    for _ in 0..max_attempts {
+        let s = Scalar::random_within_range(&mut rng, range);
+        assert!(s < Scalar::from_u64(range));
+        seen.insert(s.serialize());
+
+        if seen.len() == range as usize {
+            break;
+        }
+    }
+
+    assert_eq!(seen.len(), range as usize);
+}
+
+#[test]
 fn test_scalar_is_zero() {
     assert!(Scalar::zero().is_zero());
     assert!(!Scalar::one().is_zero());

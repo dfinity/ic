@@ -1,12 +1,12 @@
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
-use miracl_core::bls12381::{big::BIG, ecp::ECP, ecp2::ECP2};
 
 struct StructToBeHashed {
-    point: ECP,
+    point: G1Affine,
     string: String,
     integer: usize,
-    scalar: BIG,
+    scalar: Scalar,
     bytes: Vec<u8>,
 }
 
@@ -127,7 +127,7 @@ mod unique_hashing {
         const SCALAR_HASH_HEX: &str =
             "715a3ba63746ea8ff3d76fecad523406e29c3fdcf97c0cfe526199af1465f9ae";
 
-        let point = BIG::new_int(1_000_000);
+        let point = Scalar::from_usize(1_000_000);
         let hash = point.unique_hash();
 
         assert_eq!(
@@ -143,7 +143,7 @@ mod unique_hashing {
         const ECP_POINT_HASH_HEX: &str =
             "39335810030283da83504357ac5ef1e53d13343cc854df984f4b451934ef0f05";
 
-        let point = ECP::generator();
+        let point = G1Affine::generator();
         let hash = point.unique_hash();
 
         assert_eq!(
@@ -159,7 +159,7 @@ mod unique_hashing {
         const ECP2_POINT_HASH_HEX: &str =
             "9f0811beced7640b5dc6b4c08676bb4897b2d6171bf13b4738ab14a252c66057";
 
-        let point = ECP2::generator();
+        let point = G2Affine::generator();
         let hash = point.unique_hash();
 
         assert_eq!(
@@ -170,7 +170,7 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_empty_vectors() {
-        let point: Vec<ECP> = Vec::new();
+        let point: Vec<G1Affine> = Vec::new();
         let hash = point.unique_hash();
 
         assert_eq!(
@@ -181,8 +181,8 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_points() {
-        let point = ECP::generator();
-        let other_point = ECP::generator().mul(&BIG::new_int(42));
+        let point = G1Affine::generator();
+        let other_point = (G1Affine::generator() * Scalar::from_usize(42)).to_affine();
 
         let vec = vec![point, other_point];
         let _hash = vec.unique_hash();
@@ -190,8 +190,8 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_vectors_of_points() {
-        let point = ECP::generator();
-        let other_point = ECP::generator();
+        let point = G1Affine::generator();
+        let other_point = G1Affine::generator();
 
         let vec_in = vec![point, other_point];
         let vec_out = vec![vec_in; 3];
@@ -202,16 +202,16 @@ mod unique_hashing {
     #[test]
     fn should_hash_vectors_of_hashable_structs() {
         let string = String::from("This is a string");
-        let point1 = ECP::generator().mul(&BIG::new_int(17));
-        let point2 = ECP::generator().mul(&BIG::new_int(13));
+        let point1 = G1Affine::generator() * Scalar::from_usize(17);
+        let point2 = G1Affine::generator() * Scalar::from_usize(13);
         let hashable_struct = StructToBeHashed {
-            point: ECP::generator(),
+            point: G1Affine::generator(),
             string: "some string".to_string(),
             integer: 4usize,
-            scalar: BIG::new_int(36),
+            scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
-        let vec_in = vec![point1, point2];
+        let vec_in = vec![point1.to_affine(), point2.to_affine()];
         let mut vec_out: Vec<&dyn UniqueHash> = Vec::new();
         let hashed_map = hashable_struct.unique_hash().to_vec();
         let hashable_map = HashableMap::from(&hashable_struct);
@@ -225,10 +225,10 @@ mod unique_hashing {
     #[test]
     fn should_hash_structs_with_domain() {
         let hashable_struct = StructToBeHashed {
-            point: ECP::generator(),
+            point: G1Affine::generator(),
             string: "some string".to_string(),
             integer: 4usize,
-            scalar: BIG::new_int(36),
+            scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
 
@@ -247,10 +247,10 @@ mod unique_hashing {
     #[test]
     fn test_expected_output_for_random_oracle_to_scalar() {
         let hashable_struct = StructToBeHashed {
-            point: ECP::generator(),
+            point: G1Affine::generator(),
             string: "some string".to_string(),
             integer: 4usize,
-            scalar: BIG::new_int(36),
+            scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
 
@@ -261,7 +261,7 @@ mod unique_hashing {
             "0ab77cf4d9338f6bfdcd9541574bf1211e8b552743426917e405739c029407aa"
         );
 
-        let pt = ECP::generator();
+        let pt = G1Affine::generator();
         let s2 = random_oracle_to_scalar("ic-crypto-test-domain", &pt);
         assert_eq!(
             hex::encode(s2.serialize()),
@@ -282,10 +282,10 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: ECP::generator(),
+                point: G1Affine::generator(),
                 string: "some string".to_string(),
                 integer: 4usize,
-                scalar: BIG::new_int(36),
+                scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
             let hash_1 = random_oracle(&domain_1, &hashable_struct);
@@ -300,16 +300,15 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: ECP::generator(),
+                point: G1Affine::generator(),
                 string: "some string".to_string(),
                 integer: 4usize,
-                scalar: BIG::new_int(36),
+                scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
-            let hash_1 = random_oracle_to_scalar(&domain_1, &hashable_struct).to_miracl();
-            let hash_2 = random_oracle_to_scalar(&domain_2, &hashable_struct).to_miracl();
-            let result = BIG::comp(&hash_1, &hash_2);
-            assert_ne!(result, 0);
+            let hash_1 = random_oracle_to_scalar(&domain_1, &hashable_struct);
+            let hash_2 = random_oracle_to_scalar(&domain_2, &hashable_struct);
+            assert_ne!(hash_1, hash_2);
         }
 
         #[test]
@@ -319,10 +318,10 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: ECP::generator(),
+                point: G1Affine::generator(),
                 string: "some string".to_string(),
                 integer: 4usize,
-                scalar: BIG::new_int(36),
+                scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
             let hash_1 = random_oracle_to_g1(&domain_1, &hashable_struct);
