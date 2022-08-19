@@ -55,6 +55,7 @@ type SnsInitPayload = record {
   min_icp_e8s : opt nat64;
 };
 type SnsVersion = record {
+  archive_wasm_hash : vec nat8;
   root_wasm_hash : vec nat8;
   swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;

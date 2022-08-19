@@ -17,7 +17,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::governance::SnsMetadata;
+use ic_sns_governance::pb::v1::governance::{SnsMetadata, Version};
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
@@ -135,15 +135,16 @@ impl SnsInitPayload {
         }
     }
 
-    /// Build all the SNS canister's init payloads given the state of the SnsInitPayload and the
-    /// provided SnsCanisterIds.
+    /// Build all the SNS canister's init payloads given the state of the SnsInitPayload, the
+    /// provided SnsCanisterIds, and the version being deployed.  
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
+        deployed_version: Option<Version>,
     ) -> anyhow::Result<SnsCanisterInitPayloads> {
         self.validate()?;
         Ok(SnsCanisterInitPayloads {
-            governance: self.governance_init_args(sns_canister_ids)?,
+            governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids),
             swap: self.swap_init_args(sns_canister_ids),
@@ -154,10 +155,12 @@ impl SnsInitPayload {
     fn governance_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
+        deployed_version: Option<Version>,
     ) -> anyhow::Result<Governance> {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
+        governance.deployed_version = deployed_version;
 
         let parameters = governance
             .parameters
@@ -883,7 +886,7 @@ mod test {
         let sns_canister_ids = create_canister_ids();
 
         // Build all SNS canister's initialization payloads and verify the payload was.
-        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids);
+        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None);
         let sns_canisters_init_payloads = match build_result {
             Ok(payloads) => payloads,
             Err(e) => panic!("Could not build canister init payloads: {}", e),
@@ -944,7 +947,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -972,7 +975,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Root
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let root = canister_payloads.root;
@@ -1000,7 +1003,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Swap
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let swap = canister_payloads.swap;
@@ -1032,7 +1035,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Ledger
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let ledger = canister_payloads.ledger;

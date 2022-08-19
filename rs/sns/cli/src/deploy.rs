@@ -167,10 +167,12 @@ pub struct DirectSnsDeployerForTests {
 impl DirectSnsDeployerForTests {
     pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
         let sns_canisters = lookup_or_else_create_canisters(&args);
-        let sns_canister_payloads = match sns_init_payload.build_canister_payloads(&sns_canisters) {
-            Ok(payload) => payload,
-            Err(e) => panic!("Could not build canister init payloads: {}", e),
-        };
+        // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        let sns_canister_payloads =
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None) {
+                Ok(payload) => payload,
+                Err(e) => panic!("Could not build canister init payloads: {}", e),
+            };
 
         let wallet_canister = get_identity("get-wallet", &args.network);
         let dfx_identity = get_identity("get-principal", &args.network);

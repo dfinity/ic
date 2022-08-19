@@ -31,6 +31,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(strum_macros::EnumIter)]",
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.Version",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.UpgradeInProgress",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.SetMode",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
@@ -216,6 +224,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetMetadataResponse",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetRunningSnsVersionRequest",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetRunningSnsVersionResponse",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.NeuronInFlightCommand",

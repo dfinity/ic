@@ -126,13 +126,19 @@ type GetNeuron = record { neuron_id : opt NeuronId };
 type GetNeuronResponse = record { result : opt Result };
 type GetProposal = record { proposal_id : opt ProposalId };
 type GetProposalResponse = record { result : opt Result_1 };
+type GetRunningSnsVersionResponse = record {
+  deployed_version : opt Version;
+  pending_version : opt UpgradeInProgress;
+};
 type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
   metrics : opt GovernanceCachedMetrics;
   mode : int32;
   parameters : opt NervousSystemParameters;
+  deployed_version : opt Version;
   latest_reward_event : opt RewardEvent;
+  pending_version : opt UpgradeInProgress;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
@@ -293,9 +299,21 @@ type Tally = record {
   total : nat64;
   timestamp_seconds : nat64;
 };
+type UpgradeInProgress = record {
+  mark_failed_at_seconds : nat64;
+  checking_upgrade_lock : nat64;
+  target_version : opt Version;
+};
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : vec nat8;
   canister_id : opt principal;
+};
+type Version = record {
+  archive_wasm_hash : vec nat8;
+  root_wasm_hash : vec nat8;
+  swap_wasm_hash : vec nat8;
+  ledger_wasm_hash : vec nat8;
+  governance_wasm_hash : vec nat8;
 };
 type VotingRewardsParameters = record {
   start_timestamp_seconds : opt nat64;
@@ -312,6 +330,7 @@ service : (Governance) -> {
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResultV2);
+  get_running_sns_version : (record {}) -> (GetRunningSnsVersionResponse) query;
   list_nervous_system_functions : () -> (
       ListNervousSystemFunctionsResponse,
     ) query;

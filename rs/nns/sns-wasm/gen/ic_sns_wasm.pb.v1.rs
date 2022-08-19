@@ -13,7 +13,7 @@ pub struct StableCanisterState {
     #[prost(bool, tag = "5")]
     pub access_controls_enabled: bool,
 }
-/// Details the offset and size of a WASM binary in stable memory and the hash of this binary
+/// Details the offset and size of a WASM binary in stable memory and the hash of this binary.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SnsWasmStableIndex {
     #[prost(bytes = "vec", tag = "1")]
@@ -23,7 +23,7 @@ pub struct SnsWasmStableIndex {
     #[prost(uint32, tag = "3")]
     pub size: u32,
 }
-/// Specifies the upgrade path for SNS instances
+/// Specifies the upgrade path for SNS instances.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePath {
     /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
@@ -42,7 +42,7 @@ pub struct SnsUpgrade {
     #[prost(message, optional, tag = "2")]
     pub next_version: ::core::option::Option<SnsVersion>,
 }
-/// The representation of a WASM along with its target canister type
+/// The representation of a WASM along with its target canister type.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
@@ -50,14 +50,14 @@ pub struct SnsWasm {
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
 }
-/// The error response returned in response objects on failed or partially failed operations
+/// The error response returned in response objects on failed or partially failed operations.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SnsWasmError {
-    /// The message returned by the canister on errors
+    /// The message returned by the canister on errors.
     #[prost(string, tag = "1")]
     pub message: ::prost::alloc::string::String,
 }
-/// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
+/// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct AddWasmRequest {
     #[prost(message, optional, tag = "1")]
@@ -75,10 +75,10 @@ pub struct AddWasmResponse {
 pub mod add_wasm_response {
     #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
-        /// The hash of the wasm that was added
+        /// The hash of the wasm that was added.
         #[prost(bytes, tag = "1")]
         Hash(::prost::alloc::vec::Vec<u8>),
-        /// Error when request fails
+        /// Error when request fails.
         #[prost(message, tag = "2")]
         Error(super::SnsWasmError),
     }
@@ -115,68 +115,71 @@ pub struct DeployNewSnsResponse {
     #[prost(message, optional, tag = "3")]
     pub error: ::core::option::Option<SnsWasmError>,
 }
-/// The CanisterIds of the SNS canisters that are created
+/// The CanisterIds of the SNS canisters that are created.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SnsCanisterIds {
-    /// PrincipalId of the root canister
+    /// PrincipalId of the root canister.
     #[prost(message, optional, tag = "1")]
     pub root: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// PrincipalId of the ledger canister
+    /// PrincipalId of the ledger canister.
     #[prost(message, optional, tag = "2")]
     pub ledger: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// PrincipalId of the governance canister
+    /// PrincipalId of the governance canister.
     #[prost(message, optional, tag = "3")]
     pub governance: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// PrincipalId of the swap canister
+    /// PrincipalId of the swap canister.
     #[prost(message, optional, tag = "4")]
     pub swap: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-/// Message to list deployed sns instances
+/// Message to list deployed sns instances.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ListDeployedSnsesRequest {}
-/// Response to list_deployed_snses
+/// Response to list_deployed_snses.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ListDeployedSnsesResponse {
-    /// The deployed instances
+    /// The deployed instances.
     #[prost(message, repeated, tag = "1")]
     pub instances: ::prost::alloc::vec::Vec<DeployedSns>,
 }
-/// A deployed SNS root_canister_id
+/// A deployed SNS root_canister_id.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct DeployedSns {
-    /// PrincipalId of the root canister of the sns
+    /// PrincipalId of the root canister of the sns.
     #[prost(message, optional, tag = "1")]
     pub root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-/// Specifies the version of an SNS
+/// Specifies the version of an SNS.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct SnsVersion {
-    /// The hash of the Root canister WASM
+    /// The hash of the Root canister WASM.
     #[prost(bytes = "vec", tag = "1")]
     pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
-    /// The hash of the Governance canister WASM
+    /// The hash of the Governance canister WASM.
     #[prost(bytes = "vec", tag = "2")]
     pub governance_wasm_hash: ::prost::alloc::vec::Vec<u8>,
-    /// The hash of the Ledger canister WASM
+    /// The hash of the Ledger canister WASM.
     #[prost(bytes = "vec", tag = "3")]
     pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
-    /// The hash of the Swap canister WASM
+    /// The hash of the Swap canister WASM.
     #[prost(bytes = "vec", tag = "4")]
     pub swap_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The hash of the Ledger Archive canister WASM.
+    #[prost(bytes = "vec", tag = "5")]
+    pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
-/// The request type accepted by the get_next_sns_version canister method
+/// The request type accepted by the get_next_sns_version canister method.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct GetNextSnsVersionRequest {
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
 }
-/// The response type returned by the get_next_sns_version canister method
+/// The response type returned by the get_next_sns_version canister method.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
     pub next_version: ::core::option::Option<SnsVersion>,
 }
-/// The type of canister a particular WASM is intended to be installed on
+/// The type of canister a particular WASM is intended to be installed on.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -193,12 +196,14 @@ pub struct GetNextSnsVersionResponse {
 #[repr(i32)]
 pub enum SnsCanisterType {
     Unspecified = 0,
-    /// The type for the root canister
+    /// The type for the root canister.
     Root = 1,
-    /// The type for the governance canister
+    /// The type for the governance canister.
     Governance = 2,
-    /// The type for the ledger canister
+    /// The type for the ledger canister.
     Ledger = 3,
-    /// The type for the swap canister
+    /// The type for the swap canister.
     Swap = 4,
+    /// The type for the ledger archive canister.
+    Archive = 5,
 }

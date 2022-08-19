@@ -971,6 +971,12 @@ pub struct Governance {
     pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(message, optional, tag = "21")]
     pub sns_metadata: ::core::option::Option<governance::SnsMetadata>,
+    /// Current version that this SNS is running.
+    #[prost(message, optional, tag = "22")]
+    pub deployed_version: ::core::option::Option<governance::Version>,
+    /// Version SNS is in process of upgrading to.
+    #[prost(message, optional, tag = "23")]
+    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1128,6 +1134,53 @@ pub mod governance {
         #[prost(string, optional, tag = "4")]
         pub description: ::core::option::Option<::prost::alloc::string::String>,
     }
+    /// A version of the SNS defined by the WASM hashes of its canisters.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Version {
+        /// The hash of the Root canister WASM.
+        #[prost(bytes = "vec", tag = "1")]
+        pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        /// The hash of the Governance canister WASM.
+        #[prost(bytes = "vec", tag = "2")]
+        pub governance_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        /// The hash of the Ledger canister WASM.
+        #[prost(bytes = "vec", tag = "3")]
+        pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        /// The hash of the Swap canister WASM.
+        #[prost(bytes = "vec", tag = "4")]
+        pub swap_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+        /// The hash of the Ledger Archive canister WASM.
+        #[prost(bytes = "vec", tag = "5")]
+        pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    }
+    /// An upgrade in progress, defined as a version target and a time at which it is considered failed.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeInProgress {
+        /// Version to  be upgraded to
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<Version>,
+        /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+        #[prost(uint64, tag = "2")]
+        pub mark_failed_at_seconds: u64,
+        /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+        /// allowing us to fail in case we otherwise have gotten stuck.
+        #[prost(uint64, tag = "3")]
+        pub checking_upgrade_lock: u64,
+    }
     #[derive(
         strum_macros::EnumIter,
         Clone,
@@ -1179,6 +1232,34 @@ pub struct GetMetadataResponse {
     pub name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "4")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Request for the SNS's currently running version.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetRunningSnsVersionRequest {}
+/// Response with the SNS's currently running version and any upgrades
+/// that are in progress.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetRunningSnsVersionResponse {
+    /// The currently deployed version of the SNS.
+    #[prost(message, optional, tag = "1")]
+    pub deployed_version: ::core::option::Option<governance::Version>,
+    /// The upgrade in progress, if any.
+    #[prost(message, optional, tag = "2")]
+    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.

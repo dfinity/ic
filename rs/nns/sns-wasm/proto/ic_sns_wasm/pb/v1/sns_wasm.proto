@@ -5,17 +5,19 @@ package ic_sns_wasm.pb.v1;
 import "ic_base_types/pb/v1/types.proto";
 import "ic_sns_init/pb/v1/sns_init.proto";
 
-// The type of canister a particular WASM is intended to be installed on
+// The type of canister a particular WASM is intended to be installed on.
 enum SnsCanisterType {
   SNS_CANISTER_TYPE_UNSPECIFIED = 0;
-  // The type for the root canister
+  // The type for the root canister.
   SNS_CANISTER_TYPE_ROOT = 1;
-  // The type for the governance canister
+  // The type for the governance canister.
   SNS_CANISTER_TYPE_GOVERNANCE = 2;
-  // The type for the ledger canister
+  // The type for the ledger canister.
   SNS_CANISTER_TYPE_LEDGER = 3;
-  // The type for the swap canister
+  // The type for the swap canister.
   SNS_CANISTER_TYPE_SWAP = 4;
+  // The type for the ledger archive canister.
+  SNS_CANISTER_TYPE_ARCHIVE = 5;
 }
 
 // The SNS-WASM canister state that is persisted to stable memory on pre-upgrade and read on
@@ -28,14 +30,14 @@ message StableCanisterState {
   bool access_controls_enabled = 5;
 }
 
-// Details the offset and size of a WASM binary in stable memory and the hash of this binary
+// Details the offset and size of a WASM binary in stable memory and the hash of this binary.
 message SnsWasmStableIndex {
   bytes hash = 1;
   uint32 offset = 2;
   uint32 size = 3;
 }
 
-// Specifies the upgrade path for SNS instances
+// Specifies the upgrade path for SNS instances.
 message UpgradePath {
   // The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
   // this version.
@@ -51,19 +53,19 @@ message SnsUpgrade {
   SnsVersion next_version = 2;
 }
 
-// The representation of a WASM along with its target canister type
+// The representation of a WASM along with its target canister type.
 message SnsWasm {
   bytes wasm = 1;
   SnsCanisterType canister_type = 2;
 }
 
-// The error response returned in response objects on failed or partially failed operations
+// The error response returned in response objects on failed or partially failed operations.
 message SnsWasmError {
-  // The message returned by the canister on errors
+  // The message returned by the canister on errors.
   string message = 1;
 }
 
-// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
+// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes.
 message AddWasmRequest {
   SnsWasm wasm = 1;
   bytes hash = 2;
@@ -72,9 +74,9 @@ message AddWasmRequest {
 // The response from add_wasm, which is either Ok or Error.
 message AddWasmResponse {
   oneof result {
-    // The hash of the wasm that was added
+    // The hash of the wasm that was added.
     bytes hash = 1;
-    // Error when request fails
+    // Error when request fails.
     SnsWasmError error = 2;
   }
 }
@@ -105,54 +107,57 @@ message DeployNewSnsResponse {
   SnsWasmError error = 3;
 }
 
-// The CanisterIds of the SNS canisters that are created
+// The CanisterIds of the SNS canisters that are created.
 message SnsCanisterIds {
-  // PrincipalId of the root canister
+  // PrincipalId of the root canister.
   ic_base_types.pb.v1.PrincipalId root = 1;
-  // PrincipalId of the ledger canister
+  // PrincipalId of the ledger canister.
   ic_base_types.pb.v1.PrincipalId  ledger = 2;
-  // PrincipalId of the governance canister
+  // PrincipalId of the governance canister.
   ic_base_types.pb.v1.PrincipalId governance = 3;
-  // PrincipalId of the swap canister
+  // PrincipalId of the swap canister.
   ic_base_types.pb.v1.PrincipalId swap = 4;
 }
 
-// Message to list deployed sns instances
+// Message to list deployed sns instances.
 message ListDeployedSnsesRequest {}
 
-// Response to list_deployed_snses
+// Response to list_deployed_snses.
 message ListDeployedSnsesResponse {
-  // The deployed instances
+  // The deployed instances.
   repeated DeployedSns instances = 1;
 }
 
-// A deployed SNS root_canister_id
+// A deployed SNS root_canister_id.
 message DeployedSns {
-  // PrincipalId of the root canister of the sns
+  // PrincipalId of the root canister of the sns.
   ic_base_types.pb.v1.PrincipalId root_canister_id = 1;
 }
 
-// Specifies the version of an SNS
+// Specifies the version of an SNS.
 message SnsVersion {
-  // The hash of the Root canister WASM
+  // The hash of the Root canister WASM.
   bytes root_wasm_hash = 1;
 
-  // The hash of the Governance canister WASM
+  // The hash of the Governance canister WASM.
   bytes governance_wasm_hash = 2;
 
-  // The hash of the Ledger canister WASM
+  // The hash of the Ledger canister WASM.
   bytes ledger_wasm_hash = 3;
 
-  // The hash of the Swap canister WASM
+  // The hash of the Swap canister WASM.
   bytes swap_wasm_hash = 4;
+
+  // The hash of the Ledger Archive canister WASM.
+  bytes archive_wasm_hash = 5;
 }
 
-// The request type accepted by the get_next_sns_version canister method
+// The request type accepted by the get_next_sns_version canister method.
 message GetNextSnsVersionRequest {
   SnsVersion current_version = 1;
 }
 
-// The response type returned by the get_next_sns_version canister method
+// The response type returned by the get_next_sns_version canister method.
 message GetNextSnsVersionResponse {
   SnsVersion next_version = 1;
 }
