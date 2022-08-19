@@ -112,6 +112,18 @@ fn test_canisters_are_created_and_installed() {
 
         nns_canisters.add_wasm(request).await;
 
+        let archive_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-archive", &[]);
+        let archive_hash = Sha256::hash(&archive_wasm.clone().bytes()).to_vec();
+        let request = AddWasmRequest {
+            wasm: Some(SnsWasm {
+                wasm: archive_wasm.clone().bytes(),
+                canister_type: SnsCanisterType::Archive.into(),
+            }),
+            hash: archive_hash.clone(),
+        };
+
+        nns_canisters.add_wasm(request).await;
+
         let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
 
         let result = try_call_with_cycles_via_universal_canister(

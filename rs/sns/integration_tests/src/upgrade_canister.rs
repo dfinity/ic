@@ -26,6 +26,8 @@ lazy_static! {
     pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 }
 
+// Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
+
 #[test]
 fn test_upgrade_canister_proposal_is_successful() {
     local_test_on_sns_subnet(|runtime| async move {
@@ -121,7 +123,13 @@ fn test_upgrade_canister_proposal_is_successful() {
         // Step 3: Inspect result(s).
 
         // Step 3.a: Assert that the proposal was approved.
-        let proposal = sns_canisters.get_proposal(proposal_id).await;
+        let mut proposal = sns_canisters.get_proposal(proposal_id).await;
+        let mut attempts = 0;
+        while proposal.executed_timestamp_seconds == 0 && attempts < 25 {
+            sleep(Duration::from_millis(100)).await;
+            proposal = sns_canisters.get_proposal(proposal_id).await;
+            attempts += 1;
+        }
         assert_ne!(
             proposal.decided_timestamp_seconds, 0,
             "proposal: {:?}",

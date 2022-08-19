@@ -1004,6 +1004,36 @@ message Governance {
   }
 
   SnsMetadata sns_metadata = 21;
+
+  // A version of the SNS defined by the WASM hashes of its canisters.
+  message Version {
+    // The hash of the Root canister WASM.
+    bytes root_wasm_hash = 1;
+    // The hash of the Governance canister WASM.
+    bytes governance_wasm_hash = 2;
+    // The hash of the Ledger canister WASM.
+    bytes ledger_wasm_hash = 3;
+    // The hash of the Swap canister WASM.
+    bytes swap_wasm_hash = 4;
+    // The hash of the Ledger Archive canister WASM.
+    bytes archive_wasm_hash = 5;
+  }
+
+  // An upgrade in progress, defined as a version target and a time at which it is considered failed.
+  message UpgradeInProgress {
+    // Version to  be upgraded to
+    Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+  }
+  // Current version that this SNS is running.
+  Version deployed_version = 22;
+
+  // Version SNS is in process of upgrading to.
+  UpgradeInProgress pending_version = 23;
 }
 
 // Request message for 'get_metadata'.
@@ -1015,6 +1045,18 @@ message GetMetadataResponse {
   optional string url = 2;
   optional string name = 3;
   optional string description = 4;
+}
+
+// Request for the SNS's currently running version.
+message GetRunningSnsVersionRequest {}
+
+// Response with the SNS's currently running version and any upgrades
+// that are in progress.
+message GetRunningSnsVersionResponse {
+  // The currently deployed version of the SNS.
+  Governance.Version deployed_version = 1;
+  // The upgrade in progress, if any.
+  Governance.UpgradeInProgress pending_version = 2;
 }
 
 // Empty message to use in oneof fields that represent empty
@@ -1455,3 +1497,4 @@ message Account {
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
 }
+

@@ -37,7 +37,8 @@ use ic_sns_governance::{
     ledger::LedgerCanister,
     pb::v1::{
         governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
-        GetProposal, GetProposalResponse, Governance as GovernanceProto,
+        GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
+        GetRunningSnsVersionResponse, Governance as GovernanceProto,
         ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
         ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
         RewardEvent, SetMode, SetModeResponse,
@@ -466,6 +467,24 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     )
     .await
     .expect("Unable to get the status of the SNS root canister.")
+}
+
+/// Gets the current SNS version, as understood by Governance.  This is useful
+/// for diagnosing upgrade problems, such as if multiple ledger archives are not
+/// running the same version.
+#[export_name = "canister_query get_running_sns_version"]
+fn get_running_sns_version() {
+    println!("{}get_running_sns_version", log_prefix());
+    over(candid_one, get_running_sns_version_)
+}
+
+/// Internal method for calling get_sns_version.
+#[candid_method(query, rename = "get_running_sns_version")]
+fn get_running_sns_version_(_: GetRunningSnsVersionRequest) -> GetRunningSnsVersionResponse {
+    GetRunningSnsVersionResponse {
+        deployed_version: governance().proto.deployed_version.clone(),
+        pending_version: governance().proto.pending_version.clone(),
+    }
 }
 
 /// Sets the mode. Only the swap canister is allowed to call this.

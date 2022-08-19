@@ -13,6 +13,7 @@ use dfn_core::println;
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
@@ -45,11 +46,11 @@ const ONE_TRILLION: u64 = 1_000_000_000_000;
 const ONE_BILLION: u64 = 1_000_000_000;
 
 const SNS_CREATION_FEE: u64 = 50 * ONE_TRILLION;
-const INIITIAL_CANISTER_CREATION_CYCLES: u64 = 500 * ONE_BILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u64 = 500 * ONE_BILLION;
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
 /// safer handling in our internal logic.  This is not intended to be persisted outside of method logic
-struct SnsWasms {
+struct SnsWasmsForDeploy {
     root: Vec<u8>,
     governance: Vec<u8>,
     ledger: Vec<u8>,
@@ -329,7 +330,7 @@ where
 
         // After this step, we need to delete the canisters if things fail
         let canisters =
-            Self::create_sns_canisters(canister_api, subnet_id, INIITIAL_CANISTER_CREATION_CYCLES)
+            Self::create_sns_canisters(canister_api, subnet_id, INITIAL_CANISTER_CREATION_CYCLES)
                 .await?;
         // This step should never fail unless the step before it fails which would return
         // an error.
@@ -337,9 +338,20 @@ where
             "This should never happen. Failed to convert SnsCanisterIds into correct type.",
         );
 
+        let latest_version = thread_safe_sns
+            .with(|sns_wasms| sns_wasms.borrow().upgrade_path.latest_version.clone());
         // If that works, build the payloads
         let initial_payloads = sns_init_payload
-            .build_canister_payloads(&sns_init_canister_ids)
+            .build_canister_payloads(
+                &sns_init_canister_ids,
+                Some(Version {
+                    root_wasm_hash: latest_version.root_wasm_hash,
+                    governance_wasm_hash: latest_version.governance_wasm_hash,
+                    ledger_wasm_hash: latest_version.ledger_wasm_hash,
+                    swap_wasm_hash: latest_version.swap_wasm_hash,
+                    archive_wasm_hash: latest_version.archive_wasm_hash,
+                }),
+            )
             // NOTE: This error path is not under test, because validate(), called above, should
             // ensure this can never be triggered where validate() would succeed.
             .map_err(|e| {
@@ -522,7 +534,7 @@ where
     async fn install_wasms(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
-        latest_wasms: SnsWasms,
+        latest_wasms: SnsWasmsForDeploy,
         init_payloads: SnsCanisterInitPayloads,
     ) -> Result<(), String> {
         let results = zip(
@@ -714,7 +726,7 @@ where
     }
 
     /// Get the latest version of the WASMs based on the latest SnsVersion
-    fn get_latest_version_wasms(&self) -> Result<SnsWasms, String> {
+    fn get_latest_version_wasms(&self) -> Result<SnsWasmsForDeploy, String> {
         let version = &self.upgrade_path.latest_version;
 
         let root = self
@@ -749,7 +761,15 @@ where
             .ok_or_else(|| "Swap wasm for this version not found in storage.".to_string())?
             .wasm;
 
-        Ok(SnsWasms {
+        // We do not need this to be set to install, but no upgrade path will be found by the installed
+        // SNS if we do not have this as part of the version.
+        self.read_wasm(
+            &vec_to_hash(version.archive_wasm_hash.clone())
+                .map_err(|_| "No archive wasm set for this version.".to_string())?,
+        )
+        .ok_or_else(|| "Archive wasm for this version not found in storage.".to_string())?;
+
+        Ok(SnsWasmsForDeploy {
             root,
             governance,
             ledger,
@@ -813,6 +833,7 @@ impl UpgradePath {
             }
             SnsCanisterType::Ledger => new_latest_version.ledger_wasm_hash = wasm_hash.to_vec(),
             SnsCanisterType::Swap => new_latest_version.swap_wasm_hash = wasm_hash.to_vec(),
+            SnsCanisterType::Archive => new_latest_version.archive_wasm_hash = wasm_hash.to_vec(),
         }
 
         self.upgrade_path
@@ -837,7 +858,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::vec;
 
-    const CANISTER_CREATION_CYCLES: u64 = INIITIAL_CANISTER_CREATION_CYCLES * 4;
+    const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 4;
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
@@ -1004,43 +1025,59 @@ mod test {
 
     /// Add some placeholder wasms with different values so we can test
     /// that each value is installed into the correct spot
-    fn add_mock_wasms(canister: &mut SnsWasmCanister<TestCanisterStableMemory>) {
+    fn add_mock_wasms(canister: &mut SnsWasmCanister<TestCanisterStableMemory>) -> SnsVersion {
         let root = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Root),
         };
-        let root_hash = root.sha256_hash();
+        let root_wasm_hash = root.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
             wasm: Some(root),
-            hash: root_hash.to_vec(),
+            hash: root_wasm_hash.clone(),
         });
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 1],
             canister_type: i32::from(SnsCanisterType::Governance),
         };
-        let governance_hash = governance.sha256_hash();
+        let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
             wasm: Some(governance),
-            hash: governance_hash.to_vec(),
+            hash: governance_wasm_hash.clone(),
         });
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
         };
-        let ledger_hash = ledger.sha256_hash();
+        let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
-            hash: ledger_hash.to_vec(),
+            hash: ledger_wasm_hash.clone(),
         });
         let swap = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 3],
             canister_type: i32::from(SnsCanisterType::Swap),
         };
-        let swap_hash = swap.sha256_hash();
+        let swap_wasm_hash = swap.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
             wasm: Some(swap),
-            hash: swap_hash.to_vec(),
+            hash: swap_wasm_hash.clone(),
         });
+        let archive = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 4],
+            canister_type: i32::from(SnsCanisterType::Archive),
+        };
+        let archive_wasm_hash = archive.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(archive),
+            hash: archive_wasm_hash.clone(),
+        });
+        SnsVersion {
+            root_wasm_hash,
+            governance_wasm_hash,
+            ledger_wasm_hash,
+            swap_wasm_hash,
+            archive_wasm_hash,
+        }
     }
 
     #[test]
@@ -1196,6 +1233,14 @@ mod test {
         wasm.canister_type = i32::from(SnsCanisterType::Swap);
 
         canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Add an Archive WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Archive);
+
+        canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
             hash: valid_hash.to_vec(),
         });
@@ -1224,6 +1269,15 @@ mod test {
             root_wasm_hash: valid_hash.to_vec(),
             ledger_wasm_hash: valid_hash.to_vec(),
             swap_wasm_hash: valid_hash.to_vec(),
+            ..Default::default()
+        };
+
+        let expected_next_sns_version5 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            root_wasm_hash: valid_hash.to_vec(),
+            ledger_wasm_hash: valid_hash.to_vec(),
+            swap_wasm_hash: valid_hash.to_vec(),
+            archive_wasm_hash: valid_hash.to_vec(),
         };
 
         assert_eq!(
@@ -1243,7 +1297,11 @@ mod test {
 
         assert_eq!(
             canister.get_next_sns_version(expected_next_sns_version3.into()),
-            expected_next_sns_version4.into()
+            expected_next_sns_version4.clone().into()
+        );
+        assert_eq!(
+            canister.get_next_sns_version(expected_next_sns_version4.into()),
+            expected_next_sns_version5.into()
         );
     }
 
@@ -1326,7 +1384,7 @@ mod test {
             Some(SnsInitPayload::with_valid_values_for_testing()),
             canister_api,
             Some(subnet_test_id(1)),
-            false,
+            false, // wasm_available
             vec![],
             vec![],
             vec![],
@@ -1686,9 +1744,10 @@ mod test {
         }
 
         let test_id = subnet_test_id(1);
-        CANISTER_WRAPPER.with(|c| {
+        let deployed_version = CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
-            add_mock_wasms(&mut c.borrow_mut());
+            let sns_version = add_mock_wasms(&mut c.borrow_mut());
+            sns_version
         });
 
         let init_payload = SnsInitPayload::with_valid_values_for_testing();
@@ -1735,6 +1794,13 @@ mod test {
                 }
                 .try_into()
                 .unwrap(),
+                Some(Version {
+                    root_wasm_hash: deployed_version.root_wasm_hash,
+                    governance_wasm_hash: deployed_version.governance_wasm_hash,
+                    ledger_wasm_hash: deployed_version.ledger_wasm_hash,
+                    swap_wasm_hash: deployed_version.swap_wasm_hash,
+                    archive_wasm_hash: deployed_version.archive_wasm_hash,
+                }),
             )
             .unwrap();
 
@@ -1870,7 +1936,7 @@ mod test {
             },
         )
         .await;
-        println!("{:?}", response);
+
         let root_canister_2 = response.canisters.unwrap().root.unwrap();
 
         assert_ne!(root_canister_1, root_canister_2);

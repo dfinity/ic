@@ -1282,6 +1282,9 @@ pub mod test_helpers {
         /// See `impl Drop for NativeEnvironment`
         #[allow(clippy::type_complexity)]
         pub required_canister_call_invocations: Arc<RwLock<Vec<(CanisterId, String, Vec<u8>)>>>,
+
+        /// The value to be returned by now().
+        pub now: u64,
     }
 
     /// NativeEnvironment is "empty" by default. I.e. the canister_id method
@@ -1293,6 +1296,11 @@ pub mod test_helpers {
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
+                // This needs to be non-zero
+                now: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
             }
         }
     }
@@ -1317,6 +1325,10 @@ pub mod test_helpers {
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
+                now: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
             }
         }
 
@@ -1354,24 +1366,43 @@ pub mod test_helpers {
                 self.set_call_canister_response(canister_id, method_name, arg, res);
             }
         }
+
+        /// Get a function that allows you to assert required calls were made
+        /// To avoid Drop impl, you may need to keep governance in scope longer.
+        pub fn get_assert_required_calls_fn(&self) -> Box<dyn FnOnce()> {
+            let required_calls = Arc::clone(&self.required_canister_call_invocations);
+            Box::new(move || {
+                let invocations = required_calls.try_read().unwrap().clone();
+                // Empty these so we don't panic again during Drop
+                required_calls.try_write().unwrap().clear();
+                assert!(
+                    invocations.is_empty(),
+                    "Not all required calls were executed: {:?}",
+                    invocations
+                );
+            })
+        }
     }
 
-    /// Used to assert that any post-conditions are true.  This is needed because NativeEnvironment
-    /// is owned by Governance in tests, so we cannot make assertions against its contents.
+    /// Used to assert that any post-conditions are true.
+    /// A better way is using `get_assert_required_calls_fn` to get a function to make this assert
+    /// inside of the test body, as it gives better debug information.  This functions as a fallback
+    /// so that tests cannot accidentally pass if that line is removed.
     impl Drop for NativeEnvironment {
         fn drop(&mut self) {
             let invocations = self.required_canister_call_invocations.try_read().unwrap();
-            assert!(invocations.is_empty());
+            assert!(
+                invocations.is_empty(),
+                "Not all required calls were executed: {:?}",
+                invocations
+            );
         }
     }
 
     #[async_trait]
     impl Environment for NativeEnvironment {
         fn now(&self) -> u64 {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
+            self.now
         }
 
         fn random_u64(&mut self) -> u64 {
