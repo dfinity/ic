@@ -66,6 +66,7 @@ impl Wasm {
     /// reads it.
     pub fn from_location_specified_by_env_var(bin_name: &str, features: &[&str]) -> Option<Wasm> {
         let var_name = Wasm::env_var_name(bin_name, features);
+        eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
                 eprintln!("Using pre-built binary for {}", bin_name);

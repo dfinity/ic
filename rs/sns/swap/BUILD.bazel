@@ -26,8 +26,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",
-    "//rs/types/base_types",
     "//rs/types/ic00_types",
+    "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
@@ -72,7 +72,25 @@ rust_library(
     crate_name = "ic_sns_swap",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_library(
+    name = "swap_test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_swap",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
 )
 
 rust_canister(

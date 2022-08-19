@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -68,7 +68,7 @@ rust_library(
 )
 
 rust_canister(
-    name = "cycles-minting-canister",
+    name = "cycles-minting-canister-raw",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     edition = "2018",
@@ -77,6 +77,11 @@ rust_canister(
         ":cmc",
         ":build_script",
     ],
+)
+
+optimized_canister(
+    name = "cycles-minting-canister",
+    wasm = "cycles-minting-canister-raw",
 )
 
 rust_test(

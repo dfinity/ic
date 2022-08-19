@@ -148,7 +148,7 @@ def external_crates_repository(name, annotations):
             ),
             "cfg-if": crate.spec(version = "^0.1.10"),
             "chrono": crate.spec(
-                version = "=0.4.20",
+                version = "=0.4.19",
             ),
             "ciborium": crate.spec(
                 git = "https://github.com/enarx/ciborium",

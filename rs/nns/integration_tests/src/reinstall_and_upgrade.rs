@@ -396,7 +396,10 @@ fn construct_init_state() -> NnsInitPayloads {
         .genesis_token
         .donate_account_recipient_neuron_id = Some(NeuronId(TEST_NEURON_2_ID).into());
 
-    let csv_file: PathBuf = ["src", "neurons.csv"].iter().collect();
+    let csv_file = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("src/neurons.csv"),
+    };
     nns_init_payload_builder
         .governance
         .with_test_neurons()

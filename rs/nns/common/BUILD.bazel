@@ -47,6 +47,18 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "common_test_feature",
+    srcs = glob([
+        "src/**/*.rs",
+        "gen/**/*.rs",
+    ]),
+    crate_features = ["test"],
+    crate_name = "ic_nns_common",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
