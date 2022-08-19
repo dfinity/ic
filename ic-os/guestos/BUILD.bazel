@@ -258,4 +258,5 @@ py_binary(
         ":version.txt.wrapped",
         "//rs/prep:ic-prep",
     ],
+    tags = ["manual"],
 )
