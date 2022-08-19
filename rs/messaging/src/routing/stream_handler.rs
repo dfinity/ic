@@ -635,35 +635,24 @@ impl StreamHandlerImpl {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
                         // #### XNet cycle transfer monitoring
-                        // self.metrics
-                        //     .inc_stream_index
-                        //     .with_label_values(&[&remote_subnet_id.to_string()])
-                        //     .set(stream.messages_begin().get() as i64); // option to mirror what is being sent
-                        //    //.set(stream_index.get().try_into().unwrap()); // +1 needed, since this is actual index, not next index
-                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                        // let new_cycles = old_cycles.add(cycles_in_msg);
-                        // self.cycle_map.insert(remote_subnet_id, new_cycles);
+                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
                         stream.set_sum_cycles_inc(new_cycles_sum);
-                        //let (cycles_hi, cycles_lo) = new_cycles_sum.into_parts();
                         self.metrics
                             .inc_cycles
                             .with_label_values(&[&remote_subnet_id.to_string()])
                             .set(new_cycles_sum.get() as f64);
-                        // self.metrics
-                        //     .inc_cycles_lo
-                        //     .with_label_values(&[&remote_subnet_id.to_string()])
-                        //     .set(cycles_lo as f64);
-                        // self.cycle_map.insert(remote_subnet_id, new_cycles);
-                        // cycle_map: BTreeMap<SubnetId, Cycles>,
-                        // count cycles (using msg), for requests, add to balance
-                        // for refund, subtract?
-                        // ####
                     }
 
                     // Message not inducted.
                     Err((err, msg)) => {
                         self.observe_inducted_message_status(msg_type, err.to_label_value());
-
+                        // #### XNet cycle transfer monitoring
+                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
+                        stream.set_sum_cycles_inc(new_cycles_sum);
+                        self.metrics
+                            .inc_cycles
+                            .with_label_values(&[&remote_subnet_id.to_string()])
+                            .set(new_cycles_sum.get() as f64);
                         match msg {
                             RequestOrResponse::Request(_) => {
                                 debug!(
@@ -693,7 +682,13 @@ impl StreamHandlerImpl {
                 // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
-
+                    // #### XNet cycle transfer monitoring
+                    let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);;
+                    stream.set_sum_cycles_inc(new_cycles_sum);
+                    self.metrics
+                        .inc_cycles
+                        .with_label_values(&[&remote_subnet_id.to_string()])
+                        .set(new_cycles_sum.get() as f64);
                     match &msg {
                         RequestOrResponse::Request(_) => {
                             debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
@@ -769,8 +764,8 @@ impl StreamHandlerImpl {
         self.metrics
             .inc_stream_index
             .with_label_values(&[&remote_subnet_id.to_string()])
-            .set(stream_index.get().try_into().unwrap());
-            //.set(stream.signals_end().get() as i64); // option to mirror what is being sent // might be useful, current state of incoming
+            //.set(stream_index.get().try_into().unwrap()); // this option is -1 compared to stream_begin
+            .set(stream.signals_end().get() as i64); // option to mirror what is being sent // might be useful, current state of incoming
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`

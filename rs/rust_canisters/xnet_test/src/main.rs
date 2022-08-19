@@ -227,7 +227,7 @@ fn fanout() {
                 on_reject,
                 None,
                 std::ptr::null_mut(),
-                api::Funds::new(1),
+                api::Funds::new(2),
                 //api::Funds::new(u64::MAX-34798538745),
             );
 
@@ -248,6 +248,7 @@ fn fanout() {
 /// Endpoint that handles requests from canisters located on remote subnets.
 #[export_name = "canister_update handle_request"]
 fn handle_request() {
+    api::msg_cycles_accept(1);
     let (req, _) =
         candid::Decode!(&api::arg_data()[..], Request, Vec<u8>).expect("failed to decode request");
     let caller = api::caller();
