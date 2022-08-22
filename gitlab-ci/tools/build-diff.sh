@@ -100,7 +100,7 @@ if [[ $PATH0 == *".gz" && $PATH1 == *".gz" ]]; then
         -o "/tmp/$PATH1"
 
     diffoscope_check
-    diffoscope "/tmp/$PATH0" "/tmp/$PATH1"
+    diffoscope --html-dir "diffoscope-${VERSION}" "/tmp/$PATH0" "/tmp/$PATH1"
 
     exit 0
 fi
