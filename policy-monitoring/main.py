@@ -404,7 +404,7 @@ def main():
                     assert gitlab is not None, "Did you forget to specify --global_infra?"
                     try:
                         snap_bulb = gitlab.get_registry_snapshot_for_group(group)
-                        group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb)
+                        group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb, source=group.job_url())
                     except CiException:
                         print("Falling back to inferring Global Infra from logs ...")
                         # logs need to be reusable, so we serialize the stream

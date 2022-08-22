@@ -58,7 +58,6 @@ class MultiMonitor:
         with open(self.event_stream_file, "a") as fout:
             fout.writelines(self._buf)
         self._buf = []
-        eprint("Flush!")  # TODO: remove
 
     def _forward_to_file(self, datum: str) -> None:
         self._buf.append(datum)

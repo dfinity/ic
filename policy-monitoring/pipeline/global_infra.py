@@ -23,7 +23,14 @@ class GlobalInfra:
     host_addr_to_node_id_map: Dict[IPv6Address, str]
     node_id_to_host_map: Dict[str, IPv6Address]
     original_subnet_types: Dict[str, str]
+
+    # Deprecated; instead, compute the actual in_subnet relation via:
+    #  1. original_subnet_membership
+    #  2. registry__node_added_to_subnet events
+    #  3. registry__node_removed_from_subnet
+    #  See, e.g., policy-monitoring/mfotl-policies/unauthorized_connections/formula.mfotl
     in_subnet_relations: Dict[str, List[Tuple[int, str]]]
+
     original_subnet_membership: Dict[str, str]
 
     def __init__(self, source: str):
@@ -74,6 +81,7 @@ class GlobalInfra:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "source": self.source,
+            "original_nodes": sorted(self.get_original_nodes().values()),
             "subnets": self.in_subnet_relations,
             "original_subnet_types": self.get_original_subnet_types(),
             "original_subnet_membership": self.get_original_subnet_membership(),
@@ -101,7 +109,7 @@ class GlobalInfra:
         return GlobalInfra.fromDict(d, source=str(input_file))
 
     @classmethod
-    def _fromIcRegeditSnapshot(Self, j: Any) -> "GlobalInfra":
+    def _fromIcRegeditSnapshot(Self, j: Any, source: str) -> "GlobalInfra":
         d: Dict[str, Any] = dict()
 
         def int_to_subnet_type(x: str, subnet_id: str) -> str:
@@ -113,8 +121,10 @@ class GlobalInfra:
                 return "System"
             raise GlobalInfra.Error(f"unsupported subnet type {x} for {subnet_id}")
 
-        subnets = list(map(lambda x: x[len("(principal-id)") :], j["subnet_list"]["subnets"]))
         nodes = list(map(lambda x: x[len("node_record_") :], filter(lambda k: k.startswith("node_record_"), j.keys())))
+        d["original_nodes"] = sorted(nodes)
+
+        subnets = list(map(lambda x: x[len("(principal-id)") :], j["subnet_list"]["subnets"]))
         d["original_subnet_types"] = {
             subnet_id: int_to_subnet_type(j[f"subnet_record_{subnet_id}"]["subnet_type"], subnet_id)
             for subnet_id in subnets
@@ -144,12 +154,12 @@ class GlobalInfra:
         d["host_addr_to_node_id_mapping"] = host_ips
         d["data_centers"] = Self._get_dc_info_impl(set(host_ips.keys()))
 
-        return GlobalInfra.fromDict(d, "<obtained_from_registry_snapshot>")
+        return GlobalInfra.fromDict(d, source)
 
     @classmethod
-    def fromIcRegeditSnapshotBulb(Self, input_bulb: str) -> "GlobalInfra":
+    def fromIcRegeditSnapshotBulb(Self, input_bulb: str, source: str) -> "GlobalInfra":
         j = json.loads(input_bulb)
-        return Self._fromIcRegeditSnapshot(j)
+        return Self._fromIcRegeditSnapshot(j, source)
 
     @classmethod
     def fromIcRegeditSnapshotFile(Self, input_file: Path) -> "GlobalInfra":
@@ -157,7 +167,7 @@ class GlobalInfra:
         with open(input_file, "r") as fin:
             j = json.load(fin)
 
-        return Self._fromIcRegeditSnapshot(j)
+        return Self._fromIcRegeditSnapshot(j, source=str(input_file))
 
     @classmethod
     def fromLogs(Self, logs: List[EsDoc]) -> "GlobalInfra":
