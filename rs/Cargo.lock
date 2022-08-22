@@ -4625,6 +4625,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto",
  "ic-crypto-hash",
+ "ic-crypto-prng",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
  "ic-ecdsa-object",
@@ -4722,6 +4723,7 @@ dependencies = [
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
+ "ic-crypto-tecdsa",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keygen",
@@ -5242,6 +5244,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-prng"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-sha",
+ "ic-interfaces",
+ "ic-types 0.8.0",
+ "ic-types-test-utils",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
+]
+
+[[package]]
 name = "ic-crypto-secrets-containers"
 version = "0.8.0"
 dependencies = [
@@ -5256,6 +5272,14 @@ version = "0.8.0"
 dependencies = [
  "ic-crypto-internal-sha2",
  "openssl",
+]
+
+[[package]]
+name = "ic-crypto-tecdsa"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-types 0.8.0",
 ]
 
 [[package]]
@@ -5628,7 +5652,8 @@ dependencies = [
  "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-constants",
- "ic-crypto",
+ "ic-crypto-prng",
+ "ic-crypto-tecdsa",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
  "ic-embedders",

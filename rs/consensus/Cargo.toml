@@ -10,6 +10,7 @@ ic-consensus-message = { path = "./message" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-hash = { path = "../crypto/hash" }
+ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }

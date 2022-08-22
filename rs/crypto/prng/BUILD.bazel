@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/sha",
+    "//rs/interfaces",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:strum",
+]
+
+rust_library(
+    name = "prng",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_crypto_prng",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "prng_unit_tests",
+    srcs = ["src/tests.rs"],
+    crate = ":prng",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "test_suite",
+    srcs = glob(["tests/**"]),
+    edition = "2018",
+    deps = [":prng"] + DEPENDENCIES,
+)

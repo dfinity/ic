@@ -65,8 +65,7 @@ use crate::{
 
 use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
-use ic_crypto::prng::Csprng;
-use ic_crypto::prng::RandomnessPurpose::ExecutionThread;
+use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that

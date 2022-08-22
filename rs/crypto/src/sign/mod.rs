@@ -5,7 +5,7 @@ use crate::sign::basic_sig::{BasicSignVerifierByPublicKeyInternal, BasicSignerIn
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
-pub use canister_threshold_sig::ecdsa::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
+pub use canister_threshold_sig::ecdsa::get_tecdsa_master_public_key;
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::{

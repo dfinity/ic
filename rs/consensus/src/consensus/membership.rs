@@ -1,7 +1,7 @@
 use crate::consensus::utils::{
     active_high_threshold_transcript, active_low_threshold_transcript, registry_version_at_height,
 };
-use ic_crypto::prng::{Csprng, RandomnessPurpose};
+use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::{consensus_pool::ConsensusPoolCache, registry::RegistryClient};
 use ic_types::{
     consensus::{

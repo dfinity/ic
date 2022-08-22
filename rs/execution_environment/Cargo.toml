@@ -12,7 +12,8 @@ ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-prng = { path = "../crypto/prng" }
+ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
