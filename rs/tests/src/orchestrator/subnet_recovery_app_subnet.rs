@@ -49,7 +49,10 @@ const SUBNET_SIZE: usize = 3;
 
 pub fn config_same_nodes() -> InternetComputer {
     InternetComputer::new()
-        .add_fast_single_node_subnet(SubnetType::System)
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
