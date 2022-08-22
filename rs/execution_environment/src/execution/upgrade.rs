@@ -2,9 +2,11 @@
 // `upgrade` is executed.
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 // and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
-use crate::canister_manager::{canister_layout, CanisterManagerError, InstallCodeContext};
+use crate::canister_manager::{CanisterManagerError, InstallCodeContext};
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
-use crate::execution::install_code::{InstallCodeRoutineResult, PausedInstallCodeRoutine};
+use crate::execution::install_code::{
+    canister_layout, InstallCodeRoutineResult, PausedInstallCodeRoutine,
+};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
