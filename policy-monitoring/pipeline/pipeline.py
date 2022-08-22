@@ -1,6 +1,7 @@
 import re
 from typing import Dict
 from typing import Iterable
+from typing import List
 from typing import Optional
 from typing import Set
 from typing import Tuple
@@ -31,10 +32,11 @@ def gurl(group: Group) -> str:
     return "<not available>"
 
 
-class Pipeline:
-    def _formula_url(self, formula: str) -> str:
-        return f"<https://sourcegraph.com/github.com/dfinity/ic@{self.git_revision}/-/blob/policy-monitoring/mfotl-policies/{formula}/formula.mfotl|{formula}>"
+def furl(git_rev: str, formula: str) -> str:
+    return f"<https://sourcegraph.com/github.com/dfinity/ic@{git_rev}/-/blob/policy-monitoring/mfotl-policies/{formula}/formula.mfotl|{formula}>"
 
+
+class Pipeline:
     def __init__(
         self,
         policies_path: str,
@@ -74,7 +76,6 @@ class Pipeline:
         formula = "dummy"
 
         log_file = self.art_manager.event_stream_file(group, pproc.name)
-        session_name = f"{log_file.stem}.{formula}"
 
         found_expected_violation = False
 
@@ -82,18 +83,18 @@ class Pipeline:
             nonlocal found_expected_violation
             found_expected_violation = True
 
-        def repro(session: Monpoly) -> str:
-            if self.docker_starter is not None:
+        def repro(session: Monpoly, docker_starter=self.docker_starter, log_file=log_file) -> str:
+            if docker_starter is not None:
                 repro_cmd = session.cmd_wo_rss(enforce_no_docker=True) + ("-log", f'"/repro/{log_file.name}"')
                 res = " ".join(repro_cmd)
-                return "\n".join([self.docker_starter, res])
+                return "\n".join([docker_starter, res])
             else:
                 repro_cmd = session.cmd_wo_rss() + ("-log", f'"/repro/{log_file.name}"')
                 res = " ".join(repro_cmd)
                 return res
 
         with Monpoly(
-            name=session_name,
+            name=f"{log_file.stem}.{formula}",
             docker=self.docker,
             workdir=self.policies_path,
             reprodir=str(self.art_manager.artifacts_prefix()),
@@ -142,11 +143,13 @@ class Pipeline:
         self,
         group: Group,
         pproc: PreProcessor,
-    ) -> Iterable[Monpoly]:
+    ) -> List[Monpoly]:
         eprint(f"Forming Monpoly builders for {group} with pre-processor {pproc.name}...")
 
         assert group.name in self.stat and "monpoly" in self.stat[group.name]
         self.stat[group.name]["monpoly"] = dict()
+
+        monitors = []
 
         for formula in pproc.get_formulas():
             # Obtain variable name mapping
@@ -162,38 +165,49 @@ class Pipeline:
             self.stat[group.name]["monpoly"][formula] = dict()
 
             log_file = self.art_manager.event_stream_file(group, pproc.name)
-            session_name = f"{log_file.stem}.{formula}"
 
-            def repro(session: Monpoly) -> str:
+            def repro(
+                session: Monpoly,
+                formula: str,
+                log_file=log_file,
+                group=group,
+                repros: Dict[str, Dict[str, Set[Tuple[str, ...]]]] = self.repros,
+                docker_starter=self.docker_starter,
+            ) -> str:
                 repro_cmd = session.cmd_wo_rss() + ("-log", f'"/repro/{log_file.name}"')
 
                 # Save this repro in case we need to run it later
-                if group.name not in self.repros:
-                    self.repros[group.name] = dict()
+                if group.name not in repros:
+                    repros[group.name] = dict()
 
-                if formula not in self.repros[group.name]:
-                    self.repros[group.name][formula] = set()
+                if formula not in repros[group.name]:
+                    repros[group.name][formula] = set()
                 else:
                     eprint(f"REPRO WARNING: multiple violations of policy {formula} by group name {group.name}")
 
-                s: Set[Tuple[str, ...]]
-                s = self.repros[group.name][formula]
+                s = repros[group.name][formula]
                 s.add(repro_cmd)
 
-                if self.docker_starter is not None:
+                if docker_starter is not None:
                     no_docker_cmd = session.cmd_wo_rss(enforce_no_docker=True) + ("-log", f'"/repro/{log_file.name}"')
                     res = " ".join(no_docker_cmd)
-                    return "\n".join([self.docker_starter, res])
+                    return "\n".join([docker_starter, res])
                 else:
                     res = " ".join(repro_cmd)
                     return res
 
-            def alert_h(arg: AlertHandlerParams) -> None:
+            def alert_h(
+                arg: AlertHandlerParams,
+                git_rev=self.git_revision,
+                slack=self.slack,
+                group=group,
+                formula=formula,
+                var_seq: Tuple[str, ...] = self.var_seq[formula],
+            ) -> None:
                 m = re.match(r"^@(\d+) \(time point (\d+)\): (.*)$", arg.message)
                 if not m or len(m.groups()) != 3:
                     viol = arg.message
                 else:
-                    var_seq = self.var_seq[formula]
                     val_seq = ReproManager.parse_tuple(m.group(3))
                     if len(var_seq) != len(val_seq):
                         eprint(
@@ -206,43 +220,43 @@ class Pipeline:
                     else:
                         key_val_pairs = map(lambda pair: f'{pair[0]} = "{pair[1]}"', zip(var_seq, val_seq))
                         viol = f"@{m.group(1)} (time point {m.group(2)}):\n " + "\n ".join(key_val_pairs)
-                self.slack.alert(
+                slack.alert(
                     level="🎩",
                     text=f"`{arg.source}` reports that group `{group.name}`"
-                    f" has violated policy {self._formula_url(formula)}:\n"
+                    f" has violated policy {furl(git_rev, formula)}:\n"
                     f"```\n{viol}\n```\n"
                     f"Repro:\n"
-                    f"```\n{repro(arg.session)}\n"
+                    f"```\n{repro(arg.session, formula)}\n"
                     f"```\nTest logs: <{gurl(group)}>\n",
                     short_text=f"Violation in {formula}",
                 )
 
-            def error_h(arg: ErrorHandlerParams):
-                self.slack.alert(
+            def error_h(arg: ErrorHandlerParams, slack=self.slack, formula=formula, group=group) -> None:
+                slack.alert(
                     level="🍊",
                     text=f"`{arg.source}` reports an error while checking"
                     f" policy `{formula}` against group `{group.name}`:\n"
                     f"```\n{arg.message}\n```\n"
                     f"Repro:\n"
-                    f"```\n{repro(arg.session)}\n"
+                    f"```\n{repro(arg.session, formula)}\n"
                     f"```\nTest logs: <{gurl(group)}>\n",
                     short_text=f"Error from {arg.source}",
                 )
 
-            def exit_h(arg: ExitHandlerParams) -> None:
+            def exit_h(arg: ExitHandlerParams, slack=self.slack, formula=formula, group=group) -> None:
                 if arg.exit_code != "0":
-                    self.slack.alert(
+                    slack.alert(
                         level="🚱",
                         text=f"Monpoly exited with non-zero code `{arg.exit_code}`"
                         f" while checking policy `{formula}` of `{group.name}`\n"
                         f"Repro:\n"
-                        f"```\n{repro(arg.session)}\n"
+                        f"```\n{repro(arg.session, formula)}\n"
                         f"```\nTest logs: <{gurl(group)}>\n",
                         short_text=f"Monpoly exited with code {arg.exit_code}",
                     )
 
-            yield Monpoly(
-                name=session_name,
+            monitor = Monpoly(
+                name=f"{log_file.stem}.{formula}",
                 docker=self.docker,
                 workdir=self.policies_path,
                 stat=self.stat[group.name]["monpoly"][formula],
@@ -254,6 +268,9 @@ class Pipeline:
                 error_handler=error_h,
                 exit_handler=exit_h,
             )
+            monitors.append(monitor)
+
+        return monitors
 
     def _monpoly_exception_handler(self, e: MonpolyException) -> None:
         if isinstance(e, MonpolyIoClosed):
@@ -294,7 +311,7 @@ class Pipeline:
         # Process the event stream
         with MultiMonitor(
             single_formula_monitors=(
-                list(self._get_monpoly_builders(group, pproc)) if Mode.universal_policy in self.modes else []
+                self._get_monpoly_builders(group, pproc) if Mode.universal_policy in self.modes else []
             ),
             exception_handlers=(lambda e: self._monpoly_exception_handler(e)),
             event_stream_file=(
