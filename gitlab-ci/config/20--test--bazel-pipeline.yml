@@ -30,7 +30,7 @@ bazel-test-all:
       test
       --config ci
       --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})"
-      "${BAZEL_TARGET:-...}"
+      ...
       2>&1 |
       sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
   after_script:
