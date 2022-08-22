@@ -209,12 +209,13 @@ fn correct_charging_source_canister_for_a_request() {
         )
         .unwrap();
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
-    cycles_account_manager.response_cycles_refund(
+    let refund_cycles = cycles_account_manager.refund_for_response_transmission(
         &no_op_logger(),
         &no_op_counter,
-        &mut system_state,
         &response,
     );
+
+    cycles_account_manager.refund_cycles(&mut system_state, refund_cycles);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
