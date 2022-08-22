@@ -16,7 +16,7 @@ bazel-test-all:
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json
+      - bazel-build-log*.json*
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
   script:
@@ -40,5 +40,6 @@ bazel-test-all:
       echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel **"
       echo -e "*************************************************************"
       echo -e "\033[0m"
-    -  cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
+    - cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
+    - gzip bazel-build-log*.json
     - !reference [after_script]
