@@ -930,6 +930,9 @@ def external_crates_repository(name, annotations):
                     "util",
                 ],
             ),
+            "tower-test": crate.spec(
+                version = "^0.4.0",
+            ),
             "tracing": crate.spec(
                 version = "^0.1.34",
             ),
