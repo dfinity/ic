@@ -26,6 +26,7 @@ rust_library(
         "@crate_index//:tokio",
         "@crate_index//:tonic",
         "@crate_index//:tower",
+        "@crate_index//:tower-test",
     ],
 )
 
