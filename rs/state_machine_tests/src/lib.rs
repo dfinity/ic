@@ -1,5 +1,8 @@
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetConfigs},
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, keygen, sign_message,
@@ -11,7 +14,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
-pub use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
+pub use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     crypto::Signable,
@@ -187,6 +190,21 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
+/// Bundles the configuration of a `StateMachine`.
+pub struct StateMachineConfig {
+    subnet_config: SubnetConfig,
+    hypervisor_config: HypervisorConfig,
+}
+
+impl StateMachineConfig {
+    pub fn new(subnet_config: SubnetConfig, hypervisor_config: HypervisorConfig) -> Self {
+        Self {
+            subnet_config,
+            hypervisor_config,
+        }
+    }
+}
+
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
@@ -236,7 +254,7 @@ impl StateMachine {
     }
 
     /// Constructs a new environment with the specified configuration.
-    pub fn new_with_config(config: SubnetConfig) -> Self {
+    pub fn new_with_config(config: StateMachineConfig) -> Self {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
             0,
@@ -252,7 +270,7 @@ impl StateMachine {
         state_dir: TempDir,
         nonce: u64,
         time: Time,
-        subnet_config: Option<SubnetConfig>,
+        config: Option<StateMachineConfig>,
         checkpoints_enabled: bool,
     ) -> Self {
         use slog::Drain;
@@ -273,9 +291,12 @@ impl StateMachine {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let metrics_registry = MetricsRegistry::new();
         let subnet_type = SubnetType::System;
-        let subnet_config = match subnet_config {
-            Some(subnet_config) => subnet_config,
-            None => SubnetConfigs::default().own_subnet_config(subnet_type),
+        let (subnet_config, mut hypervisor_config) = match config {
+            Some(config) => (config.subnet_config, config.hypervisor_config),
+            None => (
+                SubnetConfigs::default().own_subnet_config(subnet_type),
+                HypervisorConfig::default(),
+            ),
         };
 
         let (registry_data_provider, registry_client) =
@@ -283,7 +304,6 @@ impl StateMachine {
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
 
-        let mut hypervisor_config = ic_config::execution_environment::Config::default();
         if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
         }
@@ -388,7 +408,7 @@ impl StateMachine {
 
     /// Same as [restart_node], but the subnet will have the specified `config`
     /// after the restart.
-    pub fn restart_node_with_config(self, config: SubnetConfig) -> Self {
+    pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
         Self::setup_from_dir(
             self.state_dir,
             self.nonce.get(),
@@ -771,6 +791,22 @@ impl StateMachine {
         Ok(canister_id)
     }
 
+    /// Creates a new canister with cycles and installs its code.
+    /// Returns the ID of the newly created canister.
+    ///
+    /// This function is synchronous.
+    pub fn install_canister_with_cycles(
+        &self,
+        module: Vec<u8>,
+        payload: Vec<u8>,
+        settings: Option<CanisterSettingsArgs>,
+        cycles: Cycles,
+    ) -> Result<CanisterId, UserError> {
+        let canister_id = self.create_canister_with_cycles(cycles, settings);
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)?;
+        Ok(canister_id)
+    }
+
     /// Creates a new canister and installs its code specified by WAT string.
     /// Returns the ID of the newly created canister.
     ///
@@ -811,6 +847,32 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm, payload)
+    }
+
+    /// Updates the settings of the given canister.
+    ///
+    /// This function is synchronous.
+    pub fn update_settings(
+        &self,
+        canister_id: &CanisterId,
+        settings: CanisterSettingsArgs,
+    ) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UpdateSettings,
+            UpdateSettingsArgs {
+                canister_id: canister_id.get(),
+                settings,
+            }
+            .encode(),
+        )
+        .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.

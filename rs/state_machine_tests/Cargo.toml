@@ -45,6 +45,7 @@ wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" 
 
 [dev-dependencies]
 ic-crypto-sha = { path = "../crypto/sha" }
+ic-universal-canister = { path = "../universal_canister/lib" }
 libflate = "1.1.2"
 tokio = { version = "1.15.0", features = ["macros"] }
 

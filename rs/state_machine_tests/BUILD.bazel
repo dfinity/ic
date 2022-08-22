@@ -65,6 +65,7 @@ rust_test(
         "//rs/crypto/sha",
         "//rs/registry/subnet_type",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:libflate",
         "@wabt_rs//:wabt",
