@@ -32,7 +32,7 @@ pub async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
 }
 
 /// Compute the subaccount of a principal based on a given nonce.
-fn compute_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+pub fn compute_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
     const DOMAIN: &[u8] = b"ckbtc";
     const DOMAIN_LENGTH: [u8; 1] = [0x05];
 

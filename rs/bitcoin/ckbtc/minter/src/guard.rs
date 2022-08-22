@@ -23,6 +23,14 @@ impl PendingRequests for PendingBalanceUpdates {
     }
 }
 
+pub struct RetrieveBtcUpdates;
+
+impl PendingRequests for RetrieveBtcUpdates {
+    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Principal> {
+        &mut state.retrieve_btc_principals
+    }
+}
+
 /// Guards a block from executing twice when called by the same user and from being
 /// executed [MAX_CONCURRENT] or more times in parallel.
 pub struct Guard<PR: PendingRequests> {
@@ -62,11 +70,16 @@ pub fn balance_update_guard(p: Principal) -> Result<Guard<PendingBalanceUpdates>
     Guard::new(p)
 }
 
+pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, GuardError> {
+    Guard::new(p)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::guard::{GuardError, MAX_CONCURRENT};
     use crate::state::replace_state;
     use crate::state::CkBtcMinterState;
+    use ic_base_types::CanisterId;
     use ic_btc_types::Network;
     use ic_cdk::export::Principal;
 
@@ -82,6 +95,11 @@ mod tests {
             ecdsa_key_name: "".to_string(),
             ecdsa_public_key: None,
             update_balance_principals: Default::default(),
+            retrieve_btc_principals: Default::default(),
+            retrieve_btc_min_fee: 0,
+            retrieve_btc_min_amount: 0,
+            pending_retrieve_btc_requests: Default::default(),
+            ledger_id: CanisterId::from_u64(42),
         }
     }
 

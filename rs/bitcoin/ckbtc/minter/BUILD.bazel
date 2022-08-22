@@ -10,6 +10,7 @@ LIB_DEPS = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/client/cdk",
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
