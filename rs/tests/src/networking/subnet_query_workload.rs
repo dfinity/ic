@@ -24,8 +24,9 @@ use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 
 use ic_registry_subnet_type::SubnetType;
 
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 
+use std::process::Command;
 use std::time::Duration;
 
 const COUNTER_CANISTER_WAT: &str = "counter.wat";
@@ -50,10 +51,21 @@ pub fn large_subnet_test(env: TestEnv) {
     test(env, 1000, Duration::from_secs(2 * 60 * 60), 0.95)
 }
 
+pub fn log_max_open_files(log: &Logger) {
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg("ulimit -n")
+        .output()
+        .unwrap();
+    let output = String::from_utf8_lossy(&output.stdout).replace('\n', "");
+    info!(&log, "ulimit -n: {}", output);
+}
+
 // Run a test with configurable number of query requests per second,
 // duration of the test, and the required success ratio.
 pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64) {
     let log = env.logger();
+    log_max_open_files(&log);
     info!(
         &log,
         "Step 1: Checking readiness of all nodes after the IC setup ..."
