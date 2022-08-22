@@ -4,7 +4,9 @@
 # Anything placed in the /opt directory will be copied to the corresponding location in the /usr directory.
 # If you need to build something from source, this is the place to do it (but you probably don't)
 
-FROM ubuntu@sha256:9d42d0e3e57bc067d10a75ee33bdd1a5298e95e5fc3c5d1fce98b455cb879249
+# focal-20220801
+# https://hub.docker.com/layers/library/ubuntu/focal-20220801/images/sha256-a06ae92523384c2cd182dcfe7f8b2bf09075062e937d5653d7d0db0375ad2221?context=explore
+FROM ubuntu@sha256:a06ae92523384c2cd182dcfe7f8b2bf09075062e937d5653d7d0db0375ad2221
 
 RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git
 
