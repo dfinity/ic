@@ -208,6 +208,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         canister: CanisterState,
         round_context: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution and returns the original message.
@@ -942,6 +943,7 @@ impl ExecutionEnvironment {
                     time,
                     network_topology,
                     round_limits,
+                    subnet_size,
                 );
             }
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
@@ -1214,6 +1216,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
@@ -1232,6 +1235,7 @@ impl ExecutionEnvironment {
             self.metrics.response_cycles_refund_error_counter(),
             round,
             round_limits,
+            subnet_size,
         )
     }
 
@@ -1878,7 +1882,7 @@ impl ExecutionEnvironment {
                     log: &self.log,
                     time: state.metadata.time(),
                 };
-                let dts_result = paused.resume(canister, round, round_limits);
+                let dts_result = paused.resume(canister, round, round_limits, subnet_size);
                 self.process_install_code_result(state, dts_result, timer)
             }
             ExecutionTask::AbortedInstallCode(msg) => {
@@ -2146,7 +2150,7 @@ pub fn execute_canister(
                     log: &exec_env.log,
                     time,
                 };
-                let result = paused.resume(canister, round_context, round_limits);
+                let result = paused.resume(canister, round_context, round_limits, subnet_size);
                 let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
                 ExecuteCanisterResult {
                     canister,

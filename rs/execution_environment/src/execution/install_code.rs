@@ -211,6 +211,7 @@ pub(crate) fn finish_install_code(
     canister_layout_path: PathBuf,
     config: &CanisterMgrConfig,
     round: RoundContext,
+    subnet_size: usize,
 ) -> DtsInstallCodeResult {
     let canister_id = old_canister.canister_id();
     let instructions_consumed = instruction_limit - instructions_left;
@@ -247,6 +248,7 @@ pub(crate) fn finish_install_code(
                 &mut new_canister.system_state,
                 instructions_left,
                 instruction_limit,
+                subnet_size,
             );
             if config.rate_limiting_of_instructions == FlagStatus::Enabled {
                 new_canister.scheduler_state.install_code_debit += instructions_consumed;
@@ -287,6 +289,7 @@ pub(crate) fn finish_install_code(
                 &mut old_canister.system_state,
                 instructions_left,
                 instruction_limit,
+                subnet_size,
             );
             DtsInstallCodeResult::Finished {
                 canister: old_canister,
