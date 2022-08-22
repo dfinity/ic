@@ -536,16 +536,14 @@ impl CyclesAccountManager {
         )
     }
 
-    /// Refunds the cycles from the response. In particular, adds leftover
-    /// cycles from the what was reserved when the corresponding `Request` was
-    /// sent earlier.
-    pub fn response_cycles_refund(
+    /// Returns the refund cycles for the response transmission bytes reserved at
+    /// the initial call time.
+    pub fn refund_for_response_transmission(
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        system_state: &mut SystemState,
         response: &Response,
-    ) {
+    ) -> Cycles {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.
         let response_payload_size_bytes = response.payload_size_bytes().get();
@@ -562,11 +560,9 @@ impl CyclesAccountManager {
                     response_payload_size_bytes,
                     max_payload_size_bytes
                 );
+                Cycles::zero()
             }
-            Some(extra_bytes) => {
-                let cycles_to_refund = self.config.xnet_byte_transmission_fee * extra_bytes;
-                self.refund_cycles(system_state, cycles_to_refund);
-            }
+            Some(extra_bytes) => self.config.xnet_byte_transmission_fee * extra_bytes,
         }
     }
 
