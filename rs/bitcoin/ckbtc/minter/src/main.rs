@@ -2,6 +2,7 @@ use candid::candid_method;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs, upgrade::UpgradeArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
+use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcErr, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::{GetBtcAddressArgs, GetBtcAddressResult},
@@ -33,6 +34,12 @@ async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
 #[update]
 async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
     updates::get_withdrawal_account::get_withdrawal_account().await
+}
+
+#[candid_method(update)]
+#[update]
+async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcErr> {
+    updates::retrieve_btc::retrieve_btc(args).await
 }
 
 #[export_name = "canister_query http_request"]

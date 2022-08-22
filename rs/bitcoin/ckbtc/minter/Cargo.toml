@@ -22,6 +22,7 @@ ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = { path = "../../../crypto/sha" }
 ic-ic00-types = { path = "../../../types/ic00_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
+ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
 ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
 lazy_static = "1.4.0"
 ripemd = "0.1.1"

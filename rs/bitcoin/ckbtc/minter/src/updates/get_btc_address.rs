@@ -49,6 +49,15 @@ fn derive_public_key(account: Account) -> ECDSAPublicKey {
     }
 }
 
+/// Returns the human-readable part of a bech32 address
+pub fn hrp<'a>(network: Network) -> &'a str {
+    match network {
+        ic_btc_types::Network::Mainnet => "bc",
+        ic_btc_types::Network::Testnet => "tb",
+        ic_btc_types::Network::Regtest => "bcrt",
+    }
+}
+
 /// Calculates the p2wpkh address as described in [BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
 ///
 /// Note: the public key must be compressed.
@@ -63,11 +72,7 @@ fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> St
                 .map(|b| u5::try_from_u8(b).unwrap()),
         )
         .collect();
-    let hrp = match network {
-        ic_btc_types::Network::Mainnet => "bc",   // mainnet
-        ic_btc_types::Network::Testnet => "tb",   // testnet
-        ic_btc_types::Network::Regtest => "bcrt", // it doesn't matter
-    };
+    let hrp = hrp(network);
     bech32::encode(hrp, data, Variant::Bech32).unwrap()
 }
 
