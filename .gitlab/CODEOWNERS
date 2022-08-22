@@ -49,8 +49,6 @@
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/release-team
 /testnet/ansible/                                          @dfinity-lab/teams/dcs
-/testnet/ansible/roles/boundary_node/                      @dfinity-lab/teams/networking-team @dfinity-lab/teams/dcs        
-/testnet/ansible/roles/icos_test_boundary_node/            @dfinity-lab/teams/boundarynode-team
 /testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
 /testnet/env/                                              @dfinity-lab/teams/dcs
 
