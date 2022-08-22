@@ -994,6 +994,18 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
     }
 }
 
+impl EcdsaMessageAttribute {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::EcdsaSignedDealing(_) => "signed_dealing",
+            Self::EcdsaDealingSupport(_) => "dealing_support",
+            Self::EcdsaSigShare(_) => "sig_share",
+            Self::EcdsaComplaint(_) => "complaint",
+            Self::EcdsaOpening(_) => "opening",
+        }
+    }
+}
+
 impl TryFrom<EcdsaMessage> for SignedIDkgDealing {
     type Error = EcdsaMessage;
     fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {

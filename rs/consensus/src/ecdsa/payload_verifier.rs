@@ -25,7 +25,7 @@ use super::payload_builder::{EcdsaPayloadError, InvalidChainCacheError, Membersh
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::EcdsaBlockReaderImpl;
-use crate::consensus::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use crate::consensus::{crypto::ConsensusCrypto, metrics::timed_call, pool_reader::PoolReader};
 use crate::ecdsa::payload_builder::{
     block_chain_cache, create_data_payload_helper, create_summary_payload,
     get_ecdsa_config_if_enabled,
@@ -51,6 +51,7 @@ use ic_types::{
     registry::RegistryClientError,
     Height, RegistryVersion, SubnetId,
 };
+use prometheus::HistogramVec;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -171,26 +172,40 @@ pub fn validate_payload(
     context: &ValidationContext,
     parent_block: &Block,
     payload: &BlockPayload,
+    metrics: HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
     if payload.is_summary() {
-        validate_summary_payload(
-            subnet_id,
-            registry_client,
-            pool_reader,
-            context,
-            parent_block,
-            payload.as_summary().ecdsa.as_ref(),
+        timed_call(
+            "verify_summary_payload",
+            || {
+                validate_summary_payload(
+                    subnet_id,
+                    registry_client,
+                    pool_reader,
+                    context,
+                    parent_block,
+                    payload.as_summary().ecdsa.as_ref(),
+                )
+            },
+            &metrics,
         )
     } else {
-        validate_data_payload(
-            subnet_id,
-            registry_client,
-            crypto,
-            pool_reader,
-            state_manager,
-            context,
-            parent_block,
-            payload.as_data().ecdsa.as_ref(),
+        timed_call(
+            "verify_data_payload",
+            || {
+                validate_data_payload(
+                    subnet_id,
+                    registry_client,
+                    crypto,
+                    pool_reader,
+                    state_manager,
+                    context,
+                    parent_block,
+                    payload.as_data().ecdsa.as_ref(),
+                    &metrics,
+                )
+            },
+            &metrics,
         )
     }
 }
@@ -261,6 +276,7 @@ pub fn validate_data_payload(
     context: &ValidationContext,
     parent_block: &Block,
     data_payload: Option<&ecdsa::EcdsaPayload>,
+    metrics: &HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
     if parent_block.payload.as_ref().as_ecdsa().is_none() {
         if data_payload.is_some() {
@@ -317,10 +333,21 @@ pub fn validate_data_payload(
         .map_err(PermanentError::from)?;
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
 
-    let transcripts = validate_transcript_refs(crypto, &block_reader, &prev_payload, curr_payload)?;
-    let dealings = validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload)?;
-    let signatures =
-        validate_new_signature_agreements(crypto, &block_reader, &prev_payload, curr_payload)?;
+    let transcripts = timed_call(
+        "validate_transcript_refs",
+        || validate_transcript_refs(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
+    let dealings = timed_call(
+        "validate_reshare_dealings",
+        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
+    let signatures = timed_call(
+        "validate_new_signature_agreements",
+        || validate_new_signature_agreements(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
 
     let builder = CachedBuilder {
         transcripts,

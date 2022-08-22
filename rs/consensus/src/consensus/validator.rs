@@ -990,12 +990,7 @@ impl Validator {
                 )
             })?;
 
-        let timer = self
-            .metrics
-            .validation_duration
-            .with_label_values(&["ecdsa"])
-            .start_timer();
-        let ret = ecdsa::validate_payload(
+        ecdsa::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
@@ -1004,16 +999,14 @@ impl Validator {
             &proposal.context,
             &parent,
             proposal.payload.as_ref(),
+            self.metrics.ecdsa_validation_duration.clone(),
         )
         .map_err(|err| {
             err.map(
                 PermanentError::EcdsaPayloadValidationError,
                 TransientError::EcdsaPayloadValidationError,
             )
-        });
-        let elapsed = timer.stop_and_record();
-        self.metrics.add_to_ecdsa_time_per_validator_run(elapsed);
-        ret?;
+        })?;
 
         let timer = self
             .metrics

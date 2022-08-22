@@ -425,7 +425,7 @@ pub struct ValidatorMetrics {
     pub(crate) dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
-    ecdsa_time_per_validator_run: RwLock<f64>,
+    pub(crate) ecdsa_validation_duration: HistogramVec,
 }
 
 impl ValidatorMetrics {
@@ -460,7 +460,14 @@ impl ValidatorMetrics {
                 &["type"],
             ),
             dkg_time_per_validator_run: RwLock::new(0.0),
-            ecdsa_time_per_validator_run: RwLock::new(0.0),
+            ecdsa_validation_duration: metrics_registry.histogram_vec(
+                "consensus_ecdsa_validation_duration_seconds",
+                "Time to validate ECDSA component, in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["type"],
+            ),
         }
     }
 
@@ -494,11 +501,6 @@ impl ValidatorMetrics {
             .with_label_values(&["DkgPerRun"])
             .observe(*dkg_time);
         *dkg_time = 0.0;
-    }
-
-    pub(crate) fn add_to_ecdsa_time_per_validator_run(&self, elapsed_time: f64) {
-        let mut ecdsa_time = self.ecdsa_time_per_validator_run.write().unwrap();
-        *ecdsa_time += elapsed_time;
     }
 }
 
@@ -542,6 +544,23 @@ impl EcdsaClientMetrics {
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
                 &["sub_component"],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct EcdsaGossipMetrics {
+    pub dropped_adverts: IntCounterVec,
+}
+
+impl EcdsaGossipMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            dropped_adverts: metrics_registry.int_counter_vec(
+                "ecdsa_priority_fn_dropped_adverts",
+                "ECDSA adverts dropped by priority fn",
+                &["type"],
             ),
         }
     }

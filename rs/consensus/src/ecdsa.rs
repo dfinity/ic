@@ -167,7 +167,7 @@
 #![allow(dead_code)]
 
 use crate::consensus::{
-    metrics::{timed_call, EcdsaClientMetrics},
+    metrics::{timed_call, EcdsaClientMetrics, EcdsaGossipMetrics},
     utils::RoundRobin,
     ConsensusCrypto,
 };
@@ -182,11 +182,13 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
-    consensus::ecdsa::EcdsaBlockReader,
+    consensus::ecdsa::{EcdsaBlockReader, RequestId},
+    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub(crate) mod complaints;
@@ -304,14 +306,53 @@ impl Ecdsa for EcdsaImpl {
 pub struct EcdsaGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    metrics: EcdsaGossipMetrics,
 }
 
 impl EcdsaGossipImpl {
     /// Builds a new EcdsaGossipImpl component
-    pub fn new(subnet_id: SubnetId, consensus_block_cache: Arc<dyn ConsensusBlockCache>) -> Self {
+    pub fn new(
+        subnet_id: SubnetId,
+        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        metrics_registry: MetricsRegistry,
+    ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
+            metrics: EcdsaGossipMetrics::new(metrics_registry),
+        }
+    }
+}
+
+struct EcdsaPriorityFnArgs {
+    finalized_height: Height,
+    requested_transcripts: BTreeSet<IDkgTranscriptId>,
+    requested_signatures: BTreeSet<RequestId>,
+    active_transcripts: BTreeSet<IDkgTranscriptId>,
+}
+
+impl EcdsaPriorityFnArgs {
+    fn new(block_reader: &EcdsaBlockReaderImpl) -> Self {
+        let mut requested_transcripts = BTreeSet::new();
+        for params in block_reader.requested_transcripts() {
+            requested_transcripts.insert(params.transcript_id);
+        }
+
+        let mut requested_signatures = BTreeSet::new();
+        for (request_id, _) in block_reader.requested_signatures() {
+            requested_signatures.insert(*request_id);
+        }
+
+        let mut active_transcripts = BTreeSet::new();
+        for transcript_ref in block_reader.active_transcripts() {
+            active_transcripts.insert(transcript_ref.transcript_id);
+        }
+
+        Self {
+            finalized_height: block_reader.tip_height(),
+            requested_transcripts,
+            requested_signatures,
+            active_transcripts,
         }
     }
 }
@@ -323,33 +364,21 @@ impl EcdsaGossip for EcdsaGossipImpl {
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let cached_finalized_height = block_reader.tip_height();
+        let args = EcdsaPriorityFnArgs::new(&block_reader);
+        let metrics = self.metrics.clone();
         Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
-            compute_priority(attr, subnet_id, cached_finalized_height)
+            compute_priority(attr, subnet_id, &args, &metrics)
         })
     }
 }
 
-// TODO:
-// 1. We don't drop anything right now. Once the purging part settles down
-// (https://dfinity.atlassian.net/browse/CON-624), we can start dropping
-// unwanted adverts
-// 2. The current filtering is light weight, purely based on the finalized
-// height (cached when the priority function is periodically computed).
-// We could potentially do more filtering (e.g) drop adverts for transcripts
-// we are not interested in, and use the latest state of the artifact pools.
-// But this would require more processing per call to priority function, and
-// cause extra lock contention for the main processing paths.
-// 3. The height in the dealings/support shares is the source subnet height, which
-// may be different in the xnet resharing case. Local requested height is not available
-// in these cases. Hence fetch them immediately. The requested_height will be removed
-// for other artifact types as well in near future.
 fn compute_priority(
     attr: &EcdsaMessageAttribute,
     subnet_id: SubnetId,
-    cached_finalized_height: Height,
+    args: &EcdsaPriorityFnArgs,
+    metrics: &EcdsaGossipMetrics,
 ) -> Priority {
-    let height = match attr {
+    match attr {
         EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id)
         | EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id) => {
             // For xnet dealings(target side), always fetch the artifacts,
@@ -358,119 +387,273 @@ fn compute_priority(
             if *transcript_id.source_subnet() != subnet_id {
                 return Priority::Fetch;
             }
-            transcript_id.source_height()
-        }
-        EcdsaMessageAttribute::EcdsaSigShare(request_id) => request_id.height,
-        EcdsaMessageAttribute::EcdsaComplaint(transcript_id) => transcript_id.source_height(),
-        EcdsaMessageAttribute::EcdsaOpening(transcript_id) => transcript_id.source_height(),
-    };
 
-    if height < cached_finalized_height + Height::from(LOOK_AHEAD) {
-        Priority::Fetch
-    } else {
-        Priority::Stash
+            let height = transcript_id.source_height();
+            if height <= args.finalized_height {
+                if args.requested_transcripts.contains(transcript_id) {
+                    Priority::Fetch
+                } else {
+                    metrics
+                        .dropped_adverts
+                        .with_label_values(&[attr.as_str()])
+                        .inc();
+                    Priority::Drop
+                }
+            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
+        EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
+            if request_id.height <= args.finalized_height {
+                if args.requested_signatures.contains(request_id) {
+                    Priority::Fetch
+                } else {
+                    metrics
+                        .dropped_adverts
+                        .with_label_values(&[attr.as_str()])
+                        .inc();
+                    Priority::Drop
+                }
+            } else if request_id.height < args.finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
+        EcdsaMessageAttribute::EcdsaComplaint(transcript_id)
+        | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
+            let height = transcript_id.source_height();
+            if height <= args.finalized_height {
+                if args.active_transcripts.contains(transcript_id) {
+                    Priority::Fetch
+                } else {
+                    metrics
+                        .dropped_adverts
+                        .with_label_values(&[attr.as_str()])
+                        .inc();
+                    Priority::Drop
+                }
+            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecdsa::utils::test_utils::*;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{
-        consensus::ecdsa::{EcdsaUIDGenerator, RequestId},
+        consensus::ecdsa::{QuadrupleId, RequestId},
         PrincipalId, SubnetId,
     };
 
-    // Tests the priority computation
+    // Tests the priority computation for dealings/support.
     #[test]
-    fn test_ecdsa_priority_fn() {
-        let cached_finalized_height = Height::from(100);
+    fn test_ecdsa_priority_fn_dealing_support() {
         let xnet_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
-        let local_transcript_id = IDkgTranscriptId::new(subnet_id, 1, Height::from(120));
-        let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, cached_finalized_height);
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
+        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+
+        let mut requested_transcripts = BTreeSet::new();
+        requested_transcripts.insert(transcript_id_fetch_1);
+        let args = EcdsaPriorityFnArgs {
+            finalized_height: Height::from(100),
+            requested_transcripts,
+            requested_signatures: BTreeSet::new(),
+            active_transcripts: BTreeSet::new(),
+        };
+
         let tests = vec![
+            // Signed dealings
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
                 Priority::Fetch,
             ),
             (
+                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_1),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_drop),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_2),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_stash),
+                Priority::Stash,
+            ),
+            // Dealing support
+            (
                 EcdsaMessageAttribute::EcdsaDealingSupport(xnet_transcript_id),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(local_transcript_id),
-                Priority::Stash,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaDealingSupport(local_transcript_id),
-                Priority::Stash,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaSigShare(RequestId {
-                    quadruple_id: uid_generator.next_quadruple_id(),
-                    pseudo_random_id: [0; 32],
-                    height: Height::from(90),
-                }),
+                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_1),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(RequestId {
-                    quadruple_id: uid_generator.next_quadruple_id(),
-                    pseudo_random_id: [0; 32],
-                    height: Height::from(109),
-                }),
+                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_drop),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_2),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(create_transcript_id_with_height(
-                    1,
-                    Height::from(110),
-                )),
-                Priority::Stash,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaComplaint(create_transcript_id_with_height(
-                    1,
-                    Height::from(120),
-                )),
-                Priority::Stash,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
-                    1,
-                    Height::from(90),
-                )),
-                Priority::Fetch,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
-                    1,
-                    Height::from(109),
-                )),
-                Priority::Fetch,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
-                    1,
-                    Height::from(110),
-                )),
-                Priority::Stash,
-            ),
-            (
-                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
-                    1,
-                    Height::from(120),
-                )),
+                EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
 
         for (attr, expected) in tests {
             assert_eq!(
-                compute_priority(&attr, subnet_id, cached_finalized_height),
+                compute_priority(&attr, subnet_id, &args, &metrics),
+                expected
+            );
+        }
+    }
+
+    // Tests the priority computation for sig shares.
+    #[test]
+    fn test_ecdsa_priority_fn_sig_shares() {
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let request_id_fetch_1 = RequestId {
+            quadruple_id: QuadrupleId(80),
+            pseudo_random_id: [1; 32],
+            height: Height::from(80),
+        };
+        let request_id_drop = RequestId {
+            quadruple_id: QuadrupleId(70),
+            pseudo_random_id: [2; 32],
+            height: Height::from(70),
+        };
+        let request_id_fetch_2 = RequestId {
+            quadruple_id: QuadrupleId(102),
+            pseudo_random_id: [3; 32],
+            height: Height::from(102),
+        };
+        let request_id_stash = RequestId {
+            quadruple_id: QuadrupleId(200),
+            pseudo_random_id: [4; 32],
+            height: Height::from(200),
+        };
+
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+
+        let mut requested_signatures = BTreeSet::new();
+        requested_signatures.insert(request_id_fetch_1);
+        let args = EcdsaPriorityFnArgs {
+            finalized_height: Height::from(100),
+            requested_transcripts: BTreeSet::new(),
+            requested_signatures,
+            active_transcripts: BTreeSet::new(),
+        };
+
+        let tests = vec![
+            (
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_drop),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_2),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_stash),
+                Priority::Stash,
+            ),
+        ];
+
+        for (attr, expected) in tests {
+            assert_eq!(
+                compute_priority(&attr, subnet_id, &args, &metrics),
+                expected
+            );
+        }
+    }
+
+    // Tests the priority computation for complaints/openings.
+    #[test]
+    fn test_ecdsa_priority_fn_complaint_opening() {
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
+        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = EcdsaGossipMetrics::new(metrics_registry);
+
+        let mut active_transcripts = BTreeSet::new();
+        active_transcripts.insert(transcript_id_fetch_1);
+        let args = EcdsaPriorityFnArgs {
+            finalized_height: Height::from(100),
+            requested_transcripts: BTreeSet::new(),
+            requested_signatures: BTreeSet::new(),
+            active_transcripts,
+        };
+
+        let tests = vec![
+            // Complaints
+            (
+                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_1),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_drop),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_2),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_stash),
+                Priority::Stash,
+            ),
+            // Openings
+            (
+                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_1),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(transcript_id_drop),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_2),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(transcript_id_stash),
+                Priority::Stash,
+            ),
+        ];
+
+        for (attr, expected) in tests {
+            assert_eq!(
+                compute_priority(&attr, subnet_id, &args, &metrics),
                 expected
             );
         }
