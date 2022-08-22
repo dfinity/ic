@@ -39,15 +39,12 @@ use std::time::Instant;
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
-        canister_lifecycle_memory_capacity_pot(),
-        canister_lifecycle_memory_size_pot(),
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
         replica_determinism_pot(),
         max_payload_pot(),
         dual_workload_pot(),
-        subnet_capacity_pot(),
         system_subnets_pot(),
         request_auth_malicious_replica_pot(),
         system_api_security_pot(),
@@ -64,32 +61,6 @@ fn request_auth_malicious_replica_pot() -> pot::Pot {
         "request_auth_malicious_replica_pot",
         consensus::request_auth_malicious_replica_test::config(),
         steps! {consensus::request_auth_malicious_replica_test::test => "request_auth_malicious_replica_test"}
-    )
-}
-
-fn canister_lifecycle_memory_capacity_pot() -> pot::Pot {
-    composable!(
-        "canister_lifecycle_memory_capacity_pot",
-        execution::legacy_config_memory_capacity(),
-        steps! { execution::canister_lifecycle::exceeding_memory_capacity_fails_when_memory_allocation_changes }
-    )
-}
-
-fn subnet_capacity_pot() -> pot::Pot {
-    composable!(
-        "subnet_capacity_pot",
-        execution::legacy_config_memory_capacity(),
-        steps! {
-            execution::subnet_capacity::exceeding_memory_capacity_fails_during_message_execution
-        }
-    )
-}
-
-fn canister_lifecycle_memory_size_pot() -> pot::Pot {
-    composable!(
-        "canister_lifecycle_memory_size_pot",
-        execution::canister_lifecycle::config_canister_memory_size(),
-        steps! { execution::canister_lifecycle::memory_allocation_not_set }
     )
 }
 

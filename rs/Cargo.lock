@@ -8057,6 +8057,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
+ "ic-universal-canister",
  "libflate",
  "serde",
  "serde_cbor",

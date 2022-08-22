@@ -11,7 +11,6 @@ pub mod nns_shielding;
 pub mod queries;
 pub mod registry_authentication_test;
 pub mod request_signature_test;
-pub mod subnet_capacity;
 pub mod system_api_security_test;
 pub mod upgraded_pots;
 
