@@ -97,6 +97,9 @@ test_report.xml
 # Boundary node control plane binary
 boundary-node-control-plane
 
+# Boundary node prober binary
+boundary-node-prober
+
 # Scalability test results
 scalability/results/
 *Pipfile*
