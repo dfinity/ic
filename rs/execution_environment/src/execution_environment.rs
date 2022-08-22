@@ -18,7 +18,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_crypto::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{

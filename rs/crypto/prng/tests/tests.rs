@@ -1,33 +1,52 @@
-use super::*;
-use ic_interfaces::crypto::CryptoHashDomain;
+use ic_crypto_prng::RandomnessPurpose::{
+    BlockmakerRanking, CommitteeSampling, DkgCommitteeSampling, ExecutionThread,
+};
+use ic_crypto_prng::{Csprng, RandomnessPurpose};
+use ic_types::consensus::{RandomBeacon, RandomTape};
 use ic_types::consensus::{RandomBeaconContent, RandomTapeContent};
 use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
 };
 use ic_types::signature::ThresholdSignature;
+use ic_types::Randomness;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     Height,
 };
 use ic_types_test_utils::ids::subnet_test_id;
+use rand::RngCore;
 use std::collections::BTreeSet;
-use std::hash::Hash;
-use strum::{EnumCount, IntoEnumIterator};
+use strum::EnumCount;
 
 #[test]
-fn should_produce_deterministic_randomness() {
-    let mut rng = Csprng::from_seed([42; 32]);
+fn should_produce_deterministic_randomness_from_random_beacon_and_purpose() {
+    let random_beacon = fake_random_beacon(1);
 
-    assert_eq!(rng.next_u32(), 1_176_443_288);
-    assert_eq!(rng.next_u64(), 10_895_988_999_873_266_661);
+    let mut rng = Csprng::from_random_beacon_and_purpose(&random_beacon, &BlockmakerRanking);
 
-    let mut buffer = [0; 32];
-    rng.fill_bytes(&mut buffer);
+    assert_eq!(rng.next_u32(), 460_963_034);
+}
+
+#[test]
+fn should_produce_deterministic_randomness_from_seed_and_purpose() {
+    let seed = seed();
+
+    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
+
+    assert_eq!(rng.next_u32(), 196_996_056);
+}
+
+#[test]
+fn should_produce_deterministic_randomness_from_seed_from_random_tape() {
+    let random_tape = fake_random_tape(1);
+
+    let randomness = Csprng::seed_from_random_tape(&random_tape);
+
     assert_eq!(
-        buffer,
+        randomness.get(),
         [
-            136, 3, 105, 122, 94, 58, 182, 27, 30, 137, 81, 212, 254, 154, 230, 123, 171, 97, 74,
-            95, 123, 252, 253, 117, 68, 177, 7, 141, 218, 57, 124, 239
+            109, 145, 169, 77, 62, 78, 152, 146, 147, 81, 94, 181, 213, 81, 105, 131, 60, 109, 217,
+            138, 33, 26, 94, 209, 110, 76, 228, 189, 126, 119, 13, 2
         ]
     );
 }
@@ -35,24 +54,11 @@ fn should_produce_deterministic_randomness() {
 #[test]
 fn should_offer_methods_of_rng_trait() {
     use rand::Rng;
+    let seed = seed();
 
-    let mut rng = Csprng::from_seed([42; 32]);
+    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
 
-    assert_eq!(rng.gen::<u32>(), 1_176_443_288);
-}
-
-#[test]
-fn should_use_unique_separator_byte_per_randomness_purpose() {
-    let mut set = BTreeSet::new();
-
-    // ensure separator bytes are unique
-    assert!(set.insert(COMMITTEE_SAMPLING_SEPARATOR_BYTE));
-    assert!(set.insert(BLOCKMAKER_RANKING_SEPARATOR_BYTE));
-    assert!(set.insert(DKG_COMMITTEE_SAMPLING_SEPARATOR_BYTE));
-    assert!(set.insert(EXECUTION_THREAD_SEPARATOR_BYTE));
-
-    // ensure there is a separator for each purpose
-    assert_eq!(set.len(), RandomnessPurpose::COUNT);
+    assert_eq!(rng.gen::<u32>(), 196_996_056);
 }
 
 #[test]
@@ -142,31 +148,6 @@ fn should_produce_different_randomness_for_different_execution_threads_for_rando
 }
 
 #[test]
-fn should_incorporate_crypto_hash_domain_when_generating_randomness_for_random_beacon() {
-    // Because the crypto hash domain of random beacons is hardcoded and cannot be
-    // controlled from within a test, the only way to ensure that the crypto
-    // hash domain of the random beacon is incorporated when generating the
-    // randomness is to test the actual expected implementation.
-
-    let rb = random_beacon();
-    for purpose in RandomnessPurpose::iter() {
-        let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new(rb.domain()));
-        rb.hash(&mut hasher);
-        let seed = Randomness::from(hasher.finish());
-
-        let mut hasher = Sha256::new();
-        hasher.write(&seed.get());
-        hasher.write(&purpose.domain_separator());
-        let mut csprng = Csprng::from_seed(hasher.finish());
-
-        assert_eq!(
-            Csprng::from_random_beacon_and_purpose(&rb, &purpose).next_u32(),
-            csprng.next_u32()
-        )
-    }
-}
-
-#[test]
 fn should_produce_different_seeds_for_different_random_tapes() {
     let (tape_1, tape_2) = (random_tape(), random_tape_2());
     assert_ne!(tape_1, tape_2);
@@ -175,6 +156,19 @@ fn should_produce_different_seeds_for_different_random_tapes() {
     let seed_2 = Csprng::seed_from_random_tape(&tape_2);
 
     assert_ne!(seed_1, seed_2);
+}
+
+fn fake_random_beacon(height: u64) -> RandomBeacon {
+    Signed {
+        content: RandomBeaconContent::new(
+            Height::from(height),
+            CryptoHashOf::new(CryptoHash(vec![])),
+        ),
+        signature: ThresholdSignature {
+            signer: fake_dkg_id(0),
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        },
+    }
 }
 
 fn random_beacon() -> RandomBeacon {
@@ -207,19 +201,6 @@ fn fake_dkg_id(h: u64) -> NiDkgId {
         dealer_subnet: subnet_test_id(0),
         dkg_tag: NiDkgTag::HighThreshold,
         target_subnet: NiDkgTargetSubnet::Local,
-    }
-}
-
-fn fake_random_beacon(height: u64) -> RandomBeacon {
-    Signed {
-        content: RandomBeaconContent::new(
-            Height::from(height),
-            CryptoHashOf::new(CryptoHash(vec![])),
-        ),
-        signature: ThresholdSignature {
-            signer: fake_dkg_id(0),
-            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-        },
     }
 }
 

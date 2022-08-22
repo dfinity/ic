@@ -10,7 +10,7 @@ use crate::{
 use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
