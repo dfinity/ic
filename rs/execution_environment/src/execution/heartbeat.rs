@@ -188,6 +188,7 @@ pub fn execute_heartbeat(
         &mut canister.system_state,
         num_instructions_left,
         message_instruction_limit,
+        subnet_size,
     );
 
     HeartbeatResult::new(canister, heap_delta)

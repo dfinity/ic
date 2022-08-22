@@ -241,6 +241,7 @@ fn add_cycles_does_not_overflow_when_no_balance_limit() {
 
 #[test]
 fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
     let mut system_state = SystemStateBuilder::new().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -252,7 +253,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             NumInstructions::from(1_000_000),
-            SMALL_APP_SUBNET_MAX_SIZE,
+            subnet_size,
         )
         .unwrap();
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
@@ -261,12 +262,14 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         &mut system_state,
         NumInstructions::from(5_000_000),
         NumInstructions::from(1_000_000),
+        subnet_size,
     );
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
 }
 
 #[test]
 fn larger_instructions_left_value_doesnt_mint_cycles() {
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
     let mut system_state = SystemStateBuilder::new().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -280,7 +283,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             initial_instructions_charged_for,
-            SMALL_APP_SUBNET_MAX_SIZE,
+            subnet_size,
         )
         .unwrap();
 
@@ -288,6 +291,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         &mut system_state,
         initial_instructions_charged_for * 2,
         initial_instructions_charged_for,
+        subnet_size,
     );
     assert!(system_state.balance() <= INITIAL_CYCLES);
 }

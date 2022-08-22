@@ -95,6 +95,7 @@ impl InitialStateChanges {
         callback: &Callback,
         error_counter: &IntCounter,
         round: &RoundContext,
+        subnet_size: usize,
     ) -> Self {
         // Canister A sends a request to canister B with some cycles.
         // Canister B can accept a subset of the cycles in the request.
@@ -125,7 +126,7 @@ impl InitialStateChanges {
         // the actual size of the response.
         let refund_for_response_transmission = round
             .cycles_account_manager
-            .refund_for_response_transmission(round.log, error_counter, response);
+            .refund_for_response_transmission(round.log, error_counter, response, subnet_size);
         Self {
             refund_for_sent_cycles,
             refund_for_response_transmission,
@@ -188,6 +189,7 @@ impl PausedExecution for PausedResponseExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create `executing_canister` based on `clean_state`
@@ -206,6 +208,7 @@ impl PausedExecution for PausedResponseExecution {
             self.original,
             round,
             round_limits,
+            subnet_size,
         )
     }
 
@@ -237,6 +240,7 @@ impl PausedExecution for PausedCleanupExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create `executing_canister` based on `clean_state`
@@ -258,6 +262,7 @@ impl PausedExecution for PausedCleanupExecution {
             self.original,
             round,
             round_limits,
+            subnet_size,
         )
     }
 
@@ -281,6 +286,7 @@ pub fn execute_response(
     error_counter: &IntCounter,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(&clean_canister, &response, round.log) {
@@ -297,7 +303,7 @@ pub fn execute_response(
         };
 
     let initial_state_changes =
-        InitialStateChanges::new(&response, &callback, error_counter, &round);
+        InitialStateChanges::new(&response, &callback, error_counter, &round, subnet_size);
 
     let executing_canister = initial_state_changes.apply(&clean_canister, &round);
 
@@ -331,7 +337,7 @@ pub fn execute_response(
         // Since the call context has responded, passing `Ok(None)` will produce
         // an empty response and take care of all other bookkeeping.
         let result: Result<Option<WasmResult>, HypervisorError> = Ok(None);
-        return early_finish(executing_canister, result, original, round);
+        return early_finish(executing_canister, result, original, round, subnet_size);
     }
 
     // Validate that the canister has an `ExecutionState`.
@@ -342,7 +348,7 @@ pub fn execute_response(
                 executing_canister.system_state.canister_id,
             );
         let result = Err(HypervisorError::WasmModuleNotFound);
-        return early_finish(executing_canister, result, original, round);
+        return early_finish(executing_canister, result, original, round, subnet_size);
     }
 
     let closure = match response.response_payload {
@@ -395,6 +401,7 @@ pub fn execute_response(
         original,
         round,
         round_limits,
+        subnet_size,
     )
 }
 
@@ -404,6 +411,7 @@ fn early_finish(
     result: Result<Option<WasmResult>, HypervisorError>,
     original: OriginalContext,
     round: RoundContext,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     let action = executing_canister
         .system_state
@@ -421,6 +429,7 @@ fn early_finish(
         &mut executing_canister.system_state,
         original.message_instruction_limit,
         original.message_instruction_limit,
+        subnet_size,
     );
     ExecuteMessageResult::Finished {
         canister: executing_canister,
@@ -443,6 +452,7 @@ fn execute_response_cleanup(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     execution_parameters
         .instruction_limits
@@ -476,6 +486,7 @@ fn execute_response_cleanup(
         original,
         round,
         round_limits,
+        subnet_size,
     )
 }
 
@@ -490,6 +501,7 @@ fn process_response_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -544,6 +556,7 @@ fn process_response_result(
                                 original,
                                 round,
                                 round_limits,
+                                subnet_size,
                             );
                         }
                         None => {
@@ -575,6 +588,7 @@ fn process_response_result(
                 &mut executing_canister.system_state,
                 num_instructions_left,
                 original.message_instruction_limit,
+                subnet_size,
             );
             ExecuteMessageResult::Finished {
                 canister: executing_canister,
@@ -594,6 +608,7 @@ fn process_cleanup_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -666,6 +681,7 @@ fn process_cleanup_result(
                 &mut executing_canister.system_state,
                 num_instructions_left,
                 original.message_instruction_limit,
+                subnet_size,
             );
             ExecuteMessageResult::Finished {
                 canister: executing_canister,

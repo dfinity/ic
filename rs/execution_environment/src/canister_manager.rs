@@ -803,6 +803,7 @@ impl CanisterManager {
                 canister_layout_path,
                 &self.config,
                 round,
+                subnet_size,
             ),
             InstallCodeRoutineResult::Paused { paused_execution } => {
                 let paused_execution = PausedInstallCodeExecution {
@@ -1660,6 +1661,7 @@ impl PausedInstallCodeExecution {
         canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> DtsInstallCodeResult {
         let result = self.paused_routine.resume(round.clone(), round_limits);
         match result {
@@ -1676,6 +1678,7 @@ impl PausedInstallCodeExecution {
                 self.canister_layout_path,
                 &self.config,
                 round,
+                subnet_size,
             ),
             InstallCodeRoutineResult::Paused { paused_execution } => {
                 let paused_execution = PausedInstallCodeExecution {

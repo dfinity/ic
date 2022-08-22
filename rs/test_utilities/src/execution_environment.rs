@@ -719,6 +719,7 @@ impl ExecutionTest {
             mock_time(),
             network_topology,
             &mut round_limits,
+            self.subnet_size(),
         );
         let (canister, response, heap_delta) = match result {
             ExecuteMessageResult::Finished {

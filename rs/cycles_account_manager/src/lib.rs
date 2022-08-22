@@ -327,14 +327,13 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         num_instructions: NumInstructions,
         num_instructions_initially_charged: NumInstructions,
+        subnet_size: usize,
     ) {
         // TODO(EXC-1055): Log an error if `num_instructions` is larger.
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        self.refund_cycles(
-            system_state,
-            self.convert_instructions_to_cycles(num_instructions_to_refund),
-        );
+        let cycles = self.convert_instructions_to_cycles(num_instructions_to_refund);
+        self.refund_cycles(system_state, self.scale_cost(cycles, subnet_size));
     }
 
     /// Charges the canister for its compute allocation
@@ -543,6 +542,7 @@ impl CyclesAccountManager {
         log: &ReplicaLogger,
         error_counter: &IntCounter,
         response: &Response,
+        subnet_size: usize,
     ) -> Cycles {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.
@@ -562,7 +562,10 @@ impl CyclesAccountManager {
                 );
                 Cycles::zero()
             }
-            Some(extra_bytes) => self.config.xnet_byte_transmission_fee * extra_bytes,
+            Some(extra_bytes) => self.scale_cost(
+                self.config.xnet_byte_transmission_fee * extra_bytes,
+                subnet_size,
+            ),
         }
     }
 

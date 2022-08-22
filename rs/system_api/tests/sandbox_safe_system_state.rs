@@ -213,6 +213,7 @@ fn correct_charging_source_canister_for_a_request() {
         &no_op_logger(),
         &no_op_counter,
         &response,
+        SMALL_APP_SUBNET_MAX_SIZE,
     );
 
     cycles_account_manager.refund_cycles(&mut system_state, refund_cycles);
