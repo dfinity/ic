@@ -61,7 +61,7 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
@@ -1744,13 +1744,8 @@ impl ExecutionEnvironment {
             install_context.wasm_module.is_empty().to_string(),
         );
 
-        let execution_parameters = ExecutionParameters {
-            instruction_limits,
-            canister_memory_limit: self.config.max_canister_memory_size,
-            compute_allocation: ComputeAllocation::default(),
-            subnet_type: state.metadata.own_subnet_type,
-            execution_mode: ExecutionMode::Replicated,
-        };
+        let execution_parameters =
+            self.execution_parameters(&old_canister, instruction_limits, ExecutionMode::Replicated);
 
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
