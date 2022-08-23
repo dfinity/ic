@@ -228,7 +228,7 @@ struct PausedExecutionRegistry {
     paused_execution: HashMap<PausedExecutionId, Box<dyn PausedExecution>>,
 
     // Paused executions of `install_code` subnet messages.
-    paused_install_code: HashMap<PausedExecutionId, PausedInstallCodeExecution>,
+    paused_install_code: HashMap<PausedExecutionId, Box<dyn PausedInstallCodeExecution>>,
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -1882,7 +1882,7 @@ impl ExecutionEnvironment {
                     log: &self.log,
                     time: state.metadata.time(),
                 };
-                let dts_result = paused.resume(canister, round, round_limits, subnet_size);
+                let dts_result = paused.resume(canister, round, round_limits);
                 self.process_install_code_result(state, dts_result, timer)
             }
             ExecutionTask::AbortedInstallCode(msg) => {
@@ -1901,7 +1901,7 @@ impl ExecutionEnvironment {
     fn take_paused_install_code(
         &self,
         id: PausedExecutionId,
-    ) -> Option<PausedInstallCodeExecution> {
+    ) -> Option<Box<dyn PausedInstallCodeExecution>> {
         let mut guard = self.paused_execution_registry.lock().unwrap();
         guard.paused_install_code.remove(&id)
     }
@@ -1918,7 +1918,7 @@ impl ExecutionEnvironment {
     /// Registers the given paused `install_code` execution and returns its id.
     fn register_paused_install_code(
         &self,
-        paused: PausedInstallCodeExecution,
+        paused: Box<dyn PausedInstallCodeExecution>,
     ) -> PausedExecutionId {
         let mut guard = self.paused_execution_registry.lock().unwrap();
         let id = PausedExecutionId(guard.next_id);

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterInstallMode;
 use ic_interfaces::{
     execution_environment::{HypervisorError, SubnetAvailableMemory},
@@ -13,45 +14,30 @@ use ic_interfaces::{
 use ic_logger::{error, fatal, ReplicaLogger};
 use ic_replicated_state::CanisterState;
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
-use ic_types::{ComputeAllocation, Height, MemoryAllocation, NumInstructions};
+use ic_system_api::ExecutionParameters;
+use ic_types::{ComputeAllocation, Height, MemoryAllocation, NumInstructions, Time};
 
 use crate::{
     canister_manager::{
-        CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
+        CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
+        InstallCodeResult,
     },
     execution_environment::RoundContext,
-    RoundLimits,
+    CompilationCostHandling, RoundLimits,
 };
 
-/// The result of canister installation or upgrade routines.
-/// If the routine has finished successfuly, then the canister state is the new
-/// canister state with all changes. If the routine has failed, then there is no
-/// new canister state and the caller should use the old state after refunding
-/// the remaining instructions.
-#[allow(clippy::large_enum_variant)]
+/// Context variables that remain the same throughput the entire deterministic
+/// time slicing execution of `install_code`.
 #[derive(Debug)]
-pub(crate) enum InstallCodeRoutineResult {
-    Finished {
-        instructions_left: NumInstructions,
-        result: Result<(CanisterState, NumBytes), CanisterManagerError>,
-    },
-    Paused {
-        paused_execution: Box<dyn PausedInstallCodeRoutine>,
-    },
-}
-
-/// Represents a paused execution of install code routine,
-/// that can be resumed or aborted.
-pub(crate) trait PausedInstallCodeRoutine: std::fmt::Debug + Send {
-    /// Resumes a paused install code execution.
-    fn resume(
-        self: Box<Self>,
-        round: RoundContext,
-        round_limits: &mut RoundLimits,
-    ) -> InstallCodeRoutineResult;
-
-    // Aborts the paused execution.
-    fn abort(self: Box<Self>);
+pub(crate) struct OriginalContext {
+    pub message_instruction_limit: NumInstructions,
+    pub mode: CanisterInstallMode,
+    pub canister_layout_path: PathBuf,
+    pub config: CanisterMgrConfig,
+    pub message: RequestOrIngress,
+    pub time: Time,
+    pub compilation_cost_handling: CompilationCostHandling,
+    pub subnet_size: usize,
 }
 
 pub(crate) fn validate_controller(
@@ -203,21 +189,16 @@ pub(crate) fn truncate_canister_stable_memory(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn finish_install_code(
     mut old_canister: CanisterState,
-    message: RequestOrIngress,
-    instruction_limit: NumInstructions,
     instructions_left: NumInstructions,
-    result: Result<(CanisterState, NumBytes), CanisterManagerError>,
-    mode: CanisterInstallMode,
-    canister_layout_path: PathBuf,
-    config: &CanisterMgrConfig,
+    original: OriginalContext,
     round: RoundContext,
-    subnet_size: usize,
+    result: Result<(CanisterState, NumBytes), CanisterManagerError>,
 ) -> DtsInstallCodeResult {
     let canister_id = old_canister.canister_id();
-    let instructions_consumed = instruction_limit - instructions_left;
+    let instructions_consumed = original.message_instruction_limit - instructions_left;
     match result {
         Ok((mut new_canister, heap_delta)) => {
-            if mode == CanisterInstallMode::Upgrade
+            if original.mode == CanisterInstallMode::Upgrade
                 && old_canister.system_state.queues().input_queues_stats()
                     != new_canister.system_state.queues().input_queues_stats()
             {
@@ -235,7 +216,7 @@ pub(crate) fn finish_install_code(
                 );
                 return DtsInstallCodeResult::Finished {
                     canister: old_canister,
-                    message,
+                    message: original.message,
                     result: Err(err),
                 };
             }
@@ -247,10 +228,10 @@ pub(crate) fn finish_install_code(
             round.cycles_account_manager.refund_execution_cycles(
                 &mut new_canister.system_state,
                 instructions_left,
-                instruction_limit,
-                subnet_size,
+                original.message_instruction_limit,
+                original.subnet_size,
             );
-            if config.rate_limiting_of_instructions == FlagStatus::Enabled {
+            if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
                 new_canister.scheduler_state.install_code_debit += instructions_consumed;
             }
 
@@ -258,11 +239,15 @@ pub(crate) fn finish_install_code(
             // older one. So we get rid of the previous heap to make sure it
             // doesn't interfere with the new deltas and replace the old
             // canister with the new one.
-            truncate_canister_heap(round.log, canister_layout_path.as_path(), canister_id);
-            if mode != CanisterInstallMode::Upgrade {
+            truncate_canister_heap(
+                round.log,
+                original.canister_layout_path.as_path(),
+                canister_id,
+            );
+            if original.mode != CanisterInstallMode::Upgrade {
                 truncate_canister_stable_memory(
                     round.log,
-                    canister_layout_path.as_path(),
+                    original.canister_layout_path.as_path(),
                     canister_id,
                 );
             }
@@ -271,7 +256,7 @@ pub(crate) fn finish_install_code(
             // externally into the new canister state in `result`.
             DtsInstallCodeResult::Finished {
                 canister: new_canister,
-                message,
+                message: original.message,
                 result: Ok(InstallCodeResult {
                     heap_delta,
                     old_wasm_hash,
@@ -282,20 +267,87 @@ pub(crate) fn finish_install_code(
         Err(err) => {
             // the install / upgrade failed. Refund the left over cycles to
             // the old canister and leave it in the state.
-            if config.rate_limiting_of_instructions == FlagStatus::Enabled {
+            if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
                 old_canister.scheduler_state.install_code_debit += instructions_consumed;
             }
             round.cycles_account_manager.refund_execution_cycles(
                 &mut old_canister.system_state,
                 instructions_left,
-                instruction_limit,
-                subnet_size,
+                original.message_instruction_limit,
+                original.subnet_size,
             );
             DtsInstallCodeResult::Finished {
                 canister: old_canister,
-                message,
+                message: original.message,
                 result: Err(err),
             }
         }
     }
+}
+
+/// Validates the input parameters if `install_code` message.
+pub(crate) fn validate_install_code(
+    canister: &CanisterState,
+    context: &InstallCodeContext,
+    round_limits: &RoundLimits,
+    config: &CanisterMgrConfig,
+    compute_allocation_used: u64,
+) -> Result<(), CanisterManagerError> {
+    validate_compute_allocation(
+        compute_allocation_used,
+        canister,
+        context.compute_allocation,
+        config,
+    )?;
+
+    validate_memory_allocation(
+        &round_limits.subnet_available_memory,
+        canister,
+        context.memory_allocation,
+        config,
+    )?;
+
+    validate_controller(canister, &context.sender)?;
+
+    match context.mode {
+        CanisterInstallMode::Install => {
+            if canister.execution_state.is_some() {
+                return Err(CanisterManagerError::CanisterNonEmpty(context.canister_id));
+            }
+        }
+        CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
+    }
+
+    if canister.scheduler_state.install_code_debit.get() > 0
+        && config.rate_limiting_of_instructions == FlagStatus::Enabled
+    {
+        let id = canister.system_state.canister_id;
+        return Err(CanisterManagerError::InstallCodeRateLimited(id));
+    }
+
+    Ok(())
+}
+
+/// Reserves cycles for executing the maximum number of instructions in
+/// `install_code`.
+pub(crate) fn reserve_execution_cycles_for_install_code(
+    canister: &mut CanisterState,
+    execution_parameters: &ExecutionParameters,
+    cycles_account_manager: &CyclesAccountManager,
+    subnet_size: usize,
+) -> Result<(), CanisterManagerError> {
+    // All validation checks have passed. Reserve cycles on the old canister
+    // for executing the various hooks such as `start`, `pre_upgrade`,
+    // `post_upgrade`.
+    let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+    cycles_account_manager
+        .withdraw_execution_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            execution_parameters.compute_allocation,
+            execution_parameters.instruction_limits.message(),
+            subnet_size,
+        )
+        .map_err(CanisterManagerError::InstallCodeNotEnoughCycles)?;
+    Ok(())
 }
