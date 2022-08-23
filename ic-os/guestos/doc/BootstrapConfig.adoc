@@ -1,0 +1,249 @@
+= IC Guest OS bootstrap configuration
+
+== Scope
+
+A single image build of the IC guest OS must be able to behave in slightly different ways in different scenarios (whether this is testing, development or various bootstrap stages). This document has two parts:
+
+The xref:configuration[Configuration] section describes how bootstrap configuration is injected into the system at first boot, how it is interpreted and what can be configured.
+
+The xref:behaviors[Behaviors] section describes what bootstrap behaviors are supported by the system and what parameters are required for each behavior.
+
+
+[[configuration]]
+== Configuration
+
+=== Injection mechanism
+
+When the Guest OS boots, it checks for available removable media devices. When such a device is found, the media must contain a VFAT filesystem and contain a single file called +ic-bootstrap.tar+. In certain special use cases (containerized testing workflows), the file may be put directly into the /mnt directory instead of being accessible through removable media.
+
+The bootstrap information will be processed only once during the lifecycle of the system. All required information will be integrated into persistent system state or stored in the config partition for subsequent use.
+
+=== Configuration format
+The +ic-bootstrap.tar+ may contain multiple files and/or subdirectories. The following contents of the archive are recognized and interpreted in the way described:
+
+- +network.conf+ (file): network configuration parameters
+
+- +nns.conf+ (file): IP address(es) of NNS node(s)
+
+- +nns_public_key.pem+ (file): Public key of NNS
+
+- +ic_crypto+ (directory): Externally generated cryptographic keys
+
+- +ic_registry_local_store+ (directory): Initial registry state
+
+- +accounts_ssh_authorized_keys+ (directory): ssh keys for role accounts
+
+- +nftables.conf+ (file): nftables configuration file (obsoleted)
+
+- +backup.conf+ (file): backup configuration file (optional)
+
+- +journalbeat.conf+ (file): journalbeat configuration options (optional)
+
+- +log.conf+ (file): Some logging configuration (optional)
+
+- +bitcoin_addr.conf+ (file): Configure bitcoin adapter address (optional)
+
+Not all files are needed in all bootstrap behaviors. See detailed specifications of the configuration parameters as well as the xref:behaviors[behaviors] section below.
+
+==== +network.conf+: Network configuration parameters
+
+Must be a text file consisting of key/value pairs (one per line). The following keys are recognized:
+
+- +ipv6_address+: The IPv6 address of the node. It will be used for the node to “identify” itself (via registry). All public IC services are offered through this address. Will be assigned to the enp1s0 interface. It is used as the “private” management access to the node. If left blank, SLAAC is used on the interface.
+
+- +ipv6_gateway+: Default IPv6 gateway, only meaningful if ipv6_address is given as well.
+
+- +ipv4_address+ (obsoleted): The IPv4 address of the node. Will be assigned to the enp2s0 interface. It is used as the “private” management access to the node. If left blank, dhcp is used on the interface.
+
+- +ipv4_gateway+ (obsoleted): Default IPv4 gateway, only meaningful if ipv4_address is given as well.
+
+- +name_servers+: Name servers to be used. Multiple servers to be separated by spaces, if needed. Only meaningful if not using dhcp / SLAAC.
+
+- +hostname+: Hostname; in principle free-form, but conventionally contains the MAC address of the management interface of the physical machine.
+
+This file is optional, the system will fall back to network auto configuration if this is not given (same as giving all above keys as empty).
+
+Network configuration may be given for any of the bootstrap behaviors below.
+
+==== +nns.conf+: NNS address
+
+Must be a text file consisting of key/value pairs (one per line). The following keys are recognized:
+
+- +nns_url+: The URL (http) of the NNS node(s). If multiple are given, they need to be separated by whitespace. If not specified at all, then http://127.0.0.1:8080 is assumed (which only works for nodes not needing to do any registration).
+
+The file is optional in the “inject external state” behavior for NNS nodes. It is required in all other cases.
+
+==== +nns_public_key.pem+: Public key of NNS
+
+Must be a text file containing the public key of the NNS to be used.
+
+The file is optional in the “inject external state” behavior for NNS nodes. It is required in all other cases.
+
+==== +ic_crypto+: Externally generated cryptographic keys
+
+Must be a directory with contents matching the internal representation of the +ic_crypto+ directory. When given, this provides the private keys of the node. If not given, the node will generate its own private/public key pair.
+
+This directory is required in the “inject external state” behavior. It is optional (or, rather discouraged) in all other behaviors.
+
+==== +ic_registry_local_store+: Initial registry state
+
+Must be a directory with contents matching the internal representation of the +ic_registry_local_store+. When given, this provides the initial state of the registry. If not given, the node will fetch (initial) registry state from the NNS.
+
+This directory is required in the “inject external state” behavior for all NNS nodes. It is optional (or, rather discouraged) in all other behaviors.
+
+==== +accounts_ssh_authorized_keys+: ssh keys for role accounts
+
+Must be a directory which may contain multiple files. Each file designates the ssh authorized keys for the account of the same name. For example that means, the file +accounts_ssh_authorized_keys/admin+ is transferred to +~admin/.ssh/authorized_keys+ on the target system.
+
+The following role account names are recognized:
+
+- +admin+
+
+- +readonly+
+
+- +backup+
+
+- +root+ (Only to be used for test builds)
+
+This directory and any file in it is optional, by default no authorized key is installed for either account. This means that the account is inaccessible. Accounts ssh configuration may be given for any of the bootstrap behaviors below.
+
+==== +nftables.conf+: raw nftables configuration file (obsoleted)
+
+Must be a raw, valid nftables configuration file. This feature is experimental and should be improved to only inject IPv6 blocks from a given text file.
+
+==== +backup.conf+: backup spool configuration
+
+Configures usage of the backup spool directory. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
+
+- +backup_retention_time_secs+: The maximum age of any file or directory kept in the backup spool.
+
+- +backup_purging_interval_secs+: The interval at which the backup spool directory will be scanned for files to delete.
+
+The backup configuration can be given under any of the possible node behaviors below. If left unspecified, suitable values for production are used for the above variables (24*3600 seconds and 3600 seconds, respectively).
+
+This must be left unconfigured (backup.conf file completely missing) for all production deployments.
+
+==== +journalbeat.conf+: journalbeat configuration options
+
+Configures journalbeat to export logs out of the system. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
+
+- +journalbeat_hosts+: Space-separated lists of hosts to ship logs to.
+
+- +journalbeat_tags+: Space-separated list of tags to apply to exported log records.
+
+The journalbeat configuration can be given under any of the possible node behaviors below. If left unspecified, journalbeat will be left unconfigured and no logs are exported.
+
+==== +log.conf+: some logging configuration
+
+Detailed configuration for IC logger. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
+
+- +log_debug_overrides+: A list of fully qualified Rust module paths. For each of the listed modules, at least DEBUG logs will be produced by the node software. Primarily intended for testing.
++
+The list must be provided as a serialized JSON-array. The value is
+inserted into the configuration file as is. E.g.:
++
++'["ic_consensus::consensus::finalizer",\+
++
++"ic_consensus::consensus::catchup_package_maker"]'+
+
+The configuration can be given under any of the possible node behaviors below, but should only be used in dev settings.
+
+==== +bitcoin_addr.conf+: configure bitcoin adapter
+
+Configuration for bitcoin adapter. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
+
+- +bitcoind_addr+: Address of the bitcoind to be contacted by bitcoin adapter service.
+
+The bitcoin configuration can be given under any of the possible node behaviors below. If left unspecified, bitcoin adapter will not work properly due
+to lack of external system to contact.
+
+[[behaviors]]
+== Behaviors
+
+On first boot, the system will perform technical initialization (filesystems etc.) and afterwards initialize itself to act as node in an IC. Depending on the configuration, the node behaves in one of the ways described in the sections below.
+
+There will be further behaviors to facilitate disaster recovery.
+
+=== Inject external state
+
+The purpose of this behavior is to initialize the node using externally generated private keys and an externally generated initial state. All “registration” to the target IC is assumed to have been performed by other means.
+
+The behavior is triggered through the presence of the ic_crypto directory in the injected configuration.
+
+The following parameters must be given in this behavior:
+
+- +nns.conf+ for non-nns nodes
+
+- +nns_public_key.pem+ for all nodes
+
+- +ic_crypto+
+
+- +ic_registry_local_store+
+
+This behavior is suitable for the following use cases:
+
+- Bootstrapping an IC instance: In this case, suitable state for all nodes is generated by +ic-prep+ and then distributed across multiple nodes. This is used for example during testnet setup.
+
+- Externally controlled join of a node to a subnet: In this case, +ic-prep+ is used to prepare key material to the node, while +ic-admin+ is used to modify the target NNS such that it “accepts” the new node as part of the IC
+
+=== Signed join request
+
+The purpose of this behavior is to initialize the node using key generation on the node itself (such that the private key never leaves the node) and joining an existing IC. “Registration” to the target IC is initiated by the node itself by sending a signed “join” request to its NNS. To be accepted, the request is signed by the node (using an attached smartcard).
+
+The behavior is triggered through the absence of the +ic_crypto+ directory in the injected configuration.
+
+The following parameters must be given in this behavior:
+
+- +nns.conf+
+
+- +nns_public_key.pem+
+
+This behavior is used to bootstrap all (permanent) mainnet nodes.
+
+== Implementation notes
+
+=== Data flow
+
+The bootstrap configuration is produced by the +build-bootstrap-config-image.sh+ script. This script is called from the deployment driver in both testnet and mainnet deployments. It is run outside of IC guest OS. It is called for each node to produce the individualized configuration for each. The build result of this script is a disk image containing all injected configuration bits packaged up in a tar file.
+
+The resulting disk image is attached to the VM when it boots (see also link:Boot{outfilesuffix}[Boot sequence]).
+
+On boot of the IC guest OS, the image is picked up by the +bootstrap-ic-node.sh+ script inside IC guest OS (also cf. the service file definition). The contents are unpacked and distributed in one of two places:
+
+- For node initialization material (initial registry & keys), they are put directly into their target directories where replica picks them
+
+- All other contents of the injected config are stashed into the +/boot/config+ directory. The reason is that these configurations also need to be available on subsequent boots (not just the first boot of the system), and they need to be preserved across upgrades.
+
+The contents of +/boot/config+ are then used in various ways to parameterize system services as they start: ssh keys are installed to their target accounts, network settings are applied by the network set up scripts etc. For the IC, the +generate-replica-config.sh+ script takes the template +ic.json5+ file and fills in various placeholders with information from +/boot/config+ and elsewhere to produce the effective configuration just before the replica itself is started (also cf. service file definition).
+
+=== Guidance for adding configuration bits
+
+Roughly these steps:
+
+- add handling to +build-bootstrap-config-image.sh+ to be able to build the config image
+
+- if necessary (see below)) register new config files with +bootstrap-ic-node.sh+
+
+- add interpretation of config to suitable place, e.g. +generate-replica-config.sh+
+
+- adapt testnet and/or prod deployment config asneeded
+
+*Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults: Already deployed nodes will by definition lack new configuration variables, and need to behave properly. Defaults unsuitable for tests need to be overridden in tests and not the other way around.
+
+*Format*: The configuration files are “free-form”, in principle any format will work. It is advisable to keep to simple formats whenever possible (e.g. files containing key=value pair lines): For now, parsing is done inside shell scripts and safely parsing “fancy” formats may be tricky. Treat values as potentially attacker-controlled on boot - bootstrapping a node with bogus values will most certainly cause the node to malfunction but it must not under any circumstances provide an operator with the capacity to gain control over the node via code injection or similar.
+
+*Configuration files*: New configuration bits might be added to either existing configuration files that have a suitable structure (e.g. key=value pairs), or new files. If in doubt, opt for adding additional files. If adding more files, the +bootstrap-ic-node.sh+ script needs to be augmented to accept the new file.
+
+*Interpretation of configuration bits*: Any script or service in the system may pull configuration bits out of /boot/config to customize its behavior. E.g. if adding parameter-driven customization of +ic.json5+, then simply augment the +generate-replica-config.sh+ script to pull the configuration values and substitute them into the generated configuration. (Note that this script is structured such that it can be run stand-alone for development testing in isolation).
+
+*Documentation*: Please keep documentation up-to-date.
+
+=== Testing
+
+- +build-bootstrap-config-image.sh+ can be run stand-alone. Using its -t command line argument is helpful to manually verify that the intended configuration is packaged up correctly.
+
+- +bootstrap-ic-node.sh+ can be temporarily tweaked (internally adapt paths; basically just running the process_bootstrap function of it) to run stand-alone and verify that the config image is unpacked and its files sorted into the correct locations
+
+- +generate-replica-config.sh+ can be run stand-alone to verify that it produces the intended +ic.json5+ configuration from the template
+
+After all is done, it is advised to prepare a configuration for a single node and boot it in a VM before conducting testnet deployments.
