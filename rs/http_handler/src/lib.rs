@@ -171,7 +171,7 @@ struct HttpHandler {
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    state_reader_executor: StateReaderExecutor,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -184,7 +184,10 @@ fn start_server_initialization(
         // Sleep one second between retries, only log every 10th round.
         info!(log, "Waiting for certified state...");
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForCertifiedState;
-        while common::get_latest_certified_state(state_reader.as_ref()).is_none() {
+        while common::get_latest_certified_state(&state_reader_executor)
+            .await
+            .is_none()
+        {
             info!(every_n_seconds => 10, log, "Certified state is not yet available...");
             sleep(Duration::from_secs(1)).await;
         }
@@ -192,7 +195,7 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForRootDelegation;
-        match load_root_delegation(state_reader.as_ref(), subnet_id, nns_subnet_id, &log).await {
+        match load_root_delegation(state_reader_executor, subnet_id, nns_subnet_id, &log).await {
             Err(err) => {
                 error!(log, "Could not load nns delegation: {}", err);
             }
@@ -288,7 +291,7 @@ pub fn start_server(
     rt_handle.clone().spawn(async move {
         let delegation_from_nns = Arc::new(RwLock::new(None));
         let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
-        let state_reader_executor = StateReaderExecutor::new(state_reader.clone());
+        let state_reader_executor = StateReaderExecutor::new(state_reader);
         let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
 
         let call_service = CallService::new_service(
@@ -361,7 +364,7 @@ pub fn start_server(
         }
 
         start_server_initialization(
-            Arc::clone(&state_reader),
+            state_reader_executor,
             http_handler.subnet_id,
             http_handler.nns_subnet_id,
             http_handler.log.clone(),
@@ -710,7 +713,7 @@ async fn make_router(
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
 async fn load_root_delegation(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+    state_reader_executor: StateReaderExecutor,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     log: &ReplicaLogger,
@@ -743,16 +746,17 @@ async fn load_root_delegation(
             sleep(backoff).await
         }
 
-        let node = match get_random_node_from_nns_subnet(state_reader, nns_subnet_id) {
-            Ok(node_topology) => node_topology,
-            Err(err) => {
-                fatal!(
-                    log,
-                    "Could not find a node from the root subnet to talk to. Error :{}",
-                    err
-                );
-            }
-        };
+        let node =
+            match get_random_node_from_nns_subnet(&state_reader_executor, nns_subnet_id).await {
+                Ok(node_topology) => node_topology,
+                Err(err) => {
+                    fatal!(
+                        log,
+                        "Could not find a node from the root subnet to talk to. Error :{}",
+                        err
+                    );
+                }
+            };
 
         let envelope = HttpRequestEnvelope {
             content: HttpReadStateContent::ReadState {
@@ -880,18 +884,18 @@ async fn load_root_delegation(
     }
 }
 
-fn get_random_node_from_nns_subnet(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+async fn get_random_node_from_nns_subnet(
+    state_reader_executor: &StateReaderExecutor,
     nns_subnet_id: SubnetId,
 ) -> Result<NodeTopology, String> {
     use rand::seq::IteratorRandom;
 
-    let subnet_topologies = &state_reader
+    let latest_state = state_reader_executor
         .get_latest_state()
-        .take()
-        .metadata
-        .network_topology
-        .subnets;
+        .await
+        .map_err(|_| "Latest state unavailable.".to_string())?;
+
+    let subnet_topologies = &latest_state.take().metadata.network_topology.subnets;
 
     let nns_subnet_topology = subnet_topologies.get(&nns_subnet_id).ok_or_else(|| {
         String::from("NNS subnet not found in network topology. Skipping fetching the delegation.")

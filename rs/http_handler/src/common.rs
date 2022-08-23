@@ -1,12 +1,15 @@
+use crate::state_reader_executor::StateReaderExecutor;
 use crate::HttpError;
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
 use ic_error_types::UserError;
-use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::messages::MessageId;
+use ic_types::{
+    messages::{Blob, MessageId},
+    SubnetId,
+};
 use ic_validator::RequestValidationError;
 use serde::Serialize;
 use std::convert::Infallible;
@@ -25,6 +28,33 @@ pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), Box
         Poll::Ready(Err(_infallible)) => {
             panic!("Can't enter match arm when Infallible");
         }
+    }
+}
+
+pub(crate) async fn get_root_public_key(
+    log: &ReplicaLogger,
+    state_reader_executor: &StateReaderExecutor,
+    nns_subnet_id: &SubnetId,
+) -> Option<Blob> {
+    let latest_state = match state_reader_executor.get_latest_state().await {
+        Ok(ls) => ls,
+        Err(_) => {
+            warn!(log, "Latest state unavailable.");
+            return None;
+        }
+    };
+
+    let subnets = &latest_state.take().metadata.network_topology.subnets;
+    if subnets.len() == 1 {
+        // In single-subnet instances (e.g. `dfx start`, which has no NNS)
+        // we use this single subnet’s key
+        Some(Blob(subnets.values().next().unwrap().public_key.clone()))
+    } else if let Some(snt) = subnets.get(nns_subnet_id) {
+        // NNS subnet
+        Some(Blob(snt.public_key.clone()))
+    } else {
+        warn!(log, "Cannot identify root subnet.");
+        None
     }
 }
 
@@ -184,13 +214,15 @@ pub(crate) fn validation_error_to_http_error(
     }
 }
 
-pub(crate) fn get_latest_certified_state(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+pub(crate) async fn get_latest_certified_state(
+    state_reader_executor: &StateReaderExecutor,
 ) -> Option<Arc<ReplicatedState>> {
     let paths = &mut [Path::from(Label::from("time"))];
     let labeled_tree = sparse_labeled_tree_from_paths(paths);
-    state_reader
+    state_reader_executor
         .read_certified_state(&labeled_tree)
+        .await
+        .ok()?
         .map(|r| r.0)
 }
 
