@@ -79,8 +79,8 @@ fn keys_and_ciphertext_for(
     let public_keys_with_zk: Vec<_> = keys.iter().map(|key| &key.0).collect();
     let pks = public_keys_with_zk
         .iter()
-        .map(|key| &key.key_value)
-        .collect();
+        .map(|key| key.key_value.clone())
+        .collect::<Vec<_>>();
 
     let sij: Vec<_> = (0..keys.len())
         .map(|receiver_index| {
@@ -92,8 +92,8 @@ fn keys_and_ciphertext_for(
     println!("Messages: {:#?}", sij);
 
     let tau = tau_from_epoch(sys, epoch);
-    let (crsz, _toxic) =
-        enc_chunks(&sij[..], pks, &tau, associated_data, sys, rng).expect("Encryption failed");
+    let (crsz, _witness) =
+        enc_chunks(&sij[..], &pks, &tau, associated_data, sys, rng).expect("Encryption failed");
     (keys, sij, crsz)
 }
 

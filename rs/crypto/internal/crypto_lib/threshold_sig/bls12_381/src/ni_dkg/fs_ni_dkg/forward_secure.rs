@@ -1,8 +1,4 @@
 //! Methods for forward secure encryption
-use zeroize::Zeroize;
-
-use std::collections::LinkedList;
-use std::vec::Vec;
 
 // NOTE: the paper uses multiplicative notation for operations on G1, G2, GT,
 // while miracl's API uses additive naming convention, hence
@@ -16,7 +12,11 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::CHALLENGE_BITS;
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS;
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, G2Prepared, Gt, Scalar};
+use ic_crypto_internal_bls12381_serde_miracl::*;
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
+};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionCiphertext;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
 use miracl_core::bls12381::ecp::ECP;
@@ -25,6 +25,8 @@ use miracl_core::bls12381::fp12::FP12;
 use miracl_core::bls12381::rom;
 use miracl_core::bls12381::{big, big::BIG};
 use miracl_core::rand::RAND;
+use std::collections::LinkedList;
+use zeroize::Zeroize;
 
 lazy_static! {
     static ref PRECOMP_SYS_H: G2Prepared = precomp_sys_h();
@@ -479,6 +481,95 @@ pub struct Crsz {
     pub zz: Vec<ECP2>,
 }
 
+impl Crsz {
+    /// Serialises a ciphertext from the internal representation into the standard
+    /// form.
+    ///
+    /// # Panics
+    /// This will panic if the internal representation is invalid.  Given that the
+    /// internal representation is generated internally, this can happen only if there
+    /// is an error in our code.
+    pub fn serialize(&self) -> FsEncryptionCiphertext {
+        assert_eq!(self.rr.len(), NUM_CHUNKS);
+        assert_eq!(self.ss.len(), NUM_CHUNKS);
+        assert_eq!(self.zz.len(), NUM_CHUNKS);
+
+        let rand_r = {
+            let mut rand_r = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
+            for (dst, src) in rand_r[..].iter_mut().zip(&self.rr) {
+                *dst = miracl_g1_to_bytes(src);
+            }
+            rand_r
+        };
+        let rand_s = {
+            let mut rand_s = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
+            for (dst, src) in rand_s[..].iter_mut().zip(&self.ss) {
+                *dst = miracl_g1_to_bytes(src);
+            }
+            rand_s
+        };
+        let rand_z = {
+            let mut rand_z = [G2Bytes([0u8; G2Bytes::SIZE]); NUM_CHUNKS];
+            for (dst, src) in rand_z[..].iter_mut().zip(&self.zz) {
+                *dst = miracl_g2_to_bytes(src);
+            }
+            rand_z
+        };
+        let ciphertext_chunks = self
+            .cc
+            .iter()
+            .map(|cj| {
+                assert_eq!(cj.len(), NUM_CHUNKS);
+
+                let mut cc = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
+                for (dst, src) in cc[..].iter_mut().zip(cj) {
+                    *dst = miracl_g1_to_bytes(src);
+                }
+                cc
+            })
+            .collect();
+
+        FsEncryptionCiphertext {
+            rand_r,
+            rand_s,
+            rand_z,
+            ciphertext_chunks,
+        }
+    }
+
+    /// Parses a ciphertext into the internal representation.
+    ///
+    /// # Errors
+    /// This will return an error if any of the constituent group elements is
+    /// invalid.
+    pub fn deserialize(ciphertext: &FsEncryptionCiphertext) -> Result<Self, &'static str> {
+        let rr: Vec<ECP> = ciphertext.rand_r[..]
+            .iter()
+            .map(|g1_bytes| miracl_g1_from_bytes(&g1_bytes.0).or(Err("Malformed rand_r")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let ss: Vec<ECP> = ciphertext.rand_s[..]
+            .iter()
+            .map(|g1_bytes| miracl_g1_from_bytes(&g1_bytes.0).or(Err("Malformed rand_s")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let zz: Vec<ECP2> = ciphertext.rand_z[..]
+            .iter()
+            .map(|g2_bytes| miracl_g2_from_bytes(&g2_bytes.0).or(Err("Malformed rand_z")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let cc: Vec<Vec<ECP>> = ciphertext
+            .ciphertext_chunks
+            .iter()
+            .map(|cj| {
+                cj.as_ref()
+                    .iter()
+                    .map(|c| miracl_g1_from_bytes(&c.0).or(Err("Malformed ciphertext_chunk")))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self { cc, rr, ss, zz })
+    }
+}
+
 fn format_ecp(f: &mut std::fmt::Formatter<'_>, ecp: &ECP) -> std::fmt::Result {
     let mut ecp_buffer = [0; 49];
     ecp.tobytes(&mut ecp_buffer, true);
@@ -502,28 +593,22 @@ impl std::fmt::Debug for Crsz {
 }
 
 /// Randomness needed for NIZK proofs.
-pub struct ToxicWaste {
-    pub spec_r: Vec<BIG>,
-    pub(crate) s: Vec<BIG>,
-}
-
-impl zeroize::Zeroize for ToxicWaste {
-    fn zeroize(&mut self) {
-        self.spec_r.iter_mut().for_each(|big| big.zero());
-        self.s.iter_mut().for_each(|big| big.zero());
-    }
+#[derive(Zeroize)]
+#[zeroize(drop)]
+pub struct EncryptionWitness {
+    pub spec_r: Vec<Scalar>,
 }
 
 /// Encrypt chunks. Returns ciphertext as well as the random spec_r's and s's
 /// chosen, for later use in NIZK proofs.
 pub fn enc_chunks(
     sij: &[Vec<isize>],
-    pks: Vec<&ECP>,
+    pks: &[ECP],
     tau: &[Bit],
     associated_data: &[u8],
     sys: &SysParam,
     rng: &mut impl RAND,
-) -> Option<(Crsz, ToxicWaste)> {
+) -> Option<(Crsz, EncryptionWitness)> {
     if sij.is_empty() {
         return None;
     }
@@ -545,53 +630,70 @@ pub fn enc_chunks(
         }
     }
 
-    use miracl_core::bls12381::pair::g1mul;
-    use miracl_core::bls12381::pair::g2mul;
-    let g1 = ECP::generator();
-    let p = BIG::new_ints(&rom::CURVE_ORDER);
+    let g1 = G1Affine::generator();
 
     // do
     //   spec_r <- replicateM chunks getRandom
     //   s <- replicateM chunks getRandom
     //   let rr = (g1^) <$> spec_r
     //   let ss = (g1^) <$> s
-    let mut spec_r = Vec::new();
-    let mut s = Vec::new();
-    let mut rr = Vec::new();
-    let mut ss = Vec::new();
+    let mut spec_r = Vec::with_capacity(chunks);
+    let mut s = Vec::with_capacity(chunks);
+    let mut rr = Vec::with_capacity(chunks);
+    let mut ss = Vec::with_capacity(chunks);
     for _j in 0..chunks {
         {
-            let tmp = BIG::randomnum(&p, rng);
+            let tmp = Scalar::miracl_random_using_miracl_rand(rng);
             spec_r.push(tmp);
-            rr.push(g1mul(&g1, &tmp));
+            rr.push(G1Affine::from(g1 * tmp));
         }
         {
-            let tmp = BIG::randomnum(&p, rng);
+            let tmp = Scalar::miracl_random_using_miracl_rand(rng);
             s.push(tmp);
-            ss.push(g1mul(&g1, &tmp));
+            ss.push(G1Affine::from(g1 * tmp));
         }
     }
     // [[pk^spec_r * g1^s | (spec_r, s) <- zip rs si] | (pk, si) <- zip pks sij]
     let cc: Vec<Vec<_>> = sij
         .iter()
-        .zip(&pks)
+        .zip(pks)
         .map(|(sj, pk)| {
             sj.iter()
                 .zip(&spec_r)
-                .map(|(s, spec_r)| pk.mul2(spec_r, &g1, &BIG::new_int(*s)))
+                .map(|(s, spec_r)| {
+                    G1Projective::mul2(
+                        &G1Affine::from_miracl(pk).into(),
+                        spec_r,
+                        &g1.into(),
+                        &Scalar::from_isize(*s),
+                    )
+                    .to_affine()
+                })
                 .collect()
         })
         .collect();
 
-    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
-    let mut zz = Vec::new();
+    let extended_tau = extend_tau_zkcrypto(&cc, &rr, &ss, tau, associated_data);
+    let id = G2Affine::from_miracl(
+        &ftau(&extended_tau, sys).expect("extended_tau not the correct size"),
+    );
+    let mut zz = Vec::with_capacity(chunks);
+
+    let sys_h = G2Affine::from_miracl(&sys.h);
     for j in 0..chunks {
-        let mut tmp = g2mul(&id, &spec_r[j]);
-        tmp.add(&g2mul(&sys.h, &s[j]));
-        zz.push(tmp);
+        zz.push(G2Projective::mul2(&id.into(), &spec_r[j], &sys_h.into(), &s[j]).to_affine())
     }
-    Some((Crsz { cc, rr, ss, zz }, ToxicWaste { spec_r, s }))
+
+    // convert to miracl:
+    let cc = cc
+        .iter()
+        .map(|v| v.iter().map(|p| p.to_miracl()).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let rr = rr.iter().map(|p| p.to_miracl()).collect::<Vec<_>>();
+    let ss = ss.iter().map(|p| p.to_miracl()).collect::<Vec<_>>();
+    let zz = zz.iter().map(|p| p.to_miracl()).collect::<Vec<_>>();
+
+    Some((Crsz { cc, rr, ss, zz }, EncryptionWitness { spec_r }))
 }
 
 fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
@@ -854,6 +956,34 @@ fn extend_tau(
     cc: &[Vec<ECP>],
     rr: &[ECP],
     ss: &[ECP],
+    tau: &[Bit],
+    associated_data: &[u8],
+) -> Vec<Bit> {
+    let mut map = HashedMap::new();
+    map.insert_hashed("ciphertext-chunks", &cc.to_vec());
+    map.insert_hashed("randomizers-r", &rr.to_vec());
+    map.insert_hashed("randomizers-s", &ss.to_vec());
+    map.insert_hashed("epoch", &(epoch_from_tau_vec(tau).get() as usize));
+    map.insert_hashed("associated-data", &associated_data.to_vec());
+
+    let hash = random_oracle(DOMAIN_CIPHERTEXT_NODE, &map);
+
+    let mut extended_tau: Vec<Bit> = tau.to_vec();
+    hash.iter().for_each(|byte| {
+        for b in 0..8 {
+            extended_tau.push(Bit::from((byte >> b) & 1));
+        }
+    });
+    extended_tau
+}
+
+/// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
+///
+/// See the description of Deal in Section 7.1.
+fn extend_tau_zkcrypto(
+    cc: &[Vec<G1Affine>],
+    rr: &[G1Affine],
+    ss: &[G1Affine],
     tau: &[Bit],
     associated_data: &[u8],
 ) -> Vec<Bit> {

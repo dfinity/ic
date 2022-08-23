@@ -10,9 +10,8 @@ use crate::api::ni_dkg_errors::{
     DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
 };
 use conversions::{
-    ciphertext_from_miracl, ciphertext_into_miracl, epoch_from_miracl_secret_key,
-    plaintext_from_bytes, plaintext_to_bytes, public_coefficients_to_miracl,
-    public_key_from_miracl, secret_key_from_miracl, Tau,
+    epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
+    public_coefficients_to_miracl, public_key_from_miracl, secret_key_from_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
@@ -39,8 +38,8 @@ mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, mk_sys_params,
-        verify_ciphertext_integrity, BTENode, Bit, Crsz, PublicKeyWithPop, SecretKey, SysParam,
-        ToxicWaste,
+        verify_ciphertext_integrity, BTENode, Bit, Crsz, EncryptionWitness, PublicKeyWithPop,
+        SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -150,12 +149,11 @@ pub fn encrypt_and_prove(
 
     // The API takes a vector of pointers so we need to keep the values but generate
     // another vector with the values.
-    let public_key_pointers: Vec<&miracl::ECP> = public_keys.iter().collect();
     let tau = Tau::from(epoch);
     let mut rng = crypto::RAND_ChaCha20::new(seed.into_rng().gen::<[u8; 32]>());
-    let (ciphertext, toxic_waste) = crypto::enc_chunks(
+    let (ciphertext, encryption_witness) = crypto::enc_chunks(
         &plaintext_chunks,
-        public_key_pointers,
+        &public_keys,
         &tau.0[..],
         associated_data,
         &SYS_PARAMS,
@@ -169,7 +167,7 @@ pub fn encrypt_and_prove(
         &public_keys,
         &ciphertext,
         &plaintext_chunks,
-        &toxic_waste,
+        &encryption_witness,
         &mut rng,
     );
     let miracl_public_coefficients = public_coefficients_to_miracl(public_coefficients)
@@ -179,7 +177,7 @@ pub fn encrypt_and_prove(
         &miracl_public_coefficients,
         &ciphertext,
         &plaintext_chunks,
-        &toxic_waste,
+        &encryption_witness,
         &mut rng,
     );
 
@@ -219,7 +217,7 @@ pub fn encrypt_and_prove(
     }
 
     Ok((
-        ciphertext_from_miracl(&ciphertext),
+        ciphertext.serialize(),
         chunking_proof.serialize(),
         sharing_proof.serialize(),
     ))
@@ -257,7 +255,7 @@ pub fn decrypt(
         });
     }
     let ciphertext =
-        ciphertext_into_miracl(ciphertext).map_err(DecryptError::MalformedCiphertext)?;
+        crypto::Crsz::deserialize(ciphertext).map_err(DecryptError::MalformedCiphertext)?;
     let tau = Tau::from(epoch);
     let decrypt_maybe =
         crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data);
@@ -275,7 +273,7 @@ fn prove_chunking(
     receiver_fs_public_keys: &[miracl::ECP],
     ciphertext: &crypto::Crsz,
     plaintext_chunks: &[Vec<isize>],
-    toxic_waste: &crypto::ToxicWaste,
+    encryption_witness: &crypto::EncryptionWitness,
     rng: &mut crypto::RAND_ChaCha20,
 ) -> crypto::ProofChunking {
     let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
@@ -289,14 +287,8 @@ fn prove_chunking(
         ciphertext.rr.clone(),
     );
 
-    let chunking_witness = crypto::ChunkingWitness::new(
-        toxic_waste
-            .spec_r
-            .iter()
-            .map(Scalar::from_miracl)
-            .collect::<Vec<_>>(),
-        big_plaintext_chunks,
-    );
+    let chunking_witness =
+        crypto::ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
 
     crypto::prove_chunking(&chunking_instance, &chunking_witness, rng)
 }
@@ -307,7 +299,7 @@ fn prove_sharing(
     public_coefficients: &[miracl::ECP2],
     ciphertext: &crypto::Crsz,
     plaintext_chunks: &[Vec<isize>],
-    toxic_waste: &crypto::ToxicWaste,
+    encryption_witness: &crypto::EncryptionWitness,
     rng: &mut crypto::RAND_ChaCha20,
 ) -> crypto::ProofSharing {
     // Convert fs encryption data:
@@ -325,13 +317,7 @@ fn prove_sharing(
             .collect::<Vec<_>>(),
     );
 
-    let combined_r_scalar = util::scalar_from_big_endian_chunks(
-        &toxic_waste
-            .spec_r
-            .iter()
-            .map(Scalar::from_miracl)
-            .collect::<Vec<_>>(),
-    );
+    let combined_r_scalar = util::scalar_from_big_endian_chunks(&encryption_witness.spec_r);
 
     let combined_plaintexts = plaintext_chunks
         .iter()
@@ -398,7 +384,7 @@ pub fn verify_zk_proofs(
         .collect();
     let public_keys = public_keys?;
 
-    let ciphertext = ciphertext_into_miracl(ciphertexts).map_err(|error| {
+    let ciphertext = crypto::Crsz::deserialize(ciphertexts).map_err(|error| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: error.to_string(),
         })
