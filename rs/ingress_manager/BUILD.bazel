@@ -15,6 +15,7 @@ rust_library(
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
+        "//rs/protobuf",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/subnet_type",

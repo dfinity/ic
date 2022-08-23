@@ -35,36 +35,38 @@ const VALIDATED_DEALING_AGE_THRESHOLD_MSECS: u64 = 10;
 
 /// A collection of subnet records, that are relevant for constructing a block
 pub struct SubnetRecords {
-    /// The latest [`SubnetRecord`], that is available to this node
-    pub(crate) latest: SubnetRecord,
+    /// The membership [`SubnetRecord`], that is available to this node
+    pub(crate) membership_version: SubnetRecord,
 
     /// The stable [`SubnetRecord`], that might be older than latest
     /// but is very likely available to all nodes on the subnet.
     ///
-    /// This is the [`SubnetRecord`] that should be used together
-    /// with the [`ValidationContext`].
-    pub(crate) stable: SubnetRecord,
+    /// This is the [`SubnetRecord`] that corresponds to the
+    /// [`ValidationContext`].
+    pub(crate) context_version: SubnetRecord,
 }
 
 impl SubnetRecords {
     fn new(
         block_maker: &BlockMaker,
-        latest: RegistryVersion,
-        stable: RegistryVersion,
+        membership_record: RegistryVersion,
+        context_record: RegistryVersion,
     ) -> Option<Self> {
         Some(Self {
-            latest: get_subnet_record(
+            membership_version: get_subnet_record(
                 block_maker.registry_client.as_ref(),
                 block_maker.replica_config.subnet_id,
-                latest,
+                membership_record,
                 &block_maker.log,
-            )?,
-            stable: get_subnet_record(
+            )
+            .ok()?,
+            context_version: get_subnet_record(
                 block_maker.registry_client.as_ref(),
                 block_maker.replica_config.subnet_id,
-                stable,
+                context_record,
                 &block_maker.log,
-            )?,
+            )
+            .ok()?,
         })
     }
 }
@@ -276,7 +278,8 @@ impl BlockMaker {
         registry_version: RegistryVersion,
         subnet_records: &SubnetRecords,
     ) -> Option<BlockProposal> {
-        let max_dealings_per_block = subnet_records.latest.dkg_dealings_per_block as usize;
+        let max_dealings_per_block =
+            subnet_records.membership_version.dkg_dealings_per_block as usize;
 
         let dkg_payload = create_dkg_payload(
             self.replica_config.subnet_id,
