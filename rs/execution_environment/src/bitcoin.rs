@@ -39,7 +39,7 @@ pub fn get_balance(
                 Err(err) => Err(candid_error_to_user_error(err)),
                 Ok(args) => {
                     // Verify that the request is for the expected network.
-                    verify_network(args.network, state.bitcoin().network())?;
+                    verify_network(args.network.into(), state.bitcoin().network())?;
 
                     let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
                     let balance_response = ic_btc_canister::get_balance(
@@ -80,11 +80,14 @@ pub fn get_utxos(
                 Err(err) => Err(candid_error_to_user_error(err)),
                 Ok(args) => {
                     // Verify that the request is for the expected network.
-                    verify_network(args.network, state.bitcoin().network())?;
+                    verify_network(args.network.into(), state.bitcoin().network())?;
 
                     let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-                    let utxos_response =
-                        ic_btc_canister::get_utxos(&btc_canister_state, &args.address, args.filter);
+                    let utxos_response = ic_btc_canister::get_utxos(
+                        &btc_canister_state,
+                        &args.address,
+                        args.filter.map(|f| f.into()),
+                    );
                     state.put_bitcoin_state(btc_canister_state.into());
 
                     utxos_response
@@ -117,7 +120,7 @@ pub fn get_current_fee_percentiles(
                 Err(err) => Err(candid_error_to_user_error(err)),
                 Ok(args) => {
                     // Verify that the request is for the expected network.
-                    verify_network(args.network, state.bitcoin().network())?;
+                    verify_network(args.network.into(), state.bitcoin().network())?;
 
                     let mut btc_canister_state =
                         BitcoinCanisterState::from(state.take_bitcoin_state());
@@ -161,7 +164,7 @@ pub fn send_transaction(
         fee,
         move |_payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
             // Verify that the request is for the expected network.
-            verify_network(args.network, state.bitcoin().network())?;
+            verify_network(args.network.into(), state.bitcoin().network())?;
 
             let mut btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
             let result = ic_btc_canister::send_transaction(&mut btc_canister_state, args);
