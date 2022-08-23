@@ -76,6 +76,9 @@ RUN mkdir -p /var/lib/ic/backup \
              /var/lib/ic/crypto \
              /var/lib/ic/data
 
+# Create two mount points for temporary use during setup of "var" partition
+RUN mkdir -p /mnt/var_old /mnt/var_new
+
 RUN \
     for SERVICE in /etc/systemd/system/*; do \
         if [ -f "$SERVICE" -a ! -L "$SERVICE" ] ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
