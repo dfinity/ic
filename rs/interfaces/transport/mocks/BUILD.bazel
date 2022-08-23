@@ -11,6 +11,6 @@ rust_library(
     deps = [
         "//rs/interfaces/transport",
         "//rs/types/base_types",
-        "@crate_index//:mockall_0_7_2",
+        "@crate_index//:mockall",
     ],
 )
