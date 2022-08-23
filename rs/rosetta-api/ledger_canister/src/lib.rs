@@ -28,7 +28,6 @@ mod dfn_runtime;
 #[allow(clippy::all)]
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
-pub mod range_utils;
 mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};

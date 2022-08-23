@@ -3,6 +3,7 @@ use dfn_candid::candid_one;
 use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_ledger_canister_core::range_utils;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use ledger_canister::{
@@ -183,8 +184,6 @@ fn get_blocks_() {
 
 #[candid_method(query, rename = "get_blocks")]
 fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult {
-    use ledger_canister::range_utils;
-
     let archive_state = ARCHIVE_STATE.read().unwrap();
     let blocks = &archive_state.blocks;
 

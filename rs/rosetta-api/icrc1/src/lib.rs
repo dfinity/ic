@@ -188,69 +188,6 @@ pub enum Operation {
     },
 }
 
-/// Like [Operation], but designed for a public Candid interface.
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub enum CandidOperation {
-    Mint {
-        to: Account,
-        amount: u64,
-    },
-    Transfer {
-        from: Account,
-        to: Account,
-        amount: u64,
-        fee: u64,
-    },
-    Burn {
-        from: Account,
-        amount: u64,
-    },
-}
-
-impl From<Operation> for CandidOperation {
-    fn from(op: Operation) -> Self {
-        match op {
-            Operation::Mint { to, amount } => Self::Mint { to, amount },
-            Operation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            } => Self::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            },
-            Operation::Burn { from, amount } => Self::Burn { from, amount },
-        }
-    }
-}
-
-/// Like [Transaction], but designed for a public Candid interface.
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub struct CandidTransaction {
-    pub operation: CandidOperation,
-    pub created_at_time: Option<u64>,
-    pub memo: Option<Memo>,
-}
-
-impl From<Transaction> for CandidTransaction {
-    fn from(
-        Transaction {
-            operation,
-            created_at_time,
-            memo,
-        }: Transaction,
-    ) -> Self {
-        Self {
-            operation: operation.into(),
-            created_at_time,
-            memo,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct MemoTooLarge(usize);
 
@@ -485,30 +422,6 @@ impl BlockType for Block {
             parent_hash,
             transaction,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
-        }
-    }
-}
-
-/// Like [Block], but designed for a public Candid interface.
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub struct CandidBlock {
-    pub parent_hash: Option<HashOf<EncodedBlock>>,
-    pub transaction: CandidTransaction,
-    pub timestamp: u64,
-}
-
-impl From<Block> for CandidBlock {
-    fn from(
-        Block {
-            parent_hash,
-            transaction,
-            timestamp,
-        }: Block,
-    ) -> Self {
-        Self {
-            parent_hash,
-            transaction: transaction.into(),
-            timestamp,
         }
     }
 }
