@@ -2,8 +2,10 @@ use candid::types::number::Nat;
 use candid::{CandidType, Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
-    Account, Block, CandidBlock, CandidOperation, Memo, Operation, Transaction,
+    endpoints::{
+        ArchiveInfo, StandardRecord, Transaction as Tx, Transfer, TransferArg, TransferError, Value,
+    },
+    Account, Block, Memo, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -186,18 +188,18 @@ fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
     .expect("failed to decode archives response")
 }
 
-fn get_archive_block(
+fn get_archive_transaction(
     env: &StateMachine,
     archive: CanisterId,
     block_index: u64,
-) -> Option<CandidBlock> {
+) -> Option<Tx> {
     Decode!(
-        &env.query(archive, "get_block", Encode!(&block_index).unwrap())
-            .expect("failed to query block")
+        &env.query(archive, "get_transaction", Encode!(&block_index).unwrap())
+            .expect("failed to get transaction")
             .bytes(),
-        Option<CandidBlock>
+        Option<Tx>
     )
-    .expect("failed to decode get_block response")
+    .expect("failed to decode get_transaction response")
 }
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
@@ -677,16 +679,17 @@ fn test_archiving() {
 
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
         assert_eq!(
-            get_archive_block(&env, archive_canister_id, i)
+            get_archive_transaction(&env, archive_canister_id, i)
                 .unwrap()
-                .transaction
-                .operation,
-            CandidOperation::Transfer {
+                .transfer,
+            Some(Transfer {
                 from: p1.into(),
                 to: p2.into(),
-                amount: 10_000 + i - 1,
-                fee: FEE
-            }
+                amount: Nat::from(10_000 + i - 1),
+                fee: Some(Nat::from(FEE)),
+                memo: None,
+                created_at_time: None,
+            })
         );
     }
 
@@ -697,16 +700,17 @@ fn test_archiving() {
 
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
         assert_eq!(
-            get_archive_block(&env, archive_canister_id, i)
+            get_archive_transaction(&env, archive_canister_id, i)
                 .unwrap()
-                .transaction
-                .operation,
-            CandidOperation::Transfer {
+                .transfer,
+            Some(Transfer {
                 from: p1.into(),
                 to: p2.into(),
-                amount: 10_000 + i - 1,
-                fee: FEE
-            }
+                amount: Nat::from(10_000 + i - 1),
+                fee: Some(Nat::from(FEE)),
+                memo: None,
+                created_at_time: None,
+            })
         );
     }
 

@@ -66,6 +66,7 @@ rust_test(
     crate = ":_wasm_ledger_canister_raw",
     data = [
         ":icrc1.did",
+        ":txlog.did",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",

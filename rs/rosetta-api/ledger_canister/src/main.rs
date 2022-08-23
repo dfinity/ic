@@ -9,6 +9,7 @@ use ic_base_types::CanisterId;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{archive_blocks, find_block_in_archive, LedgerAccess},
+    range_utils,
 };
 use ic_ledger_core::{
     block::{BlockHeight, BlockType, EncodedBlock},
@@ -753,8 +754,6 @@ fn get_blocks_() {
 
 #[candid_method(query, rename = "query_blocks")]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
-    use ledger_canister::range_utils;
-
     let requested_range = range_utils::make_range(start, length);
 
     let ledger = &LEDGER.read().unwrap();

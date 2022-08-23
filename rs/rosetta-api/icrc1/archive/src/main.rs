@@ -1,6 +1,6 @@
 use candid::{candid_method, Principal};
 use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{Block, CandidBlock};
+use ic_icrc1::{endpoints::Transaction, Block};
 use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock};
 use serde::{Deserialize, Serialize};
 use stable_structures::{
@@ -172,7 +172,7 @@ fn remaining_capacity() -> usize {
 
 #[query]
 #[candid_method(query)]
-fn get_block(index: BlockHeight) -> Option<CandidBlock> {
+fn get_transaction(index: BlockHeight) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
     let relative_idx = (idx_offset < index).then(|| (index - idx_offset) as usize)?;
 
