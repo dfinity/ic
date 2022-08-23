@@ -31,6 +31,8 @@ use ic_types::{
     registry::connection_endpoint::ConnectionEndpoint, Height, PrincipalId, ReplicaVersion,
 };
 
+/// the filename of the update disk image, as published on the cdn
+const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// fetch the sha256 of the corresponding image.
@@ -780,12 +782,12 @@ fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
     let contents = resp.text()?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        if words.len() == 2 && words[1].ends_with("update-img.tar.gz") {
+        if words.len() == 2 && words[1].ends_with(UPD_IMG_FILENAME) {
             return Ok(words[0].to_string());
         }
     }
 
-    bail!("SHA256 hash is not found in {:?}", url);
+    bail!("SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}", url, UPD_IMG_FILENAME);
 }
 
 #[cfg(test)]
