@@ -952,7 +952,7 @@ impl SnsMetadata {
     pub const MAX_NAME_LENGTH: usize = 255;
 
     /// The minimum number of characters allowed for a SNS name.
-    pub const MIN_NAME_LENGTH: usize = 10;
+    pub const MIN_NAME_LENGTH: usize = 4;
 
     /// The maximum number of characters allowed for a SNS description.
     pub const MAX_DESCRIPTION_LENGTH: usize = 2000;
@@ -960,7 +960,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS description.
     pub const MIN_DESCRIPTION_LENGTH: usize = 10;
 
-    // TODO NNS1-1599 : Finalize validation with NNS-Dapp
     /// Validate the SnsMetadata values
     pub fn validate(&self) -> Result<(), String> {
         let url = self.url.as_ref().ok_or("SnsMetadata.url must be set")?;
@@ -976,12 +975,13 @@ impl SnsMetadata {
             ));
         }
 
-        let logo = self.logo.as_ref().ok_or("SnsMetadata.logo must be set")?;
-        if logo.len() > Self::MAX_LOGO_LENGTH {
-            return Err(format!(
-                "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
-            ));
+        if let Some(logo) = &self.logo {
+            if logo.len() > Self::MAX_LOGO_LENGTH {
+                return Err(format!(
+                    "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
+                    Self::MAX_LOGO_LENGTH
+                ));
+            }
         }
 
         let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
@@ -2053,10 +2053,6 @@ pub(crate) mod tests {
         let invalid_sns_metadata = vec![
             SnsMetadata {
                 url: None,
-                ..default.clone()
-            },
-            SnsMetadata {
-                logo: None,
                 ..default.clone()
             },
             SnsMetadata {

@@ -633,13 +633,10 @@ neuron_minimum_stake".to_string())
     }
 
     fn validate_logo(&self) -> Result<(), String> {
-        let logo = self
-            .logo
-            .as_ref()
-            .ok_or_else(|| "Error: logo must be specified".to_string())?;
-
-        if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
-            return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
+        if let Some(logo) = &self.logo {
+            if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
+                return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
+            }
         }
 
         Ok(())
@@ -854,10 +851,6 @@ mod test {
         sns_init_payload = get_sns_init_payload();
 
         sns_init_payload.url = Some("S".repeat(SnsMetadata::MIN_URL_LENGTH - 1));
-        assert!(sns_init_payload.validate().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.logo = None;
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 
