@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 mock! {
     pub Transport {}
 
-    trait Transport {
+    impl Transport for Transport {
         fn set_event_handler(
             &self,
             event_handler: TransportEventHandler,
