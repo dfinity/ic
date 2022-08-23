@@ -5,7 +5,7 @@ use super::{
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
-use ic_btc_types::Network;
+use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method};
 use ic_interfaces::execution_environment::AvailableMemory;
@@ -1039,7 +1039,7 @@ fn subnet_messages_respect_bitcoin_request_limit_per_round() {
 
     let payload = Encode!(&BitcoinGetBalanceArgs {
         address: String::from("my_address"),
-        network: Network::Testnet,
+        network: NetworkInRequest::Testnet,
         min_confirmations: None,
     })
     .unwrap();

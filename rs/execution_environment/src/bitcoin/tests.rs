@@ -3,10 +3,13 @@ use bitcoin::{
 };
 use candid::Encode;
 use ic_btc_test_utils::{random_p2pkh_address, BlockBuilder, TransactionBuilder};
-use ic_btc_types::{GetUtxosResponse, OutPoint, Satoshi, Utxo, UtxosFilter};
+use ic_btc_types::{
+    GetUtxosResponse, NetworkInRequest as BitcoinNetwork, OutPoint, Satoshi, Utxo,
+    UtxosFilterInRequest,
+};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
+    BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
 };
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -182,7 +185,7 @@ fn execute_check_payload_and_refund<S: ToString>(
 fn fake_get_balance_args() -> BitcoinGetBalanceArgs {
     BitcoinGetBalanceArgs {
         address: random_p2pkh_address(Network::Testnet).to_string(),
-        network: BitcoinNetwork::Testnet,
+        network: BitcoinNetwork::testnet,
         min_confirmations: None,
     }
 }
@@ -244,18 +247,21 @@ fn get_balance_succeeds() {
     // Expect the balance of `address_2` to be `amount`.
     let expected_balance: Satoshi = 123;
 
-    execute_check_payload_and_refund(
-        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
-        Method::BitcoinGetBalance,
-        BitcoinGetBalanceArgs {
-            address: address_2.to_string(),
-            ..fake_get_balance_args()
-        }
-        .encode(),
-        Cycles::new(100_000_000),
-        Cycles::zero(),
-        Payload::Data(Encode!(&expected_balance).unwrap()),
-    );
+    for network in [BitcoinNetwork::Testnet, BitcoinNetwork::testnet] {
+        execute_check_payload_and_refund(
+            state_with_balance(Network::Testnet, amount, &address_1, &address_2),
+            Method::BitcoinGetBalance,
+            BitcoinGetBalanceArgs {
+                address: address_2.to_string(),
+                network,
+                ..fake_get_balance_args()
+            }
+            .encode(),
+            Cycles::new(100_000_000),
+            Cycles::zero(),
+            Payload::Data(Encode!(&expected_balance).unwrap()),
+        );
+    }
 }
 
 #[test]
@@ -343,14 +349,20 @@ fn get_utxos_rejects_feature_not_enabled() {
 
 #[test]
 fn get_utxos_not_enough_cycles() {
-    reject_and_check_refund(
-        fake_state(),
-        Method::BitcoinGetUtxos,
-        fake_get_utxos_args().encode(),
-        Cycles::new(100_000_000 - 1), // Not enough cycles given.
-        Cycles::new(100_000_000 - 1), // Refund all.
-        "Received 99999999 cycles. 100000000 cycles are required.",
-    );
+    for network in [BitcoinNetwork::Testnet, BitcoinNetwork::testnet] {
+        reject_and_check_refund(
+            fake_state(),
+            Method::BitcoinGetUtxos,
+            BitcoinGetUtxosArgs {
+                network,
+                ..fake_get_utxos_args()
+            }
+            .encode(),
+            Cycles::new(100_000_000 - 1), // Not enough cycles given.
+            Cycles::new(100_000_000 - 1), // Refund all.
+            "Received 99999999 cycles. 100000000 cycles are required.",
+        );
+    }
 }
 
 #[test]
@@ -390,12 +402,17 @@ fn get_utxos_rejects_large_min_confirmations() {
     let address_1 = random_p2pkh_address(Network::Testnet);
     let address_2 = random_p2pkh_address(Network::Testnet);
 
-    reject_and_check_refund(
+    // Confirmations that are too large.
+    for filter in [
+        UtxosFilterInRequest::MinConfirmations(1_000),
+        UtxosFilterInRequest::min_confirmations(1_000),
+    ] {
+        reject_and_check_refund(
         state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetUtxos,
         BitcoinGetUtxosArgs {
             address: address_2.to_string(),
-            filter: Some(UtxosFilter::MinConfirmations(1_000)), // Too large confirmations.
+            filter: Some(filter),
             ..fake_get_utxos_args()
         }
         .encode(),
@@ -403,6 +420,7 @@ fn get_utxos_rejects_large_min_confirmations() {
         Cycles::zero(),
         "bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 2"
     );
+    }
 }
 
 #[test]
@@ -415,38 +433,43 @@ fn get_utxos_succeeds() {
         .with_transaction(coinbase_tx.clone())
         .build();
 
-    execute_check_payload_and_refund(
-        BitcoinState::from(ic_btc_canister::state::State::new(
-            2,
-            Network::Testnet,
-            block_0.clone(),
-        )),
-        Method::BitcoinGetUtxos,
-        BitcoinGetUtxosArgs {
-            address: address.to_string(),
-            filter: Some(UtxosFilter::MinConfirmations(1)),
-            ..fake_get_utxos_args()
-        }
-        .encode(),
-        Cycles::new(100_000_000),
-        Cycles::zero(),
-        Payload::Data(
-            Encode!(&GetUtxosResponse {
-                utxos: vec![Utxo {
-                    outpoint: OutPoint {
-                        txid: coinbase_tx.txid().to_vec(),
-                        vout: 0
-                    },
-                    value: 1000,
-                    height: 0,
-                }],
-                tip_block_hash: block_0.block_hash().to_vec(),
-                tip_height: 0,
-                next_page: None,
-            })
-            .unwrap(),
-        ),
-    );
+    for filter in [
+        UtxosFilterInRequest::MinConfirmations(1),
+        UtxosFilterInRequest::min_confirmations(1),
+    ] {
+        execute_check_payload_and_refund(
+            BitcoinState::from(ic_btc_canister::state::State::new(
+                2,
+                Network::Testnet,
+                block_0.clone(),
+            )),
+            Method::BitcoinGetUtxos,
+            BitcoinGetUtxosArgs {
+                address: address.to_string(),
+                filter: Some(filter),
+                ..fake_get_utxos_args()
+            }
+            .encode(),
+            Cycles::new(100_000_000),
+            Cycles::zero(),
+            Payload::Data(
+                Encode!(&GetUtxosResponse {
+                    utxos: vec![Utxo {
+                        outpoint: OutPoint {
+                            txid: coinbase_tx.txid().to_vec(),
+                            vout: 0
+                        },
+                        value: 1000,
+                        height: 0,
+                    }],
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0,
+                    next_page: None,
+                })
+                .unwrap(),
+            ),
+        );
+    }
 }
 
 fn fake_get_current_fee_percentiles_args() -> BitcoinGetCurrentFeePercentilesArgs {
@@ -788,7 +811,7 @@ fn send_transaction_cycles_charging() {
 
             let response = execute_method(
                 &format!("bitcoin_{}", network),
-                BitcoinState::new(network),
+                BitcoinState::new(network.into()),
                 Method::BitcoinSendTransaction,
                 BitcoinSendTransactionArgs {
                     transaction,
@@ -835,16 +858,18 @@ fn send_transaction_succeeds() {
         .serialize();
     let payment = calculate_send_transaction_payment(transaction.len());
 
-    execute_check_payload_and_refund(
-        fake_state(),
-        Method::BitcoinSendTransaction,
-        BitcoinSendTransactionArgs {
-            transaction,
-            network: BitcoinNetwork::Testnet,
-        }
-        .encode(),
-        payment,
-        Cycles::zero(),
-        Payload::Data(EmptyBlob::encode()),
-    );
+    for network in [BitcoinNetwork::Testnet, BitcoinNetwork::testnet] {
+        execute_check_payload_and_refund(
+            fake_state(),
+            Method::BitcoinSendTransaction,
+            BitcoinSendTransactionArgs {
+                transaction: transaction.clone(),
+                network,
+            }
+            .encode(),
+            payment,
+            Cycles::zero(),
+            Payload::Data(EmptyBlob::encode()),
+        );
+    }
 }
