@@ -205,9 +205,10 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
     type Error = anyhow::Error;
 
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
-        let logo_path = sns_cli_init_config
-            .logo
-            .ok_or_else(|| anyhow!("The logo must be specified"))?;
+        let optional_logo = match sns_cli_init_config.logo {
+            None => None,
+            Some(logo_path) => Some(load_logo(&logo_path)?),
+        };
 
         Ok(SnsInitPayload {
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
@@ -222,7 +223,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             min_icp_e8s: sns_cli_init_config.min_icp_e8s,
             fallback_controller_principal_ids: sns_cli_init_config
                 .fallback_controller_principal_ids,
-            logo: Some(load_logo(&logo_path)?),
+            logo: optional_logo,
             url: sns_cli_init_config.url,
             name: sns_cli_init_config.name,
             description: sns_cli_init_config.description,
@@ -548,6 +549,37 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
 
+    impl SnsCliInitConfig {
+        pub fn with_test_values() -> Self {
+            let mut logo_path =
+                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            logo_path.push("test.png");
+
+            Self {
+                transaction_fee_e8s: Some(1),
+                token_name: Some("ServiceNervousSystem".to_string()),
+                token_symbol: Some("SNS".to_string()),
+                proposal_reject_cost_e8s: Some(2),
+                neuron_minimum_stake_e8s: Some(3),
+                max_icp_e8s: Some(4),
+                min_participants: Some(5),
+                min_participant_icp_e8s: Some(6),
+                max_participant_icp_e8s: Some(7),
+                min_icp_e8s: Some(8),
+                fallback_controller_principal_ids: vec![
+                    "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
+                ],
+                logo: Some(logo_path.clone()),
+                url: Some("https://internetcomputer.org".to_string()),
+                name: Some("Name".to_string()),
+                description: Some("Description".to_string()),
+                initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
+                    ..Default::default()
+                })),
+            }
+        }
+    }
+
     /// Tests that the text produced by the "new" command can be read into the default SnsCliInitConfig
     #[test]
     fn test_default_init_config_file() {
@@ -609,34 +641,16 @@ url: https://internetcomputer.org/
 
     #[test]
     fn test_try_from_sns_cli_init_config() {
-        let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        logo_path.push("test.png");
-        let create_sns_cli_init_config = || SnsCliInitConfig {
-            transaction_fee_e8s: Some(1),
-            token_name: Some("ServiceNervousSystem".to_string()),
-            token_symbol: Some("SNS".to_string()),
-            proposal_reject_cost_e8s: Some(2),
-            neuron_minimum_stake_e8s: Some(3),
-            max_icp_e8s: Some(4),
-            min_participants: Some(5),
-            min_participant_icp_e8s: Some(6),
-            max_participant_icp_e8s: Some(7),
-            min_icp_e8s: Some(8),
-            fallback_controller_principal_ids: vec![
-                "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
-            ],
-            logo: Some(logo_path.clone()),
-            url: Some("https://internetcomputer.org".to_string()),
-            name: Some("Name".to_string()),
-            description: Some("Description".to_string()),
-            initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
-                ..Default::default()
-            })),
-        };
+        let sns_cli_init_config = SnsCliInitConfig::with_test_values();
+        let try_from_result = SnsInitPayload::try_from(sns_cli_init_config.clone());
 
-        let sns_init_payload = SnsInitPayload::try_from(create_sns_cli_init_config())
-            .expect("Expected to be able to convert");
-        let sns_cli_init_config = create_sns_cli_init_config();
+        let sns_init_payload = match try_from_result {
+            Ok(sns_init_payload) => sns_init_payload,
+            Err(reason) => panic!(
+                "Could not convert SnsCliInitConfig to SnsInitPayload: {}",
+                reason
+            ),
+        };
 
         assert_eq!(
             sns_cli_init_config.transaction_fee_e8s,
@@ -699,5 +713,25 @@ url: https://internetcomputer.org/
         let encoded_logo = "data:image/png;base64,".to_owned() + &base64::encode(&buffer);
 
         assert_eq!(Some(encoded_logo), sns_init_payload.logo);
+    }
+
+    #[test]
+    fn test_try_from_sns_cli_init_without_logo() {
+        let mut sns_cli_init_config = SnsCliInitConfig::with_test_values();
+
+        // Set the logo to None to indicate the developer hasn't provided it
+        sns_cli_init_config.logo = None;
+
+        let try_from_result = SnsInitPayload::try_from(sns_cli_init_config);
+
+        let sns_init_payload = match try_from_result {
+            Ok(sns_init_payload) => sns_init_payload,
+            Err(reason) => panic!(
+                "Could not convert SnsCliInitConfig to SnsInitPayload: {}",
+                reason
+            ),
+        };
+
+        assert!(sns_init_payload.logo.is_none(), "Expected logo to be None");
     }
 }
