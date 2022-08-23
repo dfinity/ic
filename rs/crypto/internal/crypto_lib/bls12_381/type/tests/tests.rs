@@ -1,5 +1,6 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
+use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
@@ -609,6 +610,76 @@ fn test_g2_is_torsion_free() {
             }
         }
     }
+}
+
+#[test]
+fn test_g1_deserialize_rejects_infinity_bit_with_nonzero_x() {
+    let g1 = G1Affine::generator();
+
+    let mut g1_bytes = g1.serialize();
+    g1_bytes[G1Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::INFINITY_FLAG;
+
+    assert!(G1Affine::deserialize(&g1_bytes).is_err());
+    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
+}
+
+#[test]
+fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
+    let g2 = G2Affine::generator();
+
+    let mut g2_bytes = g2.serialize();
+    g2_bytes[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::INFINITY_FLAG;
+
+    assert!(G2Affine::deserialize(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+}
+
+#[test]
+fn test_g1_deserialize_rejects_out_of_range_x_value() {
+    let g1 = G1Affine::generator();
+
+    let mut g1_bytes = g1.serialize();
+    for i in 1..48 {
+        g1_bytes[i] = 0xff;
+    }
+
+    assert!(G1Affine::deserialize(&g1_bytes).is_err());
+    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
+}
+
+#[test]
+fn test_g2_deserialize_rejects_out_of_range_x_value() {
+    let g2 = G2Affine::generator();
+
+    let mut g2_bytes = g2.serialize();
+    for i in 1..48 {
+        g2_bytes[i] = 0xff;
+    }
+
+    assert!(G2Affine::deserialize(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+}
+
+#[test]
+fn test_g1_deserialize_rejects_unused_flags_being_set() {
+    let g1 = G1Affine::generator();
+
+    let mut g1_bytes = g1.serialize();
+    g1_bytes[G1Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::NON_FLAG_BITS;
+
+    assert!(G1Affine::deserialize(&g1_bytes).is_err());
+    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
+}
+
+#[test]
+fn test_g2_deserialize_rejects_unused_flags_being_set() {
+    let g2 = G2Affine::generator();
+
+    let mut g2_bytes = g2.serialize();
+    g2_bytes[G2Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::NON_FLAG_BITS;
+
+    assert!(G2Affine::deserialize(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
 }
 
 fn g1_from_u64(i: &u64) -> G1Projective {
