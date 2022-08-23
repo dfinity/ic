@@ -5,7 +5,7 @@ After=generate-network-config.service
 [Service]
 Type=idle
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setupos.sh
+ExecStart=/opt/ic/bin/output-wrapper.sh /opt/ic/bin/setupos.sh /dev/ttyS0
 StandardOutput=tty
 StandardError=tty
 
