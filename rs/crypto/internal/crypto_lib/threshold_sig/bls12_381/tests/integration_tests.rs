@@ -37,7 +37,10 @@ fn potpourri() {
         println!("generating key pair {}...", i);
         keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng));
     }
-    let pks = keys.iter().map(|key| &key.0.key_value).collect();
+    let pks = keys
+        .iter()
+        .map(|key| key.0.key_value.clone())
+        .collect::<Vec<_>>();
     let sij: Vec<_> = vec![
         vec![27, 18, 28],
         vec![31415, 8192, 8224],
@@ -45,7 +48,7 @@ fn potpourri() {
         vec![CHUNK_MIN, CHUNK_MAX, CHUNK_MIN],
     ];
     let associated_data = [rng.getbyte(); 4];
-    let (crsz, _toxic) = enc_chunks(&sij, pks, &tau10, &associated_data, sys, rng).unwrap();
+    let (crsz, _toxic) = enc_chunks(&sij, &pks, &tau10, &associated_data, sys, rng).unwrap();
 
     let dk = &mut keys[1].1;
     for _i in 0..3 {
@@ -109,10 +112,6 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         receiver_fs_keys.iter().map(|key| &key.0).collect();
     // Suggestion: Make the types used by fs encryption and zk proofs consistent.
     // One takes refs, one takes values:
-    let receiver_fs_public_key_refs: Vec<&ECP> = public_keys_with_zk
-        .iter()
-        .map(|key| &key.key_value)
-        .collect();
     let receiver_fs_public_keys: Vec<ECP> = public_keys_with_zk
         .iter()
         .map(|key| key.key_value.clone())
@@ -166,9 +165,9 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let encryption_seed = [105; 32];
     rng.seed(32, &encryption_seed);
     let associated_data = [rng.getbyte(); 4];
-    let (crsz, toxic_waste) = enc_chunks(
+    let (crsz, encryption_witness) = enc_chunks(
         &plaintext_chunks[..],
-        receiver_fs_public_key_refs,
+        &receiver_fs_public_keys,
         &tau,
         &associated_data,
         sys,
@@ -194,9 +193,9 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         println!("Verifying chunking proof...");
         // Suggestion: Make this conversion in prove_chunking, so that the API types are
         // consistent.
-        let big_plaintext_chunks: Vec<Vec<BIG>> = plaintext_chunks
+        let big_plaintext_chunks: Vec<Vec<_>> = plaintext_chunks
             .iter()
-            .map(|chunks| chunks.iter().copied().map(BIG::new_int).collect())
+            .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
             .collect();
 
         let chunking_instance = ChunkingInstance::from_miracl(
@@ -206,7 +205,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         );
 
         let chunking_witness =
-            ChunkingWitness::from_miracl(toxic_waste.spec_r.clone(), big_plaintext_chunks);
+            ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
 
         let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, rng);
 
@@ -256,7 +255,13 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
         let combined_ciphertexts: Vec<ECP> =
             crsz.cc.iter().map(ecp_from_big_endian_chunks).collect();
-        let combined_r: BIG = big_from_big_endian_chunks(&toxic_waste.spec_r);
+        let combined_r: BIG = big_from_big_endian_chunks(
+            &encryption_witness
+                .spec_r
+                .iter()
+                .map(|s| s.to_miracl())
+                .collect(),
+        );
         let combined_r_exp = ecp_from_big_endian_chunks(&crsz.rr);
         let combined_plaintexts: Vec<BIG> = plaintext_chunks
             .iter()

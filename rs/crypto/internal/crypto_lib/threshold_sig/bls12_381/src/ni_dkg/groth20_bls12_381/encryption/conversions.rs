@@ -6,14 +6,13 @@ use ic_crypto_internal_bls12381_serde_miracl::{
     miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Chunk, FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey,
-    NUM_CHUNKS,
+    Chunk, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use miracl_core::bls12381::{ecp::ECP, ecp2::ECP2};
+use miracl_core::bls12381::ecp2::ECP2;
 use std::convert::TryFrom;
 
 /// Serialises a miracl-compatible forward secure secret key into the standard
@@ -145,98 +144,6 @@ impl From<&Tau> for Epoch {
 /// current epoch.
 pub fn epoch_from_miracl_secret_key(secret_key: &crypto::SecretKey) -> Epoch {
     crypto::epoch_from_tau_vec(&secret_key.current().expect("No more secret keys left").tau)
-}
-
-/// Serialises a ciphertext from the miracl representation into the standard
-/// form.
-///
-/// # Panics
-/// This will panic if the miracl representation is invalid.  Given that the
-/// miracl representation is generated internally, this can happen only if there
-/// is an error in our code.
-pub fn ciphertext_from_miracl(ciphertext: &crypto::Crsz) -> FsEncryptionCiphertext {
-    let rand_r = {
-        assert_eq!(
-            ciphertext.rr.len(),
-            NUM_CHUNKS,
-            "Incorrect number of chunks from Miracl-library formatted forward secure Ciphertext"
-        );
-        let mut rand_r = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-        for (dst, src) in rand_r[..].iter_mut().zip(&ciphertext.rr) {
-            *dst = miracl_g1_to_bytes(src);
-        }
-        rand_r
-    };
-    let rand_s = {
-        assert_eq!(
-            ciphertext.ss.len(),
-            NUM_CHUNKS,
-            "Incorrect number of chunks from Miracl-library formatted forward secure Ciphertext"
-        );
-        let mut rand_s = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-        for (dst, src) in rand_s[..].iter_mut().zip(&ciphertext.ss) {
-            *dst = miracl_g1_to_bytes(src);
-        }
-        rand_s
-    };
-    let rand_z = {
-        assert_eq!(
-            ciphertext.zz.len(),
-            NUM_CHUNKS,
-            "Incorrect number of chunks from Miracl-library formatted forward secure Ciphertext"
-        );
-        let mut rand_z = [G2Bytes([0u8; G2Bytes::SIZE]); NUM_CHUNKS];
-        for (dst, src) in rand_z[..].iter_mut().zip(&ciphertext.zz) {
-            *dst = miracl_g2_to_bytes(src);
-        }
-        rand_z
-    };
-    let ciphertext_chunks = ciphertext.cc.iter().map(|cj| {
-            assert_eq!(cj.len(), NUM_CHUNKS, "Incorrect number of chunks from Miracl-library formatted forward secure Ciphertext");
-            let mut cc = [G1Bytes([0u8;G1Bytes::SIZE]);NUM_CHUNKS];
-            for (dst, src) in cc[..].iter_mut().zip(cj){ *dst = miracl_g1_to_bytes(src); }
-            cc
-        }).collect();
-
-    FsEncryptionCiphertext {
-        rand_r,
-        rand_s,
-        rand_z,
-        ciphertext_chunks,
-    }
-}
-
-/// Parses a ciphertext into the miracl representation.
-///
-/// # Errors
-/// This will return an error if any of the constituent group elements is
-/// invalid.
-pub fn ciphertext_into_miracl(
-    ciphertext: &FsEncryptionCiphertext,
-) -> Result<crypto::Crsz, &'static str> {
-    let rr: Vec<ECP> = ciphertext.rand_r[..]
-        .iter()
-        .map(|g1_bytes| miracl_g1_from_bytes(&g1_bytes.0).or(Err("Malformed rand_r")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let ss: Vec<ECP> = ciphertext.rand_s[..]
-        .iter()
-        .map(|g1_bytes| miracl_g1_from_bytes(&g1_bytes.0).or(Err("Malformed rand_s")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let zz: Vec<ECP2> = ciphertext.rand_z[..]
-        .iter()
-        .map(|g2_bytes| miracl_g2_from_bytes(&g2_bytes.0).or(Err("Malformed rand_z")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let cc: Vec<Vec<ECP>> = ciphertext
-        .ciphertext_chunks
-        .iter()
-        .map(|cj| {
-            cj.as_ref()
-                .iter()
-                .map(|c| miracl_g1_from_bytes(&c.0).or(Err("Malformed ciphertext_chunk")))
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(crypto::Crsz { cc, rr, ss, zz })
 }
 
 /// Converts a miracl-compatible plaintext into a standard-sized plaintext
