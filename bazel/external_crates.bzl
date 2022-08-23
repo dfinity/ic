@@ -231,9 +231,6 @@ def external_crates_repository(name, annotations):
             "eyre": crate.spec(
                 version = "^0.6.8",
             ),
-            "fast-socks5": crate.spec(
-                version = "^0.7.0",
-            ),
             "features": crate.spec(
                 version = "^0.10.0",
             ),
@@ -966,6 +963,12 @@ def external_crates_repository(name, annotations):
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
+            "warp": crate.spec(
+                version = "^0.3.2",
+                features = [
+                    "tls",
+                ],
+            ),
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
             ),
@@ -992,9 +995,6 @@ def external_crates_repository(name, annotations):
             ),
             "which": crate.spec(
                 version = "^4.2.2",
-            ),
-            "wiremock": crate.spec(
-                version = "^0.5.10",
             ),
             "wsl": crate.spec(
                 version = "^0.1.0",
