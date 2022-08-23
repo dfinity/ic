@@ -2,9 +2,9 @@
 use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_types::{
-    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
     ReplicaVersion, SubnetId,
 };
@@ -67,8 +67,6 @@ impl Service<Body> for StatusService {
     }
 
     fn call(&mut self, _unused: Body) -> Self::Future {
-        trace!(self.log, "in handle status");
-
         let log = self.log.clone();
         let nns_subnet_id = self.nns_subnet_id;
         let root_key_status = self.config.show_root_key_in_status;
@@ -78,32 +76,10 @@ impl Service<Body> for StatusService {
             // The root key is the public key of this Internet Computer instance,
             // and is the public key of the root (i.e. NNS) subnet.
             let root_key = if root_key_status {
-                let latest_state = match state_reader_executor.get_latest_state().await {
-                    Ok(ls) => ls,
-                    Err(e) => {
-                        return Ok(common::make_plaintext_response(e.status, e.message));
-                    }
-                };
-
-                let subnets = &latest_state.take().metadata.network_topology.subnets;
-                if subnets.len() == 1 {
-                    // In single-subnet instances (e.g. `dfx start`, which has no NNS)
-                    // we use this single subnet’s key
-                    Some(Blob(subnets.values().next().unwrap().public_key.clone()))
-                } else if let Some(snt) = subnets.get(&nns_subnet_id) {
-                    // NNS subnet
-                    Some(Blob(snt.public_key.clone()))
-                } else {
-                    warn!(
-                        log,
-                        "Cannot identify root subnet, will not report root key in status"
-                    );
-                    None
-                }
+                common::get_root_public_key(&log, &state_reader_executor, &nns_subnet_id).await
             } else {
                 None
             };
-
             let response = HttpStatusResponse {
                 ic_api_version: IC_API_VERSION.to_string(),
                 root_key,
