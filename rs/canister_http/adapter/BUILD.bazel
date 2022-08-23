@@ -26,7 +26,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
-    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
@@ -36,9 +35,9 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "@crate_index//:fast-socks5",
+    "@crate_index//:tempfile",
     "@crate_index//:uuid",
-    "@crate_index//:wiremock",
+    "@crate_index//:warp",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

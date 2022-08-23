@@ -1,45 +1,130 @@
-use fast_socks5::server::{Config as SocksConfig, Socks5Server};
-use futures::{StreamExt, TryFutureExt};
-use http::StatusCode;
-use hyper::{client::HttpConnector, Client};
+use futures::TryFutureExt;
+use http::{header::HeaderValue, StatusCode};
 use ic_canister_http_adapter::{AdapterServer, Config};
 use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest, HttpMethod,
 };
 use ic_logger::replica_logger::no_op_logger;
 use std::convert::TryFrom;
-use std::str::FromStr;
-use std::{convert::Infallible, net::SocketAddr};
+use std::env;
+use std::io::Write;
+use tempfile::TempDir;
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 use unix::UnixListenerDrop;
 use uuid::Uuid;
-use wiremock::{
-    http::HeaderValue,
-    matchers::{method, path},
-    Mock, MockServer, ResponseTemplate,
-};
+use warp::{http::Response, Filter};
+
+// Selfsigned localhost cert
+const CERT: &str = "
+-----BEGIN CERTIFICATE-----
+MIIBUjCB+aADAgECAgkA0o0zHUCaNowwCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwW
+cmNnZW4gc2VsZiBzaWduZWQgY2VydDAgFw03NTAxMDEwMDAwMDBaGA80MDk2MDEw
+MTAwMDAwMFowITEfMB0GA1UEAwwWcmNnZW4gc2VsZiBzaWduZWQgY2VydDBZMBMG
+ByqGSM49AgEGCCqGSM49AwEHA0IABKFLbf6iV/TZxpVezAru8FxA45RrIJb+Cy00
++lZ0SUjiGjOOl7DwOUoLHK0RIOEisq9fccZRWCvvgTp/3hkZgXajGDAWMBQGA1Ud
+EQQNMAuCCWxvY2FsaG9zdDAKBggqhkjOPQQDAgNIADBFAiAx6PyM2bCvJhkSOWdp
+ovZtltEexwXglIabATfV0rbH2wIhAPC8Dpm4seHz+NzU7ci8PGbFmaNsz5cnaYIW
+4hzjIv//
+-----END CERTIFICATE-----
+";
+
+// Corresponding private key
+const KEY: &str = "
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
+7ZxcVthhssKkdRD+cMgD+wPseKShRANCAAShS23+olf02caVXswK7vBcQOOUayCW
+/gstNPpWdElI4hozjpew8DlKCxytESDhIrKvX3HGUVgr74E6f94ZGYF2
+-----END PRIVATE KEY-----
+";
+
+fn generate_certs() -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    // Store self signed cert
+    let cert_file_path = dir.path().join("cert.crt");
+    let mut cert_file = std::fs::File::create(cert_file_path).unwrap();
+    writeln!(cert_file, "{}", CERT).unwrap();
+    let key_file_path = dir.path().join("key.pem");
+    let mut key_file = std::fs::File::create(key_file_path).unwrap();
+    writeln!(key_file, "{}", KEY).unwrap();
+
+    // The Nix environmet with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
+    // https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openssl/1.1/nix-ssl-cert-file.patch
+    // SSL_CERT_FILE is respected by OpenSSL and Rustls.
+    // Rustlts: https://github.com/rustls/rustls/issues/540
+    // OpenSSL: https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_default_verify_paths.html
+    env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt"));
+    env::remove_var("NIX_SSL_CERT_FILE");
+    dir
+}
+
+fn start_server(cert_dir: TempDir) -> String {
+    let basic_post = warp::post()
+        .and(warp::path("post"))
+        .and(warp::body::json())
+        .map(|req: u64| Response::builder().body(req.to_string()));
+
+    let basic_get = warp::get()
+        .and(warp::path("get"))
+        .map(|| warp::reply::json(&"Hello"));
+
+    let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
+        Response::builder()
+            .header(
+                "invalid-ascii-value",
+                HeaderValue::from_maybe_shared_unchecked("x√ab c".as_bytes()),
+            )
+            .body("hi")
+    });
+
+    let get_response_size = warp::get()
+        .and(warp::path("size"))
+        .and(warp::body::json())
+        .map(|req: usize| Response::builder().body(vec![0u8; req]));
+
+    let get_delay = warp::get()
+        .and(warp::path("delay"))
+        .and(warp::body::json())
+        .and_then(|req: u64| async move {
+            tokio::time::sleep(std::time::Duration::from_secs(req)).await;
+            Ok::<_, warp::Rejection>(warp::reply::reply())
+        });
+
+    let basic_head = warp::head()
+        .and(warp::path("head"))
+        .map(|| warp::reply::reply());
+
+    let routes = basic_post
+        .or(basic_get)
+        .or(basic_head)
+        .or(get_response_size)
+        .or(get_delay)
+        .or(invalid_header);
+
+    let (addr, fut) = warp::serve(routes)
+        .tls()
+        .cert_path(cert_dir.path().join("cert.crt"))
+        .key_path(cert_dir.path().join("key.pem"))
+        .bind_ephemeral(([127, 0, 0, 1], 0));
+
+    tokio::spawn(async { fut.await });
+    format!("https://localhost:{}", addr.port())
+}
 
 #[tokio::test]
 async fn test_canister_http_server() {
-    // Setup local mock server.
-    let listener = std::net::TcpListener::bind("127.0.0.1:20001").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
     let server_config = Config {
         ..Default::default()
     };
-    // Spawn grpc server and return client.
+
+    let tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/get", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
@@ -47,103 +132,82 @@ async fn test_canister_http_server() {
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
-    assert_eq!(
-        response.unwrap().into_inner().status,
-        StatusCode::OK.as_u16() as u32
-    );
+    let http_response = response.unwrap().into_inner();
+    assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
 }
 
 #[tokio::test]
 async fn test_canister_http_server_post() {
-    // Setup local mock server.
-    let listener = std::net::TcpListener::bind("127.0.0.1:20002").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    Mock::given(method("POST"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
     let server_config = Config {
         ..Default::default()
     };
-    // Spawn grpc server and return client.
+
+    let tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/post", &url),
         headers: Vec::new(),
         method: HttpMethod::Post as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
+        body: "420".to_string().as_bytes().to_vec(),
         max_response_size_bytes: 512,
     });
 
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
-    assert_eq!(
-        response.unwrap().into_inner().status,
-        StatusCode::OK.as_u16() as u32
-    );
+    let http_response = response.unwrap().into_inner();
+    assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    assert_eq!(String::from_utf8_lossy(&http_response.content), "420");
 }
 
 #[tokio::test]
 async fn test_canister_http_server_head() {
-    // Setup local mock server.
-    let listener = std::net::TcpListener::bind("127.0.0.1:20003").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    Mock::given(method("HEAD"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
     let server_config = Config {
         ..Default::default()
     };
-    // Spawn grpc server and return client.
+
+    let tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/head", &url),
         headers: Vec::new(),
         method: HttpMethod::Head as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
+        body: "".to_string().as_bytes().to_vec(),
         max_response_size_bytes: 512,
     });
 
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
-    assert_eq!(
-        response.unwrap().into_inner().status,
-        StatusCode::OK.as_u16() as u32
-    );
+    let http_response = response.unwrap().into_inner();
+    assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
 }
 
 #[tokio::test]
 async fn test_response_limit_exceeded() {
     // Check if response with higher than allowed response limit is rejected.
+    let response_limit: u64 = 512;
     let server_config = Config {
         ..Default::default()
     };
-    let listener = std::net::TcpListener::bind("127.0.0.1:20004").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    let response_limit: u64 = 512;
-    // Check that larger than specified payloads get rejected.
-    let payload: Vec<u8> = vec![0u8; (response_limit + 1) as usize];
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(payload))
-        .mount(&mock_server)
-        .await;
+
+    let tmp_dir = generate_certs();
 
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
+
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/size", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
+        body: format!("{}", response_limit + 1).as_bytes().to_vec(),
         max_response_size_bytes: response_limit,
     });
+
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     assert_eq!(
@@ -158,61 +222,51 @@ async fn test_response_limit_exceeded() {
 
 #[tokio::test]
 async fn test_within_response_limit() {
-    // Check that everything works fine if response limit is specified.
+    // Check if response with higher than allowed response limit is rejected.
+    let response_limit: u64 = 512;
     let server_config = Config {
         ..Default::default()
     };
-    let mock_server = MockServer::start().await;
-    let response_limit: u64 = 512;
-    let payload: Vec<u8> = vec![0u8; (response_limit - 1) as usize];
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(payload))
-        .mount(&mock_server)
-        .await;
 
-    let mut client = spawn_grpc_server(server_config.clone());
+    let tmp_dir = generate_certs();
+
+    let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
+
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/size", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
+        body: format!("{}", response_limit).as_bytes().to_vec(),
         max_response_size_bytes: response_limit,
     });
+
     let response = client.canister_http_send(request).await;
-    assert!(response.is_ok());
-    assert_eq!(
-        response.unwrap().into_inner().status,
-        StatusCode::OK.as_u16() as u32
-    );
+    let http_response = response.unwrap().into_inner();
+    assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
 }
 
 #[tokio::test]
 async fn test_request_timeout() {
-    // Test that adapter times out for unresponsive but reachable webpages.
-    let listener = std::net::TcpListener::bind("127.0.0.1:20005").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await; // 2Mb and 2 bytes. Will get limitet because 'Content-length' is too large.
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        // Delay here is higher than request timeout below.
-        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)))
-        .mount(&mock_server)
-        .await;
-
+    // Check if response with higher than allowed response limit is rejected.
+    let delay: u64 = 512;
     let server_config = Config {
-        // Set connect timeout to high value to make sure request timeout is triggered.
-        http_connect_timeout_secs: 6000,
-        http_request_timeout_secs: 3,
         ..Default::default()
     };
+
+    let tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
+
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/delay", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
+        body: format!("{}", delay).as_bytes().to_vec(),
         max_response_size_bytes: 512,
     });
+
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     assert_eq!(
@@ -234,11 +288,14 @@ async fn test_connect_timeout() {
         http_request_timeout_secs: 6000,
         ..Default::default()
     };
+
+    let _tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
 
     // Non routable address that causes a connect timeout.
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: "http://10.255.255.1".to_string(),
+        url: "https://10.255.255.1".to_string(),
         headers: Vec::new(),
         method: HttpMethod::Head as i32,
         body: "hello".to_string().as_bytes().to_vec(),
@@ -258,31 +315,24 @@ async fn test_connect_timeout() {
 
 #[tokio::test]
 async fn test_nonascii_header() {
-    let listener = std::net::TcpListener::bind("127.0.0.1:20006").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await; // Create invalid header. Needs unsafe to bypass parsing.
-    unsafe {
-        Mock::given(method("GET"))
-            .and(path("/hello"))
-            .respond_with(ResponseTemplate::new(200).insert_header(
-                "invalid-ascii-value",
-                HeaderValue::from_bytes_unchecked("x√ab c".as_bytes().to_vec()),
-            ))
-            .mount(&mock_server)
-            .await;
-    }
-
+    let response_limit: u64 = 512;
     let server_config = Config {
         ..Default::default()
     };
+
+    let tmp_dir = generate_certs();
+
     let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
+        url: format!("{}/invalid", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
-        max_response_size_bytes: 512,
+        body: "hello".as_bytes().to_vec(),
+        max_response_size_bytes: response_limit,
     });
+
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
@@ -293,6 +343,7 @@ async fn test_missing_protocol() {
     let server_config = Config {
         ..Default::default()
     };
+
     let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
@@ -304,128 +355,6 @@ async fn test_missing_protocol() {
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
-}
-
-#[tokio::test]
-async fn test_bad_socks() {
-    // Try to connect through failing proxy.
-    let socks_url = "socks5://doesnotexist:8088".to_string();
-    let server_config = Config {
-        socks_proxy: Some(socks_url),
-        ..Default::default()
-    };
-    // Spawn grpc server and return client.
-    let mut client = spawn_grpc_server(server_config);
-
-    let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: "https://127.0.0.1".to_string(),
-        headers: Vec::new(),
-        method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
-        max_response_size_bytes: 512,
-    });
-
-    let response = client.canister_http_send(request).await;
-    assert!(response.is_err());
-}
-
-#[tokio::test]
-async fn test_socks() {
-    // Spawn socks proxy on localhost and connect thourgh poxy.
-    let server_config = Config {
-        socks_proxy: Some("socks5://127.0.0.1:8088".to_string()),
-        ..Default::default()
-    };
-    // Spawn grpc server and return client.
-    let mut client = spawn_grpc_server(server_config);
-
-    let listener = std::net::TcpListener::bind("127.0.0.1:20007").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
-    tokio::task::spawn(async move {
-        spawn_socks5_server("127.0.0.1:8088".to_string()).await;
-    });
-
-    let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/hello", &mock_server.uri()),
-        headers: Vec::new(),
-        method: HttpMethod::Get as i32,
-        body: "hello".to_string().as_bytes().to_vec(),
-        max_response_size_bytes: 512,
-    });
-    let response = client.canister_http_send(request).await;
-    assert!(response.is_ok());
-}
-
-// DNS returns multiple addresses and only one is valid. The Http connector should fallback to the working one.
-// This test only verifies the fallback behaviour of the hyper HttpConnector that is used in the adapter client.
-#[tokio::test]
-async fn test_socks_fallback() {
-    let listener = std::net::TcpListener::bind("127.0.0.1:20008").unwrap();
-    let mock_server = MockServer::builder().listener(listener).start().await;
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
-    let addr = mock_server.address().to_owned();
-
-    // Setup dns resolver for connecting to socks proxy. Only 127.0.0.1:8089 is working
-    let resolver = tower::service_fn(move |_name| async move {
-        Ok::<_, Infallible>(
-            vec![
-                SocketAddr::from(([127, 0, 0, 9], 8089)),
-                SocketAddr::from(([127, 0, 0, 8], 8089)),
-                SocketAddr::from(([127, 0, 0, 7], 8089)),
-                SocketAddr::from(([127, 0, 0, 6], 8089)),
-                SocketAddr::from(([127, 0, 0, 5], 8089)),
-                SocketAddr::from(([127, 0, 0, 4], 8089)),
-                SocketAddr::from(([127, 0, 0, 3], 8089)),
-                SocketAddr::from(([127, 0, 0, 2], 8089)),
-                addr,
-            ]
-            .into_iter(),
-        )
-    });
-
-    // Create socks connector. This test case uses the custom resolver to mimic the boundary nodes.
-    // The boundary node domain should resolve to multiple domain names and the connector should fallback if some are not working.
-    let connector = HttpConnector::new_with_resolver(resolver);
-    let http_client = Client::builder().build::<_, hyper::Body>(connector);
-
-    let response = http_client
-        .get(Uri::from_str(&format!("{}/hello", &mock_server.uri())).unwrap())
-        .await
-        .unwrap();
-    assert!(response.status() == 200);
-}
-
-async fn spawn_socks5_server(listen_addr: String) {
-    let mut listener = Socks5Server::bind(listen_addr).await.unwrap();
-    let socks_config = SocksConfig::default();
-    listener.set_config(socks_config.clone());
-    let mut incoming = listener.incoming();
-    // Standard TCP loop
-    while let Some(socket_res) = incoming.next().await {
-        match socket_res {
-            Ok(socket) => {
-                tokio::task::spawn(async move {
-                    if socket.upgrade_to_socks5().await.is_err() {
-                        eprintln!("Socks5 proxy failed to serve....");
-                    }
-                });
-            }
-            Err(_) => {
-                eprintln!("Socks5 proxy server stopped....");
-            }
-        }
-    }
 }
 
 // Spawn grpc server and return canister http client
@@ -445,7 +374,7 @@ fn spawn_grpc_server(config: Config) -> CanisterHttpServiceClient<Channel> {
         }
     };
 
-    let server = AdapterServer::new(config, no_op_logger(), false);
+    let server = AdapterServer::new(config, no_op_logger());
 
     // spawn gRPC server
     tokio::spawn(async move { server.serve(incoming).await.expect("server shutdown") });
