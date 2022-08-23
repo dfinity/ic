@@ -177,7 +177,7 @@ pub fn test(env: TestEnv) {
     let s = app_node.get_ssh_session(ADMIN).unwrap();
     retry(logger.clone(), secs(120), secs(10), || {
         let res = execute_bash_command(&s, "journalctl | grep -c 'is halted'".to_string());
-        if res.trim().parse::<i32>().unwrap() > 0
+        if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0)
             && cannot_store_msg(logger.clone(), &app_node.get_public_url(), app_can_id, msg)
         {
             Ok(())

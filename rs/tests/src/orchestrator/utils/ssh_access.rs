@@ -245,7 +245,7 @@ pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub(crate) fn execute_bash_command(sess: &Session, command: String) -> String {
+pub(crate) fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
     let mut channel = sess.channel_session().unwrap();
     channel.exec("bash").unwrap();
     channel.write_all(command.as_bytes()).unwrap();
@@ -253,5 +253,24 @@ pub(crate) fn execute_bash_command(sess: &Session, command: String) -> String {
     channel.send_eof().unwrap();
     let mut out = String::new();
     channel.read_to_string(&mut out).unwrap();
-    out
+    let mut err_str = String::new();
+    match channel.exit_status() {
+        Ok(status) => match status {
+            0 => Ok(out),
+            _ => {
+                channel.stderr().read_to_string(&mut err_str).unwrap();
+                Err(format!(
+                    "Error in: {}\nErr code: {}\nstdout: \n{}\nstderr: \n{}",
+                    command, status, out, err_str
+                ))
+            }
+        },
+        Err(e) => {
+            channel.stderr().read_to_string(&mut err_str).unwrap();
+            Err(format!(
+                "Error in: {}\nError: {}\nstdout: \n{}\nstderr: \n{}",
+                command, e, out, err_str
+            ))
+        }
+    }
 }

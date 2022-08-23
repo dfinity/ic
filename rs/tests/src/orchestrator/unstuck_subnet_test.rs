@@ -117,15 +117,16 @@ pub fn test(test_env: TestEnv) {
         let s = n
             .block_on_ssh_session(ADMIN)
             .expect("Failed to establish SSH session");
-        execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string());
+        execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string()).unwrap();
     }
 
     info!(logger, "Download and save the proper image file...");
     let command = format!(
-        r#"sudo chmod 777 /var/lib/ic/data/images
+        r#"set -e
+        sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
         sudo mv guest-os.tar.gz old-guest-os.tar.gz
-        sudo curl https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz -o guest-os.tar.gz
+        sudo curl http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.gz -o guest-os.tar.gz
         sudo chmod --reference=old-guest-os.tar.gz guest-os.tar.gz
         sudo chown --reference=old-guest-os.tar.gz guest-os.tar.gz
         sudo rm old-guest-os.tar.gz
@@ -136,7 +137,9 @@ pub fn test(test_env: TestEnv) {
         let s = n
             .block_on_ssh_session(ADMIN)
             .expect("Failed to establish SSH session");
-        execute_bash_command(&s, command.clone());
+        if let Err(err) = execute_bash_command(&s, command.clone()) {
+            panic!("{}", err)
+        }
     }
 
     info!(logger, "Starting orchestrator...");
@@ -144,7 +147,7 @@ pub fn test(test_env: TestEnv) {
         let s = n
             .block_on_ssh_session(ADMIN)
             .expect("Failed to establish SSH session");
-        execute_bash_command(&s, "sudo systemctl start ic-replica".to_string());
+        execute_bash_command(&s, "sudo systemctl start ic-replica".to_string()).unwrap();
     }
 
     info!(logger, "Waiting for update to finish on all 3 nodes...");
@@ -183,7 +186,6 @@ pub fn test(test_env: TestEnv) {
 }
 
 fn have_sha_errors(sess: &Session) -> bool {
-    let search_str = "FileHashMismatchError";
-    let check_log_script = format!("journalctl | grep \"{}\"", search_str);
-    execute_bash_command(sess, check_log_script).lines().count() != 0
+    let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
+    execute_bash_command(sess, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
 }
