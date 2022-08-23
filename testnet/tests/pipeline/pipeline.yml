@@ -429,6 +429,7 @@ system-tests-long-nightly:
     SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
   script:
+    - echo "ulimit -n = $(ulimit -n)"
     - *run-farm-based-test
 
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
