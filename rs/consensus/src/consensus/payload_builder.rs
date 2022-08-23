@@ -4,10 +4,11 @@ use crate::consensus::{
     block_maker::SubnetRecords,
     metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
     payload::BatchPayloadSectionBuilder,
+    utils::get_subnet_record,
 };
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder,
-    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
+    consensus::{PayloadPermanentError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     registry::RegistryClient,
@@ -17,7 +18,6 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     batch::{BatchPayload, ValidationContext, MAX_BITCOIN_BLOCK_SIZE},
     consensus::Payload,
@@ -117,9 +117,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut section_select = (0..num_sections).collect::<Vec<_>>();
         section_select.rotate_right(height.get() as usize % num_sections);
 
-        let max_block_payload_size = self
-            .get_max_block_payload_size_bytes(&subnet_records.stable)
-            .get();
+        // Fetch Subnet Record for Consensus registry version, return empty batch payload is not available
+        let max_block_payload_size =
+            self.get_max_block_payload_size_bytes(&subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
         let mut accumulated_size = 0;
@@ -130,7 +130,11 @@ impl PayloadBuilder for PayloadBuilderImpl {
                     &mut batch_payload,
                     height,
                     context,
-                    NumBytes::new(max_block_payload_size.saturating_sub(accumulated_size)),
+                    NumBytes::new(
+                        max_block_payload_size
+                            .get()
+                            .saturating_sub(accumulated_size),
+                    ),
                     past_payloads,
                     &self.metrics,
                     &self.logger,
@@ -153,29 +157,10 @@ impl PayloadBuilder for PayloadBuilderImpl {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
+        let subnet_record = self.get_subnet_record(context)?;
 
         // Retrieve max_block_payload_size from subnet
-        let max_block_payload_size = match self
-            .registry_client
-            .get_subnet_record(self.subnet_id, context.registry_version)
-        {
-            Err(err) => {
-                warn!(self.logger, "Failed to get subnet record in block_maker");
-                return Err(ValidationError::Transient(
-                    PayloadTransientError::RegistryUnavailable(err),
-                ));
-            }
-            Ok(None) => {
-                warn!(
-                    self.logger,
-                    "Subnet id {:?} not found in registry", self.subnet_id
-                );
-                return Err(ValidationError::Transient(
-                    PayloadTransientError::SubnetNotFound(self.subnet_id),
-                ));
-            }
-            Ok(Some(subnet_record)) => self.get_max_block_payload_size_bytes(&subnet_record),
-        };
+        let max_block_payload_size = self.get_max_block_payload_size_bytes(&subnet_record);
 
         let mut accumulated_size = NumBytes::new(0);
         for builder in &self.section_builder {
@@ -195,6 +180,20 @@ impl PayloadBuilder for PayloadBuilderImpl {
 }
 
 impl PayloadBuilderImpl {
+    /// Fetches the [`SubnetRecord`] corresponding to the registry version provided
+    /// by the [`ValidationContext`]
+    fn get_subnet_record(
+        &self,
+        context: &ValidationContext,
+    ) -> Result<SubnetRecord, PayloadValidationError> {
+        get_subnet_record(
+            self.registry_client.as_ref(),
+            self.subnet_id,
+            context.registry_version,
+            &self.logger,
+        )
+    }
+
     /// Returns the valid maximum block payload length from the registry and
     /// checks the invariants. Emits a warning in case the invariants are not
     /// met.
@@ -344,8 +343,8 @@ mod test {
             };
             let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
             let subnet_records = SubnetRecords {
-                latest: subnet_record.clone(),
-                stable: subnet_record,
+                membership_version: subnet_record.clone(),
+                context_version: subnet_record,
             };
 
             let (ingress_msgs, stream_msgs, responses_from_adapter) = payload_builder
@@ -413,8 +412,8 @@ mod test {
             subnet_record.max_ingress_bytes_per_message = MAX_SIZE;
 
             let subnet_records = SubnetRecords {
-                latest: subnet_record.clone(),
-                stable: subnet_record.clone(),
+                membership_version: subnet_record.clone(),
+                context_version: subnet_record.clone(),
             };
 
             let Dependencies { registry, .. } = dependencies_with_subnet_params(

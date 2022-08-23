@@ -1,5 +1,7 @@
 //! Consensus utility functions
 use crate::consensus::{membership::Membership, pool_reader::PoolReader, prelude::*};
+use ic_interfaces::consensus::{PayloadTransientError, PayloadValidationError};
+use ic_interfaces::validation::ValidationError;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache, crypto::CryptoHashable, registry::RegistryClient,
     time_source::TimeSource,
@@ -524,20 +526,22 @@ pub(crate) fn get_subnet_record(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
-) -> Option<SubnetRecord> {
-    registry_client
-        .get_subnet_record(subnet_id, registry_version)
-        .map_err(|err| warn!(logger, "Registry error: {:?}", err))
-        .ok()?
-        .or_else(|| {
-            warn!(
-                logger,
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version,
-                subnet_id,
-            );
-            None
-        })
+) -> Result<SubnetRecord, PayloadValidationError> {
+    match registry_client.get_subnet_record(subnet_id, registry_version) {
+        Ok(Some(record)) => Ok(record),
+        Ok(None) => {
+            warn!(logger, "Subnet id {:?} not found in registry", subnet_id);
+            Err(ValidationError::Transient(
+                PayloadTransientError::SubnetNotFound(subnet_id),
+            ))
+        }
+        Err(err) => {
+            warn!(logger, "Failed to get subnet record in block_maker");
+            Err(ValidationError::Transient(
+                PayloadTransientError::RegistryUnavailable(err),
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
