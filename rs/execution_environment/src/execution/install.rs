@@ -1,33 +1,42 @@
 // This module defines how the `install_code` IC method in mode
 // `install`/`reinstall` is executed.
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
-use crate::canister_manager::{CanisterManagerError, InstallCodeContext};
+use crate::canister_manager::{
+    CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
+};
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, InstallCodeRoutineResult, PausedInstallCodeRoutine,
+    canister_layout, finish_install_code, reserve_execution_cycles_for_install_code,
+    validate_install_code, OriginalContext,
 };
-use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
+use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{SubnetAvailableMemoryError, WasmExecutionOutput};
+use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{fatal, info};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{MemoryAllocation, NumInstructions, Time};
-use std::path::PathBuf;
+use ic_types::{MemoryAllocation, NumInstructions};
 
-/// Installs a new code in canister. The algorithm consists of three stages:
+/// Installs a new code in canister. The algorithm consists of five stages:
+/// - Stage 0: validate input and reserve execution cycles.
 /// - Stage 1: create a new execution state based on the new Wasm code.
 /// - Stage 2: invoke the `start()` method (if present).
 /// - Stage 3: invoke the `canister_init()` method (if present).
+/// - Stage 4: finalize execution and refund execution cycles.
 ///
 /// With deterministic time slicing stages 2 and 3 may require multiple rounds
 /// to complete. In order to support that, the algorithm is implemented as a
 /// state machine:
 /// ```text
 /// [begin]
+///   │
+///   ▼
+/// [validate input and reserve execution cycles]
+///   │
 ///   │
 ///   ▼
 /// [create new execution state]
@@ -51,32 +60,64 @@ use std::path::PathBuf;
 ///   │◄─────────────────────────────────────────────┘  instruction limit
 ///   │
 ///   │
+/// [finalize execution and refund execution cycles]
+///   │
+///   │
 ///   ▼
 /// [end]
 ///```
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn execute_install(
     context: InstallCodeContext,
-    old_canister: &CanisterState,
-    time: Time,
-    canister_layout_path: PathBuf,
+    mut old_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
+    original: OriginalContext,
+    compute_allocation_used: u64,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    compilation_cost_handling: CompilationCostHandling,
-) -> InstallCodeRoutineResult {
+) -> DtsInstallCodeResult {
+    // Stage 0: validate input and reserve execution cycles.
+
+    if let Err(err) = validate_install_code(
+        &old_canister,
+        &context,
+        round_limits,
+        &original.config,
+        compute_allocation_used,
+    ) {
+        return DtsInstallCodeResult::Finished {
+            canister: old_canister,
+            message: original.message,
+            result: Err(err),
+        };
+    }
+
+    if let Err(err) = reserve_execution_cycles_for_install_code(
+        &mut old_canister,
+        &execution_parameters,
+        round.cycles_account_manager,
+        original.subnet_size,
+    ) {
+        return DtsInstallCodeResult::Finished {
+            canister: old_canister,
+            message: original.message,
+            result: Err(err),
+        };
+    }
+
     // Stage 1: create a new execution state based on the new Wasm binary.
 
     let canister_id = context.canister_id;
-    let layout = canister_layout(&canister_layout_path, &canister_id);
+    let layout = canister_layout(&original.canister_layout_path, &canister_id);
 
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         context.wasm_module,
         layout.raw_path(),
         canister_id,
         round_limits,
-        compilation_cost_handling,
+        original.compilation_cost_handling,
     );
+
     execution_parameters
         .instruction_limits
         .reduce_by(instructions_from_compilation);
@@ -84,10 +125,13 @@ pub(crate) fn execute_install(
     let execution_state = match result {
         Ok(result) => result,
         Err(err) => {
-            return InstallCodeRoutineResult::Finished {
-                instructions_left: execution_parameters.instruction_limits.message(),
-                result: Err((canister_id, err).into()),
-            };
+            return finish_install_code(
+                old_canister,
+                execution_parameters.instruction_limits.message(),
+                original,
+                round,
+                Err((canister_id, err).into()),
+            );
         }
     };
 
@@ -122,14 +166,17 @@ pub(crate) fn execute_install(
 
     if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
         if bytes < new_usage {
-            return InstallCodeRoutineResult::Finished {
-                instructions_left: execution_parameters.instruction_limits.message(),
-                result: Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+            return finish_install_code(
+                old_canister,
+                execution_parameters.instruction_limits.message(),
+                original,
+                round,
+                Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                     canister_id,
                     memory_allocation_given: desired_memory_allocation,
                     memory_usage_needed: new_canister.memory_usage(subnet_type),
                 }),
-            };
+            );
         }
         execution_parameters.canister_memory_limit = bytes;
     }
@@ -148,13 +195,16 @@ pub(crate) fn execute_install(
                     available_total,
                     available_messages: _,
                 } => {
-                    return InstallCodeRoutineResult::Finished {
-                        instructions_left: execution_parameters.instruction_limits.message(),
-                        result: Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                    return finish_install_code(
+                        old_canister,
+                        execution_parameters.instruction_limits.message(),
+                        original,
+                        round,
+                        Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
                             requested: requested_total,
                             available: NumBytes::new(available_total.max(0) as u64),
                         }),
-                    };
+                    );
                 }
             }
         }
@@ -190,11 +240,12 @@ pub(crate) fn execute_install(
         install_stage_2b_continue_install_after_start(
             context.sender,
             context.arg,
+            old_canister,
             new_canister,
             execution_parameters,
             instructions_left,
             total_heap_delta,
-            time,
+            original,
             round,
             round_limits,
         )
@@ -218,10 +269,11 @@ pub(crate) fn execute_install(
                     output,
                     context.sender,
                     context.arg,
+                    old_canister,
                     new_canister,
                     execution_parameters,
                     total_heap_delta,
-                    time,
+                    original,
                     round,
                     round_limits,
                 )
@@ -235,9 +287,12 @@ pub(crate) fn execute_install(
                     total_heap_delta,
                     context_sender: context.sender,
                     context_arg: context.arg,
-                    time,
+                    original,
                 });
-                InstallCodeRoutineResult::Paused { paused_execution }
+                DtsInstallCodeResult::Paused {
+                    canister: old_canister,
+                    paused_execution,
+                }
             }
         }
     }
@@ -249,20 +304,21 @@ fn install_stage_2a_process_start_result(
     mut output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
+    old_canister: CanisterState,
     mut new_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
-    time: Time,
+    original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> InstallCodeRoutineResult {
+) -> DtsInstallCodeResult {
     apply_canister_state_changes(
         canister_state_changes,
         new_canister.execution_state.as_mut().unwrap(),
         &mut new_canister.system_state,
         &mut output,
         round_limits,
-        time,
+        original.time,
         round.network_topology,
         round.hypervisor.subnet_id(),
         round.log,
@@ -278,21 +334,25 @@ fn install_stage_2a_process_start_result(
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
         }
         Err(err) => {
-            return InstallCodeRoutineResult::Finished {
+            return finish_install_code(
+                old_canister,
                 instructions_left,
-                result: Err((canister_id, err).into()),
-            }
+                original,
+                round,
+                Err((canister_id, err).into()),
+            );
         }
     };
 
     install_stage_2b_continue_install_after_start(
         context_sender,
         context_arg,
+        old_canister,
         new_canister,
         execution_parameters,
         instructions_left,
         total_heap_delta,
-        time,
+        original,
         round,
         round_limits,
     )
@@ -302,14 +362,15 @@ fn install_stage_2a_process_start_result(
 fn install_stage_2b_continue_install_after_start(
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
+    old_canister: CanisterState,
     new_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
-    time: Time,
+    original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> InstallCodeRoutineResult {
+) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     info!(
         round.log,
@@ -341,15 +402,18 @@ fn install_stage_2b_continue_install_after_start(
             execution_parameters.instruction_limits.message() - instructions_left,
             instructions_left
         );
-        return InstallCodeRoutineResult::Finished {
+        return finish_install_code(
+            old_canister,
             instructions_left,
-            result: Ok((new_canister, total_heap_delta)),
-        };
+            original,
+            round,
+            Ok((new_canister, total_heap_delta)),
+        );
     }
 
     let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
     let wasm_execution_result = round.hypervisor.execute_dts(
-        ApiType::init(time, context_arg, context_sender),
+        ApiType::init(original.time, context_arg, context_sender),
         new_canister.execution_state.as_ref().unwrap(),
         &new_canister.system_state,
         memory_usage,
@@ -363,10 +427,12 @@ fn install_stage_2b_continue_install_after_start(
             update_round_limits(round_limits, &slice);
             install_stage_3_process_init_result(
                 canister_state_changes,
+                old_canister,
                 new_canister,
                 output,
                 execution_parameters,
                 total_heap_delta,
+                original,
                 round,
                 round_limits,
             )
@@ -378,8 +444,12 @@ fn install_stage_2b_continue_install_after_start(
                 paused_wasm_execution,
                 execution_parameters,
                 total_heap_delta,
+                original,
             });
-            InstallCodeRoutineResult::Paused { paused_execution }
+            DtsInstallCodeResult::Paused {
+                canister: old_canister,
+                paused_execution,
+            }
         }
     }
 }
@@ -387,13 +457,15 @@ fn install_stage_2b_continue_install_after_start(
 #[allow(clippy::too_many_arguments)]
 fn install_stage_3_process_init_result(
     canister_state_changes: Option<CanisterStateChanges>,
+    old_canister: CanisterState,
     mut new_canister: CanisterState,
     mut output: WasmExecutionOutput,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
+    original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-) -> InstallCodeRoutineResult {
+) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     info!(
         round.log,
@@ -423,15 +495,21 @@ fn install_stage_3_process_init_result(
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
 
-            InstallCodeRoutineResult::Finished {
-                instructions_left: output.num_instructions_left,
-                result: Ok((new_canister, total_heap_delta)),
-            }
+            finish_install_code(
+                old_canister,
+                output.num_instructions_left,
+                original,
+                round,
+                Ok((new_canister, total_heap_delta)),
+            )
         }
-        Err(err) => InstallCodeRoutineResult::Finished {
-            instructions_left: output.num_instructions_left,
-            result: Err((canister_id, err).into()),
-        },
+        Err(err) => finish_install_code(
+            old_canister,
+            output.num_instructions_left,
+            original,
+            round,
+            Err((canister_id, err).into()),
+        ),
     }
 }
 
@@ -440,17 +518,19 @@ fn install_stage_3_process_init_result(
 #[derive(Debug)]
 struct PausedInitExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
+    original: OriginalContext,
     new_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     total_heap_delta: NumBytes,
 }
 
-impl PausedInstallCodeRoutine for PausedInitExecution {
+impl PausedInstallCodeExecution for PausedInitExecution {
     fn resume(
         self: Box<Self>,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-    ) -> InstallCodeRoutineResult {
+    ) -> DtsInstallCodeResult {
         let execution_state = self.new_canister.execution_state.as_ref().unwrap();
         let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
@@ -458,10 +538,12 @@ impl PausedInstallCodeRoutine for PausedInitExecution {
                 update_round_limits(round_limits, &slice);
                 install_stage_3_process_init_result(
                     canister_state_changes,
+                    canister,
                     self.new_canister,
                     output,
                     self.execution_parameters,
                     self.total_heap_delta,
+                    self.original,
                     round,
                     round_limits,
                 )
@@ -472,13 +554,17 @@ impl PausedInstallCodeRoutine for PausedInitExecution {
                     paused_wasm_execution,
                     ..*self
                 });
-                InstallCodeRoutineResult::Paused { paused_execution }
+                DtsInstallCodeResult::Paused {
+                    canister,
+                    paused_execution,
+                }
             }
         }
     }
 
-    fn abort(self: Box<Self>) {
+    fn abort(self: Box<Self>) -> RequestOrIngress {
         self.paused_wasm_execution.abort();
+        self.original.message
     }
 }
 
@@ -492,15 +578,16 @@ struct PausedStartExecutionDuringInstall {
     total_heap_delta: NumBytes,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
-    time: Time,
+    original: OriginalContext,
 }
 
-impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
+impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
     fn resume(
         self: Box<Self>,
+        canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
-    ) -> InstallCodeRoutineResult {
+    ) -> DtsInstallCodeResult {
         let execution_state = self.new_canister.execution_state.as_ref().unwrap();
         let wasm_execution_result = self.paused_wasm_execution.resume(execution_state);
         match wasm_execution_result {
@@ -511,10 +598,11 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
                     output,
                     self.context_sender,
                     self.context_arg,
+                    canister,
                     self.new_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
-                    self.time,
+                    self.original,
                     round,
                     round_limits,
                 )
@@ -525,12 +613,16 @@ impl PausedInstallCodeRoutine for PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
                     ..*self
                 });
-                InstallCodeRoutineResult::Paused { paused_execution }
+                DtsInstallCodeResult::Paused {
+                    canister,
+                    paused_execution,
+                }
             }
         }
     }
 
-    fn abort(self: Box<Self>) {
+    fn abort(self: Box<Self>) -> RequestOrIngress {
         self.paused_wasm_execution.abort();
+        self.original.message
     }
 }
