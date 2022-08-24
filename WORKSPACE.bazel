@@ -73,12 +73,6 @@ external_crates_repository(
                 "NUM_JOBS": "8",
             },
         )],
-        "miracl_core_bls12381": [crate.annotation(
-            rustc_flags = [
-                "-C",
-                "opt-level=3",
-            ],
-        )],
         "pprof": [crate.annotation(
             build_script_data = [
                 "@com_google_protobuf//:protoc",

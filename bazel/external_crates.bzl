@@ -441,9 +441,6 @@ def external_crates_repository(name, annotations):
                     "pipe",
                 ],
             ),
-            "miracl_core_bls12381": crate.spec(
-                version = "=4.1.2",
-            ),
             "mockall": crate.spec(
                 version = "^0.11.1",
             ),
