@@ -1678,11 +1678,6 @@ impl GovernanceProto {
             None => return,
         };
 
-        // Don't remove the controller of the neuron from the principal-to-neuron-ids index
-        if neuron.controller.as_ref() == Some(principal) {
-            return;
-        }
-
         let neuron_ids = index.get_mut(principal);
         // Shouldn't fail if the index is broken, so just continue.
         if neuron_ids.is_none() {
@@ -5659,11 +5654,13 @@ impl Governance {
                 }
                 manage_neuron::configure::Operation::RemoveHotKey(k) => {
                     let hot_key = k.hot_key_to_remove.as_ref().expect("Must have a hot key");
-                    GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                        &mut self.principal_to_neuron_ids_index,
-                        neuron,
-                        hot_key,
-                    );
+                    if neuron.controller.as_ref() != Some(hot_key) {
+                        GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+                            &mut self.principal_to_neuron_ids_index,
+                            neuron,
+                            hot_key,
+                        );
+                    }
                 }
                 _ => (),
             }
