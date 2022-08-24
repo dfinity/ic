@@ -31,7 +31,7 @@ async fn get_sig(options: Options) {
         IC_00,
         &Ic00Method::SignWithECDSA.to_string(),
         &Encode!(&SignWithECDSAArgs {
-            message_hash: vec![0; 32],
+            message_hash: [0; 32],
             derivation_path: options.derivation_path,
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,

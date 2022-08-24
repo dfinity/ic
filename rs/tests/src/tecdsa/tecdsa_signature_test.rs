@@ -295,14 +295,14 @@ async fn execute_create_subnet_proposal(
 }
 
 pub(crate) async fn get_signature(
-    message_hash: &[u8],
+    message_hash: &[u8; 32],
     cycles: Cycles,
     key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
-        message_hash: message_hash.to_vec(),
+        message_hash: *message_hash,
         derivation_path: Vec::new(),
         key_id,
     };

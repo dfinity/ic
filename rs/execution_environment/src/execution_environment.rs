@@ -1575,19 +1575,15 @@ impl ExecutionEnvironment {
     fn sign_with_ecdsa(
         &self,
         mut request: Request,
-        message_hash: Vec<u8>,
+        message_hash: [u8; 32],
         derivation_path: Vec<Vec<u8>>,
         key_id: EcdsaKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
-        if message_hash.len() != 32 {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "message_hash must be 32 bytes",
-            ));
-        }
+        // We already ensured message_hash is 32 byte statically, so there is
+        // no need to check length here.
 
         // If the request isn't from the NNS, then we need to charge for it.
         // Consensus will return any remaining cycles.

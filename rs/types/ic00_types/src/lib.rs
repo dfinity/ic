@@ -830,7 +830,7 @@ fn ecdsa_key_id_round_trip() {
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SignWithECDSAArgs {
-    pub message_hash: Vec<u8>,
+    pub message_hash: [u8; 32],
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: EcdsaKeyId,
 }

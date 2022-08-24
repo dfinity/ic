@@ -1685,7 +1685,7 @@ fn ecdsa_signature_fee_charged() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -1734,7 +1734,7 @@ fn ecdsa_signature_rejected_without_fee() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -1771,7 +1771,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -2138,7 +2138,7 @@ fn ecdsa_signature_queue_fills_up() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };

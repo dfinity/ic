@@ -280,7 +280,7 @@ mod tests {
 
     fn ecdsa_sign_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = SignWithECDSAArgs {
-            message_hash: vec![1; 32],
+            message_hash: [1; 32],
             derivation_path: vec![vec![0; 10]],
             key_id,
         };
