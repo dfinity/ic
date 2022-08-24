@@ -8,7 +8,6 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
@@ -19,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:hex",
     "@crate_index//:lazy_static",
-    "@crate_index//:miracl_core_bls12381",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:serde",
@@ -42,14 +40,9 @@ MACRO_DEV_DEPENDENCIES = [
     "@crate_index//:proptest-derive",
 ]
 
-ALIASES = {
-    "@crate_index//:miracl_core_bls12381": "miracl_core",
-}
-
 rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_internal_threshold_sig_bls12381",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -58,7 +51,6 @@ rust_library(
 
 rust_test(
     name = "ic_crypto_internal_threshold_sig_bls12_381_test",
-    aliases = ALIASES,
     crate = ":bls12_381",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -67,7 +59,6 @@ rust_test(
 rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     compile_data = glob(["tests/data/*"]),
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

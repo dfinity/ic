@@ -21,11 +21,7 @@ pub use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Byt
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionCiphertextBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
-use miracl_core::bls12381::rom;
-use miracl_core::rand::RAND;
+use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
 use zeroize::Zeroize;
 
@@ -35,7 +31,7 @@ lazy_static! {
 
 fn precomp_sys_h() -> G2Prepared {
     let sys = mk_sys_params();
-    G2Prepared::from(G2Affine::from_miracl(&sys.h))
+    G2Prepared::from(&sys.h)
 }
 
 /// The ciphertext is an element of Fr which is 256-bits
@@ -60,7 +56,7 @@ pub const NUM_CHUNKS: usize = (MESSAGE_BYTES + CHUNK_BYTES - 1) / CHUNK_BYTES;
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
 pub enum Bit {
     Zero = 0,
     One = 1,
@@ -133,8 +129,8 @@ pub struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
     pub tau: Vec<Bit>,
 
-    pub a: ECP,
-    pub b: ECP2,
+    pub a: G1Affine,
+    pub b: G2Affine,
 
     // We split the d's into two groups.
     // The vector `d_h` always contains the last lambda_H points
@@ -142,23 +138,21 @@ pub struct BTENode {
     // The list `d_t` contains the other elements. There are at most lambda_T of them.
     // The longer this list, the higher up we are in the binary tree,
     // and the more leaf node keys we are able to derive.
-    pub d_t: LinkedList<ECP2>,
-    pub d_h: Vec<ECP2>,
+    pub d_t: LinkedList<G2Affine>,
+    pub d_h: Vec<G2Affine>,
 
-    pub e: ECP2,
+    pub e: G2Affine,
 }
 
+// must implement explicitly as zeroize does not support LinkedList
 impl zeroize::Zeroize for BTENode {
     fn zeroize(&mut self) {
-        self.tau.iter_mut().for_each(|t| *t = Bit::Zero);
-        // Overwrite all group elements with generators.
-        let g1 = ECP::generator();
-        let g2 = ECP2::generator();
-        self.a.copy(&g1);
-        self.b.copy(&g2);
-        self.d_h.iter_mut().for_each(|x| x.copy(&g2));
-        self.d_t.iter_mut().for_each(|x| x.copy(&g2));
-        self.e.copy(&g2);
+        self.tau.zeroize();
+        self.a.zeroize();
+        self.b.zeroize();
+        self.d_t.iter_mut().for_each(|x| x.zeroize());
+        self.d_h.zeroize();
+        self.e.zeroize();
     }
 }
 
@@ -172,9 +166,9 @@ pub struct SecretKey {
 }
 
 /// A public key and its associated proof of possession
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PublicKeyWithPop {
-    pub key_value: ECP,
+    pub key_value: G1Affine,
     pub proof_data: EncryptionKeyPop,
 }
 
@@ -182,18 +176,10 @@ impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
         let instance = EncryptionKeyInstance {
             g1_gen: G1Affine::generator(),
-            public_key: G1Affine::from_miracl(&self.key_value),
+            public_key: self.key_value,
             associated_data: associated_data.to_vec(),
         };
         verify_pop(&instance, &self.proof_data).is_ok()
-    }
-}
-
-impl std::fmt::Debug for PublicKeyWithPop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "y: ")?;
-        format_ecp(f, &self.key_value)?;
-        write!(f, ", ...}}")
     }
 }
 
@@ -201,10 +187,10 @@ impl std::fmt::Debug for PublicKeyWithPop {
 pub struct SysParam {
     pub lambda_t: usize,
     pub lambda_h: usize,
-    pub f0: ECP2,       // f_0 in the paper.
-    pub f: Vec<ECP2>,   // f_1, ..., f_{lambda_T} in the paper.
-    pub f_h: Vec<ECP2>, // The remaining lambda_H f_i's in the paper.
-    pub h: ECP2,
+    pub f0: G2Affine,       // f_0 in the paper.
+    pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
+    pub f_h: Vec<G2Affine>, // The remaining lambda_H f_i's in the paper.
+    pub h: G2Affine,
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -215,34 +201,33 @@ pub struct SysParam {
 ///   key.
 /// * `sys`: system parameters for the FS Encryption scheme.
 /// * `rng`: seeded pseudo random number generator.
-pub fn kgen(
+pub fn kgen<R: RngCore + CryptoRng>(
     associated_data: &[u8],
     sys: &SysParam,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> (PublicKeyWithPop, SecretKey) {
-    let g1 = ECP::generator();
-    let g2 = ECP2::generator();
-    let spec_p = BIG::new_ints(&rom::CURVE_ORDER);
+    let g1 = G1Affine::generator();
+    let g2 = G2Affine::generator();
+
     // x <- getRandomZp
     // rho <- getRandomZp
     // let y = g1^x
     // let pk = (y, pi_dlog)
     // let dk = (g1^rho, g2^x * f0^rho, f1^rho, ..., f_lambda^rho, h^rho)
     // return (pk, dk)
-    let spec_x = BIG::randomnum(&spec_p, rng);
-    let rho = BIG::randomnum(&spec_p, rng);
-    let a = g1.mul(&rho);
-    let mut b = g2.mul(&spec_x);
-    b.add(&sys.f0.mul(&rho));
+    let spec_x = Scalar::miracl_random(rng);
+    let rho = Scalar::miracl_random(rng);
+    let a = G1Affine::from(g1 * rho);
+    let b = G2Projective::mul2(&g2.into(), &spec_x, &sys.f0.into(), &rho).to_affine();
     let mut d_t = LinkedList::new();
     for f in sys.f.iter() {
-        d_t.push_back(f.mul(&rho));
+        d_t.push_back(G2Affine::from(*f * rho));
     }
     let mut d_h = Vec::new();
-    for f in sys.f_h.iter() {
-        d_h.push(f.mul(&rho));
+    for h in sys.f_h.iter() {
+        d_h.push(G2Affine::from(*h * rho));
     }
-    let e = sys.h.mul(&rho);
+    let e = G2Affine::from(sys.h * rho);
     let bte_root = BTENode {
         tau: Vec::new(),
         a,
@@ -253,16 +238,16 @@ pub fn kgen(
     };
     let sk = SecretKey::new(bte_root);
 
-    let y = g1.mul(&spec_x);
+    let y = G1Affine::from(g1 * spec_x);
 
     let pop_instance = EncryptionKeyInstance {
         g1_gen: G1Affine::generator(),
-        public_key: G1Affine::from_miracl(&y),
+        public_key: y,
         associated_data: associated_data.to_vec(),
     };
 
-    let pop = prove_pop(&pop_instance, &Scalar::from_miracl(&spec_x), rng)
-        .expect("Implementation bug: Pop generation failed");
+    let pop =
+        prove_pop(&pop_instance, &spec_x, rng).expect("Implementation bug: Pop generation failed");
 
     (
         PublicKeyWithPop {
@@ -300,7 +285,7 @@ impl SecretKey {
     /// key update is a bit fiddlier.
     ///
     /// No-op if `self` is empty.
-    pub(crate) fn fast_derive(&mut self, sys: &SysParam, rng: &mut impl RAND) {
+    pub(crate) fn fast_derive<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
         let mut epoch = Vec::new();
         if self.bte_nodes.is_empty() {
             return;
@@ -330,7 +315,7 @@ impl SecretKey {
     /// Updates this key to the next epoch.  After an update,
     /// the decryption keys for previous epochs are not accessible any more.
     /// (KUpd(dk, 1) from Sect. 9.1)
-    pub fn update(&mut self, sys: &SysParam, rng: &mut impl RAND) {
+    pub fn update<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
         self.fast_derive(sys, rng);
         match self.bte_nodes.pop_back() {
             None => {}
@@ -344,7 +329,12 @@ impl SecretKey {
     /// Updates `self` to the given `epoch`.
     ///
     /// If `epoch` is in the past, then disables `self`.
-    pub fn update_to(&mut self, epoch: &[Bit], sys: &SysParam, rng: &mut impl RAND) {
+    pub fn update_to<R: RngCore + CryptoRng>(
+        &mut self,
+        epoch: &[Bit],
+        sys: &SysParam,
+        rng: &mut R,
+    ) {
         // dropWhileEnd (\node -> not $ tau node `isPrefixOf` epoch) bte_nodes
         loop {
             match self.bte_nodes.back() {
@@ -361,8 +351,8 @@ impl SecretKey {
                 .zeroize();
         }
 
-        let g1 = ECP::generator();
-        let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
+        let g1 = G1Affine::generator();
+
         // At this point, bte_nodes.back() is a prefix of `epoch`.
         // Replace it with the nodes for `epoch` and later (in the subtree).
         //
@@ -382,7 +372,7 @@ impl SecretKey {
         // Accumulators.
         //   b_acc = b * product [d_i^tau_i | i <- [1..n]]
         //   f_acc = f0 * product [f_i^tau_i | i <- [1..n]]
-        let mut b_acc = node.b.clone();
+        let mut b_acc = G2Projective::from(&node.b);
         let mut f_acc = ftau_partial(&node.tau, sys).expect("node.tau not the expected size");
         let mut tau = node.tau.clone();
         while n < epoch.len() {
@@ -390,80 +380,71 @@ impl SecretKey {
                 // Save the root of the right subtree for later.
                 let mut tau_1 = tau.clone();
                 tau_1.push(Bit::One);
-                let delta = BIG::randomnum(&spec_r, rng);
+                let delta = Scalar::miracl_random(rng);
 
-                let mut a_blind = g1.mul(&delta);
-                a_blind.add(&node.a);
-                let mut b_blind = d_t.pop_front().expect("d_t not sufficiently large");
-                b_blind.add(&b_acc);
-                let mut ftmp = f_acc.clone();
-                ftmp.add(&sys.f[n]);
-                b_blind.add(&ftmp.mul(&delta));
+                let a_blind = (g1 * delta) + node.a;
+                let mut b_blind =
+                    G2Projective::from(d_t.pop_front().expect("d_t not sufficiently large"));
+                b_blind += b_acc;
+                b_blind += (f_acc + sys.f[n]) * delta;
 
-                let mut e_blind = sys.h.mul(&delta);
-                e_blind.add(&node.e);
+                let e_blind = (sys.h * delta) + node.e;
                 let mut d_t_blind = LinkedList::new();
                 let mut k = n + 1;
                 d_t.iter().for_each(|d| {
-                    let mut tmp = sys.f[k].mul(&delta);
-                    tmp.add(d);
-                    d_t_blind.push_back(tmp);
+                    let tmp = (sys.f[k] * delta) + d;
+                    d_t_blind.push_back(tmp.to_affine());
                     k += 1;
                 });
                 let mut d_h_blind = Vec::new();
                 node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-                    let mut tmp = f.mul(&delta);
-                    tmp.add(d);
-                    d_h_blind.push(tmp);
+                    let tmp = (*f * delta) + d;
+                    d_h_blind.push(tmp.to_affine());
                 });
                 self.bte_nodes.push_back(BTENode {
                     tau: tau_1,
-                    a: a_blind,
-                    b: b_blind,
+                    a: a_blind.to_affine(),
+                    b: b_blind.to_affine(),
                     d_t: d_t_blind,
                     d_h: d_h_blind,
-                    e: e_blind,
+                    e: e_blind.to_affine(),
                 });
             } else {
                 // Update accumulators.
-                f_acc.add(&sys.f[n]);
-                b_acc.add(&d_t.pop_front().expect("d_t not sufficiently large"));
+                f_acc += sys.f[n];
+                b_acc += d_t.pop_front().expect("d_t not sufficiently large");
             }
             tau.push(epoch[n]);
             n += 1;
         }
 
-        let delta = BIG::randomnum(&spec_r, rng);
-        let mut a = g1.mul(&delta);
-        a.add(&node.a);
-        let mut e = sys.h.mul(&delta);
-        e.add(&node.e);
-        b_acc.add(&f_acc.mul(&delta));
+        let delta = Scalar::miracl_random(rng);
+        let a = g1 * delta + node.a;
+        let e = sys.h * delta + node.e;
+        b_acc += f_acc * delta;
 
         let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
         let mut k = n;
         d_t.iter().for_each(|d| {
-            let mut tmp = sys.f[k].mul(&delta);
-            tmp.add(d);
-            d_t_blind.push_back(tmp);
+            let tmp = (sys.f[k] * delta) + d;
+            d_t_blind.push_back(tmp.to_affine());
             k += 1;
         });
         let mut d_h_blind = Vec::new();
         node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-            let mut tmp = f.mul(&delta);
-            tmp.add(d);
-            d_h_blind.push(tmp);
+            let tmp = *f * delta + d;
+            d_h_blind.push(tmp.to_affine());
         });
 
         self.bte_nodes.push_back(BTENode {
             tau,
-            a,
-            b: b_acc,
+            a: a.to_affine(),
+            b: b_acc.to_affine(),
             d_t: d_t_blind,
             d_h: d_h_blind,
-            e,
+            e: e.to_affine(),
         });
         node.zeroize();
     }
@@ -557,12 +538,6 @@ impl FsEncryptionCiphertext {
     }
 }
 
-fn format_ecp(f: &mut std::fmt::Formatter<'_>, ecp: &ECP) -> std::fmt::Result {
-    let mut ecp_buffer = [0; 49];
-    ecp.tobytes(&mut ecp_buffer, true);
-    write!(f, "0x{}", hex::encode(&ecp_buffer[..]))
-}
-
 /// Randomness needed for NIZK proofs.
 #[derive(Zeroize)]
 #[zeroize(drop)]
@@ -572,13 +547,13 @@ pub struct EncryptionWitness {
 
 /// Encrypt chunks. Returns ciphertext as well as the random spec_r's and s's
 /// chosen, for later use in NIZK proofs.
-pub fn enc_chunks(
+pub fn enc_chunks<R: RngCore + CryptoRng>(
     sij: &[Vec<isize>],
-    pks: &[ECP],
+    pks: &[G1Affine],
     tau: &[Bit],
     associated_data: &[u8],
     sys: &SysParam,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> Option<(FsEncryptionCiphertext, EncryptionWitness)> {
     if sij.is_empty() {
         return None;
@@ -614,12 +589,12 @@ pub fn enc_chunks(
     let mut ss = Vec::with_capacity(chunks);
     for _j in 0..chunks {
         {
-            let tmp = Scalar::miracl_random_using_miracl_rand(rng);
+            let tmp = Scalar::miracl_random(rng);
             spec_r.push(tmp);
             rr.push(G1Affine::from(g1 * tmp));
         }
         {
-            let tmp = Scalar::miracl_random_using_miracl_rand(rng);
+            let tmp = Scalar::miracl_random(rng);
             s.push(tmp);
             ss.push(G1Affine::from(g1 * tmp));
         }
@@ -632,27 +607,19 @@ pub fn enc_chunks(
             sj.iter()
                 .zip(&spec_r)
                 .map(|(s, spec_r)| {
-                    G1Projective::mul2(
-                        &G1Affine::from_miracl(pk).into(),
-                        spec_r,
-                        &g1.into(),
-                        &Scalar::from_isize(*s),
-                    )
-                    .to_affine()
+                    G1Projective::mul2(&pk.into(), spec_r, &g1.into(), &Scalar::from_isize(*s))
+                        .to_affine()
                 })
                 .collect()
         })
         .collect();
 
     let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
-    let id = G2Affine::from_miracl(
-        &ftau(&extended_tau, sys).expect("extended_tau not the correct size"),
-    );
+    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
     let mut zz = Vec::with_capacity(chunks);
 
-    let sys_h = G2Affine::from_miracl(&sys.h);
     for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id.into(), &spec_r[j], &sys_h.into(), &s[j]).to_affine())
+        zz.push(G2Projective::mul2(&id, &spec_r[j], &sys.h.into(), &s[j]).to_affine())
     }
 
     Some((
@@ -691,11 +658,6 @@ fn find_prefix<'a>(dks: &'a SecretKey, tau: &[Bit]) -> Option<&'a BTENode> {
 ///   find (\x -> base^x == tgt) [lo..lo + range - 1]
 ///
 /// using an O(sqrt(N)) approach rather than a naive O(N) search.
-///
-/// We call `reduce()` before every `tobytes()` because this algorithm requires
-/// the same element to serialize identically every time. (MIRACL does not
-/// automatically perform Montgomery reduction for serialization, so in general
-/// x == y does not imply x.tobytes() == y.tobytes().)
 ///
 /// We cut the exponent in half, that is, for a range of 2^46, we build a table
 /// of size 2^23 then perform up to 2^23 FP12 multiplications and lookups.
@@ -781,27 +743,25 @@ pub fn dec_chunks(
         None => return Err(DecErr::ExpiredKey),
         Some(node) => node,
     };
-    let mut bneg = dk.b.clone();
+    let mut bneg = G2Projective::from(&dk.b);
     let mut l = dk.tau.len();
-    for tmp in dk.d_t.iter() {
+    for t in dk.d_t.iter() {
         if extended_tau[l] == Bit::One {
-            bneg.add(tmp);
+            bneg += t;
         }
         l += 1
     }
     for k in 0..LAMBDA_H {
         if extended_tau[LAMBDA_T + k] == Bit::One {
-            bneg.add(&dk.d_h[k]);
+            bneg += dk.d_h[k];
         }
     }
-    bneg.neg();
-    let mut eneg = dk.e.clone();
-    eneg.neg();
+    bneg = bneg.neg();
 
     let cj = &crsz.cc[i];
 
-    let bneg = G2Prepared::from(G2Affine::from_miracl(&bneg));
-    let eneg = G2Prepared::from(G2Affine::from_miracl(&eneg));
+    let bneg = G2Prepared::from(&bneg);
+    let eneg = G2Prepared::from(&dk.e.neg());
 
     // zipWith4 f cj rr ss zz where
     //   f c spec_r s z =
@@ -812,10 +772,7 @@ pub fn dec_chunks(
         let x = Gt::multipairing(&[
             (&cj[i], &G2Prepared::generator()),
             (&crsz.rr[i], &bneg),
-            (
-                &G1Affine::from_miracl(&dk.a),
-                &G2Prepared::from(&crsz.zz[i]),
-            ),
+            (&dk.a, &G2Prepared::from(&crsz.zz[i])),
             (&crsz.ss[i], &eneg),
         ]);
 
@@ -886,7 +843,7 @@ pub fn verify_ciphertext_integrity(
     let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
 
     let g1_neg = G1Affine::generator().neg();
-    let precomp_id = G2Prepared::from(G2Affine::from_miracl(&id));
+    let precomp_id = G2Prepared::from(&id);
 
     // check for all j:
     //     1 =
@@ -944,17 +901,17 @@ fn extend_tau(
 /// Computes the function f of the paper.
 ///
 /// The bit vector tau must have length lambda_T + lambda_H.
-fn ftau(tau: &[Bit], sys: &SysParam) -> Option<ECP2> {
+fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     if tau.len() != sys.lambda_t + sys.lambda_h {
         return None;
     }
-    let mut id = sys.f0.clone();
+    let mut id = G2Projective::from(sys.f0);
     for (n, t) in tau.iter().enumerate() {
         if *t == Bit::One {
             if n < sys.lambda_t {
-                id.add(&sys.f[n]);
+                id += sys.f[n];
             } else {
-                id.add(&sys.f_h[n - sys.lambda_t]);
+                id += sys.f_h[n - sys.lambda_t];
             }
         }
     }
@@ -962,15 +919,15 @@ fn ftau(tau: &[Bit], sys: &SysParam) -> Option<ECP2> {
 }
 
 /// Computes f for bit vectors tau <= lambda_T.
-fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<ECP2> {
+fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     if tau.len() > sys.lambda_t {
         return None;
     }
     // id = product $ f0 : [f | (t, f) <- zip tau sys_fs, t == 1]
-    let mut id = sys.f0.clone();
+    let mut id = G2Projective::from(&sys.f0);
     tau.iter().zip(sys.f.iter()).for_each(|(t, f)| {
         if *t == Bit::One {
-            id.add(f);
+            id += f;
         }
     });
     Some(id)
@@ -995,20 +952,20 @@ const LAMBDA_H: usize = 256;
 /// Return NI-DKG system parameters
 pub fn mk_sys_params() -> SysParam {
     let dst = b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-    let f0 = G2Affine::hash(dst, b"f0").to_miracl();
+    let f0 = G2Affine::hash(dst, b"f0");
 
     let mut f = Vec::with_capacity(LAMBDA_T);
     for i in 0..LAMBDA_T {
         let s = format!("f{}", i + 1);
-        f.push(G2Affine::hash(dst, s.as_bytes()).to_miracl());
+        f.push(G2Affine::hash(dst, s.as_bytes()));
     }
     let mut f_h = Vec::with_capacity(LAMBDA_H);
     for i in 0..LAMBDA_H {
         let s = format!("f_h{}", i);
-        f_h.push(G2Affine::hash(dst, s.as_bytes()).to_miracl());
+        f_h.push(G2Affine::hash(dst, s.as_bytes()));
     }
 
-    let h = G2Affine::hash(dst, b"h").to_miracl();
+    let h = G2Affine::hash(dst, b"h");
 
     SysParam {
         lambda_t: LAMBDA_T,

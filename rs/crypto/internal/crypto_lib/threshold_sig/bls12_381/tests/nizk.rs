@@ -9,12 +9,12 @@ use dkg::nizk_sharing::{
     ZkProofSharingError,
 };
 use dkg::random_oracles::UniqueHash;
-use dkg::utils::RAND_ChaCha20;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
-use miracl_core::rand::RAND;
+use rand::{CryptoRng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
-fn setup_sharing_instance_and_witness(
-    rng: &mut impl RAND,
+fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(
+    rng: &mut R,
 ) -> (
     Vec<G1Affine>,
     Vec<G2Affine>,
@@ -31,21 +31,19 @@ fn setup_sharing_instance_and_witness(
 
     let mut pk = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        pk.push(G1Affine::from(
-            g1 * Scalar::miracl_random_using_miracl_rand(rng),
-        ));
+        pk.push(G1Affine::from(g1 * Scalar::miracl_random(rng)));
     }
 
     let mut a = Vec::new();
     let mut aa = Vec::new();
 
     for _ in 0..THRESHOLD {
-        let apow = Scalar::miracl_random_using_miracl_rand(rng);
+        let apow = Scalar::miracl_random(rng);
         a.push(apow);
         aa.push(G2Affine::from(g2 * apow));
     }
 
-    let r = Scalar::miracl_random_using_miracl_rand(rng);
+    let r = Scalar::miracl_random(rng);
     let rr = G1Affine::from(g1 * r);
 
     let mut s = Vec::with_capacity(NODE_COUNT);
@@ -84,13 +82,13 @@ fn assert_expected_scalar(scalar: &Scalar, expected: &'static str) {
 
 #[test]
 fn sharing_nizk_should_verify() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
     let witness = SharingWitness::new(r, s);
-    let sharing_proof = prove_sharing(&instance, &witness, rng);
+    let sharing_proof = prove_sharing(&instance, &witness, &mut rng);
     assert_eq!(
         Ok(()),
         verify_sharing(&instance, &sharing_proof),
@@ -100,8 +98,8 @@ fn sharing_nizk_should_verify() {
 
 #[test]
 fn sharing_nizk_is_stable() {
-    let rng = &mut RAND_ChaCha20::new([23; 32]);
-    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = ChaCha20Rng::from_seed([23; 32]);
+    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     assert_expected_scalar(
         &r,
@@ -117,7 +115,7 @@ fn sharing_nizk_is_stable() {
 
     let witness = SharingWitness::new(r, s);
 
-    let sharing_proof = prove_sharing(&instance, &witness, rng);
+    let sharing_proof = prove_sharing(&instance, &witness, &mut rng);
 
     assert_expected_g2(&sharing_proof.aa,
                        "8a64c96d5e3d4292ef6081a1b849ff70cf0dcb374eaf2149c539ff4e438661a73f1c3c08b7797ac5b926bc1d14cbfb3c183403feb57bea05486542e6f9e377b0f1cf3ca23982ad4b455831bc4a89e5301ce48103f2342fe9e7ec15a73e251088");
@@ -145,31 +143,31 @@ fn sharing_nizk_is_stable() {
 #[test]
 #[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
 fn sharing_prover_should_panic_on_empty_coefficients() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, vec![], rr, cc);
     let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    let _panic_one = prove_sharing(&instance, &witness, &mut rng);
 }
 
 #[test]
 #[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
 fn sharing_prover_should_panic_on_invalid_instance() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
     pk.push(G1Affine::generator());
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
     let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    let _panic_one = prove_sharing(&instance, &witness, &mut rng);
 }
 
 #[test]
 fn sharing_nizk_should_fail_on_invalid_instance() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk.clone(), aa.clone(), rr, cc.clone());
 
@@ -178,9 +176,9 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
     let invalid_instance = SharingInstance::new(pk, aa, rr, cc);
 
     let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    let _panic_one = prove_sharing(&instance, &witness, &mut rng);
 
-    let sharing_proof = prove_sharing(&instance, &witness, rng);
+    let sharing_proof = prove_sharing(&instance, &witness, &mut rng);
     assert_eq!(
         Err(ZkProofSharingError::InvalidInstance),
         verify_sharing(&invalid_instance, &sharing_proof),
@@ -190,15 +188,15 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
 
 #[test]
 fn sharing_nizk_should_fail_on_invalid_proof() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
     let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    let _panic_one = prove_sharing(&instance, &witness, &mut rng);
 
-    let sharing_proof = prove_sharing(&instance, &witness, rng);
+    let sharing_proof = prove_sharing(&instance, &witness, &mut rng);
     let invalid_proof = ProofSharing {
         ff: sharing_proof.ff,
         aa: sharing_proof.aa,
@@ -213,7 +211,9 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     );
 }
 
-fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance, ChunkingWitness) {
+fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
+    rng: &mut R,
+) -> (ChunkingInstance, ChunkingWitness) {
     const NODE_COUNT: usize = 28;
     const THRESHOLD: usize = 16;
 
@@ -221,15 +221,13 @@ fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance
 
     let mut y = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        y.push(G1Affine::from(
-            g1 * Scalar::miracl_random_using_miracl_rand(rng),
-        ));
+        y.push(G1Affine::from(g1 * Scalar::miracl_random(rng)));
     }
 
     let mut r = Vec::with_capacity(THRESHOLD);
     let mut rr = Vec::with_capacity(THRESHOLD);
     for _ in 0..THRESHOLD {
-        let r_i = Scalar::miracl_random_using_miracl_rand(rng);
+        let r_i = Scalar::miracl_random(rng);
         rr.push(G1Affine::from(g1 * r_i));
         r.push(r_i);
     }
@@ -240,7 +238,7 @@ fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance
         let mut s_i = Vec::new();
         let mut chunk_i = Vec::new();
         for r_j in &r {
-            let s_ij = Scalar::miracl_random_within_range_using_miracl_rand(rng, CHUNK_SIZE as u64);
+            let s_ij = Scalar::miracl_random_within_range(rng, CHUNK_SIZE as u64);
             chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
@@ -255,10 +253,10 @@ fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance
 
 #[test]
 fn chunking_nizk_should_verify() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
-    let nizk = prove_chunking(&instance, &witness, rng);
+    let nizk = prove_chunking(&instance, &witness, &mut rng);
     assert_eq!(
         Ok(()),
         verify_chunking(&instance, &nizk),
@@ -269,19 +267,19 @@ fn chunking_nizk_should_verify() {
 #[test]
 #[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
 fn chunking_prover_should_panic_on_empty_chunks() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (mut instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     // invalidate the instance:
     instance.ciphertext_chunks = vec![];
 
-    let _panic = prove_chunking(&instance, &witness, rng);
+    let _panic = prove_chunking(&instance, &witness, &mut rng);
 }
 
 #[test]
 fn chunking_nizk_is_stable() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = ChaCha20Rng::from_seed([42; 32]);
+    let (instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     assert_eq!(
         hex::encode(instance.unique_hash()),
@@ -289,7 +287,7 @@ fn chunking_nizk_is_stable() {
     );
 
     let nizk_cbor =
-        serde_cbor::to_vec(&prove_chunking(&instance, &witness, rng).serialize()).unwrap();
+        serde_cbor::to_vec(&prove_chunking(&instance, &witness, &mut rng).serialize()).unwrap();
 
     assert_eq!(nizk_cbor.len(), 6942);
     let sha256_nizk_cbor = ic_crypto_sha::Sha256::hash(&nizk_cbor);
@@ -302,23 +300,23 @@ fn chunking_nizk_is_stable() {
 #[test]
 #[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
 fn chunking_prover_should_panic_on_invalid_instance() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (mut instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     instance.public_keys.push(G1Affine::generator());
 
-    let _panic = prove_chunking(&instance, &witness, rng);
+    let _panic = prove_chunking(&instance, &witness, &mut rng);
 }
 
 #[test]
 fn chunking_nizk_should_fail_on_invalid_instance() {
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (valid_instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (valid_instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let mut invalid_instance = valid_instance.clone();
     invalid_instance.public_keys.push(G1Affine::generator());
 
-    let chunking_proof = prove_chunking(&valid_instance, &witness, rng);
+    let chunking_proof = prove_chunking(&valid_instance, &witness, &mut rng);
     assert_eq!(
         Err(ZkProofChunkingError::InvalidInstance),
         verify_chunking(&invalid_instance, &chunking_proof),
@@ -330,10 +328,10 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
 fn chunking_nizk_should_fail_on_invalid_proof() {
     use ic_crypto_internal_bls12_381_type::G1Affine;
 
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
-    let chunking_proof = prove_chunking(&instance, &witness, rng);
+    let chunking_proof = prove_chunking(&instance, &witness, &mut rng);
 
     let invalid_proof = {
         let mut zkproof = chunking_proof.serialize();

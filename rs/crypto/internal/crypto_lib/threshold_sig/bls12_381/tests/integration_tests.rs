@@ -4,26 +4,26 @@
 
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
-    forward_secure::*, nizk_chunking::*, nizk_sharing::*, utils::RAND_ChaCha20,
+    forward_secure::*, nizk_chunking::*, nizk_sharing::*,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use miracl_core::rand::RAND;
+use rand::Rng;
 
 #[test]
 fn potpourri() {
     let sys = &mk_sys_params();
-    let rng = &mut RAND_ChaCha20::new([16; 32]);
+    let mut rng = rand::thread_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
 
     println!("generating key pair...");
-    let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
+    let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
     assert!(
         pk.verify(KEY_GEN_ASSOCIATED_DATA),
         "Forward secure public key failed validation"
     );
     for _i in 0..10 {
         println!("upgrading private key...");
-        dk.update(sys, rng);
+        dk.update(sys, &mut rng);
     }
     let epoch10 = Epoch::from(10);
     let tau10 = tau_from_epoch(sys, epoch10);
@@ -31,25 +31,22 @@ fn potpourri() {
     let mut keys = Vec::new();
     for i in 0..3 {
         println!("generating key pair {}...", i);
-        keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng));
+        keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng));
     }
-    let pks = keys
-        .iter()
-        .map(|key| key.0.key_value.clone())
-        .collect::<Vec<_>>();
+    let pks = keys.iter().map(|key| key.0.key_value).collect::<Vec<_>>();
     let sij: Vec<_> = vec![
         vec![27, 18, 28],
         vec![31415, 8192, 8224],
         vec![99, 999, 9999],
         vec![CHUNK_MIN, CHUNK_MAX, CHUNK_MIN],
     ];
-    let associated_data = [rng.getbyte(); 4];
-    let (crsz, _toxic) = enc_chunks(&sij, &pks, &tau10, &associated_data, sys, rng).unwrap();
+    let associated_data = rng.gen::<[u8; 4]>();
+    let (crsz, _toxic) = enc_chunks(&sij, &pks, &tau10, &associated_data, sys, &mut rng).unwrap();
 
     let dk = &mut keys[1].1;
     for _i in 0..3 {
         println!("upgrading private key...");
-        dk.update(sys, rng);
+        dk.update(sys, &mut rng);
     }
 
     verify_ciphertext_integrity(&crsz, &tau10, &associated_data, sys)
@@ -66,7 +63,7 @@ fn potpourri() {
 
     for _i in 0..8 {
         println!("upgrading private key...");
-        dk.update(sys, rng);
+        dk.update(sys, &mut rng);
     }
     // Should be impossible to decrypt now.
     let out = dec_chunks(dk, 1, &crsz, &tau10, &associated_data);
@@ -86,7 +83,7 @@ fn potpourri() {
 /// * Varying the plaintexts more; here we have only fairly noddy variation.
 fn encrypted_chunks_should_validate(epoch: Epoch) {
     let sys = &mk_sys_params();
-    let rng = &mut RAND_ChaCha20::new([88; 32]);
+    let mut rng = rand::thread_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 8u8, 4u8];
 
     let num_receivers = 3;
@@ -97,8 +94,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let receiver_fs_keys: Vec<_> = (0u8..num_receivers)
         .map(|i| {
             println!("generating key pair {}...", i);
-            rng.seed(32, &[0x10 | i; 32]);
-            let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
+            let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
             println!("{:#?}", &key_pair.0);
             key_pair
         })
@@ -109,11 +105,11 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // One takes refs, one takes values:
     let receiver_fs_public_keys: Vec<_> = public_keys_with_zk
         .iter()
-        .map(|key| key.key_value.clone())
+        .map(|key| key.key_value)
         .collect();
 
     let polynomial: Vec<_> = (0..threshold)
-        .map(|_| Scalar::miracl_random_using_miracl_rand(rng))
+        .map(|_| Scalar::miracl_random(&mut rng))
         .collect();
     let polynomial_exp: Vec<_> = polynomial
         .iter()
@@ -157,27 +153,16 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
     // Encrypt
     let tau = tau_from_epoch(sys, epoch);
-    let encryption_seed = [105; 32];
-    rng.seed(32, &encryption_seed);
-    let associated_data = [rng.getbyte(); 4];
+    let associated_data = rng.gen::<[u8; 10]>();
     let (crsz, encryption_witness) = enc_chunks(
         &plaintext_chunks[..],
         &receiver_fs_public_keys,
         &tau,
         &associated_data,
         sys,
-        rng,
+        &mut rng,
     )
     .expect("Encryption failed");
-    println!(
-        "Ciphertext:\n  Seed: {:?}\n  {:#?}",
-        &encryption_seed, &crsz
-    );
-
-    let receiver_fs_public_keys = receiver_fs_public_keys
-        .iter()
-        .map(G1Affine::from_miracl)
-        .collect::<Vec<_>>();
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
@@ -207,7 +192,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         let chunking_witness =
             ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
 
-        let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, rng);
+        let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, &mut rng);
 
         assert_eq!(
             Ok(()),
@@ -305,7 +290,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         );
         let sharing_witness = SharingWitness::new(combined_r, combined_plaintexts);
 
-        let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, rng);
+        let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, &mut rng);
 
         assert_eq!(
             Ok(()),

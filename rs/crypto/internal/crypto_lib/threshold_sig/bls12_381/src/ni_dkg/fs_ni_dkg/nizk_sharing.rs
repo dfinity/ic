@@ -5,7 +5,7 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofShare;
-use miracl_core::rand::RAND;
+use rand::{CryptoRng, RngCore};
 use std::vec::Vec;
 
 /// Domain separators for the zk proof of sharing
@@ -176,10 +176,10 @@ fn sharing_proof_challenge(hashed_instance: &Scalar, first_move: &FirstMoveShari
 /// Create a proof of correct sharing
 ///
 /// See section 6.4 of <https://eprint.iacr.org/2021/339.pdf>
-pub fn prove_sharing(
+pub fn prove_sharing<R: RngCore + CryptoRng>(
     instance: &SharingInstance,
     witness: &SharingWitness,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> ProofSharing {
     //   instance = ([y_1..y_n], [A_0..A_{t-1}], R, [C_1..C_n])
     //   witness = (r, [s_1..s_n])
@@ -195,8 +195,8 @@ pub fn prove_sharing(
 
     // First move (prover)
     // alpha, rho <- random Z_p
-    let alpha = Scalar::miracl_random_using_miracl_rand(rng);
-    let rho = Scalar::miracl_random_using_miracl_rand(rng);
+    let alpha = Scalar::miracl_random(rng);
+    let rho = Scalar::miracl_random(rng);
     // F = g_1^rho
     // A = g_2^alpha
     // Y = product [y_i^x^i | i <- [1..n]]^rho * g_1^alpha
