@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 miracl_core_bls12381 = { version = "4.1.2", package = "miracl_core_bls12381" }
-bls12_381 = { version = "0.7.0", default-features = false, features = ["groups", "pairings", "alloc", "experimental", "zeroize"] }
+bls12_381 = { git = "https://github.com/dfinity/bls12_381", branch = "main", default-features = false, features = ["groups", "pairings", "alloc", "experimental", "zeroize"] }
 pairing = "0.22"
 subtle = "2.4"
 sha2 = "0.9"

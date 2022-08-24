@@ -1116,6 +1116,9 @@ pub struct Gt {
 }
 
 impl Gt {
+    /// The size in bytes of this type
+    pub const BYTES: usize = 576;
+
     /// Create a new Gt from the inner type
     pub(crate) fn new(value: bls12_381::Gt) -> Self {
         Self { value }
@@ -1162,6 +1165,14 @@ impl Gt {
     pub fn neg(&self) -> Self {
         use std::ops::Neg;
         Self::new(self.value.neg())
+    }
+
+    /// Return some arbitrary bytes which represent this Gt element
+    ///
+    /// These are not deserializable, and serve only to uniquely identify
+    /// the group element.
+    pub fn tag(&self) -> [u8; Self::BYTES] {
+        self.value.to_bytes()
     }
 }
 

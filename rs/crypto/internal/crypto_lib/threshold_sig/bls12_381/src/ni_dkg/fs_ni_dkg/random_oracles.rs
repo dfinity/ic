@@ -3,8 +3,6 @@ use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
 use std::collections::BTreeMap;
 
-use miracl_core::bls12381::ecp::ECP;
-
 const DOMAIN_RO_INT: &str = "ic-random-oracle-integer";
 const DOMAIN_RO_STRING: &str = "ic-random-oracle-string";
 const DOMAIN_RO_SCALAR_ELEMENT: &str = "ic-random-oracle-bls12381-scalar";
@@ -58,17 +56,6 @@ impl UniqueHash for Vec<u8> {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_BYTE_ARRAY);
         hasher.write(self);
         hasher.finish()
-    }
-}
-
-/// Computes the unique digest of a group element in G1 of the BLS12_381 curve.
-///
-/// The group element is serialized according to the IETF draft of BLS signatures: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
-/// The digest is the hash of the domain separator appended with the
-/// serialization of the group element.
-impl UniqueHash for ECP {
-    fn unique_hash(&self) -> [u8; 32] {
-        G1Affine::from_miracl(self).unique_hash()
     }
 }
 

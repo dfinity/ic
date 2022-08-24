@@ -353,6 +353,14 @@ fn test_pairing_bilinearity() {
         assert_eq!(mul_231, mul_gt);
         assert_eq!(mul_312, mul_gt);
         assert_eq!(mul_321, mul_gt);
+
+        // test that the tag is identical no matter how the Gt was derived
+        assert_eq!(mul_123.tag(), mul_gt.tag());
+        assert_eq!(mul_132.tag(), mul_gt.tag());
+        assert_eq!(mul_213.tag(), mul_gt.tag());
+        assert_eq!(mul_231.tag(), mul_gt.tag());
+        assert_eq!(mul_312.tag(), mul_gt.tag());
+        assert_eq!(mul_321.tag(), mul_gt.tag());
     }
 }
 

@@ -10,51 +10,63 @@ use dkg::nizk_sharing::{
 };
 use dkg::random_oracles::UniqueHash;
 use dkg::utils::RAND_ChaCha20;
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
-use miracl_core::bls12381::rom;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
 use miracl_core::rand::RAND;
 
 fn setup_sharing_instance_and_witness(
     rng: &mut impl RAND,
-) -> (Vec<ECP>, Vec<ECP2>, ECP, Vec<ECP>, BIG, Vec<BIG>) {
-    let g1 = ECP::generator();
-    let g2 = ECP2::generator();
-    let spec_p = BIG::new_ints(&rom::CURVE_ORDER);
-    let mut pk = Vec::new();
+) -> (
+    Vec<G1Affine>,
+    Vec<G2Affine>,
+    G1Affine,
+    Vec<G1Affine>,
+    Scalar,
+    Vec<Scalar>,
+) {
+    const NODE_COUNT: usize = 28;
+    const THRESHOLD: usize = 10;
+
+    let g1 = G1Affine::generator();
+    let g2 = G2Affine::generator();
+
+    let mut pk = Vec::with_capacity(NODE_COUNT);
+    for _ in 0..NODE_COUNT {
+        pk.push(G1Affine::from(
+            g1 * Scalar::miracl_random_using_miracl_rand(rng),
+        ));
+    }
+
     let mut a = Vec::new();
     let mut aa = Vec::new();
-    let node_count = 28;
-    let threshold = 10;
-    for _i in 1..node_count + 1 {
-        pk.push(g1.mul(&BIG::randomnum(&spec_p, rng)));
-    }
-    for _i in 0..threshold {
-        let apow = BIG::randomnum(&spec_p, rng);
+
+    for _ in 0..THRESHOLD {
+        let apow = Scalar::miracl_random_using_miracl_rand(rng);
         a.push(apow);
-        aa.push(g2.mul(&apow));
+        aa.push(G2Affine::from(g2 * apow));
     }
-    let r = BIG::randomnum(&spec_p, rng);
-    let rr = g1.mul(&r);
-    let mut s = Vec::new();
+
+    let r = Scalar::miracl_random_using_miracl_rand(rng);
+    let rr = G1Affine::from(g1 * r);
+
+    let mut s = Vec::with_capacity(NODE_COUNT);
     // s = [sum [a_k ^ i^k | (a_k, k) <- zip a [0..t-1]] | i <- [1..n]]
-    for i in 1..node_count + 1 {
-        let ibig = BIG::new_int(i);
-        let mut ipow = BIG::new_int(1);
-        let mut acc = BIG::new_int(0);
+    for i in 1..NODE_COUNT + 1 {
+        let ibig = Scalar::from_u64(i as u64);
+        let mut ipow = Scalar::one();
+        let mut acc = Scalar::zero();
         for ak in &a {
-            acc = BIG::modadd(&acc, &BIG::modmul(ak, &ipow, &spec_p), &spec_p);
-            ipow = BIG::modmul(&ipow, &ibig, &spec_p);
+            acc += *ak * ipow;
+            ipow *= ibig;
         }
         s.push(acc);
     }
+
     let cc: Vec<_> = pk
         .iter()
         .zip(&s)
-        .map(|(yi, si)| yi.mul2(&r, &g1, si))
+        .map(|(yi, si)| G1Projective::mul2(&yi.into(), &r, &g1.into(), si).to_affine())
         .collect();
+
     (pk, aa, rr, cc, r, s)
 }
 
@@ -75,9 +87,9 @@ fn sharing_nizk_should_verify() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc);
 
-    let witness = SharingWitness::from_miracl(r, s);
+    let witness = SharingWitness::new(r, s);
     let sharing_proof = prove_sharing(&instance, &witness, rng);
     assert_eq!(
         Ok(()),
@@ -92,18 +104,18 @@ fn sharing_nizk_is_stable() {
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
     assert_expected_scalar(
-        &Scalar::from_miracl(&r),
+        &r,
         "4fa6457b6d2e3fb03c251766c0967127b4f9e5ece7d54741187191a88ce0e047",
     );
 
-    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc);
 
     assert_expected_scalar(
         &instance.hash_to_scalar(),
         "63fe81e364eab9c3ceae0c715e31c75e8c4e0dfa96c144f635a2e524326e2ace",
     );
 
-    let witness = SharingWitness::from_miracl(r, s);
+    let witness = SharingWitness::new(r, s);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng);
 
@@ -136,8 +148,8 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::from_miracl(pk, vec![], rr, cc);
-    let witness = SharingWitness::from_miracl(r, s);
+    let instance = SharingInstance::new(pk, vec![], rr, cc);
+    let witness = SharingWitness::new(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 }
 
@@ -146,11 +158,11 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
 fn sharing_prover_should_panic_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
-    pk.push(ECP::generator());
+    pk.push(G1Affine::generator());
 
-    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc);
 
-    let witness = SharingWitness::from_miracl(r, s);
+    let witness = SharingWitness::new(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 }
 
@@ -159,13 +171,13 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::from_miracl(pk.clone(), aa.clone(), rr.clone(), cc.clone());
+    let instance = SharingInstance::new(pk.clone(), aa.clone(), rr, cc.clone());
 
-    pk.push(ECP::generator());
+    pk.push(G1Affine::generator());
 
-    let invalid_instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+    let invalid_instance = SharingInstance::new(pk, aa, rr, cc);
 
-    let witness = SharingWitness::from_miracl(r, s);
+    let witness = SharingWitness::new(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng);
@@ -181,9 +193,9 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     let rng = &mut RAND_ChaCha20::new([42; 32]);
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::from_miracl(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc);
 
-    let witness = SharingWitness::from_miracl(r, s);
+    let witness = SharingWitness::new(r, s);
     let _panic_one = prove_sharing(&instance, &witness, rng);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng);
@@ -202,38 +214,42 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
 }
 
 fn setup_chunking_instance_and_witness(rng: &mut impl RAND) -> (ChunkingInstance, ChunkingWitness) {
-    let g1 = ECP::generator();
-    let spec_p = BIG::new_ints(&rom::CURVE_ORDER);
-    let n = 28;
-    let spec_m = 16;
-    let mut y = Vec::new();
-    for _i in 1..n + 1 {
-        y.push(g1.mul(&BIG::randomnum(&spec_p, rng)));
+    const NODE_COUNT: usize = 28;
+    const THRESHOLD: usize = 16;
+
+    let g1 = G1Affine::generator();
+
+    let mut y = Vec::with_capacity(NODE_COUNT);
+    for _ in 0..NODE_COUNT {
+        y.push(G1Affine::from(
+            g1 * Scalar::miracl_random_using_miracl_rand(rng),
+        ));
     }
-    let mut r = Vec::new();
-    let mut rr = Vec::new();
-    for _i in 0..spec_m {
-        let r_i = BIG::randomnum(&spec_p, rng);
-        rr.push(g1.mul(&r_i));
+
+    let mut r = Vec::with_capacity(THRESHOLD);
+    let mut rr = Vec::with_capacity(THRESHOLD);
+    for _ in 0..THRESHOLD {
+        let r_i = Scalar::miracl_random_using_miracl_rand(rng);
+        rr.push(G1Affine::from(g1 * r_i));
         r.push(r_i);
     }
-    let bb = BIG::new_int(CHUNK_SIZE);
-    let mut s = Vec::new();
+
+    let mut s = Vec::with_capacity(y.len());
     let mut chunk = Vec::new();
     for y_i in &y {
         let mut s_i = Vec::new();
         let mut chunk_i = Vec::new();
         for r_j in &r {
-            let s_ij = BIG::randomnum(&bb, rng);
-            chunk_i.push(y_i.mul2(r_j, &g1, &s_ij));
+            let s_ij = Scalar::miracl_random_within_range_using_miracl_rand(rng, CHUNK_SIZE as u64);
+            chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
         s.push(s_i);
         chunk.push(chunk_i);
     }
 
-    let instance = ChunkingInstance::from_miracl(y, chunk, rr);
-    let witness = ChunkingWitness::from_miracl(r, s);
+    let instance = ChunkingInstance::new(y, chunk, rr);
+    let witness = ChunkingWitness::new(r, s);
     (instance, witness)
 }
 

@@ -2,15 +2,11 @@
 //! Tests for combined forward secure encryption and ZK proofs
 #![allow(clippy::many_single_char_names)]
 
-use ic_crypto_internal_bls12_381_type::Scalar;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
     forward_secure::*, nizk_chunking::*, nizk_sharing::*, utils::RAND_ChaCha20,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
-use miracl_core::bls12381::rom;
 use miracl_core::rand::RAND;
 
 #[test]
@@ -95,9 +91,8 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
     let num_receivers = 3;
     let threshold = 2;
-    let g1 = ECP::generator();
-    let g2 = ECP2::generator();
-    let spec_p = BIG::new_ints(&rom::CURVE_ORDER);
+    let g1 = G1Affine::generator();
+    let g2 = G2Affine::generator();
 
     let receiver_fs_keys: Vec<_> = (0u8..num_receivers)
         .map(|i| {
@@ -112,39 +107,39 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         receiver_fs_keys.iter().map(|key| &key.0).collect();
     // Suggestion: Make the types used by fs encryption and zk proofs consistent.
     // One takes refs, one takes values:
-    let receiver_fs_public_keys: Vec<ECP> = public_keys_with_zk
+    let receiver_fs_public_keys: Vec<_> = public_keys_with_zk
         .iter()
         .map(|key| key.key_value.clone())
         .collect();
 
-    let polynomial: Vec<BIG> = (0..threshold)
-        .map(|_| BIG::randomnum(&spec_p, rng))
+    let polynomial: Vec<_> = (0..threshold)
+        .map(|_| Scalar::miracl_random_using_miracl_rand(rng))
         .collect();
-    let polynomial_exp: Vec<ECP2> = polynomial.iter().map(|term| g2.mul(term)).collect();
+    let polynomial_exp: Vec<_> = polynomial
+        .iter()
+        .map(|term| G2Affine::from(g2 * term))
+        .collect();
 
     // Plaintext, unchunked:
-    // Note: This is never actually mutated.
-    let mut plaintexts: Vec<BIG> = (1..)
+    let plaintexts: Vec<Scalar> = (1..)
         .zip(&receiver_fs_keys)
         .map(|(i, _)| {
-            let ibig = BIG::new_int(i);
-            let mut ipow = BIG::new_int(1);
-            let mut acc = BIG::new_int(0);
+            let ibig = Scalar::from_usize(i);
+            let mut ipow = Scalar::one();
+            let mut acc = Scalar::zero();
             for ak in &polynomial {
-                acc = BIG::modadd(&acc, &BIG::modmul(ak, &ipow, &spec_p), &spec_p);
-                ipow = BIG::modmul(&ipow, &ibig, &spec_p);
+                acc += *ak * ipow;
+                ipow *= ibig;
             }
             acc
         })
         .collect();
 
     // Plaintext, chunked:
-    // Note: The plaintext is not actually mutated.  The mutation is just required
-    // by the API.
     let plaintext_chunks: Vec<Vec<isize>> = plaintexts
-        .iter_mut()
+        .iter()
         .map(|plaintext| {
-            let mut bytes = Scalar::from_miracl(plaintext).serialize();
+            let mut bytes = plaintext.serialize();
             bytes.reverse(); // Make little endian.
             let chunks = bytes[..].chunks(CHUNK_BYTES); // The last, most significant, chunk may be partial.
             chunks
@@ -179,6 +174,11 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         &encryption_seed, &crsz
     );
 
+    let receiver_fs_public_keys = receiver_fs_public_keys
+        .iter()
+        .map(G1Affine::from_miracl)
+        .collect::<Vec<_>>();
+
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
     let out = dec_chunks(dk, 1, &crsz, &tau, &associated_data);
@@ -198,7 +198,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
             .collect();
 
-        let chunking_instance = ChunkingInstance::from_miracl(
+        let chunking_instance = ChunkingInstance::new(
             receiver_fs_public_keys.clone(),
             crsz.cc.clone(),
             crsz.rr.clone(),
@@ -225,49 +225,50 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
 
         /// Combine a big endian array of group elements (first chunk is the
         /// most significant) into a single group element.
-        #[allow(clippy::ptr_arg)] // We have no use case for other types.
-        fn ecp_from_big_endian_chunks(data: &Vec<ECP>) -> ECP {
-            // Note: Relies on ECP::new() being zero == point at infinity.
-            data.iter().fold(ECP::new(), |acc, term| {
-                let mut acc = acc.mul(&BIG::new_int(CHUNK_SIZE));
-                acc.add(term);
-                acc.affine(); // Needed to avoid getting an overflow error.
-                acc
-            })
-        }
-        /// Combine a big endian array of field elements (first chunk is the
-        /// most significant) into a single field element.
-        ///
-        /// Note: The field elements stored as Miracl BIG types, so we
-        /// have to do the modular reduction ourselves.  As the array length is
-        /// unbounded and BIG has finite size we cannot do the reduction safely
-        /// at the end, so it is done on every iteration.  This is not cheap.
-        #[allow(clippy::ptr_arg)] // We have no use case for other types.
-        fn big_from_big_endian_chunks(data: &Vec<BIG>) -> BIG {
-            // Note: Relies on BIG::new() being zero.
-            data.iter().fold(BIG::new(), |mut acc, term| {
-                acc.shl(CHUNK_BYTES << 3);
-                acc.add(term);
-                acc.rmod(&BIG::new_ints(&rom::CURVE_ORDER)); // Needed to avoid getting a buffer overflow.
-                acc
-            })
+        fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
+            let mut acc = G1Projective::identity();
+
+            for term in terms {
+                for _ in 0..16 {
+                    acc = acc.double();
+                }
+
+                acc += term;
+            }
+
+            acc.to_affine()
         }
 
-        let combined_ciphertexts: Vec<ECP> =
-            crsz.cc.iter().map(ecp_from_big_endian_chunks).collect();
-        let combined_r: BIG = big_from_big_endian_chunks(
-            &encryption_witness
-                .spec_r
-                .iter()
-                .map(|s| s.to_miracl())
-                .collect(),
-        );
-        let combined_r_exp = ecp_from_big_endian_chunks(&crsz.rr);
-        let combined_plaintexts: Vec<BIG> = plaintext_chunks
+        /// Combine a big endian array of field elements (first chunk is the
+        /// most significant) into a single field element.
+        fn scalar_from_big_endian_chunks(terms: &[Scalar]) -> Scalar {
+            let factor = Scalar::from_u64(1 << 16);
+
+            let mut acc = Scalar::zero();
+            for term in terms {
+                acc *= factor;
+                acc += term;
+            }
+
+            acc
+        }
+
+        let combined_ciphertexts: Vec<G1Affine> = crsz
+            .cc
+            .iter()
+            .map(|s| g1_from_big_endian_chunks(s))
+            .collect();
+        let combined_r = scalar_from_big_endian_chunks(&encryption_witness.spec_r);
+        let combined_r_exp = g1_from_big_endian_chunks(&crsz.rr);
+        let combined_plaintexts: Vec<Scalar> = plaintext_chunks
             .iter()
             .map(|receiver_chunks| {
-                big_from_big_endian_chunks(
-                    &receiver_chunks.iter().copied().map(BIG::new_int).collect(),
+                scalar_from_big_endian_chunks(
+                    &receiver_chunks
+                        .iter()
+                        .copied()
+                        .map(Scalar::from_isize)
+                        .collect::<Vec<_>>(),
                 )
             })
             .collect();
@@ -275,10 +276,10 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         // Check that the combination is correct:
         // ... for plaintexts:
         for (plaintext, reconstituted_plaintext) in plaintexts.iter().zip(&combined_plaintexts) {
-            let mut diff = BIG::new_big(plaintext);
-            diff.sub(reconstituted_plaintext);
-            diff.rmod(&spec_p);
-            assert!(diff.iszilch(), "Reconstituted plaintext does not match");
+            assert_eq!(
+                plaintext, reconstituted_plaintext,
+                "Reconstituted plaintext does not match"
+            );
         }
 
         // ... for plaintexts:
@@ -287,25 +288,22 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .zip(&plaintexts)
             .zip(&receiver_fs_public_keys)
         {
-            let mut ciphertext_computed_directly: ECP =
-                public_key.mul2(&combined_r, &g1, plaintext);
-            ciphertext_computed_directly.affine();
-            let mut ciphertext_copy = ECP::new();
-            ciphertext_copy.copy(ciphertext);
-            ciphertext_copy.affine();
-            assert!(
-                ciphertext_computed_directly.equals(&ciphertext_copy),
+            let ciphertext_computed_directly =
+                G1Projective::mul2(&public_key.into(), &combined_r, &g1.into(), plaintext)
+                    .to_affine();
+            assert_eq!(
+                ciphertext_computed_directly, *ciphertext,
                 "Reconstitued ciphertext doesn't match"
             );
         }
 
-        let sharing_instance = SharingInstance::from_miracl(
+        let sharing_instance = SharingInstance::new(
             receiver_fs_public_keys,
             polynomial_exp,
             combined_r_exp,
             combined_ciphertexts,
         );
-        let sharing_witness = SharingWitness::from_miracl(combined_r, combined_plaintexts);
+        let sharing_witness = SharingWitness::new(combined_r, combined_plaintexts);
 
         let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, rng);
 

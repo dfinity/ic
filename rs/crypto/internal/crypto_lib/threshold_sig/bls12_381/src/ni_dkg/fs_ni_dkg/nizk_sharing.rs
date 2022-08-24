@@ -5,9 +5,6 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofShare;
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::ecp2::ECP2;
 use miracl_core::rand::RAND;
 use std::vec::Vec;
 
@@ -46,20 +43,6 @@ impl SharingInstance {
             combined_ciphertexts,
         }
     }
-
-    pub fn from_miracl(
-        public_keys: Vec<ECP>,
-        public_coeff: Vec<ECP2>,
-        combined_randomizer: ECP,
-        combined_ctext: Vec<ECP>,
-    ) -> Self {
-        Self::new(
-            public_keys.iter().map(G1Affine::from_miracl).collect(),
-            public_coeff.iter().map(G2Affine::from_miracl).collect(),
-            G1Affine::from_miracl(&combined_randomizer),
-            combined_ctext.iter().map(G1Affine::from_miracl).collect(),
-        )
-    }
 }
 
 /// Witness for the validity of a sharing instance.
@@ -76,13 +59,6 @@ impl SharingWitness {
             scalar_r,
             scalars_s,
         }
-    }
-
-    pub fn from_miracl(scalar_r: BIG, scalars_s: Vec<BIG>) -> Self {
-        Self::new(
-            Scalar::from_miracl(&scalar_r),
-            scalars_s.iter().map(Scalar::from_miracl).collect(),
-        )
     }
 }
 

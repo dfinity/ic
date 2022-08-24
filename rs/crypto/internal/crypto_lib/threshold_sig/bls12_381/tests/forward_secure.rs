@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Tests for combined forward secure encryption and ZK proofs
 
-use ic_crypto_internal_bls12_381_type::G2Affine;
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Gt, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
     forward_secure::*, utils::RAND_ChaCha20, Epoch,
 };
@@ -64,7 +64,11 @@ fn keys_and_ciphertext_for(
     epoch: Epoch,
     associated_data: &[u8],
     rng: &mut impl RAND,
-) -> (Vec<(PublicKeyWithPop, SecretKey)>, Vec<Vec<isize>>, Crsz) {
+) -> (
+    Vec<(PublicKeyWithPop, SecretKey)>,
+    Vec<Vec<isize>>,
+    FsEncryptionCiphertext,
+) {
     let sys = &mk_sys_params();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 1u8, 0u8, 6u8];
 
@@ -215,28 +219,20 @@ fn should_decrypt_correctly_for_epoch_10() {
     }
 }
 
-// Returns a random element of FP12 of order CURVE_ORDER (i.e. call fexp()
-// before returning).
-// Our tests call FP12::pow(), which only works on elements of order
-// CURVE_ORDER.
-fn fp12_rand(rng: &mut impl RAND) -> miracl_core::bls12381::fp12::FP12 {
-    use miracl_core::bls12381::fp12::FP12;
-    use miracl_core::bls12381::fp4::FP4;
-    use miracl_core::bls12381::pair;
-    pair::fexp(&FP12::new_fp4s(
-        &FP4::new_rand(rng),
-        &FP4::new_rand(rng),
-        &FP4::new_rand(rng),
-    ))
+// Returns a random element of Gt
+fn gt_rand() -> Gt {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let g1 = G1Affine::hash(b"ic-crypto-test-fp12-random", &rng.gen::<[u8; 32]>());
+    let g2 = G2Affine::generator();
+    Gt::pairing(&g1, &g2)
 }
 
 #[test]
 fn baby_giant_1000() {
-    use miracl_core::bls12381::big::BIG;
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
     for x in 0..1000 {
-        let base = fp12_rand(rng);
-        let tgt = base.pow(&BIG::new_int(x));
+        let base = gt_rand();
+        let tgt = base * Scalar::from_isize(x);
         assert!(
             baby_giant(&tgt, &base, -24, 1024).unwrap() == x,
             "baby-giant finds x"
@@ -246,12 +242,9 @@ fn baby_giant_1000() {
 
 #[test]
 fn baby_giant_negative() {
-    use miracl_core::bls12381::big::BIG;
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
     for x in 0..1000 {
-        let base = fp12_rand(rng);
-        let mut tgt = base.pow(&BIG::new_int(x));
-        tgt.inverse();
+        let base = gt_rand();
+        let tgt = base * Scalar::from_isize(x).neg();
         assert!(
             baby_giant(&tgt, &base, -999, 1000).unwrap() == -x,
             "baby-giant finds x"
@@ -264,11 +257,9 @@ fn baby_giant_negative() {
 // (This is not the entire cost. We must also search for a cofactor Delta.)
 #[test]
 fn baby_giant_big_range() {
-    use miracl_core::bls12381::big::BIG;
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
-    let base = fp12_rand(rng);
     let x = (1 << 39) + 123;
-    let tgt = base.pow(&BIG::new_int(x));
+    let base = gt_rand();
+    let tgt = base * Scalar::from_isize(x);
     assert!(
         baby_giant(&tgt, &base, -(1 << 10), 1 << 40).unwrap() == x,
         "baby-giant finds x"
@@ -278,175 +269,19 @@ fn baby_giant_big_range() {
 // Find the log for a cheater who exceeds the bounds by a little.
 #[test]
 fn slightly_dishonest_dlog() {
-    use miracl_core::bls12381::big::BIG;
-    use miracl_core::bls12381::ecp::ECP;
-    use miracl_core::bls12381::ecp2::ECP2;
-    use miracl_core::bls12381::pair;
-    use miracl_core::bls12381::rom;
+    let base = Gt::generator();
 
-    let base = pair::fexp(&pair::ate(&ECP2::generator(), &ECP::generator()));
-    let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
     // Last I checked:
     //   E = 128
     //   Z = 31960108800 * m * n
     // So searching for Delta < 10 with m = n = 1 should be tolerable.
-    let mut answer = BIG::new_int(8);
-    answer.invmodp(&spec_r);
-    answer = BIG::modmul(&answer, &BIG::new_int(12345678), &spec_r);
-    answer.norm();
-    let soln = solve_cheater_log(1, 1, &base.pow(&answer)).unwrap();
-    assert!(BIG::comp(&soln, &answer) == 0);
+
+    let mut answer = Scalar::from_usize(8).inverse().expect("Inverse exists");
+    answer *= Scalar::from_usize(12345678);
+    assert_eq!(solve_cheater_log(1, 1, &(base * answer)), Some(answer));
 
     // Check negative numbers also work.
-    let mut answer = BIG::new_int(5);
-    answer.invmodp(&spec_r);
-    answer = BIG::modmul(&answer, &negative_safe_new_int(-12345678), &spec_r);
-    answer.norm();
-    let soln = solve_cheater_log(1, 1, &base.pow(&answer)).unwrap();
-    assert!(BIG::comp(&soln, &answer) == 0);
-}
-
-#[test]
-fn deserialize_invalid_point() {
-    use miracl_core::bls12381::ecp::ECP;
-    let g1 = ECP::generator();
-    let mut buf = [0; 1 + 2 * 48];
-    g1.tobytes(&mut buf, false);
-    for (cell, i) in buf[10..20].iter_mut().zip(10..) {
-        *cell = i;
-    }
-    let y = ECP::frombytes(&buf);
-    assert!(y.is_infinity(), "invalid point deserializes as infinity");
-}
-
-mod multipairing_api_usage {
-    // These tests show how to use the  MIRACL multipairing API
-    // and ensure its consistency with the computation of individual pairings.
-
-    use super::*;
-    use miracl_core::bls12381::ecp::ECP;
-    use miracl_core::bls12381::ecp2::ECP2;
-
-    #[test]
-    fn multipairing_should_equal_iterated() {
-        use miracl_core::bls12381::pair;
-
-        let num_of_repetitions = 50;
-        for points in gen_points_for_pairings(num_of_repetitions) {
-            let iterated_p = {
-                let mut iterated_p = pair::fexp(&pair::ate(&points.g2_point1, &points.g1_point1));
-                iterated_p.mul(&pair::fexp(&pair::ate(
-                    &points.g2_point2,
-                    &points.g1_point2,
-                )));
-                iterated_p.mul(&pair::fexp(&pair::ate(
-                    &points.g2_point3,
-                    &points.g1_point3,
-                )));
-                iterated_p
-            };
-
-            let multi_p = {
-                let mut r = pair::initmp();
-
-                pair::another(&mut r, &points.g2_point1, &points.g1_point1);
-                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
-                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
-
-                let v = pair::miller(&mut r);
-                pair::fexp(&v)
-            };
-
-            assert!(
-            multi_p.equals(&iterated_p),
-            "Multipairing and iterated-pairing not-equal\nIterated:{}\nMultipairing:{}\nPoints:{:?}",
-            iterated_p,
-            multi_p,
-            points
-        );
-        }
-    }
-
-    #[test]
-    fn multipairing_with_precomp_should_equal_multipairing() {
-        use miracl_core::bls12381::ecp::G2_TABLE;
-        use miracl_core::bls12381::fp4::FP4;
-        use miracl_core::bls12381::pair;
-
-        let num_of_repetitions = 50;
-        for points in gen_points_for_pairings(num_of_repetitions) {
-            let multi_p = {
-                let mut r = pair::initmp();
-
-                pair::another(&mut r, &points.g2_point1, &points.g1_point1);
-                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
-                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
-
-                let v = pair::miller(&mut r);
-                pair::fexp(&v)
-            };
-
-            // Precompute the G2 point of the first pairing.
-            let precomp_p = {
-                let mut precomp_point: [FP4; G2_TABLE] = [FP4::new(); G2_TABLE];
-                // The multipairing and the precomputation assume (undocumented)
-                // that the points are in affine form.
-                let mut g2_point1 = points.g2_point1.clone();
-                g2_point1.affine();
-                pair::precomp(&mut precomp_point, &g2_point1);
-
-                let mut r = pair::initmp();
-
-                pair::another_pc(&mut r, &precomp_point, &points.g1_point1);
-                pair::another(&mut r, &points.g2_point2, &points.g1_point2);
-                pair::another(&mut r, &points.g2_point3, &points.g1_point3);
-
-                let v = pair::miller(&mut r);
-                pair::fexp(&v)
-            };
-
-            assert!(
-            multi_p.equals(&precomp_p),
-            "Multipairing and precomputed-multipairing not-equal\nMultipairing:{}\nPrecomputed-multipairing:{}\npoints:{:?}",
-            multi_p,
-            precomp_p,
-            points
-        );
-        }
-    }
-
-    // We test 3-way multipairing
-    // (i.e. e(p1, q1) * e(p2, q2) * e(p3, q3))
-    #[derive(Debug)]
-    struct ThreewayPairingPoints {
-        g1_point1: ECP,
-        g2_point1: ECP2,
-        g1_point2: ECP,
-        g2_point2: ECP2,
-        g1_point3: ECP,
-        g2_point3: ECP2,
-    }
-
-    fn gen_points_for_pairings(num_of_repetitions: usize) -> Vec<ThreewayPairingPoints> {
-        use miracl_core::bls12381::big::BIG;
-        use miracl_core::bls12381::rom;
-
-        use rand::Rng;
-
-        let seed = rand::thread_rng().gen::<[u8; 32]>();
-        let rng = &mut RAND_ChaCha20::new(seed);
-
-        let curve_order = BIG::new_ints(&rom::CURVE_ORDER);
-
-        (1..num_of_repetitions)
-            .map(|_i| ThreewayPairingPoints {
-                g1_point1: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
-                g2_point1: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
-                g1_point2: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
-                g2_point2: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
-                g1_point3: ECP::generator().mul(&BIG::randomnum(&curve_order, rng)),
-                g2_point3: ECP2::generator().mul(&BIG::randomnum(&curve_order, rng)),
-            })
-            .collect()
-    }
+    let mut answer = Scalar::from_usize(5).inverse().expect("Inverse exists");
+    answer *= Scalar::from_isize(-12345678);
+    assert_eq!(solve_cheater_log(1, 1, &(base * answer)), Some(answer));
 }
