@@ -33,4 +33,5 @@ message CryptoLogEntry {
   google.protobuf.StringValue signature = 25;
   google.protobuf.StringValue signature_shares = 26;
   google.protobuf.StringValue signature_inputs = 27;
+  google.protobuf.UInt64Value log_id = 28;
 }

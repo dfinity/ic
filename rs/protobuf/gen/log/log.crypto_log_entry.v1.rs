@@ -81,4 +81,7 @@ pub struct CryptoLogEntry {
     #[prost(message, optional, tag = "27")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature_inputs: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "28")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_id: ::core::option::Option<u64>,
 }
