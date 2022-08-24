@@ -9,10 +9,10 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        catchup::CUPWithOriginalProtobuf, Block, BlockProposal, CatchUpPackage,
-        CatchUpPackageShare, ConsensusMessage, ContentEq, Finalization, FinalizationShare,
-        HasHeight, HashedBlock, Notarization, NotarizationShare, RandomBeacon, RandomBeaconShare,
-        RandomTape, RandomTapeShare,
+        catchup::CUPWithOriginalProtobuf, ecdsa::EcdsaPayload, Block, BlockProposal,
+        CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq, Finalization,
+        FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare, RandomBeacon,
+        RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     time::Time,
     Height,
@@ -319,15 +319,21 @@ pub trait ConsensusBlockCache: Send + Sync {
 /// Snapshot of the block chain
 #[allow(clippy::len_without_is_empty)]
 pub trait ConsensusBlockChain: Send + Sync {
-    /// Returns the highest block in the chain.
-    fn tip(&self) -> Block;
+    /// Returns the height and the ECDSA payload of the tip in the block chain.
+    fn tip(&self) -> (Height, Option<Arc<EcdsaPayload>>);
 
-    /// Returns the block at the given height from the chain. The implementation
-    /// can choose the number of past blocks to cache.
-    fn block(&self, height: Height) -> Option<Block>;
+    /// Returns the ECDSA payload from the block at the given height.
+    /// The implementation can choose the number of past blocks to cache.
+    fn ecdsa_payload(&self, height: Height) -> Result<Arc<EcdsaPayload>, ConsensusBlockChainErr>;
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConsensusBlockChainErr {
+    BlockNotFound(Height),
+    EcdsaPayloadNotFound(Height),
 }
 
 /// An iterator for block ancestors.

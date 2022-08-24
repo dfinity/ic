@@ -15,7 +15,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     complaint_prefix, opening_prefix, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
-    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent,
+    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, TranscriptRef,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -23,7 +23,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::{Height, NodeId, RegistryVersion};
 
-use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -104,12 +103,8 @@ impl EcdsaComplaintHandlerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let active_transcripts = resolve_complaint_refs(
-            block_reader,
-            "validate_complaints",
-            self.metrics.complaint_errors.clone(),
-            &self.log,
-        );
+        let active_transcripts = self.active_transcripts(block_reader);
+
         // Collection of duplicate <complainer Id, transcript Id, dealer Id>
         let mut complaint_keys = BTreeSet::new();
         let mut duplicate_keys = BTreeSet::new();
@@ -144,7 +139,7 @@ impl EcdsaComplaintHandlerImpl {
                 complaint.idkg_complaint.transcript_id.source_height(),
                 &complaint.idkg_complaint.transcript_id,
             ) {
-                Action::Process(transcript) => {
+                Action::Process(transcript_ref) => {
                     if self.has_complainer_issued_complaint(
                         ecdsa_pool,
                         &complaint.idkg_complaint,
@@ -156,9 +151,26 @@ impl EcdsaComplaintHandlerImpl {
                             format!("Duplicate complaint: {}", signed_complaint),
                         ));
                     } else {
-                        let mut changes =
-                            self.crypto_verify_complaint(&id, transcript, &signed_complaint);
-                        ret.append(&mut changes);
+                        match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
+                        {
+                            Some(transcript) => {
+                                let mut changes = self.crypto_verify_complaint(
+                                    &id,
+                                    &transcript,
+                                    &signed_complaint,
+                                );
+                                ret.append(&mut changes);
+                            }
+                            None => {
+                                ret.push(EcdsaChangeAction::HandleInvalid(
+                                    id,
+                                    format!(
+                                        "validate_complaints(): failed to resolve: {}",
+                                        signed_complaint
+                                    ),
+                                ));
+                            }
+                        }
                     }
                 }
                 Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
@@ -175,12 +187,7 @@ impl EcdsaComplaintHandlerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let active_transcripts = resolve_complaint_refs(
-            block_reader,
-            "send_openings",
-            self.metrics.complaint_errors.clone(),
-            &self.log,
-        );
+        let active_transcripts = self.active_transcripts(block_reader);
 
         ecdsa_pool
             .validated()
@@ -199,7 +206,9 @@ impl EcdsaComplaintHandlerImpl {
                 // Look up the transcript for the complained transcript Id.
                 let complaint = signed_complaint.get();
                 match active_transcripts.get(&complaint.idkg_complaint.transcript_id) {
-                    Some(transcript) => Some((signed_complaint, transcript)),
+                    Some(transcript_ref) => self
+                        .resolve_ref(transcript_ref, block_reader, "send_openings")
+                        .map(|transcript| (signed_complaint, transcript)),
                     None => {
                         self.metrics
                             .complaint_errors_inc("complaint_inactive_transcript");
@@ -208,7 +217,7 @@ impl EcdsaComplaintHandlerImpl {
                 }
             })
             .flat_map(|(signed_complaint, transcript)| {
-                self.crypto_create_opening(&signed_complaint, transcript)
+                self.crypto_create_opening(&signed_complaint, &transcript)
             })
             .collect()
     }
@@ -219,12 +228,7 @@ impl EcdsaComplaintHandlerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let active_transcripts = resolve_complaint_refs(
-            block_reader,
-            "validate_openings",
-            self.metrics.complaint_errors.clone(),
-            &self.log,
-        );
+        let active_transcripts = self.active_transcripts(block_reader);
 
         // Collection of duplicate <opener id, complainer Id, transcript Id, dealer Id>
         let mut opening_keys = BTreeSet::new();
@@ -258,7 +262,7 @@ impl EcdsaComplaintHandlerImpl {
                 opening.idkg_opening.transcript_id.source_height(),
                 &opening.idkg_opening.transcript_id,
             ) {
-                Action::Process(transcript) => {
+                Action::Process(transcript_ref) => {
                     if self.has_node_issued_opening(
                         ecdsa_pool,
                         &opening.idkg_opening.transcript_id,
@@ -274,13 +278,26 @@ impl EcdsaComplaintHandlerImpl {
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(ecdsa_pool, &signed_opening)
                     {
-                        let mut changes = self.crypto_verify_opening(
-                            &id,
-                            transcript,
-                            &signed_opening,
-                            &signed_complaint,
-                        );
-                        ret.append(&mut changes);
+                        match self.resolve_ref(transcript_ref, block_reader, "validate_openings") {
+                            Some(transcript) => {
+                                let mut changes = self.crypto_verify_opening(
+                                    &id,
+                                    &transcript,
+                                    &signed_opening,
+                                    &signed_complaint,
+                                );
+                                ret.append(&mut changes);
+                            }
+                            None => {
+                                ret.push(EcdsaChangeAction::HandleInvalid(
+                                    id,
+                                    format!(
+                                        "validate_openings(): failed to resolve: {}",
+                                        signed_opening
+                                    ),
+                                ));
+                            }
+                        }
                     } else {
                         // Defer handling the opening in case it was received
                         // before the complaint.
@@ -302,12 +319,11 @@ impl EcdsaComplaintHandlerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let active_transcripts = resolve_complaint_refs(
-            block_reader,
-            "purge_artifacts",
-            self.metrics.complaint_errors.clone(),
-            &self.log,
-        );
+        let active_transcripts = block_reader
+            .active_transcripts()
+            .iter()
+            .map(|transcript_ref| transcript_ref.transcript_id)
+            .collect::<BTreeSet<_>>();
 
         let mut ret = Vec::new();
         let current_height = block_reader.tip_height();
@@ -711,9 +727,54 @@ impl EcdsaComplaintHandlerImpl {
         transcript_id: &IDkgTranscriptId,
         requested_height: Height,
         current_height: Height,
-        active_transcripts: &BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+        active_transcripts: &BTreeSet<IDkgTranscriptId>,
     ) -> bool {
-        requested_height <= current_height && !active_transcripts.contains_key(transcript_id)
+        requested_height <= current_height && !active_transcripts.contains(transcript_id)
+    }
+
+    /// Resolves the active ref -> transcripts
+    fn resolve_ref(
+        &self,
+        transcript_ref: &TranscriptRef,
+        block_reader: &dyn EcdsaBlockReader,
+        reason: &str,
+    ) -> Option<IDkgTranscript> {
+        let _timer = self
+            .metrics
+            .on_state_change_duration
+            .with_label_values(&["resolve_transcript_refs"])
+            .start_timer();
+        match block_reader.transcript(transcript_ref) {
+            Ok(transcript) => {
+                self.metrics
+                    .complaint_metrics_inc("resolve_transcript_refs");
+                Some(transcript)
+            }
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "Failed to resolve complaint ref: reason = {}, \
+                     transcript_ref = {:?}, error = {:?}",
+                    reason,
+                    transcript_ref,
+                    error
+                );
+                self.metrics.complaint_errors_inc("resolve_transcript_refs");
+                None
+            }
+        }
+    }
+
+    /// Returns the active transcript map.
+    fn active_transcripts(
+        &self,
+        block_reader: &dyn EcdsaBlockReader,
+    ) -> BTreeMap<IDkgTranscriptId, TranscriptRef> {
+        block_reader
+            .active_transcripts()
+            .iter()
+            .map(|transcript_ref| (transcript_ref.transcript_id, *transcript_ref))
+            .collect::<BTreeMap<_, _>>()
     }
 }
 
@@ -872,7 +933,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
 enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately.
-    Process(&'a IDkgTranscript),
+    Process(&'a TranscriptRef),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -888,7 +949,7 @@ impl<'a> Action<'a> {
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn EcdsaBlockReader,
-        active_transcripts: &'a BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+        active_transcripts: &'a BTreeMap<IDkgTranscriptId, TranscriptRef>,
         msg_height: Height,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
@@ -899,39 +960,10 @@ impl<'a> Action<'a> {
         }
 
         match active_transcripts.get(msg_transcript_id) {
-            Some(transcript) => Action::Process(transcript),
+            Some(transcript_ref) => Action::Process(transcript_ref),
             None => Action::Drop,
         }
     }
-}
-
-/// Resolves the active refs -> transcripts
-fn resolve_complaint_refs(
-    block_reader: &dyn EcdsaBlockReader,
-    reason: &str,
-    metric: IntCounterVec,
-    log: &ReplicaLogger,
-) -> BTreeMap<IDkgTranscriptId, IDkgTranscript> {
-    let mut ret = BTreeMap::new();
-    for transcript_ref in block_reader.active_transcripts() {
-        match block_reader.transcript(&transcript_ref) {
-            Ok(transcript) => {
-                ret.insert(transcript_ref.transcript_id, transcript);
-            }
-            Err(error) => {
-                warn!(
-                    log,
-                    "Failed to resolve complaint ref: reason = {}, \
-                     sig_inputs_ref = {:?}, error = {:?}",
-                    reason,
-                    transcript_ref,
-                    error
-                );
-                metric.with_label_values(&[reason]).inc();
-            }
-        }
-    }
-    ret
 }
 
 #[cfg(test)]
@@ -963,8 +995,8 @@ mod tests {
         let block_reader =
             TestEcdsaBlockReader::for_complainer_test(Height::new(100), vec![ref_1, ref_2]);
         let mut active_transcripts = BTreeMap::new();
-        active_transcripts.insert(id_1, block_reader.transcript(&ref_1).unwrap());
-        active_transcripts.insert(id_2, block_reader.transcript(&ref_2).unwrap());
+        active_transcripts.insert(id_1, ref_1);
+        active_transcripts.insert(id_2, ref_2);
 
         // Message from a node ahead of us
         assert_eq!(

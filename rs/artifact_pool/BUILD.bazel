@@ -47,6 +47,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/registry",
+    "//rs/types/ic00_types",
     "@crate_index//:criterion",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:slog-async",

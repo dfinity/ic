@@ -848,13 +848,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum TranscriptLookupError {
-    BlockNotFound(TranscriptRef),
-    NoEcdsaSummary(TranscriptRef),
-    NoEcdsaPayload(TranscriptRef),
-    TranscriptNotFound(TranscriptRef, bool),
-}
+pub type TranscriptLookupError = String;
 
 /// Wrapper to access the ECDSA related info from the blocks.
 pub trait EcdsaBlockReader: Send + Sync {
