@@ -6,8 +6,6 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
-mod miracl;
-
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use rand::{CryptoRng, RngCore};
