@@ -564,35 +564,38 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    //let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(suite(
-        "nightly_long_duration",
-        vec![
-            /* running in staging suite for the time being
-            pot(
-                "xnet_120_subnets_pot",
-                xnet_120_subnets.build(),
-                par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-            ),*/
-            pot_with_setup(
-                "default_subnet_workload_pot",
-                networking::subnet_update_workload::default_config,
-                par(vec![
-                    sys_t(
-                        "default_subnet_query_workload_long_duration_test",
-                        networking::subnet_query_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_long_duration_test",
-                        networking::subnet_update_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_large_payload",
-                        networking::subnet_update_workload::large_payload_test,
-                    ),
-                ]),
-            ),
-        ],
+        "nightly_default_subnet_query_workload_long_duration_test",
+        vec![pot_with_setup(
+            "nightly_default_subnet_query_workload_long_duration_test",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_query_workload_long_duration_test",
+                networking::subnet_query_workload::long_duration_test,
+            )]),
+        )],
+    ));
+    m.add_suite(suite(
+        "nightly_default_subnet_update_workload_long_duration_test",
+        vec![pot_with_setup(
+            "nightly_default_subnet_update_workload_long_duration_test",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_update_workload_long_duration_test",
+                networking::subnet_update_workload::long_duration_test,
+            )]),
+        )],
+    ));
+    m.add_suite(suite(
+        "nightly_default_subnet_update_workload_large_payload",
+        vec![pot_with_setup(
+            "nightly_default_subnet_update_workload_large_payload",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_update_workload_large_payload",
+                networking::subnet_update_workload::large_payload_test,
+            )]),
+        )],
     ));
 
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();

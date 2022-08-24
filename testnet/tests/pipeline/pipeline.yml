@@ -343,7 +343,7 @@ hourly-system-tests-tecdsa-pre-master:
     SUITE_NAME: "tecdsa_pre_master"
     cd_target_env: "HOURLY"
   script:
-    - *run-farm-based-test   
+    - *run-farm-based-test
 
 # The 'pre-master' tests are also run hourly
 hourly-system-tests-subnet-recover-pre-master:
@@ -353,7 +353,7 @@ hourly-system-tests-subnet-recover-pre-master:
     SUITE_NAME: "subnet_recovery"
     cd_target_env: "HOURLY"
   script:
-    - *run-farm-based-test   
+    - *run-farm-based-test
 
 rosetta-hourly:
   extends:
@@ -390,7 +390,7 @@ wasm-generator-hourly:
     NUMBER_OF_CANISTERS: 100
 
 wasm-generator-nightly:
-  extends: 
+  extends:
     - .system-tests-wasm-generator
     - .with-monitoring
   stage: prod-tests-04
@@ -420,11 +420,35 @@ system-tests-short-nightly:
   script:
     - *run-farm-based-test
 
-system-tests-long-nightly:
+system-tests-default-subnet-query-workload-long-duration-nightly:
   extends:
     - .system-tests
   variables:
-    SUITE_NAME: "nightly_long_duration"
+    SUITE_NAME: "nightly_default_subnet_query_workload_long_duration_test"
+    cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
+  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
+  script:
+    - echo "ulimit -n = $(ulimit -n)"
+    - *run-farm-based-test
+
+system-tests-default-subnet-update-workload-long-duration-nightly:
+  extends:
+    - .system-tests
+  variables:
+    SUITE_NAME: "nightly_default_subnet_update_workload_long_duration_test"
+    cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
+  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
+  script:
+    - echo "ulimit -n = $(ulimit -n)"
+    - *run-farm-based-test
+
+system-tests-default-subnet-update-workload-large-payload-nightly:
+  extends:
+    - .system-tests
+  variables:
+    SUITE_NAME: "nightly_default_subnet_update_workload_large_payload"
     cd_target_env: "NIGHTLY"
     SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
@@ -496,7 +520,7 @@ system-tests-staging-nightly:
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
   script:
     - *run-farm-based-test
-  allow_failure: true 
+  allow_failure: true
 
 ingress-manager-proptests-nightly:
   extends:
