@@ -11,7 +11,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams,
+    IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -40,30 +40,48 @@ pub trait IDkgProtocol {
 
     /// Perform public verification of a dealing.
     ///
-    /// This checks the consistency of the dealing with the params and verifies
-    /// the optional contextual proof.
+    /// This checks the consistency of the dealing with the params, the signature on the dealing,
+    /// and it verifies the optional contextual proof.
+    ///
+    /// # Errors
+    /// * `IDkgVerifyDealingPublicError::TranscriptIdMismatch` if the transcript ID in the `params`
+    ///    is different from the one included in the dealing.
+    /// * `IDkgVerifyDealingPublicError::InvalidDealing` if the internal dealing is invalid.
+    /// * `IDkgVerifyDealingPublicError::InvalidSignature` if the signature on the dealing is invalid.
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError>;
 
     /// Perform private verification of a dealing.
     ///
     /// If called by a receiver of the dealing, this verifies:
     /// * Decryptability of the receiver's ciphertext
-    /// * The consistencty of the decrypted share with the polynomial
+    /// * The consistency of the decrypted share with the polynomial
     ///   commitment.
     ///
     /// # Errors
-    /// * IDkgVerifyDealingPrivateError::NotAReceiver if the caller isn't in the
-    ///   dealing's receivers
+    /// * `IDkgVerifyDealingPrivateError::NotAReceiver` if the caller isn't in the
+    ///   dealing's receivers. Only receivers can perform private verification of dealings.
+    /// * `IDkgVerifyDealingPrivateError::InvalidDealing` if the decrypted shares are not consistent
+    ///    with polynomial commitment.
+    /// * `IDkgVerifyDealingPrivateError::InvalidArgument` if some argument cannot be parsed correctly.
+    /// * `IDkgVerifyDealingPrivateError::PrivateKeyNotFound` if the secret key store of the node
+    ///    does not contain the secret key necessary to decrypt the ciphertext.
+    /// * `IDkgVerifyDealingPrivateError::RegistryError` if the registry client returned an error.
+    /// * `IDkgVerifyDealingPrivateError::PublicKeyNotInRegistry` if the encryption key of the
+    ///    receiver is not in the registry.
+    /// * `IDkgVerifyDealingPrivateError::MalformedPublicKey` if the public key of one of the receivers
+    ///    is not well formed.
+    /// * `IDkgVerifyDealingPrivateError::UnsupportedAlgorithm` if the `params.algorithm_id` is not supported
+    /// * `IDkgVerifyDealingPrivateError::InternalError` if the an internal error occurs.
+    /// * `IDkgVerifyDealingPrivateError::CspVaultRpcError` if there is an RPC error reported when
+    ///    connecting with the vault.
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
     /// Combine the given dealings into a transcript.

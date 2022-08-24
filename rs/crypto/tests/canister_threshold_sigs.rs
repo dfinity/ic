@@ -9,9 +9,9 @@ use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
-    create_and_verify_signed_dealing, create_signed_dealings, generate_key_transcript,
-    generate_presig_quadruple, generate_tecdsa_protocol_inputs, load_input_transcripts,
-    load_transcript, node_id, random_dealer_id, random_dealer_id_excluding,
+    create_and_verify_signed_dealing, create_and_verify_signed_dealings, create_signed_dealing,
+    generate_key_transcript, generate_presig_quadruple, generate_tecdsa_protocol_inputs,
+    load_input_transcripts, load_transcript, node_id, random_dealer_id, random_dealer_id_excluding,
     random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
     random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript, run_tecdsa_protocol,
     CanisterThresholdSigTestEnvironment,
@@ -21,11 +21,11 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyComplaintError, IDkgVerifyOpeningError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
@@ -182,7 +182,7 @@ fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
-    let signed_dealings = create_signed_dealings(&params, &env.crypto_components);
+    let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
     let batch_signed_dealings =
         batch_sign_signed_dealings(&params, &env.crypto_components, signed_dealings);
 
@@ -221,7 +221,7 @@ fn should_fail_create_transcript_without_enough_signatures() {
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
-    let signed_dealings = create_signed_dealings(&params, &env.crypto_components);
+    let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
     let insufficient_batch_signed_dealings = signed_dealings
         .into_iter()
         .map(|(dealer_id, signed_dealing)| {
@@ -1867,17 +1867,45 @@ fn should_derive_differing_ecdsa_public_keys() {
 
 #[test]
 fn should_run_verify_dealing_public() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let params = fake_params_for(NODE_1);
+    let subnet_size = thread_rng().gen_range(1..10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
-    let dealer_id = NodeId::from(PrincipalId::new_node_test_id(0));
-    let dealing = IDkgDealing {
-        transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        internal_dealing_raw: vec![],
-    };
-    let result =
-        crypto_for(NODE_1, &crypto_components).verify_dealing_public(&params, dealer_id, &dealing);
-    assert!(result.is_err());
+    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let dealer_id = random_dealer_id(&params);
+
+    let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
+
+    let verifier_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
+    let verifier = TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+
+    let result = verifier.verify_dealing_public(&params, &signed_dealing);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn should_fail_verify_dealing_public_with_invalid_signature() {
+    let subnet_size = thread_rng().gen_range(1..10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let dealer_id = random_dealer_id(&params);
+
+    let mut signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
+
+    let other_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
+
+    signed_dealing.signature = other_dealing.signature;
+
+    let verifier_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
+    let verifier = TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+
+    let result = verifier.verify_dealing_public(&params, &signed_dealing);
+
+    assert!(matches!(
+        result,
+        Err(IDkgVerifyDealingPublicError::InvalidSignature { error, .. }) if error.contains("Invalid basic signature on signed iDKG dealing \
+                 from signer")
+    ));
 }
 
 #[test]
@@ -2197,21 +2225,6 @@ fn should_fail_verify_opening_when_dealing_is_missing() {
         "{:?}",
         result
     );
-}
-
-fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
-    let mut nodes = BTreeSet::new();
-    nodes.insert(node_id);
-
-    IDkgTranscriptParams::new(
-        dummy_idkg_transcript_id_for_tests(1),
-        nodes.clone(),
-        nodes,
-        RegistryVersion::from(1),
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        IDkgTranscriptOperation::Random,
-    )
-    .expect("failed to generate fake parameters")
 }
 
 fn fake_key_and_presig_quadruple(

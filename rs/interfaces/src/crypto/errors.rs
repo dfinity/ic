@@ -147,6 +147,7 @@ impl ErrorReplication for IDkgVerifyDealingPublicError {
             Self::TranscriptIdMismatch => true,
             // The dealing was publically invalid
             Self::InvalidDealing { .. } => true,
+            Self::InvalidSignature { crypto_error, .. } => crypto_error.is_replicated(),
         }
     }
 }

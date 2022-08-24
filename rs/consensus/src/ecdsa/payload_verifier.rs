@@ -486,13 +486,9 @@ fn validate_reshare_dealings(
                         InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
                             .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?
                             .dealings();
-                    for dealing in dealings.iter() {
+                    for signed_dealing in dealings.iter() {
                         crypto
-                            .verify_dealing_public(
-                                &param,
-                                dealing.dealer_id(),
-                                dealing.idkg_dealing(),
-                            )
+                            .verify_dealing_public(&param, signed_dealing)
                             .map_err(PermanentError::from)?;
                     }
                     new_dealings.insert(transcript_id, dealings);

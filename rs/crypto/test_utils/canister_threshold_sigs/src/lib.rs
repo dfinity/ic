@@ -76,46 +76,24 @@ pub fn mock_transcript(
     }
 }
 
-pub fn create_and_verify_dealing(
-    params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    dealer_id: NodeId,
-) -> IDkgDealing {
-    let dealing = crypto_for(dealer_id, crypto_components)
-        .create_dealing(params)
-        .unwrap_or_else(|error| {
-            panic!(
-                "failed to create IDkg dealing for {:?}: {:?}",
-                dealer_id, error
-            )
-        });
-
-    // Verify the dealing is publicly valid
-    let csp = crypto_for(dealer_id, crypto_components);
-    csp.verify_dealing_public(params, dealer_id, &dealing)
-        .expect("unexpectedly invalid dealing");
-
-    // Verify the dealing is privately valid for all receivers
-    for receiver in params.receivers().get() {
-        crypto_for(*receiver, crypto_components)
-            .verify_dealing_private(params, dealer_id, &dealing)
-            .expect("unexpectedly invalid dealing (private verification)");
-    }
-
-    dealing
-}
-
-pub fn create_and_verify_signed_dealing(
+pub fn create_signed_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     dealer_id: NodeId,
 ) -> SignedIDkgDealing {
-    let dealing = create_and_verify_dealing(params, crypto_components, dealer_id);
-    // Sign the dealing.
-    let csp = crypto_for(dealer_id, crypto_components);
-    let signature = csp
+    let dealer = crypto_for(dealer_id, crypto_components);
+
+    let dealing = dealer.create_dealing(params).unwrap_or_else(|error| {
+        panic!(
+            "failed to create IDkg dealing for {:?}: {:?}",
+            dealer_id, error
+        )
+    });
+
+    let signature = dealer
         .sign_basic(&dealing, dealer_id, params.registry_version())
         .expect("Failed to sign a dealing");
+
     SignedIDkgDealing {
         content: dealing,
         signature: BasicSignature {
@@ -125,22 +103,30 @@ pub fn create_and_verify_signed_dealing(
     }
 }
 
-pub fn create_dealings(
+pub fn create_and_verify_signed_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-) -> BTreeMap<NodeId, IDkgDealing> {
-    params
-        .dealers()
-        .get()
-        .iter()
-        .map(|node| {
-            let dealing = create_and_verify_dealing(params, crypto_components, *node);
-            (*node, dealing)
-        })
-        .collect()
+    dealer_id: NodeId,
+) -> SignedIDkgDealing {
+    let signed_dealing = create_signed_dealing(params, crypto_components, dealer_id);
+
+    let dealer = crypto_for(dealer_id, crypto_components);
+    // Verify the dealing is publicly valid
+    dealer
+        .verify_dealing_public(params, &signed_dealing)
+        .expect("unexpectedly invalid dealing");
+
+    // Verify the dealing is privately valid for all receivers
+    for receiver in params.receivers().get() {
+        crypto_for(*receiver, crypto_components)
+            .verify_dealing_private(params, &signed_dealing)
+            .expect("unexpectedly invalid dealing (private verification)");
+    }
+
+    signed_dealing
 }
 
-pub fn create_signed_dealings(
+pub fn create_and_verify_signed_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> BTreeMap<NodeId, SignedIDkgDealing> {

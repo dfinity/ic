@@ -11,7 +11,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptParams,
+    IDkgTranscriptId, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::NodeId;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -65,8 +65,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
@@ -77,11 +76,15 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
             crypto.dkg_config => format!("{:?}", params),
-            crypto.dkg_dealer => format!("{:?}", dealer_id),
-            crypto.dkg_dealing => format!("{:?}", dealing),
+            crypto.dkg_dealing => format!("{:?}", signed_dealing),
         );
         let start_time = self.metrics.now();
-        let result = dealing::verify_dealing_public(&self.csp, params, dealer_id, dealing);
+        let result = dealing::verify_dealing_public(
+            &self.csp,
+            &self.registry_client,
+            params,
+            signed_dealing,
+        );
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::IDkgProtocol,
             "verify_dealing_public",
@@ -98,8 +101,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
@@ -110,8 +112,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
             crypto.dkg_config => format!("{:?}", params),
-            crypto.dkg_dealer => format!("{:?}", dealer_id),
-            crypto.dkg_dealing => format!("{:?}", dealing),
+            crypto.dkg_dealing => format!("{:?}", signed_dealing),
         );
         let start_time = self.metrics.now();
         let result = dealing::verify_dealing_private(
@@ -119,8 +120,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             &self.node_id,
             &self.registry_client,
             params,
-            dealer_id,
-            dealing,
+            signed_dealing,
         );
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::IDkgProtocol,
