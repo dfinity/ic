@@ -28,10 +28,6 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
-    fn node_public_keys(&self) -> NodePublicKeys {
-        self.csp.node_public_keys()
-    }
-
     fn check_keys_with_registry(
         &self,
         registry_version: RegistryVersion,
@@ -65,10 +61,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         }
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
-}
 
-// Helpers for implementing `KeyManager`-trait.
-impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
         let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
             self.collect_key_count_metrics(registry_version);
@@ -76,6 +69,13 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             .observe_node_key_counts(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks);
     }
 
+    fn node_public_keys(&self) -> NodePublicKeys {
+        self.csp.node_public_keys()
+    }
+}
+
+// Helpers for implementing `KeyManager`-trait.
+impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> (u8, u8, u8) {
         let mut pub_keys_in_reg: u8 = 0;
         let mut secret_keys_in_sks: u8 = 0;
