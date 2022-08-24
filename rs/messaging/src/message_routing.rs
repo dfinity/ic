@@ -1000,7 +1000,7 @@ impl MessageRouting for MessageRoutingImpl {
             // resend the overflowing batches later.
             Err(TrySendError::Full(_)) => {
                 self.inc_deliver_batch(STATUS_QUEUE_FULL);
-                info!(
+                debug!(
                     self.log,
                     "Rejecting batch {}: execution queue overflow ({} batches queued)",
                     batch_number,
