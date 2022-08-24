@@ -103,9 +103,6 @@ rust_test(
 
 rust_test(
     name = "tests_test",
-    # This is cpu intensive test. It times out with default 5 minutes timeout when runs on already loaded machine.
-    # TODO(IDX-2447): Ensure bazel always gets enough resources instead.
-    size = "large",
     srcs = ["tests/tests.rs"],
     data = DEV_DATA,
     edition = "2018",
