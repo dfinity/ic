@@ -94,7 +94,7 @@ variables:
     popd
 
     # Step 3. Clone a fresh working repo from the cache.
- 
+
     # This directory should not exist unless something changed on GitLab,
     # or someone has bind mounted it from the runner. To be safe just delete it.
     rm -fr "@{CI_PROJECT_DIR}"
@@ -125,7 +125,6 @@ before_script:
     chmod 0700 ~/.ssh
 
     echo -e "Host *\nUser gitlab-runner\n" > ~/.ssh/config
-    ulimit -n 8192
     date
 
     export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
