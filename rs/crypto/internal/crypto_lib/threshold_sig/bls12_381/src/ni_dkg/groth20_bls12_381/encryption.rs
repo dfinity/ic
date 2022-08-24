@@ -10,14 +10,14 @@ use crate::api::ni_dkg_errors::{
     DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
 };
 use conversions::{
-    epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes,
-    public_coefficients_to_miracl, public_key_from_miracl, secret_key_from_miracl, Tau,
+    epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes, public_key_from_miracl,
+    secret_key_from_miracl, Tau,
 };
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
-use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    FsEncryptionCiphertext, FsEncryptionPlaintext, FsEncryptionPublicKey, NodeIndex,
+    FsEncryptionCiphertextBytes, FsEncryptionPlaintext, FsEncryptionPublicKey, NodeIndex,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     ZKProofDec, ZKProofShare,
@@ -28,6 +28,7 @@ use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use lazy_static::lazy_static;
+use miracl_core::rand::RAND;
 use rand::Rng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -38,8 +39,8 @@ mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, mk_sys_params,
-        verify_ciphertext_integrity, BTENode, Bit, Crsz, EncryptionWitness, PublicKeyWithPop,
-        SecretKey, SysParam,
+        verify_ciphertext_integrity, BTENode, Bit, EncryptionWitness, FsEncryptionCiphertext,
+        PublicKeyWithPop, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -50,10 +51,7 @@ mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::utils::RAND_ChaCha20;
 }
 mod miracl {
-    pub use miracl_core::bls12381::big::BIG;
     pub use miracl_core::bls12381::ecp::ECP;
-    pub use miracl_core::bls12381::ecp2::ECP2;
-    pub use miracl_core::bls12381::rom;
 }
 
 #[cfg(test)]
@@ -121,7 +119,7 @@ pub fn encrypt_and_prove(
     epoch: Epoch,
     public_coefficients: &PublicCoefficientsBytes,
     associated_data: &[u8],
-) -> Result<(FsEncryptionCiphertext, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
+) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
     let public_keys: Result<Vec<miracl::ECP>, EncryptAndZKProveError> = key_message_pairs
         .as_ref()
         .iter()
@@ -170,11 +168,17 @@ pub fn encrypt_and_prove(
         &encryption_witness,
         &mut rng,
     );
-    let miracl_public_coefficients = public_coefficients_to_miracl(public_coefficients)
+
+    let public_coefficients = public_coefficients
+        .coefficients
+        .iter()
+        .map(G2Affine::deserialize)
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|_| EncryptAndZKProveError::MalformedPublicCoefficients)?;
+
     let sharing_proof = prove_sharing(
         &public_keys,
-        &miracl_public_coefficients,
+        &public_coefficients,
         &ciphertext,
         &plaintext_chunks,
         &encryption_witness,
@@ -183,9 +187,13 @@ pub fn encrypt_and_prove(
 
     #[cfg(test)]
     {
+        let public_keys = public_keys
+            .iter()
+            .map(G1Affine::from_miracl)
+            .collect::<Vec<_>>();
         assert_eq!(
             crypto::verify_chunking(
-                &crypto::ChunkingInstance::from_miracl(
+                &crypto::ChunkingInstance::new(
                     public_keys.clone(),
                     ciphertext.cc.clone(),
                     ciphertext.rr.clone(),
@@ -195,18 +203,18 @@ pub fn encrypt_and_prove(
             Ok(()),
             "We just created an invalid chunking proof"
         );
-        let combined_ciphertexts: Vec<miracl::ECP> = ciphertext
+        let combined_ciphertexts: Vec<_> = ciphertext
             .cc
             .iter()
-            .map(util::ecp_from_big_endian_chunks)
+            .map(|s| util::g1_from_big_endian_chunks(s))
             .collect();
 
         assert_eq!(
             crypto::verify_sharing(
-                &crypto::SharingInstance::from_miracl(
+                &crypto::SharingInstance::new(
                     public_keys,
-                    miracl_public_coefficients,
-                    util::ecp_from_big_endian_chunks(&ciphertext.rr),
+                    public_coefficients,
+                    util::g1_from_big_endian_chunks(&ciphertext.rr),
                     combined_ciphertexts,
                 ),
                 &sharing_proof,
@@ -231,7 +239,7 @@ pub fn encrypt_and_prove(
 /// # Errors
 /// This will return an error if the `epoch` is below the `secret_key` epoch.
 pub fn decrypt(
-    ciphertext: &FsEncryptionCiphertext,
+    ciphertext: &FsEncryptionCiphertextBytes,
     secret_key: &crypto::SecretKey,
     node_index: NodeIndex,
     epoch: Epoch,
@@ -254,8 +262,8 @@ pub fn decrypt(
             secret_key_epoch: epoch_from_miracl_secret_key(secret_key),
         });
     }
-    let ciphertext =
-        crypto::Crsz::deserialize(ciphertext).map_err(DecryptError::MalformedCiphertext)?;
+    let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)
+        .map_err(DecryptError::MalformedCiphertext)?;
     let tau = Tau::from(epoch);
     let decrypt_maybe =
         crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data);
@@ -271,21 +279,23 @@ pub fn decrypt(
 /// crypto::forward_secure so we need a thin wrapper to convert.
 fn prove_chunking(
     receiver_fs_public_keys: &[miracl::ECP],
-    ciphertext: &crypto::Crsz,
+    ciphertext: &crypto::FsEncryptionCiphertext,
     plaintext_chunks: &[Vec<isize>],
     encryption_witness: &crypto::EncryptionWitness,
-    rng: &mut crypto::RAND_ChaCha20,
+    rng: &mut impl RAND,
 ) -> crypto::ProofChunking {
     let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
         .iter()
         .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
         .collect();
 
-    let chunking_instance = crypto::ChunkingInstance::from_miracl(
-        receiver_fs_public_keys.to_vec(),
-        ciphertext.cc.clone(),
-        ciphertext.rr.clone(),
-    );
+    let public_keys = receiver_fs_public_keys
+        .iter()
+        .map(G1Affine::from_miracl)
+        .collect::<Vec<_>>();
+
+    let chunking_instance =
+        crypto::ChunkingInstance::new(public_keys, ciphertext.cc.clone(), ciphertext.rr.clone());
 
     let chunking_witness =
         crypto::ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
@@ -296,26 +306,25 @@ fn prove_chunking(
 /// Zero knowledge proof of correct sharing
 fn prove_sharing(
     receiver_fs_public_keys: &[miracl::ECP],
-    public_coefficients: &[miracl::ECP2],
-    ciphertext: &crypto::Crsz,
+    public_coefficients: &[G2Affine],
+    ciphertext: &crypto::FsEncryptionCiphertext,
     plaintext_chunks: &[Vec<isize>],
     encryption_witness: &crypto::EncryptionWitness,
-    rng: &mut crypto::RAND_ChaCha20,
+    rng: &mut impl RAND,
 ) -> crypto::ProofSharing {
+    let receiver_fs_public_keys = receiver_fs_public_keys
+        .iter()
+        .map(G1Affine::from_miracl)
+        .collect::<Vec<_>>();
+
     // Convert fs encryption data:
-    let combined_ciphertexts: Vec<miracl::ECP> = ciphertext
+    let combined_ciphertexts: Vec<_> = ciphertext
         .cc
         .iter()
-        .map(util::ecp_from_big_endian_chunks)
+        .map(|s| util::g1_from_big_endian_chunks(s))
         .collect();
 
-    let combined_r = util::g1_from_big_endian_chunks(
-        &ciphertext
-            .rr
-            .iter()
-            .map(G1Affine::from_miracl)
-            .collect::<Vec<_>>(),
-    );
+    let combined_r = util::g1_from_big_endian_chunks(&ciphertext.rr);
 
     let combined_r_scalar = util::scalar_from_big_endian_chunks(&encryption_witness.spec_r);
 
@@ -325,10 +334,10 @@ fn prove_sharing(
         .collect::<Vec<_>>();
 
     crypto::prove_sharing(
-        &crypto::SharingInstance::from_miracl(
+        &crypto::SharingInstance::new(
             receiver_fs_public_keys.to_vec(),
             public_coefficients.to_vec(),
-            combined_r.to_miracl(),
+            combined_r,
             combined_ciphertexts,
         ),
         &crypto::SharingWitness::new(combined_r_scalar, combined_plaintexts),
@@ -359,17 +368,17 @@ pub fn verify_zk_proofs(
     epoch: Epoch,
     receiver_fs_public_keys: &BTreeMap<NodeIndex, FsEncryptionPublicKey>,
     public_coefficients: &PublicCoefficientsBytes,
-    ciphertexts: &FsEncryptionCiphertext,
+    ciphertexts: &FsEncryptionCiphertextBytes,
     chunking_proof: &ZKProofDec,
     sharing_proof: &ZKProofShare,
     associated_data: &[u8],
 ) -> Result<(), CspDkgVerifyDealingError> {
     // Conversions
-    let public_keys: Result<Vec<miracl::ECP>, CspDkgVerifyDealingError> = receiver_fs_public_keys
+    let public_keys: Result<Vec<G1Affine>, CspDkgVerifyDealingError> = receiver_fs_public_keys
         .values()
         .zip(0..)
         .map(|(public_key, receiver_index)| {
-            miracl_g1_from_bytes(public_key.as_bytes()).map_err(|parse_error| {
+            G1Affine::deserialize(public_key.as_bytes()).map_err(|parse_error| {
                 let error = MalformedPublicKeyError {
                     algorithm: ALGORITHM_ID,
                     key_bytes: Some(public_key.as_bytes()[..].to_vec()),
@@ -384,7 +393,7 @@ pub fn verify_zk_proofs(
         .collect();
     let public_keys = public_keys?;
 
-    let ciphertext = crypto::Crsz::deserialize(ciphertexts).map_err(|error| {
+    let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertexts).map_err(|error| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
             message: error.to_string(),
         })
@@ -406,7 +415,7 @@ pub fn verify_zk_proofs(
 
     // Verify proof
     crypto::verify_chunking(
-        &crypto::ChunkingInstance::from_miracl(
+        &crypto::ChunkingInstance::new(
             public_keys.clone(),
             ciphertext.cc.clone(),
             ciphertext.rr.clone(),
@@ -421,17 +430,22 @@ pub fn verify_zk_proofs(
     })?;
 
     // More conversions
-    let miracl_public_coefficients =
-        public_coefficients_to_miracl(public_coefficients).map_err(|_| {
+    let public_coefficients = public_coefficients
+        .coefficients
+        .iter()
+        .map(G2Affine::deserialize)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| {
             CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
                 message: "Could not parse public coefficients".to_string(),
             })
         })?;
-    let combined_r = util::ecp_from_big_endian_chunks(&ciphertext.rr);
-    let combined_ciphertexts: Vec<miracl::ECP> = ciphertext
+
+    let combined_r = util::g1_from_big_endian_chunks(&ciphertext.rr);
+    let combined_ciphertexts: Vec<_> = ciphertext
         .cc
         .iter()
-        .map(util::ecp_from_big_endian_chunks)
+        .map(|s| util::g1_from_big_endian_chunks(s))
         .collect();
     let sharing_proof = crypto::ProofSharing::deserialize(sharing_proof).ok_or_else(|| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
@@ -440,9 +454,9 @@ pub fn verify_zk_proofs(
     })?;
 
     crypto::verify_sharing(
-        &crypto::SharingInstance::from_miracl(
+        &crypto::SharingInstance::new(
             public_keys,
-            miracl_public_coefficients,
+            public_coefficients,
             combined_r,
             combined_ciphertexts,
         ),
@@ -457,24 +471,7 @@ pub fn verify_zk_proofs(
 }
 
 mod util {
-    use super::miracl;
     use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
-
-    /// Combine a big endian array of group elements (first chunk is the
-    /// most significant) into a single group element.
-    #[allow(clippy::ptr_arg)] // Vec is the only type we need this for.  Being specific reduces repeated code.
-    pub fn ecp_from_big_endian_chunks(data: &Vec<miracl::ECP>) -> miracl::ECP {
-        // Note: Relies on miracl::ECP::new() being zero == point at infinity.
-        data.iter().fold(miracl::ECP::new(), |acc, term| {
-            let mut acc = acc.mul(&miracl::BIG::new_int(1 << 16));
-            let mut reduced_term = miracl::ECP::new();
-            reduced_term.copy(term);
-            reduced_term.affine();
-            acc.add(&reduced_term);
-            acc.affine(); // Needed to avoid getting an overflow error.
-            acc
-        })
-    }
 
     /// Combine a big endian array of group elements (first chunk is the
     /// most significant) into a single group element.

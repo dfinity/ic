@@ -52,7 +52,7 @@ fn should_correctly_format_dealing_display_message() {
 
     let expected_text =
         "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
-        public_coefficients: PublicCoefficientsBytes { coefficients: [] }, ciphertexts: FsEncryptionCiphertext { \
+        public_coefficients: PublicCoefficientsBytes { coefficients: [] }, ciphertexts: FsEncryptionCiphertextBytes { \
          rand_r: [G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \

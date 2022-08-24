@@ -271,7 +271,7 @@ fn decryption_should_fail_below_epoch() {
         .take(5)
         .map(Epoch::from)
         .collect();
-    let ciphertexts_at_epochs: Vec<FsEncryptionCiphertext> = encryption_epochs
+    let ciphertexts_at_epochs: Vec<FsEncryptionCiphertextBytes> = encryption_epochs
         .iter()
         .map(|epoch| {
             encrypt_and_prove(

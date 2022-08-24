@@ -2,7 +2,7 @@
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
 use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes, miracl_g2_from_bytes,
+    miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes,
     miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
@@ -11,8 +11,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     Chunk, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use miracl_core::bls12381::ecp2::ECP2;
 use std::convert::TryFrom;
 
 /// Serialises a miracl-compatible forward secure secret key into the standard
@@ -172,21 +170,5 @@ pub fn plaintext_from_bytes(bytes: &[Chunk; NUM_CHUNKS]) -> Vec<isize> {
     bytes
         .iter()
         .map(|chunk| isize::try_from(*chunk).expect("Invalid chunk: Too large to parse"))
-        .collect()
-}
-
-/// Parses public coefficients to a miracl-compatible form.
-///
-/// # Errors
-/// This will return an error if any of the group elements is not a valid group
-/// element.
-pub fn public_coefficients_to_miracl(
-    public_coefficients: &PublicCoefficientsBytes,
-) -> Result<Vec<ECP2>, ()> {
-    // TODO (CRP-816): Return CryptoError::MalformedPublicKey instead of ()
-    public_coefficients
-        .coefficients
-        .iter()
-        .map(|public_key| miracl_g2_from_bytes(&public_key.0).map_err(|_| ()))
         .collect()
 }

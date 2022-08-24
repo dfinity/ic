@@ -6,11 +6,9 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
 };
 use crate::ni_dkg::fs_ni_dkg::utils::*;
 use arrayvec::ArrayVec;
-use ic_crypto_internal_bls12381_serde_miracl::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
+use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
 use miracl_core::rand::RAND;
 
 /// Domain separators for the zk proof of chunking
@@ -66,28 +64,6 @@ impl ChunkingInstance {
             randomizers_r,
         }
     }
-
-    pub fn from_miracl(
-        public_keys: Vec<ECP>,
-        ciphertext_chunks: Vec<Vec<ECP>>,
-        randomizers_r: Vec<ECP>,
-    ) -> Self {
-        let public_keys = public_keys
-            .iter()
-            .map(G1Affine::from_miracl)
-            .collect::<Vec<_>>();
-        let randomizers_r = randomizers_r
-            .iter()
-            .map(G1Affine::from_miracl)
-            .collect::<Vec<_>>();
-
-        let ciphertext_chunks: Vec<Vec<G1Affine>> = ciphertext_chunks
-            .iter()
-            .map(|chunks| chunks.iter().map(G1Affine::from_miracl).collect())
-            .collect();
-
-        Self::new(public_keys, ciphertext_chunks, randomizers_r)
-    }
 }
 
 /// Witness for the validity of a chunking instance.
@@ -108,20 +84,6 @@ impl ChunkingWitness {
             scalars_r,
             scalars_s,
         }
-    }
-
-    pub fn from_miracl(scalars_r: Vec<BIG>, scalars_s: Vec<Vec<BIG>>) -> Self {
-        let scalars_r = scalars_r
-            .iter()
-            .map(Scalar::from_miracl)
-            .collect::<Vec<_>>();
-
-        let scalars_s: Vec<Vec<Scalar>> = scalars_s
-            .iter()
-            .map(|chunks| chunks.iter().map(Scalar::from_miracl).collect())
-            .collect();
-
-        Self::new(scalars_r, scalars_s)
     }
 }
 
