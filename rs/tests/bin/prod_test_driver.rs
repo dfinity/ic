@@ -299,18 +299,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ]),
             ),
             pot_with_setup(
-                "canister_http",
-                canister_http::lib::config,
-                par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
-            ),
-            /* Moved to staging
-            pot_with_setup(
                 "btc_pot",
                 btc_integration::btc::config,
                 par(vec![
                     sys_t("btc_get_balance", btc_integration::btc::get_balance),
                 ]),
             ),
+            /*
             pot_with_setup(
                 "boundary_nodes_pot",
                 boundary_nodes_integration::boundary_nodes::config,
@@ -521,14 +516,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_120_subnets_pot",
                     xnet_120_subnets.build(),
                     par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-                ),
-                pot_with_setup(
-                    "btc_pot",
-                    btc_integration::btc::config,
-                    par(vec![sys_t(
-                        "btc_get_balance",
-                        btc_integration::btc::get_balance,
-                    )]),
                 ),
                 pot_with_setup(
                     "boundary_nodes_pot",
