@@ -3899,6 +3899,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto",
  "ic-ecdsa-object",
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",

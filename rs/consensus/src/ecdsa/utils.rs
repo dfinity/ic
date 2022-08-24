@@ -10,7 +10,6 @@ use ic_types::consensus::ecdsa::{
     EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
     TranscriptLookupError,
 };
-use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
@@ -21,21 +20,16 @@ use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
-    tip: Block,
-    tip_ecdsa_payload: Option<EcdsaPayload>,
+    tip_height: Height,
+    tip_ecdsa_payload: Option<Arc<EcdsaPayload>>,
 }
 
 impl EcdsaBlockReaderImpl {
     pub(crate) fn new(chain: Arc<dyn ConsensusBlockChain>) -> Self {
-        let tip = chain.tip();
-        let tip_ecdsa_payload = if !tip.payload.is_summary() {
-            BlockPayload::from(tip.clone().payload).into_data().ecdsa
-        } else {
-            BlockPayload::from(tip.clone().payload).into_summary().ecdsa
-        };
+        let (tip_height, tip_ecdsa_payload) = chain.tip();
         Self {
             chain,
-            tip,
+            tip_height,
             tip_ecdsa_payload,
         }
     }
@@ -43,7 +37,7 @@ impl EcdsaBlockReaderImpl {
 
 impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     fn tip_height(&self) -> Height {
-        self.tip.height()
+        self.tip_height
     }
 
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
@@ -96,23 +90,22 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
-        let block = self
-            .chain
-            .block(transcript_ref.height)
-            .ok_or(TranscriptLookupError::BlockNotFound(*transcript_ref))?;
-        let is_summary_block = block.payload.is_summary();
-        let block_payload = BlockPayload::from(block.payload);
+        let ecdsa_payload = match self.chain.ecdsa_payload(transcript_ref.height) {
+            Ok(ecdsa_payload) => ecdsa_payload,
+            Err(err) => {
+                return Err(format!(
+                    "transcript(): chain look up failed {:?}: {:?}",
+                    transcript_ref, err
+                ))
+            }
+        };
 
-        let idkg_transcripts = &block_payload
-            .as_ecdsa()
-            .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
-            .idkg_transcripts;
-
-        idkg_transcripts
+        ecdsa_payload
+            .idkg_transcripts
             .get(&transcript_ref.transcript_id)
-            .ok_or(TranscriptLookupError::TranscriptNotFound(
-                *transcript_ref,
-                is_summary_block,
+            .ok_or(format!(
+                "transcript(): missing idkg_transcript: {:?}",
+                transcript_ref
             ))
             .map(|entry| entry.clone())
     }
@@ -396,9 +389,13 @@ pub(crate) mod test_utils {
             &self,
             transcript_ref: &TranscriptRef,
         ) -> Result<IDkgTranscript, TranscriptLookupError> {
-            self.idkg_transcripts.get(transcript_ref).cloned().ok_or(
-                TranscriptLookupError::TranscriptNotFound(*transcript_ref, false),
-            )
+            self.idkg_transcripts
+                .get(transcript_ref)
+                .cloned()
+                .ok_or(format!(
+                    "transcript(): {:?} not found in idkg_transcripts",
+                    transcript_ref
+                ))
         }
 
         fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
@@ -1183,7 +1180,7 @@ pub(crate) mod test_utils {
             key_transcript: EcdsaKeyTranscript {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
-                key_id: ic_ic00_types::EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
             },
         }
     }
