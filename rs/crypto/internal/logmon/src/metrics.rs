@@ -2,7 +2,7 @@
 
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntCounter};
+use prometheus::{HistogramVec, IntGauge};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::time;
@@ -115,9 +115,9 @@ impl CryptoMetrics {
         num_secret_local: u8,
     ) {
         if let Some(metrics) = &self.metrics {
-            metrics.crypto_key_counts[&KeyType::PublicLocal].inc_by(num_pub_local as u64);
-            metrics.crypto_key_counts[&KeyType::PublicRegistry].inc_by(num_pub_reg as u64);
-            metrics.crypto_key_counts[&KeyType::SecretSKS].inc_by(num_secret_local as u64);
+            metrics.crypto_key_counts[&KeyType::PublicLocal].set(num_pub_local as i64);
+            metrics.crypto_key_counts[&KeyType::PublicRegistry].set(num_pub_reg as i64);
+            metrics.crypto_key_counts[&KeyType::SecretSKS].set(num_secret_local as i64);
         }
     }
 }
@@ -170,7 +170,7 @@ struct Metrics {
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
-    pub crypto_key_counts: BTreeMap<KeyType, IntCounter>,
+    pub crypto_key_counts: BTreeMap<KeyType, IntGauge>,
 }
 
 impl Display for MetricsDomain {
@@ -269,7 +269,7 @@ impl Metrics {
         for key_type in KeyType::iter() {
             key_counts.insert(
                 key_type,
-                r.int_counter(
+                r.int_gauge(
                     key_type.key_count_metric_name(),
                     key_type.key_count_metric_help(),
                 ),

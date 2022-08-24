@@ -460,6 +460,8 @@ impl KeyManager for CryptoReturningOk {
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 
+    fn collect_and_store_key_count_metrics(&self, _registry_version: RegistryVersion) {}
+
     fn node_public_keys(&self) -> NodePublicKeys {
         unimplemented!()
     }

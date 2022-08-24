@@ -294,14 +294,17 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
             .as_ref()
             .expect("Missing node signing public key");
         let node_id = derive_node_id(node_signing_pk);
-        CryptoComponentFatClient {
+        let latest_registry_version = registry_client.get_latest_version();
+        let crypto_component = CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             registry_client,
             node_id,
             logger,
             metrics,
-        }
+        };
+        crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
+        crypto_component
     }
 
     /// Creates a crypto component using a fake `node_id`.
