@@ -103,7 +103,7 @@ pub fn test(test_env: TestEnv) {
     .expect("No hash missmatch in the logs");
 
     info!(logger, "Check that creation of canisters is impossible...");
-    retry(test_env.logger(), secs(60), secs(5), || {
+    retry(test_env.logger(), secs(600), secs(10), || {
         if can_install_canister(&nns_node.get_public_url()) {
             bail!("Waiting for a failure creating a canister!")
         } else {
