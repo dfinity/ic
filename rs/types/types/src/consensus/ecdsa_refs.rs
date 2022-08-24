@@ -1362,7 +1362,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
-    pub hashed_message: Vec<u8>,
+    pub hashed_message: [u8; 32],
     pub nonce: Randomness,
     pub presig_quadruple_ref: PreSignatureQuadrupleRef,
     pub key_transcript_ref: UnmaskedTranscript,
@@ -1378,7 +1378,7 @@ pub enum ThresholdEcdsaSigInputsError {
 impl ThresholdEcdsaSigInputsRef {
     pub fn new(
         derivation_path: ExtendedDerivationPath,
-        hashed_message: Vec<u8>,
+        hashed_message: [u8; 32],
         nonce: Randomness,
         presig_quadruple_ref: PreSignatureQuadrupleRef,
         key_transcript_ref: UnmaskedTranscript,
@@ -1439,7 +1439,7 @@ impl From<&ThresholdEcdsaSigInputsRef> for pb::ThresholdEcdsaSigInputsRef {
     fn from(sig_inputs: &ThresholdEcdsaSigInputsRef) -> Self {
         Self {
             derivation_path: Some((sig_inputs.derivation_path.clone()).into()),
-            hashed_message: sig_inputs.hashed_message.clone(),
+            hashed_message: sig_inputs.hashed_message.to_vec(),
             nonce: sig_inputs.nonce.get().to_vec(),
             presig_quadruple_ref: Some((&sig_inputs.presig_quadruple_ref).into()),
             key_transcript_ref: Some((&sig_inputs.key_transcript_ref).into()),
@@ -1460,6 +1460,15 @@ impl TryFrom<&pb::ThresholdEcdsaSigInputsRef> for ThresholdEcdsaSigInputsRef {
                 err
             )
         })?;
+
+        if sig_inputs.hashed_message.len() != 32 {
+            return Err(format!(
+                "pb::ThresholdEcdsaSigInputsRef:: Invalid hashed_message length: {:?}",
+                sig_inputs.nonce.len()
+            ));
+        }
+        let mut hashed_message = [0; 32];
+        hashed_message.copy_from_slice(&sig_inputs.hashed_message[0..32]);
 
         if sig_inputs.nonce.len() != 32 {
             return Err(format!(
@@ -1485,7 +1494,7 @@ impl TryFrom<&pb::ThresholdEcdsaSigInputsRef> for ThresholdEcdsaSigInputsRef {
 
         Ok(Self::new(
             derivation_path,
-            sig_inputs.hashed_message.clone(),
+            hashed_message,
             nonce,
             presig_quadruple_ref,
             key_transcript_ref,

@@ -260,7 +260,7 @@ impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
 pub struct SignWithEcdsaContext {
     pub request: Request,
     pub key_id: EcdsaKeyId,
-    pub message_hash: Vec<u8>,
+    pub message_hash: [u8; 32],
     pub derivation_path: Vec<Vec<u8>>,
     pub pseudo_random_id: [u8; 32],
     pub batch_time: Time,
@@ -286,7 +286,16 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
         let key_id = try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
         Ok(SignWithEcdsaContext {
-            message_hash: context.message_hash,
+            message_hash: {
+                if context.message_hash.len() != 32 {
+                    return Err(Self::Error::Other(
+                        "message_hash is not 32 bytes.".to_string(),
+                    ));
+                }
+                let mut id = [0; NiDkgTargetId::SIZE];
+                id.copy_from_slice(&context.message_hash);
+                id
+            },
             derivation_path: context.derivation_path_vec,
             request,
             key_id,

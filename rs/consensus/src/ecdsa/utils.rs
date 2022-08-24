@@ -899,7 +899,7 @@ pub(crate) mod test_utils {
                 caller: PrincipalId::try_from(&vec![caller]).unwrap(),
                 derivation_path: vec![],
             },
-            vec![0u8; 32],
+            [0u8; 32],
             Randomness::from([0_u8; 32]),
             presig_quadruple_ref,
             key_unmasked_ref,
