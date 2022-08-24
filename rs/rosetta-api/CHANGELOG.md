@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `blockchain` command line flag that overrides the blockchain name in the network identifier.
+### Changed
+- `NEURON_INFO` restricted data now contains followees and hotkeys.
 
 ## [1.6.0] - 2022-05-30
 ### Fixed

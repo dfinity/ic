@@ -3,6 +3,7 @@ use crate::ledger_client::neuron_response::NeuronResponse;
 use crate::ledger_client::OperationOutput;
 use crate::models;
 use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronState};
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn handle_neuron_info(
@@ -17,28 +18,41 @@ pub fn handle_neuron_info(
             format!("Could not retrieve neuron information: {}", e.error_message).into(),
         ))),
         Ok(neuron) => {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            let state = neuron.state(now);
-            let state = match state {
-                NeuronState::NotDissolving => models::NeuronState::NotDissolving,
-                NeuronState::Spawning => models::NeuronState::Spawning,
-                NeuronState::Dissolving => models::NeuronState::Dissolving,
-                NeuronState::Dissolved => models::NeuronState::Dissolved,
-                NeuronState::Unspecified => models::NeuronState::Dissolved,
-            };
-
             let output = OperationOutput::NeuronResponse(NeuronResponse {
                 neuron_id: neuron.id.as_ref().unwrap().id,
                 controller: neuron.controller.unwrap(),
                 kyc_verified: neuron.kyc_verified,
-                state,
+                state: neuron_state(&neuron),
                 maturity_e8s_equivalent: neuron.maturity_e8s_equivalent,
                 neuron_fees_e8s: neuron.neuron_fees_e8s,
+                followees: neuron_followees(&neuron),
+                hotkeys: neuron.hot_keys,
             });
             return Ok(Ok(Some(output)));
         }
     };
+}
+
+fn neuron_state(neuron: &Neuron) -> models::NeuronState {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    match neuron.state(now) {
+        NeuronState::NotDissolving => models::NeuronState::NotDissolving,
+        NeuronState::Spawning => models::NeuronState::Spawning,
+        NeuronState::Dissolving => models::NeuronState::Dissolving,
+        NeuronState::Dissolved => models::NeuronState::Dissolved,
+        NeuronState::Unspecified => models::NeuronState::Dissolved,
+    }
+}
+
+fn neuron_followees(neuron: &Neuron) -> HashMap<i32, Vec<u64>> {
+    let mut followees: HashMap<i32, Vec<u64>> = HashMap::new();
+    neuron.followees.iter().for_each(|rule| {
+        let topic = *rule.0;
+        let topic_followees = rule.1.followees.iter().map(|x| x.id).collect();
+        followees.insert(topic, topic_followees);
+    });
+    followees
 }
