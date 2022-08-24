@@ -60,14 +60,18 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<H>> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "BasicSigner",
             crypto.method_name => "sign_basic",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
             crypto.signer => format!("{:?}", signer),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = BasicSignerInternal::sign_basic(
             &self.csp,
@@ -99,15 +103,19 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
             crypto.method_name => "verify_basic_sig",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
             crypto.signer => format!("{:?}", signer),
             crypto.signature => format!("{:?}", signature),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig(
             &self.csp,
@@ -135,13 +143,17 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         signatures: BTreeMap<NodeId, &BasicSigOf<H>>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSignatureBatch<H>> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
             crypto.method_name => "combine_basic_sig",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signature_shares => format!("{:?}", signatures),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::combine_basic_sig(signatures);
         self.metrics.observe_full_duration_seconds(
@@ -163,13 +175,17 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         message: &H,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
             crypto.method_name => "verify_basic_sig_batch",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature.signatures_map),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch(
             &self.csp,
@@ -201,14 +217,18 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
         signed_bytes: &S,
         public_key: &UserPublicKey,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifierByPublicBytes",
             crypto.method_name => "verify_basic_sig_by_public_key",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.signed_bytes => format!("0x{}", hex::encode(signed_bytes.as_signed_bytes())),
             crypto.public_key => format!("{}", public_key),
             crypto.signature => format!("{:?}", signature),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let metrics_label = format!("verify_basic_sig_by_public_key_{}", public_key.algorithm_id);
         let result = BasicSignVerifierByPublicKeyInternal::verify_basic_sig_by_public_key(
@@ -238,14 +258,18 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<IndividualMultiSigOf<H>> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
             crypto.method_name => "sign_multi",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signer => format!("{:?}", signer),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = MultiSignerInternal::sign_multi(
             &self.csp,
@@ -277,15 +301,19 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
             crypto.method_name => "verify_multi_sig_individual",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signer => format!("{:?}", signer),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
             crypto.signature => format!("{:?}", signature),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_individual(
             &self.csp,
@@ -315,14 +343,16 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signatures: BTreeMap<NodeId, IndividualMultiSigOf<H>>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<CombinedMultiSigOf<H>> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
             crypto.method_name => "combine_multi_sig_individuals",
-            crypto.registry_version => registry_version.get(),
-            crypto.signature_shares => format!("{:?}", signatures),
         );
         debug!(logger;
             crypto.description => format!("start"),
+            crypto.registry_version => registry_version.get(),
+            crypto.signature_shares => format!("{:?}", signatures),
         );
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::combine_multi_sig_individuals(
@@ -354,16 +384,18 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
             crypto.method_name => "verify_multi_sig_combined",
+        );
+        debug!(logger;
+            crypto.description => format!("start"),
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
             crypto.signer => format!("{:?}", signers),
-        );
-        debug!(logger;
-            crypto.description => format!("start; signers: {:?}", signers),
         );
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_combined(
@@ -371,7 +403,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             Arc::clone(&self.registry_client),
             signature,
             message,
-            signers.clone(),
+            signers,
             registry_version,
         );
         self.metrics.observe_full_duration_seconds(
@@ -380,7 +412,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end; signers: {:?}", signers),
+            crypto.description => format!("end"),
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
         );
@@ -392,13 +424,17 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
     fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigner",
             crypto.method_name => "sign_threshold",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.dkg_id => format!("{}", dkg_id),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = ThresholdSignerInternal::sign_threshold(
             &self.lockable_threshold_sig_data_store,
@@ -431,15 +467,19 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         dkg_id: DkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
             crypto.method_name => "verify_threshold_sig_share",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.dkg_id => format!("{}", dkg_id),
             crypto.signer => format!("{:?}", signer),
             crypto.signature_shares => format!("{:?}", signature),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &self.lockable_threshold_sig_data_store,
@@ -467,15 +507,16 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
         dkg_id: DkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
-        let nodes_with_share: BTreeSet<NodeId> = shares.keys().cloned().collect();
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
             crypto.method_name => "combine_threshold_sig_shares",
-            crypto.dkg_id => format!("{}", dkg_id),
-            crypto.signature_shares => format!("{:?}", shares),
         );
         debug!(logger;
-            crypto.description => format!("start; nodes with share: {:?}", nodes_with_share),
+            crypto.description => format!("start"),
+            crypto.dkg_id => format!("{}", dkg_id),
+            crypto.signature_shares => format!("{:?}", shares),
         );
         let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
@@ -490,7 +531,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end; nodes with share: {:?}", nodes_with_share),
+            crypto.description => format!("end"),
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.signature => log_ok_content(&result),
@@ -504,15 +545,17 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         message: &T,
         dkg_id: DkgId,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
             crypto.method_name => "verify_threshold_sig_combined",
-            crypto.dkg_id => format!("{}", dkg_id),
-            crypto.signature => format!("{:?}", signature),
-            crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_id => format!("{}", dkg_id),
+            crypto.signature => format!("{:?}", signature),
+            crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
         );
         let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_threshold_sig_combined(
@@ -546,16 +589,18 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifierByPublicKey",
             crypto.method_name => "verify_combined_threshold_sig_by_public_key",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.subnet_id => format!("{}", subnet_id),
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
-        );
-        debug!(logger;
-            crypto.description => "start",
         );
         let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
@@ -588,16 +633,18 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         public_key: &UserPublicKey,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "CanisterSigVerifier",
             crypto.method_name => "verify_canister_sig",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.signed_bytes => format!("0x{}", hex::encode(signed_bytes.as_signed_bytes())),
             crypto.public_key => format!("{}", public_key),
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
-        );
-        debug!(logger;
-            crypto.description => "start",
         );
         let start_time = self.metrics.now();
         let result = canister_sig::verify_canister_sig(
@@ -626,13 +673,15 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
         &self,
         inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigner",
             crypto.method_name => "sign_share",
-            crypto.signature_inputs => format!("{:?}", inputs),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
@@ -658,15 +707,17 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         inputs: &ThresholdEcdsaSigInputs,
         share: &ThresholdEcdsaSigShare,
     ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
             crypto.method_name => "verify_sig_share",
-            crypto.signature_shares => format!("{:?}", share),
-            crypto.signer => format!("{:?}", signer),
-            crypto.signature_inputs => format!("{:?}", inputs),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.signature_shares => format!("{:?}", share),
+            crypto.signer => format!("{:?}", signer),
+            crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
         let result =
@@ -689,14 +740,16 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         inputs: &ThresholdEcdsaSigInputs,
         shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
             crypto.method_name => "combine_sig_shares",
-            crypto.signature_inputs => format!("{:?}", inputs),
-            crypto.signature_shares => format!{"{:?}", shares},
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
+            crypto.signature_shares => format!{"{:?}", shares},
         );
         let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::combine_sig_shares(&self.csp, inputs, shares);
@@ -719,14 +772,16 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         inputs: &ThresholdEcdsaSigInputs,
         signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
             crypto.method_name => "verify_combined_sig",
-            crypto.signature_inputs => format!("{:?}", inputs),
-            crypto.signature => format!("{:?}", signature),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
+            crypto.signature => format!("{:?}", signature),
         );
         let start_time = self.metrics.now();
         let result =
@@ -755,6 +810,13 @@ fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
         return format!("{}", content);
+    }
+    "none".to_string()
+}
+
+pub fn debug_ok_content<T: fmt::Debug, E>(result: &Result<T, E>) -> String {
+    if let Ok(content) = result {
+        return format!("{:?}", content);
     }
     "none".to_string()
 }

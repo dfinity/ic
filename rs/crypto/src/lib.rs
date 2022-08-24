@@ -425,3 +425,18 @@ fn key_from_registry(
         }),
     }
 }
+
+/// Get an identifier to use with logging. If debug logging is not enabled for the caller, a
+/// `log_id` of 0 is returned.
+/// The main criteria for the identifier, and the generation thereof, are:
+///  * Should be fast to generate
+///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
+///  * The generation of the identifier should not block or panic
+///  * The generation of the identifier should not require synchronization between threads
+fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+        ic_types::time::current_time().as_nanos_since_unix_epoch()
+    } else {
+        0
+    }
+}

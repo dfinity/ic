@@ -24,14 +24,16 @@ mod test_utils;
 
 impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "create_dealing",
-            crypto.registry_version => config.registry_version().get(),
-            crypto.dkg_id => format!("{}", config.dkg_id()),
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.dkg_config => format!("{}", config),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result =
             dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, config);
@@ -55,16 +57,18 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         dealer: NodeId,
         dealing: &NiDkgDealing,
     ) -> Result<(), DkgVerifyDealingError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "verify_dealing",
-            crypto.registry_version => config.registry_version().get(),
-            crypto.dkg_id => format!("{}", config.dkg_id()),
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.dkg_config => format!("{}", config),
             crypto.dkg_dealer => format!("{}", dealer),
             crypto.dkg_dealing => format!("{}", dealing),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result =
             dealing::verify_dealing(&self.csp, &self.registry_client, config, &dealer, dealing);
@@ -86,14 +90,22 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         config: &NiDkgConfig,
         verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "create_transcript",
-            crypto.registry_version => config.registry_version().get(),
-            crypto.dkg_id => format!("{}", config.dkg_id()),
-            crypto.dkg_config => format!("{}", config),
         );
-        debug!(logger; crypto.description => "start",);
+        debug!(logger;
+            crypto.description => "start",
+            crypto.dkg_config => format!("{}", config),
+            crypto.dkg_dealing => format!("{:?}",
+                verified_dealings
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<NodeId>>()
+            ),
+        );
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(&self.csp, config, verified_dealings);
         self.metrics.observe_full_duration_seconds(
@@ -114,14 +126,16 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         &self,
         transcript: &NiDkgTranscript,
     ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "load_transcript",
-            crypto.registry_version => transcript.registry_version.get(),
-            crypto.dkg_id => format!("{}", transcript.dkg_id),
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.dkg_transcript => format!("{}", transcript),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = transcript::load_transcript(
             &self.node_id,
@@ -139,6 +153,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.dkg_transcript => debug_ok_content(&result),
         );
         result
     }
@@ -149,12 +164,16 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
     ) -> Result<(), DkgKeyRemovalError> {
         let transcripts = TranscriptsToRetain::new(transcripts)
             .map_err(DkgKeyRemovalError::InputValidationError)?;
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
             crypto.method_name => "retain_only_active_keys",
-            crypto.description => transcripts.display_dkg_ids_and_registry_versions(),
         );
-        debug!(logger; crypto.description => "start",);
+        debug!(logger;
+            crypto.description => "start",
+            crypto.dkg_transcript => transcripts.display_dkg_ids_and_registry_versions(),
+        );
         let start_time = self.metrics.now();
         let result = retain_active_keys::retain_only_active_keys(&self.csp, transcripts);
         self.metrics.observe_full_duration_seconds(

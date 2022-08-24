@@ -114,7 +114,8 @@ fn build_log_proto(def: &Path, out: &Path) {
         signer,
         signature,
         signature_shares,
-        signature_inputs
+        signature_inputs,
+        log_id
     );
 
     add_log_proto_derives!(
