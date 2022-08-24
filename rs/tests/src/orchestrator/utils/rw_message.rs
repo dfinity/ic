@@ -4,6 +4,7 @@ use anyhow::bail;
 use candid::Principal;
 use reqwest::Url;
 use slog::{debug, info, Logger};
+use std::time::Duration;
 
 pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
     block_on(async {
@@ -107,6 +108,18 @@ pub(crate) fn can_install_canister(url: &url::Url) -> bool {
         let agent = assert_create_agent(url.as_str()).await;
         UniversalCanister::try_new(&agent).await.is_ok()
     })
+}
+
+pub(crate) fn install_canister_with_retries(
+    url: &url::Url,
+    logger: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+) {
+    block_on(async {
+        let agent = assert_create_agent(url.as_str()).await;
+        let _ = UniversalCanister::new_with_retries(&agent, logger, timeout, backoff).await;
+    });
 }
 
 pub(crate) fn await_all_nodes_are_healthy(topology: TopologySnapshot) {
