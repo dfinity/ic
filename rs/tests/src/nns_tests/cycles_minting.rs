@@ -19,6 +19,7 @@ use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_certification::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_fondue::ic_manager::IcHandle;
@@ -52,10 +53,24 @@ use slog::info;
 use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
 
+/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
+const USE_COST_SCALING_FLAG: bool = false;
+
 pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+}
+
+// TODO(EXC-1168): remove after cost scaling is fully implemented.
+fn scale_cycles(cycles: Cycles) -> Cycles {
+    let subnet_size: u128 = match USE_COST_SCALING_FLAG {
+        true => 1, // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
+        false => SMALL_APP_SUBNET_MAX_SIZE as u128,
+    };
+    let reference_subnet_size = SMALL_APP_SUBNET_MAX_SIZE as u128;
+
+    Cycles::from((cycles.get() * subnet_size) / reference_subnet_size)
 }
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
@@ -260,7 +275,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         /* Create with funds < the canister creation fee. */
         info!(ctx.logger, "creating canister (not enough funds 1)");
 
-        let small_amount = Tokens::new(0, 10_000_000).unwrap();
+        let small_amount = Tokens::new(0, 500_000).unwrap();
 
         let (err, refund_block) = user1
             .create_canister_cmc(small_amount, None, &controller_pid)
@@ -478,15 +493,15 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         assert_eq!(new_canister_status.controller(), controller_pid);
         let config = CyclesAccountManagerConfig::application_subnet();
-        assert_eq!(
-            new_canister_status.cycles(),
-            (icpts_to_cycles.to_cycles((initial_amount + top_up_amount).unwrap())
-                - config.canister_creation_fee
-                - config.ingress_message_reception_fee
-                - config.ingress_byte_reception_fee
-                    * (msg_size + "canister_status".len() + nonce_size))
-                .get()
+        let fees = scale_cycles(
+            config.canister_creation_fee
+                + config.ingress_message_reception_fee
+                + config.ingress_byte_reception_fee
+                    * (msg_size + "canister_status".len() + nonce_size),
         );
+        let expected_cycles =
+            (icpts_to_cycles.to_cycles((initial_amount + top_up_amount).unwrap()) - fees).get();
+        assert_eq!(new_canister_status.cycles(), expected_cycles);
 
         /* Check that the funds for the canister top up attempt are burned. */
         let block = tst.get_tip().await.unwrap();
@@ -553,15 +568,15 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
             assert_eq!(new_canister_status.controller(), controller_pid);
             let config = CyclesAccountManagerConfig::application_subnet();
-            assert_eq!(
-                new_canister_status.cycles(),
-                (icpts_to_cycles.to_cycles((initial_amount + top_up_amount).unwrap())
-                    - config.canister_creation_fee
-                    - config.ingress_message_reception_fee
-                    - config.ingress_byte_reception_fee
-                        * (msg_size + "canister_status".len() + nonce_size))
-                    .get()
+            let fees = scale_cycles(
+                config.canister_creation_fee
+                    + config.ingress_message_reception_fee
+                    + config.ingress_byte_reception_fee
+                        * (msg_size + "canister_status".len() + nonce_size),
             );
+            let expected_cycles =
+                (icpts_to_cycles.to_cycles((initial_amount + top_up_amount).unwrap()) - fees).get();
+            assert_eq!(new_canister_status.cycles(), expected_cycles);
 
             /* Check that the funds for the canister top up attempt are burned. */
             let block = tst.get_tip().await.unwrap();
