@@ -4,6 +4,7 @@
 use crate::tls::x509_certificates::CertWithPrivateKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
+use openssl::ssl;
 use openssl::ssl::{Ssl, SslAcceptor, SslContextBuilder, SslMethod, SslVersion};
 use std::pin::Pin;
 use tokio::net::TcpListener;
@@ -93,7 +94,7 @@ impl CustomServer {
     }
 
     /// Run this client asynchronously. This allows a client to connect.
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Result<(), ssl::Error> {
         self.listener
             .set_nonblocking(true)
             .expect("failed to make listener non-blocking");
@@ -112,19 +113,21 @@ impl CustomServer {
         let result = Pin::new(&mut tls_stream).accept().await;
 
         if let Some(expected_error) = &self.expected_error {
-            let error = result.err().expect("expected error");
+            let error = result.as_ref().err().expect("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the server error to contain \"{}\" but got error: {:?}",
                     expected_error, error
                 )
             }
-        } else if let Some(error) = result.err() {
+        } else if let Some(error) = result.as_ref().err() {
             panic!(
                 "expected the server result to be ok but got error: {}",
                 error
             )
         }
+
+        result
     }
 
     /// Returns the port this server is running on.
