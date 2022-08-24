@@ -139,7 +139,7 @@ pub fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");
-    let delay = create_delay(500, 60);
+    let delay = create_delay(500, 300);
     block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_1, delay.clone()))
         .expect("Update canister call failed.");
     assert_eq!(

@@ -111,11 +111,13 @@ pub(crate) fn can_install_canister(url: &url::Url) -> bool {
 
 pub(crate) fn await_all_nodes_are_healthy(topology: TopologySnapshot) {
     topology.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
+        subnet.nodes().for_each(|node| {
+            node.await_status_is_healthy()
+                .expect("Timeout while waiting for all subnets to be healthy")
+        })
     });
     topology.unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh().unwrap();
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Timeout while waiting for all unassigned nodes to be healthy");
     });
 }
