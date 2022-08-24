@@ -13,17 +13,12 @@
 //     lowercase version, e.g. `A` -> `aa`.
 //   * Greek letters are replaced by their names in English, e.g. `tau`.
 //
-// We build on top of MIRACL's `bls12381`.
+// We build on top of the BLS12-381 library in `bls12_381/type`.
 //
-//   rom::CURVE_ORDER  What the paper calls `p`.
-//   rom::MODULUS      The order of FP, the field where the elliptic curve
-// lives.
-//
-//   FP    The field Z_MODULUS (not Z_p).
-//   FP12  The field where pairing outputs live.
-//   BIG   Holds integers modulo `p`; also integers modulo MODULUS.
-//   ECP   The group G_1.
-//   ECP2  The group G_2.
+//   Gt        The field where pairing outputs live.
+//   Scalar    Holds integers modulo `p`; also integers modulo MODULUS.
+//   G1Affine  The group G_1.
+//   G2Affine  The group G_2.
 
 pub use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 
