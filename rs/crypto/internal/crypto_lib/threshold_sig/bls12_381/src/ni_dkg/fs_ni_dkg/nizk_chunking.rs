@@ -4,12 +4,12 @@ use crate::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
     random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
 };
-use crate::ni_dkg::fs_ni_dkg::utils::*;
 use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
-use miracl_core::rand::RAND;
+use rand::{CryptoRng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 /// Domain separators for the zk proof of chunking
 const DOMAIN_PROOF_OF_CHUNKING_ORACLE: &str = "ic-zk-proof-of-chunking-chunking";
@@ -187,10 +187,10 @@ impl UniqueHash for SecondMoveChunking {
 }
 
 /// Create a proof of correct chunking
-pub fn prove_chunking(
+pub fn prove_chunking<R: RngCore + CryptoRng>(
     instance: &ChunkingInstance,
     witness: &ChunkingWitness,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> ProofChunking {
     instance
         .check_instance()
@@ -207,14 +207,14 @@ pub fn prove_chunking(
 
     // y0 <- getRandomG1
     let g1 = instance.g1_gen;
-    let y0 = G1Affine::from(g1 * Scalar::miracl_random_using_miracl_rand(rng));
+    let y0 = G1Affine::from(g1 * Scalar::miracl_random(rng));
 
     // sigma = replicateM NUM_ZK_REPETITIONS $ getRandom [-S..Z-1]
     // beta = replicateM NUM_ZK_REPETITIONS $ getRandom [0..p-1]
     // bb = map (g1^) beta
     // cc = zipWith (\x pk -> y0^x * g1^pk) beta sigma
     let beta: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-        .map(|_| Scalar::miracl_random_using_miracl_rand(rng))
+        .map(|_| Scalar::miracl_random(rng))
         .collect();
     let bb: Vec<G1Affine> = beta
         .iter()
@@ -223,9 +223,7 @@ pub fn prove_chunking(
 
     let (first_move, first_challenge, z_s) = loop {
         let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-            .map(|_| {
-                Scalar::miracl_random_within_range_using_miracl_rand(rng, range as u64) + p_sub_s
-            })
+            .map(|_| Scalar::miracl_random_within_range(rng, range as u64) + p_sub_s)
             .collect();
         let cc: Vec<G1Affine> = beta
             .iter()
@@ -274,7 +272,7 @@ pub fn prove_chunking(
     let mut dd = Vec::with_capacity(spec_n + 1);
     let mut yy = G1Projective::identity();
     for i in 0..spec_n + 1 {
-        let delta_i = Scalar::miracl_random_using_miracl_rand(rng);
+        let delta_i = Scalar::miracl_random(rng);
         dd.push(G1Affine::from(g1 * delta_i));
         if i == 0 {
             yy = y0 * delta_i;
@@ -448,7 +446,7 @@ pub fn verify_chunking(
 }
 
 struct ChunksOracle {
-    rng: RAND_ChaCha20, // The choice of RNG matters so this is explicit, not a trait.
+    rng: ChaCha20Rng, // The choice of RNG matters so this is explicit, not a trait.
 }
 
 impl ChunksOracle {
@@ -460,15 +458,22 @@ impl ChunksOracle {
 
         let hash = random_oracle(DOMAIN_PROOF_OF_CHUNKING_ORACLE, &map);
 
-        let rng = RAND_ChaCha20::new(hash);
+        let rng = ChaCha20Rng::from_seed(hash);
         Self { rng }
+    }
+
+    fn getbyte(&mut self) -> u8 {
+        let mut random_byte: [u8; 1] = [0; 1];
+        // `fill_bytes()` with 1-byte buffer consumes 4 bytes of the random stream.
+        self.rng.fill_bytes(&mut random_byte);
+        random_byte[0]
     }
 
     /// Get a chunk-sized unit of data.
     fn get_chunk(&mut self) -> usize {
         // The order of the getbyte(..) calls matters so this is intentionally serial.
         CHALLENGE_MASK
-            & (0..CHALLENGE_BYTES).fold(0, |state, _| (state << 8) | (self.rng.getbyte() as usize))
+            & (0..CHALLENGE_BYTES).fold(0, |state, _| (state << 8) | (self.getbyte() as usize))
     }
 
     fn get_all_chunks(&mut self, spec_n: usize, spec_m: usize) -> Vec<Vec<Vec<usize>>> {

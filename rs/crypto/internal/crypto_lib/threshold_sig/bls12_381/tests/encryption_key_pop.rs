@@ -1,21 +1,15 @@
 //! Tests for the POP of the Encryption Key
 use ic_crypto_internal_bls12_381_type::*;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
-    encryption_key_pop::*, utils::RAND_ChaCha20,
-};
-use miracl_core::rand::RAND;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::encryption_key_pop::*;
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 
-fn setup_pop_instance_and_witness(rng: &mut impl RAND) -> (EncryptionKeyInstance, Scalar) {
+fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
+    rng: &mut R,
+) -> (EncryptionKeyInstance, Scalar) {
     let g1 = G1Affine::generator();
-    let witness = Scalar::miracl_random_using_miracl_rand(rng);
+    let witness = Scalar::miracl_random(rng);
     let public_key = G1Affine::from(g1 * witness);
-    let associated_data = {
-        let mut vec = vec![];
-        for _i in 0..10 {
-            vec.push(rng.getbyte());
-        }
-        vec
-    };
+    let associated_data = rng.gen::<[u8; 10]>().to_vec();
 
     let instance = EncryptionKeyInstance {
         g1_gen: g1,
@@ -40,8 +34,8 @@ fn assert_expected_bytestring(bytes: &[u8], expected: &'static str) {
 
 #[test]
 fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
-    let rng = &mut RAND_ChaCha20::new([74; 32]);
-    let (instance, witness) = setup_pop_instance_and_witness(rng);
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed([74; 32]);
+    let (instance, witness) = setup_pop_instance_and_witness(&mut rng);
 
     assert_expected_scalar(
         &witness,
@@ -55,7 +49,7 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
     assert_expected_bytestring(&instance.associated_data, "96057d6b28e248fd8160");
 
-    let pop = prove_pop(&instance, &witness, rng)?;
+    let pop = prove_pop(&instance, &witness, &mut rng)?;
 
     assert_expected_g1(&pop.pop_key,
                        "86fd63a7502eb705e4dfe518cf4c412238cbfbb80835174b5415b6fecaae8db97a16b7e4a0bd5c6091e29f4a40e259e8");
@@ -74,10 +68,10 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
 #[test]
 fn should_verify_encryption_key_pop() {
-    let rng = &mut RAND_ChaCha20::new([74; 32]);
-    let (instance, witness) = setup_pop_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (instance, witness) = setup_pop_instance_and_witness(&mut rng);
 
-    let pop = prove_pop(&instance, &witness, rng);
+    let pop = prove_pop(&instance, &witness, &mut rng);
 
     assert!(
         pop.is_ok(),
@@ -93,11 +87,11 @@ fn should_verify_encryption_key_pop() {
 
 #[test]
 fn prover_should_return_error_on_invalid_instance() {
-    let rng = &mut RAND_ChaCha20::new([84; 32]);
-    let (instance, _witness) = setup_pop_instance_and_witness(rng);
-    let (_other_instance, other_witness) = setup_pop_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
+    let (_other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
 
-    let pop = prove_pop(&instance, &other_witness, rng);
+    let pop = prove_pop(&instance, &other_witness, &mut rng);
 
     assert_eq!(
         pop.unwrap_err(),
@@ -108,11 +102,11 @@ fn prover_should_return_error_on_invalid_instance() {
 
 #[test]
 fn verifier_should_return_error_on_invalid_proof() {
-    let rng = &mut RAND_ChaCha20::new([84; 32]);
-    let (instance, _witness) = setup_pop_instance_and_witness(rng);
-    let (other_instance, other_witness) = setup_pop_instance_and_witness(rng);
+    let mut rng = rand::thread_rng();
+    let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
+    let (other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
 
-    let wrong_pop = prove_pop(&other_instance, &other_witness, rng);
+    let wrong_pop = prove_pop(&other_instance, &other_witness, &mut rng);
 
     assert!(
         wrong_pop.is_ok(),

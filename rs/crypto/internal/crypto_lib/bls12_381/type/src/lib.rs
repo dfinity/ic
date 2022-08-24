@@ -244,32 +244,17 @@ impl Scalar {
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
     /// This should not be used for new code but only for compatability in
-    /// situations where MIRACL's BIG::randomnum was previously used
-    pub fn miracl_random_using_miracl_rand(
-        rng: &mut impl miracl_core_bls12381::rand::RAND,
-    ) -> Self {
-        let mut bytes = [0u8; 64];
-        for i in 0..64 {
-            bytes[i] = rng.getbyte();
-        }
-        Self::miracl_bigrandomnum_impl(&bytes)
-    }
-
-    /// Randomly generate a scalar in a way that is compatible with MIRACL
-    ///
-    /// This should not be used for new code but only for compatability in
     /// situations where MIRACL's BIG::randomnum was previously used with
     /// a limited range
-    pub fn miracl_random_within_range_using_miracl_rand(
-        rng: &mut impl miracl_core_bls12381::rand::RAND,
-        n: u64,
-    ) -> Self {
+    pub fn miracl_random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
+        use rand::Rng;
+
         let n_bits = 64 - n.leading_zeros();
         let mut d = 0u128;
         let mut j = 0;
         let mut r: u8 = 0;
         for _ in 0..2 * n_bits {
-            r = if j == 0 { rng.getbyte() } else { r >> 1 };
+            r = if j == 0 { rng.gen::<u8>() } else { r >> 1 };
 
             let b = (r & 1) as u128;
             d <<= 1;

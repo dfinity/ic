@@ -1,12 +1,8 @@
 //! Type conversion for using the Miracl-based FS library.
 use super::super::types::{BTENode, FsEncryptionSecretKey};
 use super::crypto;
-use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_g1_from_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes,
-    miracl_g2_from_bytes_unchecked, miracl_g2_to_bytes,
-};
-use ic_crypto_internal_bls12_381_type::{G1Affine, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
+use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Chunk, FsEncryptionPlaintext, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
 };
@@ -22,11 +18,19 @@ pub fn secret_key_from_miracl(miracl_secret_key: &crypto::SecretKey) -> FsEncryp
             .iter()
             .map(|node| BTENode {
                 tau: node.tau.iter().map(|i| *i as u8).collect(),
-                a: miracl_g1_to_bytes(&node.a),
-                b: miracl_g2_to_bytes(&node.b),
-                d_t: node.d_t.iter().map(miracl_g2_to_bytes).collect(),
-                d_h: node.d_h.iter().map(miracl_g2_to_bytes).collect(),
-                e: miracl_g2_to_bytes(&node.e),
+                a: node.a.serialize_to::<G1Bytes>(),
+                b: node.b.serialize_to::<G2Bytes>(),
+                d_t: node
+                    .d_t
+                    .iter()
+                    .map(|p| p.serialize_to::<G2Bytes>())
+                    .collect(),
+                d_h: node
+                    .d_h
+                    .iter()
+                    .map(|p| p.serialize_to::<G2Bytes>())
+                    .collect(),
+                e: node.e.serialize_to::<G2Bytes>(),
             })
             .collect(),
     }
@@ -52,15 +56,15 @@ pub fn trusted_secret_key_into_miracl(secret_key: &FsEncryptionSecretKey) -> cry
             .iter()
             .map(|node| crypto::BTENode {
                 tau: node.tau.iter().copied().map(crypto::Bit::from).collect(),
-                a: miracl_g1_from_bytes_unchecked(&node.a.0)
+                a: G1Affine::deserialize_unchecked(&node.a.0)
                     .expect("Malformed secret key at BTENode.a"),
-                b: miracl_g2_from_bytes_unchecked(&node.b.0)
+                b: G2Affine::deserialize_unchecked(&node.b.0)
                     .expect("Malformed secret key at BTENode.b"),
                 d_t: node
                     .d_t
                     .iter()
                     .map(|g2| {
-                        miracl_g2_from_bytes_unchecked(&g2.0)
+                        G2Affine::deserialize_unchecked(&g2.0)
                             .expect("Malformed secret key at BTENode.d_t")
                     })
                     .collect(),
@@ -68,11 +72,11 @@ pub fn trusted_secret_key_into_miracl(secret_key: &FsEncryptionSecretKey) -> cry
                     .d_h
                     .iter()
                     .map(|g2| {
-                        miracl_g2_from_bytes_unchecked(&g2.0)
+                        G2Affine::deserialize_unchecked(&g2.0)
                             .expect("Malformed secret key at BTENode.d_h")
                     })
                     .collect(),
-                e: miracl_g2_from_bytes_unchecked(&node.e.0)
+                e: G2Affine::deserialize_unchecked(&node.e.0)
                     .expect("Malformed secret key at BTENode.e"),
             })
             .collect(),
@@ -83,10 +87,8 @@ pub fn trusted_secret_key_into_miracl(secret_key: &FsEncryptionSecretKey) -> cry
 pub fn public_key_from_miracl(
     crypto_public_key: &crypto::PublicKeyWithPop,
 ) -> (FsEncryptionPublicKey, FsEncryptionPop) {
-    let public_key_bytes = {
-        let g1 = miracl_g1_to_bytes(&crypto_public_key.key_value);
-        FsEncryptionPublicKey(g1)
-    };
+    let public_key_bytes =
+        { FsEncryptionPublicKey(crypto_public_key.key_value.serialize_to::<G1Bytes>()) };
     let pop_bytes = FsEncryptionPop {
         pop_key: G1Bytes(crypto_public_key.proof_data.pop_key.serialize()),
         challenge: FrBytes(crypto_public_key.proof_data.challenge.serialize()),
@@ -106,7 +108,7 @@ pub fn public_key_into_miracl(
 ) -> Result<crypto::PublicKeyWithPop, ()> {
     let (public_key, pop) = public_key_with_pop;
     Ok(crypto::PublicKeyWithPop {
-        key_value: miracl_g1_from_bytes(public_key.as_bytes())?,
+        key_value: G1Affine::deserialize(public_key.as_bytes()).map_err(|_| ())?,
         proof_data: crypto::EncryptionKeyPop {
             pop_key: G1Affine::deserialize(&pop.pop_key.0).map_err(|_| ())?,
             challenge: Scalar::deserialize(&pop.challenge.0).map_err(|_| ())?,

@@ -4,7 +4,7 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
     random_oracle_to_g1, random_oracle_to_scalar, HashedMap, UniqueHash,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
-use miracl_core::rand::RAND;
+use rand::{CryptoRng, RngCore};
 use zeroize::Zeroize;
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
@@ -59,10 +59,10 @@ fn generate_pop_challenge(
 }
 
 /// Prove the Possession of an EncryptionKey.
-pub fn prove_pop(
+pub fn prove_pop<R: RngCore + CryptoRng>(
     instance: &EncryptionKeyInstance,
     witness: &Scalar,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> Result<EncryptionKeyPop, EncryptionKeyPopError> {
     // Check validity of the instance
     if instance.public_key != G1Affine::from(instance.g1_gen * witness) {
@@ -75,7 +75,7 @@ pub fn prove_pop(
 
     // This is not a random oracle and could be changed to using Scalar::random
     // aside from the fact that this would break the stability test.
-    let mut random_scalar = Scalar::miracl_random_using_miracl_rand(rng);
+    let mut random_scalar = Scalar::miracl_random(rng);
 
     let blinder_public_key = G1Affine::from(instance.g1_gen * random_scalar);
     let blinder_pop_key = G1Affine::from(pop_base * random_scalar);

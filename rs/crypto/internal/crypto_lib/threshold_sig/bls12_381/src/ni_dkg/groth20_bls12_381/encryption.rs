@@ -13,7 +13,6 @@ use conversions::{
     epoch_from_miracl_secret_key, plaintext_from_bytes, plaintext_to_bytes, public_key_from_miracl,
     secret_key_from_miracl, Tau,
 };
-use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_from_bytes;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
@@ -28,8 +27,8 @@ use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use lazy_static::lazy_static;
-use miracl_core::rand::RAND;
-use rand::Rng;
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -48,10 +47,6 @@ mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::nizk_sharing::{
         prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
     };
-    pub use crate::ni_dkg::fs_ni_dkg::utils::RAND_ChaCha20;
-}
-mod miracl {
-    pub use miracl_core::bls12381::ecp::ECP;
 }
 
 #[cfg(test)]
@@ -72,7 +67,7 @@ pub fn create_forward_secure_key_pair(
     seed: Seed,
     associated_data: &[u8],
 ) -> FsEncryptionKeySetWithPop {
-    let mut rng = crypto::RAND_ChaCha20::new(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let (lib_public_key_with_pop, lib_secret_key) =
         crypto::kgen(associated_data, &SYS_PARAMS, &mut rng);
     let (public_key, pop) = public_key_from_miracl(&lib_public_key_with_pop);
@@ -97,7 +92,7 @@ pub fn create_forward_secure_key_pair(
 /// * `epoch` - The earliest epoch at which to retain keys.
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
-    let mut rng = crypto::RAND_ChaCha20::new(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let tau = Tau::from(epoch);
     if epoch_from_miracl_secret_key(secret_key) < epoch {
         secret_key.update_to(&tau.0, &SYS_PARAMS, &mut rng);
@@ -120,12 +115,12 @@ pub fn encrypt_and_prove(
     public_coefficients: &PublicCoefficientsBytes,
     associated_data: &[u8],
 ) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
-    let public_keys: Result<Vec<miracl::ECP>, EncryptAndZKProveError> = key_message_pairs
+    let public_keys: Result<Vec<G1Affine>, EncryptAndZKProveError> = key_message_pairs
         .as_ref()
         .iter()
         .zip(0..)
         .map(|((public_key, _plaintext), receiver_index)| {
-            miracl_g1_from_bytes(public_key.as_bytes()).map_err(|_| {
+            G1Affine::deserialize(public_key.as_bytes()).map_err(|_| {
                 EncryptAndZKProveError::MalformedFsPublicKeyError {
                     receiver_index,
                     error: MalformedPublicKeyError {
@@ -148,7 +143,7 @@ pub fn encrypt_and_prove(
     // The API takes a vector of pointers so we need to keep the values but generate
     // another vector with the values.
     let tau = Tau::from(epoch);
-    let mut rng = crypto::RAND_ChaCha20::new(seed.into_rng().gen::<[u8; 32]>());
+    let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let (ciphertext, encryption_witness) = crypto::enc_chunks(
         &plaintext_chunks,
         &public_keys,
@@ -187,10 +182,6 @@ pub fn encrypt_and_prove(
 
     #[cfg(test)]
     {
-        let public_keys = public_keys
-            .iter()
-            .map(G1Affine::from_miracl)
-            .collect::<Vec<_>>();
         assert_eq!(
             crypto::verify_chunking(
                 &crypto::ChunkingInstance::new(
@@ -277,25 +268,23 @@ pub fn decrypt(
 ///
 /// Note: The crypto::nizk API data types are inconsistent with those used in
 /// crypto::forward_secure so we need a thin wrapper to convert.
-fn prove_chunking(
-    receiver_fs_public_keys: &[miracl::ECP],
+fn prove_chunking<R: RngCore + CryptoRng>(
+    public_keys: &[G1Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,
     plaintext_chunks: &[Vec<isize>],
     encryption_witness: &crypto::EncryptionWitness,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> crypto::ProofChunking {
     let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
         .iter()
         .map(|chunks| chunks.iter().copied().map(Scalar::from_isize).collect())
         .collect();
 
-    let public_keys = receiver_fs_public_keys
-        .iter()
-        .map(G1Affine::from_miracl)
-        .collect::<Vec<_>>();
-
-    let chunking_instance =
-        crypto::ChunkingInstance::new(public_keys, ciphertext.cc.clone(), ciphertext.rr.clone());
+    let chunking_instance = crypto::ChunkingInstance::new(
+        public_keys.to_vec(),
+        ciphertext.cc.clone(),
+        ciphertext.rr.clone(),
+    );
 
     let chunking_witness =
         crypto::ChunkingWitness::new(encryption_witness.spec_r.clone(), big_plaintext_chunks);
@@ -304,19 +293,14 @@ fn prove_chunking(
 }
 
 /// Zero knowledge proof of correct sharing
-fn prove_sharing(
-    receiver_fs_public_keys: &[miracl::ECP],
+fn prove_sharing<R: RngCore + CryptoRng>(
+    receiver_fs_public_keys: &[G1Affine],
     public_coefficients: &[G2Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,
     plaintext_chunks: &[Vec<isize>],
     encryption_witness: &crypto::EncryptionWitness,
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> crypto::ProofSharing {
-    let receiver_fs_public_keys = receiver_fs_public_keys
-        .iter()
-        .map(G1Affine::from_miracl)
-        .collect::<Vec<_>>();
-
     // Convert fs encryption data:
     let combined_ciphertexts: Vec<_> = ciphertext
         .cc

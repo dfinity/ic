@@ -2,11 +2,9 @@
 //! Tests for combined forward secure encryption and ZK proofs
 
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Gt, Scalar};
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
-    forward_secure::*, utils::RAND_ChaCha20, Epoch,
-};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
 use ic_crypto_sha::Sha256;
-use miracl_core::{bls12381::ecp2::ECP2, rand::RAND};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 
 #[test]
 fn output_of_mk_sys_params_is_expected_values() {
@@ -18,8 +16,8 @@ fn output_of_mk_sys_params_is_expected_values() {
     assert_eq!(sys.f.len(), sys.lambda_t);
     assert_eq!(sys.f_h.len(), sys.lambda_h);
 
-    fn assert_g2_equal(g2: &ECP2, expected: &'static str) {
-        assert_eq!(hex::encode(G2Affine::from_miracl(g2).serialize()), expected);
+    fn assert_g2_equal(g2: &G2Affine, expected: &'static str) {
+        assert_eq!(hex::encode(g2.serialize()), expected);
     }
 
     assert_g2_equal(&sys.f0,
@@ -30,7 +28,7 @@ fn output_of_mk_sys_params_is_expected_values() {
 
     let mut sha256 = Sha256::new();
     for val in sys.f {
-        sha256.write(&G2Affine::from_miracl(&val).serialize());
+        sha256.write(&val.serialize());
     }
     assert_eq!(
         hex::encode(sha256.finish()),
@@ -39,7 +37,7 @@ fn output_of_mk_sys_params_is_expected_values() {
 
     let mut sha256 = Sha256::new();
     for val in sys.f_h {
-        sha256.write(&G2Affine::from_miracl(&val).serialize());
+        sha256.write(&val.serialize());
     }
     assert_eq!(
         hex::encode(sha256.finish()),
@@ -50,20 +48,20 @@ fn output_of_mk_sys_params_is_expected_values() {
 #[test]
 fn fs_keys_should_be_valid() {
     let sys = &mk_sys_params();
-    let rng = &mut RAND_ChaCha20::new([99; 32]);
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed([99; 32]);
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[3u8, 0u8, 0u8, 0u8];
 
-    let (pk, _dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
+    let (pk, _dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
     assert!(
         pk.verify(KEY_GEN_ASSOCIATED_DATA),
         "Generated public key should be valid"
     );
 }
 
-fn keys_and_ciphertext_for(
+fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
     epoch: Epoch,
     associated_data: &[u8],
-    rng: &mut impl RAND,
+    rng: &mut R,
 ) -> (
     Vec<(PublicKeyWithPop, SecretKey)>,
     Vec<Vec<isize>>,
@@ -75,7 +73,6 @@ fn keys_and_ciphertext_for(
     let mut keys = Vec::new();
     for i in 0u8..3 {
         println!("generating key pair {}...", i);
-        rng.seed(32, &[0x10 | i; 32]);
         let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
         println!("{:#?}", &key_pair.0);
         keys.push(key_pair);
@@ -83,7 +80,7 @@ fn keys_and_ciphertext_for(
     let public_keys_with_zk: Vec<_> = keys.iter().map(|key| &key.0).collect();
     let pks = public_keys_with_zk
         .iter()
-        .map(|key| key.key_value.clone())
+        .map(|key| key.key_value)
         .collect::<Vec<_>>();
 
     let sij: Vec<_> = (0..keys.len())
@@ -104,12 +101,12 @@ fn keys_and_ciphertext_for(
 #[test]
 fn integrity_check_should_return_error_on_wrong_associated_data() {
     let sys = &mk_sys_params();
-    let rng = &mut RAND_ChaCha20::new([82; 32]);
+    let mut rng = rand::thread_rng();
     let epoch = Epoch::from(0);
     let associated_data: Vec<u8> = vec![3u8; 12];
     let wrong_associated_data: Vec<u8> = vec![1u8; 7];
 
-    let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
     let tau = tau_from_epoch(sys, epoch);
 
     assert_eq!(
@@ -122,9 +119,9 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
 fn should_encrypt_with_empty_associated_data() {
     let sys = &mk_sys_params();
     let epoch = Epoch::from(0);
-    let rng = &mut RAND_ChaCha20::new([50; 32]);
+    let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = Vec::new();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
     assert_eq!(
@@ -142,9 +139,9 @@ fn should_encrypt_with_empty_associated_data() {
 fn should_decrypt_correctly_for_epoch_0() {
     let sys = &mk_sys_params();
     let epoch = Epoch::from(0);
-    let rng = &mut RAND_ChaCha20::new([12; 32]);
-    let associated_data: Vec<u8> = (0..10).map(|_| rng.getbyte()).collect();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let mut rng = rand::thread_rng();
+    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
     assert_eq!(
@@ -162,9 +159,9 @@ fn should_decrypt_correctly_for_epoch_0() {
 fn should_decrypt_correctly_for_epoch_1() {
     let sys = &mk_sys_params();
     let epoch = Epoch::from(1);
-    let rng = &mut RAND_ChaCha20::new([24; 32]);
-    let associated_data: Vec<u8> = (0..10).map(|_| rng.getbyte()).collect();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let mut rng = rand::thread_rng();
+    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
     assert_eq!(
@@ -182,9 +179,9 @@ fn should_decrypt_correctly_for_epoch_1() {
 fn should_decrypt_correctly_for_epoch_5() {
     let sys = &mk_sys_params();
     let epoch = Epoch::from(5);
-    let rng = &mut RAND_ChaCha20::new([36; 32]);
-    let associated_data: Vec<u8> = (0..10).map(|_| rng.getbyte()).collect();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let mut rng = rand::thread_rng();
+    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
     assert_eq!(
@@ -202,9 +199,9 @@ fn should_decrypt_correctly_for_epoch_5() {
 fn should_decrypt_correctly_for_epoch_10() {
     let sys = &mk_sys_params();
     let epoch = Epoch::from(10);
-    let rng = &mut RAND_ChaCha20::new([48; 32]);
-    let associated_data: Vec<u8> = (0..10).map(|_| rng.getbyte()).collect();
-    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, rng);
+    let mut rng = rand::thread_rng();
+    let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
+    let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
     let tau = tau_from_epoch(sys, epoch);
     assert_eq!(
@@ -221,7 +218,6 @@ fn should_decrypt_correctly_for_epoch_10() {
 
 // Returns a random element of Gt
 fn gt_rand() -> Gt {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
     let g1 = G1Affine::hash(b"ic-crypto-test-fp12-random", &rng.gen::<[u8; 32]>());
     let g2 = G2Affine::generator();

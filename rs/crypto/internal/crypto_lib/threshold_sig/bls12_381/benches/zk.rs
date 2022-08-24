@@ -1,7 +1,6 @@
 use criterion::*;
 use fs_ni_dkg::nizk_chunking::*;
 use fs_ni_dkg::nizk_sharing::*;
-use fs_ni_dkg::utils::RAND_ChaCha20;
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
@@ -63,13 +62,13 @@ fn zk_sharing_proof(c: &mut Criterion) {
 
     let (instance, witness) = setup_sharing_instance_and_witness();
 
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
+    let mut rng = rand::thread_rng();
 
     group.bench_function("prove_sharing", |b| {
-        b.iter(|| prove_sharing(&instance, &witness, rng))
+        b.iter(|| prove_sharing(&instance, &witness, &mut rng))
     });
 
-    let proof = prove_sharing(&instance, &witness, rng);
+    let proof = prove_sharing(&instance, &witness, &mut rng);
 
     group.bench_function("verify_sharing", |b| {
         b.iter(|| verify_sharing(&instance, &proof))
@@ -121,13 +120,13 @@ fn zk_chunking_proof(c: &mut Criterion) {
 
     let (instance, witness) = setup_chunking_instance_and_witness();
 
-    let rng = &mut RAND_ChaCha20::new([42; 32]);
+    let mut rng = rand::thread_rng();
 
     group.bench_function("prove_chunking", |b| {
-        b.iter(|| prove_chunking(&instance, &witness, rng))
+        b.iter(|| prove_chunking(&instance, &witness, &mut rng))
     });
 
-    let proof = prove_chunking(&instance, &witness, rng);
+    let proof = prove_chunking(&instance, &witness, &mut rng);
 
     group.bench_function("verify_chunking", |b| {
         b.iter(|| verify_chunking(&instance, &proof))
