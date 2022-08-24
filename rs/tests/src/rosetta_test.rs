@@ -16,7 +16,7 @@ end::catalog[] */
 
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
+use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
 use ledger_canister::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
@@ -58,6 +58,7 @@ use serde_json::{json, Value};
 use slog::info;
 use slog::Logger;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -284,13 +285,28 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "Test get neuron info",
         rand::random(),
         |neuron| {
-            neuron.dissolve_state = Some(
-                ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
-                    2 * 365 * 24 * 60 * 60,
-                ),
-            );
+            neuron.dissolve_state =
+                Some(DissolveState::DissolveDelaySeconds(2 * 365 * 24 * 60 * 60));
             neuron.maturity_e8s_equivalent = 345_000_000;
             neuron.kyc_verified = true;
+            neuron.followees = HashMap::from([
+                (
+                    0,
+                    Followees {
+                        followees: vec![
+                            NeuronId { id: 12 },
+                            NeuronId { id: 34 },
+                            NeuronId { id: 56 },
+                        ],
+                    },
+                ),
+                (
+                    6,
+                    Followees {
+                        followees: vec![NeuronId { id: 33 }],
+                    },
+                ),
+            ]);
         },
     );
 
@@ -306,6 +322,24 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             );
             neuron.maturity_e8s_equivalent = 678_000_000;
             neuron.kyc_verified = true;
+            neuron.followees = HashMap::from([
+                (
+                    0,
+                    Followees {
+                        followees: vec![
+                            NeuronId { id: 123 },
+                            NeuronId { id: 345 },
+                            NeuronId { id: 567 },
+                        ],
+                    },
+                ),
+                (
+                    7,
+                    Followees {
+                        followees: vec![NeuronId { id: 333 }],
+                    },
+                ),
+            ]);
         },
     );
 
@@ -321,6 +355,20 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             );
             neuron.maturity_e8s_equivalent = 679_000_000;
             neuron.kyc_verified = true;
+            neuron.followees = HashMap::from([
+                (
+                    0,
+                    Followees {
+                        followees: vec![NeuronId { id: 111 }, NeuronId { id: 222 }],
+                    },
+                ),
+                (
+                    8,
+                    Followees {
+                        followees: vec![NeuronId { id: 555 }, NeuronId { id: 666 }],
+                    },
+                ),
+            ]);
         },
     );
 
@@ -2594,9 +2642,11 @@ async fn test_neuron_info(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron
         .expect("No metadata found.");
     let maturity = metadata
         .get("maturity_e8s_equivalent")
-        .expect("Maturity expected");
+        .expect("Maturity expected")
+        .as_u64()
+        .unwrap();
     let kyc = metadata.get("kyc_verified").expect("KYC status expected");
-    assert_eq!(345_000_000, maturity.as_u64().unwrap());
+    assert_eq!(345_000_000, maturity);
     assert!(kyc.as_bool().unwrap());
     assert_eq!(
         "NOT_DISSOLVING",
@@ -2606,6 +2656,16 @@ async fn test_neuron_info(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron
             .as_str()
             .unwrap()
     );
+    let followees = metadata.get("followees").expect("Expected followees");
+    assert_eq!(
+        json!({
+            "0": [12, 34, 56],
+            "6": [33],
+        }),
+        *followees
+    );
+    let hotkeys = metadata.get("hotkeys").expect("Expected hotkeys");
+    assert_eq!(json!([]), *hotkeys);
 }
 
 async fn test_neuron_info_with_hotkey(
@@ -2626,7 +2686,7 @@ async fn test_neuron_info_with_hotkey(
             request: Request::AddHotKey(AddHotKey {
                 account: acc,
                 neuron_index,
-                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk),
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk.clone()),
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -2703,6 +2763,18 @@ async fn test_neuron_info_with_hotkey(
             .as_str()
             .unwrap()
     );
+
+    let followees = metadata.get("followees").expect("Expected followees");
+    assert_eq!(
+        json!({
+            "0": [123, 345, 567],
+            "7": [333],
+        }),
+        *followees
+    );
+    let hotkeys = metadata.get("hotkeys").expect("Expected hotkeys");
+    let hotkey_pid = PrincipalId::try_from(&PublicKeyOrPrincipal::PublicKey(hotkey_pk)).unwrap();
+    assert_eq!(json!([hotkey_pid]), *hotkeys);
 }
 
 async fn test_neuron_info_with_hotkey_raw(
@@ -2723,7 +2795,7 @@ async fn test_neuron_info_with_hotkey_raw(
             request: Request::AddHotKey(AddHotKey {
                 account: acc,
                 neuron_index,
-                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk),
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk.clone()),
             }),
             sender_keypair: Arc::clone(&key_pair),
         }],
@@ -2962,6 +3034,17 @@ async fn test_neuron_info_with_hotkey_raw(
             .as_str()
             .unwrap()
     );
+    let followees = metadata.get("followees").expect("Expected followees");
+    assert_eq!(
+        json!({
+            "0": [111, 222],
+            "8": [555, 666],
+        }),
+        *followees
+    );
+    let hotkeys = metadata.get("hotkeys").expect("Expected hotkeys");
+    let hotkey_pid = PrincipalId::try_from(&PublicKeyOrPrincipal::PublicKey(hotkey_pk)).unwrap();
+    assert_eq!(json!([hotkey_pid]), *hotkeys);
 }
 
 async fn test_follow(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron_info: NeuronInfo) {
