@@ -111,5 +111,6 @@ rust_test(
     edition = "2018",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
+    tags = ["exclusive-if-local"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
 )
