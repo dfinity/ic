@@ -271,7 +271,7 @@ pub fn test(env: TestEnv) {
     upload_node.await_status_is_healthy().unwrap();
 
     // wait until state sync is completed
-    retry(logger.clone(), secs(120), secs(5), || {
+    retry(logger.clone(), secs(600), secs(10), || {
         info!(logger, "Try to install canister...");
         if can_install_canister(&upload_node.get_public_url()) {
             info!(logger, "Installing canister is possible.");
