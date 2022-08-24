@@ -482,8 +482,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_dealing_public(
         &self,
         _params: &IDkgTranscriptParams,
-        _dealer_id: NodeId,
-        _dealing: &IDkgDealing,
+        _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
         Ok(())
     }
@@ -491,8 +490,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_dealing_private(
         &self,
         _params: &IDkgTranscriptParams,
-        _dealer_id: NodeId,
-        _dealing: &IDkgDealing,
+        _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         Ok(())
     }
