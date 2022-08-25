@@ -9,6 +9,7 @@ rust_binary(
     edition = "2018",
     deps = [
         "//rs/config",
+        "//rs/crypto/sha",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
