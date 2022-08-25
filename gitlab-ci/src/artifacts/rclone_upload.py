@@ -92,7 +92,7 @@ def main():
     parser.add_argument(
         "--timeout",
         action="store",
-        default=120,
+        default=600,
         help="Timeout in seconds for each rclone call.",
     )
 
