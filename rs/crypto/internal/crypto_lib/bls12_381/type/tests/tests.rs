@@ -636,15 +636,23 @@ fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
 
 #[test]
 fn test_g1_deserialize_rejects_out_of_range_x_value() {
-    let g1 = G1Affine::generator();
+    // This point has an x coordinate equal to the size of the G1 field
+    let g1_x_eq_mod =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
 
-    let mut g1_bytes = g1.serialize();
-    for i in 1..48 {
-        g1_bytes[i] = 0xff;
-    }
+    assert!(G1Affine::deserialize_unchecked(&g1_x_eq_mod).is_err());
 
-    assert!(G1Affine::deserialize(&g1_bytes).is_err());
-    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
+    // This point has an x coordinate equal to the size of the G1 field + 2
+    let g1_x_eq_mod =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaad").unwrap();
+
+    assert!(G1Affine::deserialize_unchecked(&g1_x_eq_mod).is_err());
+
+    // This point has an x coordinate equal 2 (smallest valid x coordinate)
+    let g1_x_eq_mod =
+        hex::decode("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002").unwrap();
+
+    assert!(G1Affine::deserialize(&g1_x_eq_mod).is_err());
 }
 
 #[test]
@@ -655,28 +663,6 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
     for i in 1..48 {
         g2_bytes[i] = 0xff;
     }
-
-    assert!(G2Affine::deserialize(&g2_bytes).is_err());
-    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
-}
-
-#[test]
-fn test_g1_deserialize_rejects_unused_flags_being_set() {
-    let g1 = G1Affine::generator();
-
-    let mut g1_bytes = g1.serialize();
-    g1_bytes[G1Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::NON_FLAG_BITS;
-
-    assert!(G1Affine::deserialize(&g1_bytes).is_err());
-    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
-}
-
-#[test]
-fn test_g2_deserialize_rejects_unused_flags_being_set() {
-    let g2 = G2Affine::generator();
-
-    let mut g2_bytes = g2.serialize();
-    g2_bytes[G2Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::NON_FLAG_BITS;
 
     assert!(G2Affine::deserialize(&g2_bytes).is_err());
     assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
