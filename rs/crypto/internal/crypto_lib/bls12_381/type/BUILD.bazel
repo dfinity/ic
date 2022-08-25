@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "@crate_index//:bls12_381",
     "@crate_index//:hex",
     "@crate_index//:lazy_static",
-    "@crate_index//:miracl_core_bls12381",
     "@crate_index//:pairing",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rand_chacha_0_3_1",
@@ -25,14 +24,9 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {
-    "@crate_index//:miracl_core_bls12381": "miracl_core_bls12381",
-}
-
 rust_library(
     name = "type",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_internal_bls12_381_type",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -54,7 +48,6 @@ rust_binary(
 rust_test_suite(
     name = "type_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":type"] + DEPENDENCIES + DEV_DEPENDENCIES,

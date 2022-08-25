@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-miracl_core_bls12381 = { version = "4.1.2", package = "miracl_core_bls12381" }
 bls12_381 = { git = "https://github.com/dfinity/bls12_381", branch = "main", default-features = false, features = ["groups", "pairings", "alloc", "experimental", "zeroize"] }
 pairing = "0.22"
 subtle = "2.4"

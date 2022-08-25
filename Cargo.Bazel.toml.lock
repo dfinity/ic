@@ -2172,7 +2172,6 @@ dependencies = [
  "maplit",
  "mersenne_twister",
  "mio 0.7.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "miracl_core_bls12381",
  "mockall 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockall 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockall 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4407,12 +4406,6 @@ checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "miracl_core_bls12381"
-version = "4.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb5c13471499e00775be202c9007d365fdab9b1c65624c95b238b2f3037a2c1c"
 
 [[package]]
 name = "mockall"
