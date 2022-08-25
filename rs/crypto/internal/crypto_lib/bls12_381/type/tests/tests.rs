@@ -657,15 +657,15 @@ fn test_g1_deserialize_rejects_out_of_range_x_value() {
 
 #[test]
 fn test_g2_deserialize_rejects_out_of_range_x_value() {
-    let g2 = G2Affine::generator();
+    let invalid_x0 =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
 
-    let mut g2_bytes = g2.serialize();
-    for i in 1..48 {
-        g2_bytes[i] = 0xff;
-    }
+    assert!(G2Affine::deserialize_unchecked(&invalid_x0).is_err());
 
-    assert!(G2Affine::deserialize(&g2_bytes).is_err());
-    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+    let invalid_x1 =
+        hex::decode("8000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
+
+    assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
 }
 
 fn g1_from_u64(i: &u64) -> G1Projective {
