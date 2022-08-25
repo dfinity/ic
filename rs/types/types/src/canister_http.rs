@@ -38,8 +38,15 @@ use std::{
     mem::size_of,
 };
 
-// TODO: Make this amount configurable
+// TODO: Make these amounts configurable
+/// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Number of CanisterHttpResponses to be included in a block.
+///
+/// Limiting the number of responses can improve performance, as otherwise validation times
+/// could become too large.
+pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 
 pub type CanisterHttpRequestId = CallbackId;
 

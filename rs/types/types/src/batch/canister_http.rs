@@ -30,6 +30,11 @@ impl CanisterHttpPayload {
         self.responses.len() + self.timeouts.len()
     }
 
+    /// Returns the number of non_timeout responses
+    pub fn num_non_timeout_responses(&self) -> usize {
+        self.responses.len()
+    }
+
     /// Returns true, if this is an empty payload
     pub fn is_empty(&self) -> bool {
         self.num_responses() == 0
