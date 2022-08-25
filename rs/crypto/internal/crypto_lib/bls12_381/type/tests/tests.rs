@@ -1,6 +1,6 @@
 use ic_crypto_internal_bls12_381_type::*;
-use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
