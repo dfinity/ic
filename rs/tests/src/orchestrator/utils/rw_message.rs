@@ -122,15 +122,50 @@ pub(crate) fn install_canister_with_retries(
     });
 }
 
-pub(crate) fn await_all_nodes_are_healthy(topology: TopologySnapshot) {
+pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
+    check_or_init_ic(topology, true)
+}
+
+pub(crate) fn await_all_nodes_are_ready(topology: TopologySnapshot) {
+    check_or_init_ic(topology, false)
+}
+
+fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
+    let logger = topology.test_env().logger();
+
+    if install_canisters {
+        topology
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .install_nns_canisters()
+            .expect("NNS canisters not installed");
+        info!(logger, "NNS canisters are installed.");
+    }
+
     topology.subnets().for_each(|subnet| {
-        subnet.nodes().for_each(|node| {
-            node.await_status_is_healthy()
-                .expect("Timeout while waiting for all subnets to be healthy")
-        })
+        if subnet.subnet_id != topology.root_subnet_id() {
+            subnet.nodes().for_each(|node| {
+                // make sure node is healty
+                node.await_status_is_healthy()
+                    .expect("Timeout while waiting for all subnets to be healthy");
+                // make sure the node is participating in a subnet
+                if install_canisters {
+                    install_canister_with_retries(
+                        &node.get_public_url(),
+                        &logger,
+                        secs(600),
+                        secs(10),
+                    );
+                }
+            });
+        }
     });
+
     topology.unassigned_nodes().for_each(|node| {
         node.await_can_login_as_admin_via_ssh()
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
     });
+    info!(logger, "IC is healthy and ready.");
 }

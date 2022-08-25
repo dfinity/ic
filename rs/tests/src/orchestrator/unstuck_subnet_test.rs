@@ -13,7 +13,7 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::rw_message::await_all_nodes_are_healthy;
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
@@ -47,7 +47,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    await_all_nodes_are_healthy(env.topology_snapshot());
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(test_env: TestEnv) {
@@ -60,12 +60,6 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "node1: {:?}", nodes[0].get_ip_addr());
     info!(logger, "node2: {:?}", nodes[1].get_ip_addr());
     info!(logger, "node3: {:?}", nodes[2].get_ip_addr());
-
-    info!(logger, "Installing NNS canisters...");
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     let target_version =
         get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
