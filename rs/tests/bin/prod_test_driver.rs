@@ -224,12 +224,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     boundary_nodes_integration::boundary_nodes::config,
                     par(vec![
                         sys_t(
-                            "boundary_nodes_test",
-                            boundary_nodes_integration::boundary_nodes::test,
+                            "boundary_nodes_canister_test",
+                            boundary_nodes_integration::boundary_nodes::canister_test,
                         ),
                         sys_t(
-                            "boundary_nodes_nginx_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_test,
+                            "boundary_nodes_http_canister_test",
+                            boundary_nodes_integration::boundary_nodes::http_canister_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_valid_config_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_request_response_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_request_response_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_denylist_test",
+                            boundary_nodes_integration::boundary_nodes::denylist_test,
                         ),
                     ]),
                 ),
@@ -315,8 +327,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         boundary_nodes_integration::boundary_nodes::test,
                     ),
                     sys_t(
-                        "boundary_nodes_nginx_test",
-                        boundary_nodes_integration::boundary_nodes::nginx_test,
+                        "boundary_nodes_nginx_valid_config_test",
+                        boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                     ),
                 ]),
             ),
@@ -522,12 +534,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     boundary_nodes_integration::boundary_nodes::config,
                     par(vec![
                         sys_t(
-                            "boundary_nodes_test",
-                            boundary_nodes_integration::boundary_nodes::test,
+                            "boundary_nodes_canister_test",
+                            boundary_nodes_integration::boundary_nodes::canister_test,
                         ),
                         sys_t(
-                            "boundary_nodes_nginx_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_test,
+                            "boundary_nodes_http_canister_test",
+                            boundary_nodes_integration::boundary_nodes::http_canister_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_valid_config_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_request_response_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_request_response_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_denylist_test",
+                            boundary_nodes_integration::boundary_nodes::denylist_test,
                         ),
                     ]),
                 ),
