@@ -8094,6 +8094,7 @@ dependencies = [
  "clap 3.2.14",
  "hex",
  "ic-config",
+ "ic-crypto-sha",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -8106,6 +8107,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "prost",
  "scoped_threadpool",
+ "tempfile",
 ]
 
 [[package]]
