@@ -1,5 +1,5 @@
 {
-  "checksum": "70e090deb81670070fce5074adf62211e68c1a4b30a257d03e6d2b53eb7558fd",
+  "checksum": "51a99a88a4d054dfcc4185e66beac51c2fe0cd1b81390d8d7a5c6020eccfdb1e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11315,10 +11315,6 @@
             {
               "id": "mio 0.7.14",
               "target": "mio"
-            },
-            {
-              "id": "miracl_core_bls12381 4.1.2",
-              "target": "miracl_core_bls12381"
             },
             {
               "id": "mockall 0.11.2",
@@ -23416,59 +23412,6 @@
         "version": "0.3.7"
       },
       "license": "MIT/Apache-2.0"
-    },
-    "miracl_core_bls12381 4.1.2": {
-      "name": "miracl_core_bls12381",
-      "version": "4.1.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/miracl_core_bls12381/4.1.2/download",
-          "sha256": "eb5c13471499e00775be202c9007d365fdab9b1c65624c95b238b2f3037a2c1c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "miracl_core_bls12381",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "miracl_core_bls12381",
-            "crate_root": "src/main.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "miracl_core_bls12381",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "edition": "2018",
-        "rustc_flags": [
-          "-C",
-          "opt-level=3"
-        ],
-        "version": "4.1.2"
-      },
-      "license": "Apache-2.0"
     },
     "mockall 0.11.2": {
       "name": "mockall",
@@ -48191,7 +48134,6 @@
     "inferno 0.11.7",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
-    "miracl_core_bls12381 4.1.2",
     "multipart 0.18.0",
     "pretty-bytes 0.2.2",
     "wait-timeout 0.2.0",

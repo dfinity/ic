@@ -4876,25 +4876,12 @@ dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-internal-types",
  "lazy_static",
- "miracl_core_bls12381",
  "pairing",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.9.9",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-internal-bls12381-serde-miracl"
-version = "0.8.0"
-dependencies = [
- "criterion",
- "hex",
- "ic-crypto-internal-bls12-381-type",
- "ic-crypto-internal-types",
- "miracl_core_bls12381",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -4913,7 +4900,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
- "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-csp-protobuf-generator",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-logmon",
@@ -9683,12 +9669,6 @@ dependencies = [
  "socket2 0.3.19",
  "winapi 0.3.9",
 ]
-
-[[package]]
-name = "miracl_core_bls12381"
-version = "4.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb5c13471499e00775be202c9007d365fdab9b1c65624c95b238b2f3037a2c1c"
 
 [[package]]
 name = "mockall"

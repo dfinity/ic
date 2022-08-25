@@ -182,22 +182,6 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         )
     });
 
-    group.bench_function("to_miracl", |b| {
-        b.iter_batched_ref(
-            || G1Affine::from(random_g1()),
-            |pt| pt.to_miracl(),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("from_miracl", |b| {
-        b.iter_batched_ref(
-            || G1Affine::from(random_g1()).to_miracl(),
-            |pt| G1Affine::from_miracl(pt),
-            BatchSize::SmallInput,
-        )
-    });
-
     group.bench_function("multiexp_naive2", |b| {
         b.iter_batched_ref(
             || g1_muln_instance(2),
@@ -307,22 +291,6 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || random_g2(),
             |pt| G2Affine::from(*pt),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("to_miracl", |b| {
-        b.iter_batched_ref(
-            || G2Affine::from(random_g2()),
-            |pt| pt.to_miracl(),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("from_miracl", |b| {
-        b.iter_batched_ref(
-            || G2Affine::from(random_g2()).to_miracl(),
-            |pt| G2Affine::from_miracl(pt),
             BatchSize::SmallInput,
         )
     });
