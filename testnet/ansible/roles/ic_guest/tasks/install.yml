@@ -62,7 +62,7 @@
     set -exuo pipefail
 
     NODE0_NAME={{ groups['nns'][0] }}
-    NODE0_IPV6={{ hostvars[groups['nns'][0]].ipv6 }}
+    NODE0_IPV6={{ hostvars[groups['nns'][0]].ipv6_address }}
     NNS_URL="http://[$NODE0_IPV6]:8080"
 
     echo "Running on $(hostname -f)"
