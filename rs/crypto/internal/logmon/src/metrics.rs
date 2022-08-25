@@ -100,24 +100,14 @@ impl CryptoMetrics {
         }
     }
 
-    /// Observes the key counts of a node.
-    ///
-    /// Parameters:
-    ///  - `num_pub_reg`: The number of node public keys (and TLS x.509 certificates) stored
-    ///    in the registry
-    ///  - `num_pub_local`: The number of node public keys (and TLS x.509 certificates) stored
-    ///    locally
-    ///  - `num_secret_local`: The number of node secret keys stored in the local secret key store
-    pub fn observe_node_key_counts(
-        &self,
-        num_pub_reg: u8,
-        num_pub_local: u8,
-        num_secret_local: u8,
-    ) {
+    /// Observes the key counts of a node. For more information about the types of keys contained
+    /// in the `key_counts` parameter, see the [`KeyCounts`] documentation.
+    pub fn observe_node_key_counts(&self, key_counts: KeyCounts) {
         if let Some(metrics) = &self.metrics {
-            metrics.crypto_key_counts[&KeyType::PublicLocal].set(num_pub_local as i64);
-            metrics.crypto_key_counts[&KeyType::PublicRegistry].set(num_pub_reg as i64);
-            metrics.crypto_key_counts[&KeyType::SecretSKS].set(num_secret_local as i64);
+            metrics.crypto_key_counts[&KeyType::PublicLocal].set(key_counts.get_pk_local() as i64);
+            metrics.crypto_key_counts[&KeyType::PublicRegistry]
+                .set(key_counts.get_pk_registry() as i64);
+            metrics.crypto_key_counts[&KeyType::SecretSKS].set(key_counts.get_sk_local() as i64);
         }
     }
 }
@@ -139,6 +129,41 @@ pub enum MetricsDomain {
     IDkgProtocol,
     ThresholdEcdsa,
     IcCanisterSignature,
+}
+
+/// Keeps track of the number of node keys. This information is collected and provided to the
+/// metrics component. The type of keys for which the key counts are tracked are the following:
+///  - `pk_registry`: The number of node public keys (and TLS x.509 certificates) stored
+///    in the registry
+///  - `pk_local`: The number of node public keys (and TLS x.509 certificates) stored
+///    locally
+///  - `sk_local`: The number of node secret keys stored in the local secret key store
+pub struct KeyCounts {
+    pk_registry: u8,
+    pk_local: u8,
+    sk_local: u8,
+}
+
+impl KeyCounts {
+    pub fn new(pk_registry: u8, pk_local: u8, sk_local: u8) -> Self {
+        KeyCounts {
+            pk_registry,
+            pk_local,
+            sk_local,
+        }
+    }
+
+    pub fn get_pk_registry(&self) -> u8 {
+        self.pk_registry
+    }
+
+    pub fn get_pk_local(&self) -> u8 {
+        self.pk_local
+    }
+
+    pub fn get_sk_local(&self) -> u8 {
+        self.sk_local
+    }
 }
 
 struct Metrics {

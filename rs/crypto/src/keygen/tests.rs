@@ -22,11 +22,10 @@ fn should_collect_correctly_key_count_metrics_for_all_keys() {
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .build();
-    let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
-        crypto_component.collect_key_count_metrics(REG_V1);
-    assert_eq!(5, pub_keys_in_reg);
-    assert_eq!(5, pub_keys_local);
-    assert_eq!(5, secret_keys_in_sks);
+    let key_counts = crypto_component.collect_key_count_metrics(REG_V1);
+    assert_eq!(5, key_counts.get_pk_registry());
+    assert_eq!(5, key_counts.get_pk_local());
+    assert_eq!(5, key_counts.get_sk_local());
 }
 
 #[test]
@@ -34,11 +33,10 @@ fn should_collect_correctly_key_count_metrics_for_only_node_signing_key() {
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
         .build();
-    let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
-        crypto_component.collect_key_count_metrics(REG_V1);
-    assert_eq!(1, pub_keys_in_reg);
-    assert_eq!(1, pub_keys_local);
-    assert_eq!(1, secret_keys_in_sks);
+    let key_counts = crypto_component.collect_key_count_metrics(REG_V1);
+    assert_eq!(1, key_counts.get_pk_registry());
+    assert_eq!(1, key_counts.get_pk_local());
+    assert_eq!(1, key_counts.get_sk_local());
 }
 
 #[test]
@@ -68,11 +66,10 @@ fn should_count_correctly_inconsistent_numbers_of_node_signing_keys() {
     );
     registry_client.reload();
 
-    let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
-        crypto_component.collect_key_count_metrics(REG_V2);
-    assert_eq!(5, pub_keys_in_reg);
-    assert_eq!(5, pub_keys_local);
-    assert_eq!(4, secret_keys_in_sks);
+    let key_counts = crypto_component.collect_key_count_metrics(REG_V2);
+    assert_eq!(5, key_counts.get_pk_registry());
+    assert_eq!(5, key_counts.get_pk_local());
+    assert_eq!(4, key_counts.get_sk_local());
 }
 
 #[test]
@@ -107,9 +104,8 @@ fn should_count_correctly_inconsistent_numbers_of_tls_certificates() {
     );
     registry_client.reload();
 
-    let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
-        crypto_component.collect_key_count_metrics(REG_V2);
-    assert_eq!(5, pub_keys_in_reg);
-    assert_eq!(5, pub_keys_local);
-    assert_eq!(4, secret_keys_in_sks);
+    let key_counts = crypto_component.collect_key_count_metrics(REG_V2);
+    assert_eq!(5, key_counts.get_pk_registry());
+    assert_eq!(5, key_counts.get_pk_local());
+    assert_eq!(4, key_counts.get_sk_local());
 }
