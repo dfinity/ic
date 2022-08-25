@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use std::io::BufRead;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -16,9 +17,23 @@ use tokio::{
 /// requests on a single thread.
 #[async_trait]
 pub trait Dashboard {
+    /// Starts the HTTP server and monitors the exit signal. Exits on whenever the exit signal is
+    /// activated.
+    async fn run(&self, exit_signal: Arc<RwLock<bool>>) {
+        async fn wait_for_exit(exit_signal: Arc<RwLock<bool>>) {
+            while !*exit_signal.read().await {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
+        tokio::select! {
+            _ = self.serve_requests() => {}
+            _ = wait_for_exit(exit_signal) => {}
+        };
+    }
+
     /// Starts listening on the port and calls handle_connection on each
     /// incoming stream, *one-by-one*.
-    async fn listen(&self, exit_signal: Arc<RwLock<bool>>) {
+    async fn serve_requests(&self) {
         let addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), Self::port());
         let listener = match TcpListener::bind(addr).await {
             Ok(listener) => listener,
@@ -28,8 +43,7 @@ pub trait Dashboard {
             }
         };
 
-        // Wait for incoming connections
-        while !*exit_signal.read().await {
+        loop {
             if let Ok((stream, _)) = listener.accept().await {
                 self.handle_connection(stream).await;
             }
