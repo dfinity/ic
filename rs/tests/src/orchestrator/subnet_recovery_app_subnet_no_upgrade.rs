@@ -23,7 +23,7 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::await_all_nodes_are_healthy;
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::driver_setup::{
     IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
@@ -61,7 +61,7 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    await_all_nodes_are_healthy(env.topology_snapshot());
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
@@ -84,11 +84,6 @@ pub fn test(env: TestEnv) {
 
     // choose a node from the nns subnet
     let nns_node = get_nns_node(&env.topology_snapshot());
-
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     info!(
         logger,

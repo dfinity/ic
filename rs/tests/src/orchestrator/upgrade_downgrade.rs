@@ -12,7 +12,7 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::await_all_nodes_are_healthy;
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
@@ -43,7 +43,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    await_all_nodes_are_healthy(env.topology_snapshot());
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 // Tests a downgrade of the nns subnet to the mainnet version and an upgrade back to the branch version
@@ -72,11 +72,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .nodes()
         .next()
         .unwrap();
-
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
     // We have to upgrade to `<VERSION>-test` because the original version is stored without the
