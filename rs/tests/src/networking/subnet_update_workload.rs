@@ -221,7 +221,7 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, Duration::from_secs(11), RETRY_BACKOFF, || async {
+            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &nns_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),
