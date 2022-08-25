@@ -164,7 +164,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(|| dfn_core::api::msg_cycles_available());
+        let cycles = cycles.unwrap_or_else(dfn_core::api::msg_cycles_available);
         self.message_has_enough_cycles(cycles)?;
 
         let accepted = dfn_core::api::msg_cycles_accept(cycles);

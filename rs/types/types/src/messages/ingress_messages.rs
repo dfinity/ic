@@ -357,9 +357,7 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
 
 impl From<&Ingress> for pb_ingress::Ingress {
     fn from(item: &Ingress) -> Self {
-        let effective_canister_id = item
-            .effective_canister_id
-            .map(|id| pb_types::CanisterId::from(id));
+        let effective_canister_id = item.effective_canister_id.map(pb_types::CanisterId::from);
         Self {
             source: Some(crate::user_id_into_protobuf(item.source)),
             receiver: Some(pb_types::CanisterId::from(item.receiver)),
