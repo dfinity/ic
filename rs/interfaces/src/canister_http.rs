@@ -21,6 +21,8 @@ use ic_types::{
 pub enum CanisterHttpPermanentValidationError {
     /// The [`CanisterHttpPayload`] is too large
     PayloadTooBig { expected: usize, received: usize },
+    /// There are too many responses in the payload
+    TooManyResponses { expected: usize, received: usize },
     /// The signed metadata does not match the metadata of the content
     InvalidMetadata {
         metadata_id: CallbackId,
