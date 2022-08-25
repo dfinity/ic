@@ -13,6 +13,7 @@ use ic_crypto_internal_csp::keygen::{
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
+use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -63,10 +64,8 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
     }
 
     fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
-        let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
-            self.collect_key_count_metrics(registry_version);
         self.metrics
-            .observe_node_key_counts(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks);
+            .observe_node_key_counts(self.collect_key_count_metrics(registry_version));
     }
 
     fn node_public_keys(&self) -> NodePublicKeys {
@@ -76,7 +75,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 
 // Helpers for implementing `KeyManager`-trait.
 impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
-    fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> (u8, u8, u8) {
+    fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> KeyCounts {
         let mut pub_keys_in_reg: u8 = 0;
         let mut secret_keys_in_sks: u8 = 0;
         let pub_keys_local = self.node_public_keys().get_pub_keys_and_cert_count();
@@ -102,7 +101,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 _ => {}
             }
         }
-        (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks)
+        KeyCounts::new(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks)
     }
 
     fn ensure_node_signing_key_material_is_set_up(
