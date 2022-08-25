@@ -64,7 +64,7 @@ impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
         let signed_dealings = initial_dealings
             .dealings()
             .iter()
-            .map(|signed_dealing| signed_idkg_dealing_tuple_proto(signed_dealing))
+            .map(signed_idkg_dealing_tuple_proto)
             .collect();
         InitialIDkgDealingsProto {
             version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,

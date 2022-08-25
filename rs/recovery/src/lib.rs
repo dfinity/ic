@@ -483,7 +483,7 @@ impl Recovery {
                 .get_ecdsa_config(subnet_id, version)
                 .map_err(|err| err.to_string())
         })
-        .map_err(|err| RecoveryError::UnexpectedError(err))
+        .map_err(RecoveryError::UnexpectedError)
     }
 
     /// Return an [AdminStep] step updating the recovery CUP of the given
@@ -864,7 +864,7 @@ pub fn get_member_ips(nns_url: Url, subnet_id: SubnetId) -> RecoveryResult<Vec<I
                 )),
             }
         })
-        .map_err(|err| RecoveryError::UnexpectedError(err))?;
+        .map_err(RecoveryError::UnexpectedError)?;
     result
         .into_iter()
         .filter_map(|node_record| {
