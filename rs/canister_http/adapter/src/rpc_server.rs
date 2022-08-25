@@ -1,6 +1,6 @@
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::Uri;
+use http::{uri::Scheme, Uri};
 use hyper::{
     client::connect::Connect,
     header::{HeaderMap, ToStrError},
@@ -41,6 +41,17 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 format!("Failed to parse URL: {}", err),
             )
         })?;
+
+        if uri.scheme() != Some(&Scheme::HTTPS) {
+            debug!(
+                self.logger,
+                "Got request with no or http scheme specified. {}", uri
+            );
+            return Err(Status::new(
+                tonic::Code::InvalidArgument,
+                "Url need to specify https scheme",
+            ));
+        }
 
         let method = HttpMethod::from_i32(req.method)
             .ok_or_else(|| {

@@ -109,7 +109,7 @@ fn start_server(cert_dir: TempDir) -> String {
         .bind_ephemeral(([127, 0, 0, 1], 0));
 
     tokio::spawn(async { fut.await });
-    format!("https://localhost:{}", addr.port())
+    format!("localhost:{}", addr.port())
 }
 
 #[tokio::test]
@@ -124,7 +124,7 @@ async fn test_canister_http_server() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/get", &url),
+        url: format!("https://{}/get", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
@@ -134,6 +134,37 @@ async fn test_canister_http_server() {
     assert!(response.is_ok());
     let http_response = response.unwrap().into_inner();
     assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+}
+
+#[tokio::test]
+async fn test_canister_http_http_protocol() {
+    // Check that error is returned if a `http` url is specified.
+    let server_config = Config {
+        ..Default::default()
+    };
+
+    let tmp_dir = generate_certs();
+
+    let mut client = spawn_grpc_server(server_config);
+    let url = start_server(tmp_dir);
+
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("http://{}/get", &url),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
+    });
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_err());
+    assert_eq!(
+        response.as_ref().unwrap_err().code(),
+        tonic::Code::InvalidArgument
+    );
+    assert!(response
+        .unwrap_err()
+        .message()
+        .contains(&"Url need to specify https scheme".to_string()));
 }
 
 #[tokio::test]
@@ -148,7 +179,7 @@ async fn test_canister_http_server_post() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/post", &url),
+        url: format!("https://{}/post", &url),
         headers: Vec::new(),
         method: HttpMethod::Post as i32,
         body: "420".to_string().as_bytes().to_vec(),
@@ -174,7 +205,7 @@ async fn test_canister_http_server_head() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/head", &url),
+        url: format!("https://{}/head", &url),
         headers: Vec::new(),
         method: HttpMethod::Head as i32,
         body: "".to_string().as_bytes().to_vec(),
@@ -201,7 +232,7 @@ async fn test_response_limit_exceeded() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/size", &url),
+        url: format!("https://{}/size", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: format!("{}", response_limit + 1).as_bytes().to_vec(),
@@ -234,7 +265,7 @@ async fn test_within_response_limit() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/size", &url),
+        url: format!("https://{}/size", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: format!("{}", response_limit).as_bytes().to_vec(),
@@ -260,7 +291,7 @@ async fn test_request_timeout() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/delay", &url),
+        url: format!("https://{}/delay", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: format!("{}", delay).as_bytes().to_vec(),
@@ -326,7 +357,7 @@ async fn test_nonascii_header() {
     let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
-        url: format!("{}/invalid", &url),
+        url: format!("https://{}/invalid", &url),
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".as_bytes().to_vec(),
