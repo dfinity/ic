@@ -29,11 +29,10 @@ use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_P
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister, can_read_msg, cannot_store_msg, store_message,
+    can_read_msg, cannot_store_msg, install_canister_with_retries, store_message,
 };
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
-use anyhow::bail;
 use ic_base_types::NodeId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
@@ -131,6 +130,7 @@ pub fn test(env: TestEnv) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
+    install_canister_with_retries(&app_node.get_public_url(), &logger, secs(600), secs(10));
     let msg = "subnet recovery works!";
     let app_can_id = store_message(&app_node.get_public_url(), msg);
     assert!(can_read_msg(
@@ -307,17 +307,9 @@ pub fn test(env: TestEnv) {
         );
     }
 
+    upload_node.await_status_is_healthy().unwrap();
     // make sure that state sync is completed
-    retry(logger.clone(), secs(600), secs(10), || {
-        info!(logger, "Try to install canister...");
-        if can_install_canister(&upload_node.get_public_url()) {
-            info!(logger, "Installing canister is possible.");
-            Ok(())
-        } else {
-            bail!("retry...")
-        }
-    })
-    .expect("Canister instalation should work!");
+    install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(
@@ -326,7 +318,6 @@ pub fn test(env: TestEnv) {
         app_can_id,
         msg
     ));
-    upload_node.await_status_is_healthy().unwrap();
     let new_msg = "subnet recovery still works!";
     info!(
         logger,
