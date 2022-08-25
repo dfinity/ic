@@ -165,12 +165,6 @@ ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e ic_git_revision=$G
 if ! boundary_nodes_exists "$INVENTORY"; then
     USE_BOUNDARY_NODES="false"
 elif [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    BN_DOMAINNAME=$("$INVENTORY" --list | jq -r '.boundary.vars.domain // ""')
-    if [[ -z "$BN_DOMAINNAME" ]]; then
-        echo "ERROR: '[boundary:vars] domain' was not defined, please check '$INVENTORY.ini'"
-        exit 1
-    fi
-
     ANSIBLE+=" -e bn_media_path=\"$BN_MEDIA_PATH\" -e ic_boundary_node_image=boundary"
 else
     ANSIBLE+=" -e ic_boundary_node_image=generic --skip-tags "boundary_node_vm""
@@ -212,8 +206,7 @@ mkdir -p "$BN_MEDIA_PATH"
     --input="$BN_MEDIA_PATH/${deployment}.json" \
     --output="$BN_MEDIA_PATH" \
     --deployment-type=dev \
-    --git-revision=$GIT_REVISION \
-    --nginx-domainname=$BN_DOMAINNAME
+    --git-revision=$GIT_REVISION
 EOM
     )
 
