@@ -6037,6 +6037,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "log",
+ "log4rs",
  "on_wire",
  "rusqlite",
  "serde",
