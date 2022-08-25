@@ -7,7 +7,7 @@ build --strip=always
 
 build --strategy_regexp=ic-os/guestos/.*=local
 
-build --remote_cache=buildfarm.dfinity.systems
+build:ci --remote_cache=buildfarm.dfinity.systems # TODO: set as default when the infrastructure will be reliably accessible from development machines
 build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
@@ -15,7 +15,7 @@ build --noremote_upload_local_results # Whether to upload locally executed actio
 build --execution_log_json_file=bazel-build-log.json
 
 build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
-build --bes_backend=bes.buildfarm.dfinity.systems
+build:ci --bes_backend=bes.buildfarm.dfinity.systems # TODO: set as default when the infrastructure will be reliably accessible from development machines
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
