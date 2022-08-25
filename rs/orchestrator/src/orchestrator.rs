@@ -285,7 +285,7 @@ impl Orchestrator {
             exit_signal: Arc<RwLock<bool>>,
             logger: ReplicaLogger,
         ) {
-            dashboard.listen(exit_signal).await;
+            dashboard.run(exit_signal).await;
             info!(logger, "Shut down the orchestrator dashboard");
         }
 
