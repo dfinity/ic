@@ -503,27 +503,17 @@ impl TransportImpl {
         // Creating the listeners requres that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
         // Bind to the server ports.
-        let mut listeners = Vec::new();
-
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
-        listeners.push((
-            self.config.legacy_flow_tag,
-            self.config.listening_port,
-            start_listener(server_addr).unwrap_or_else(|err| {
-                panic!(
-                    "Failed to init listener: local_addr = {:?}, error = {:?}",
-                    server_addr, err
-                )
-            }),
-        ));
+        let tcp_listener = start_listener(server_addr).unwrap_or_else(|err| {
+            panic!(
+                "Failed to init listener: local_addr = {:?}, error = {:?}",
+                server_addr, err
+            )
+        });
 
-        let mut accept_ports = HashMap::new();
-        for (config_flow_tag, _, tcp_listener) in listeners {
-            let flow_tag = FlowTag::from(config_flow_tag);
-            let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
-            accept_ports.insert(flow_tag, ServerPortState { accept_task });
-        }
-        *self.accept_ports.blocking_lock() = accept_ports;
+        let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
+        let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
+        *self.accept_port.blocking_lock() = Some(ServerPortState { accept_task });
         *self.event_handler.blocking_lock() = Some(event_handler);
     }
 }

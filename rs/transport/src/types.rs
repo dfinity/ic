@@ -77,8 +77,8 @@ pub(crate) struct TransportImpl {
     /// Configuration
     pub config: TransportConfig,
 
-    /// Ports used to accept connections for this transport-client
-    pub accept_ports: Mutex<HashMap<FlowTag, ServerPortState>>,
+    /// Port used to accept connections for this transport-client
+    pub accept_port: Mutex<Option<ServerPortState>>,
     /// Mapping of peers to their corresponding state
     pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
     /// Event handler to report back to the transport client
