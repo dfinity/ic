@@ -859,7 +859,7 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: Scalar) -> $projective {
-                <$projective>::new(self.inner() * scalar.inner())
+                <$projective>::from(self).windowed_mul(&scalar)
             }
         }
 
@@ -867,7 +867,7 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: &Scalar) -> $projective {
-                <$projective>::new(self.inner() * scalar.inner())
+                <$projective>::from(self).windowed_mul(scalar)
             }
         }
 
@@ -1073,10 +1073,74 @@ macro_rules! declare_muln_vartime_affine_impl_for {
     };
 }
 
+macro_rules! declare_windowed_scalar_mul_ops_for {
+    ( $typ:ty, $window:expr ) => {
+        impl $typ {
+            pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
+                // Configurable window size: can be 1, 2, or 4
+                type Window = WindowInfo<$window>;
+
+                // Derived constants
+                const TABLE_SIZE: usize = Window::ELEMENTS;
+
+                let mut tbl = [Self::identity(); TABLE_SIZE];
+
+                for i in 1..TABLE_SIZE {
+                    tbl[i] = tbl[i - 1] + *self;
+                }
+
+                let s = scalar.serialize();
+
+                let mut accum = Self::identity();
+
+                for i in 0..Window::WINDOWS {
+                    // skip on first iteration: doesn't leak secrets as index is public
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w = Window::extract(&s, i);
+                    accum += Self::ct_select(&tbl, w as usize);
+                }
+
+                accum
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for $typ {
+            type Output = Self;
+            fn mul(self, scalar: Scalar) -> Self {
+                self.windowed_mul(&scalar)
+            }
+        }
+
+        impl std::ops::Mul<&Scalar> for $typ {
+            type Output = Self;
+            fn mul(self, scalar: &Scalar) -> Self {
+                self.windowed_mul(scalar)
+            }
+        }
+
+        impl std::ops::MulAssign<Scalar> for $typ {
+            fn mul_assign(&mut self, other: Scalar) {
+                *self = self.windowed_mul(&other);
+            }
+        }
+
+        impl std::ops::MulAssign<&Scalar> for $typ {
+            fn mul_assign(&mut self, other: &Scalar) {
+                *self = self.windowed_mul(other);
+            }
+        }
+    };
+}
+
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
 declare_mixed_addition_ops_for!(G1Projective, G1Affine);
-declare_mul_scalar_ops_for!(G1Projective);
+declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
 declare_mul2_impl_for!(G1Projective, 2);
 declare_muln_vartime_impl_for!(G1Projective, 4);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
@@ -1086,7 +1150,7 @@ impl_debug_using_serialize_for!(G1Projective);
 define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);
 declare_mixed_addition_ops_for!(G2Projective, G2Affine);
-declare_mul_scalar_ops_for!(G2Projective);
+declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
 declare_mul2_impl_for!(G2Projective, 2);
 declare_muln_vartime_impl_for!(G2Projective, 4);
 impl_debug_using_serialize_for!(G2Affine);
