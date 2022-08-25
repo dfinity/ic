@@ -107,6 +107,7 @@ rust_test(
     data = DEV_DATA,
     edition = "2018",
     env = DEV_ENV,
+    flaky = True,  # TODO(IDX-2447): remove when tests will be stable.
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     tags = ["exclusive-if-local"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
