@@ -113,7 +113,7 @@ impl TransportImpl {
             log,
 
             peer_map: tokio::sync::RwLock::new(HashMap::new()),
-            accept_ports: Mutex::new(HashMap::new()),
+            accept_port: Mutex::new(None),
             event_handler: Mutex::new(None),
             weak_self: std::sync::RwLock::new(Weak::new()),
         });
