@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "mocks",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_tls_interfaces_mocks",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "//rs/crypto/tls_interfaces",
+        "//rs/types/base_types",
+        "@crate_index//:mockall",
+        "@crate_index//:tokio",
+    ],
+)

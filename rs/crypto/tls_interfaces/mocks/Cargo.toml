@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-tls-interfaces-mocks"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.36"
+ic-base-types = { path = "../../../types/base_types" }
+ic-crypto-tls-interfaces = { path = "../" }
+mockall = "0.11.2"
+tokio = { version = "1.15.0", features = ["full"] }
