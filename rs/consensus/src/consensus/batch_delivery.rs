@@ -67,6 +67,7 @@ pub fn deliver_batches(
         match (pool.get_finalized_block(h), pool.get_random_tape(h)) {
             (Some(block), Some(tape)) => {
                 debug!(
+                    every_n_seconds => 5,
                     log,
                     "Finalized height";
                     consensus => ConsensusLogEntry {
@@ -89,6 +90,7 @@ pub fn deliver_batches(
                     }) {
                         Some(replica_version) if replica_version != current_replica_version => {
                             debug!(
+                                every_n_seconds => 5,
                                 log,
                                 "Batch of height {} is not delivered before replica upgrades to new version {}",
                                 h,
