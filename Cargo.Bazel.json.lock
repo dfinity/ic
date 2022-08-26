@@ -1,5 +1,5 @@
 {
-  "checksum": "4ac4f53685a913fbeca218c3c4ce5498b11d7d8fc055336f496f46cc7fdebb2c",
+  "checksum": "c9851ab4f7ab0a5d029b3edd25e45950d13723677af7f2fabb6be9a3f0887966",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7333,6 +7333,67 @@
       },
       "license": "MIT"
     },
+    "console 0.14.1": {
+      "name": "console",
+      "version": "0.14.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/console/0.14.1/download",
+          "sha256": "3993e6445baa160675931ec041a5e03ca84b9c6e32a056150d3aa2bdda0a1f45"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "console",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "console",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "libc 0.2.132",
+              "target": "libc"
+            },
+            {
+              "id": "terminal_size 0.1.17",
+              "target": "terminal_size"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "encode_unicode 0.3.6",
+                "target": "encode_unicode"
+              },
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.14.1"
+      },
+      "license": "MIT"
+    },
     "console 0.15.1": {
       "name": "console",
       "version": "0.15.1",
@@ -11229,7 +11290,7 @@
               "target": "indicatif"
             },
             {
-              "id": "insta 1.19.0",
+              "id": "insta 1.8.0",
               "target": "insta"
             },
             {
@@ -19044,13 +19105,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "insta 1.19.0": {
+    "insta 1.8.0": {
       "name": "insta",
-      "version": "1.19.0",
+      "version": "1.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/insta/1.19.0/download",
-          "sha256": "f37dc501f12ec0c339b385787fa89ffda3d5d2caa62e558da731134c24d6e0c4"
+          "url": "https://crates.io/api/v1/crates/insta/1.8.0/download",
+          "sha256": "15226a375927344c78d39dc6b49e2d5562a5b0705e26a589093c6792e52eed8e"
         }
       },
       "targets": [
@@ -19080,30 +19141,38 @@
         "deps": {
           "common": [
             {
-              "id": "console 0.15.1",
+              "id": "console 0.14.1",
               "target": "console"
             },
             {
-              "id": "linked-hash-map 0.5.6",
-              "target": "linked_hash_map"
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
             },
             {
-              "id": "once_cell 1.13.1",
-              "target": "once_cell"
+              "id": "serde 1.0.144",
+              "target": "serde"
             },
             {
-              "id": "similar 2.2.0",
+              "id": "serde_json 1.0.85",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_yaml 0.8.26",
+              "target": "serde_yaml"
+            },
+            {
+              "id": "similar 1.3.0",
               "target": "similar"
             },
             {
-              "id": "yaml-rust 0.4.5",
-              "target": "yaml_rust"
+              "id": "uuid 0.8.2",
+              "target": "uuid"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.19.0"
+        "version": "1.8.0"
       },
       "license": "Apache-2.0"
     },
@@ -37301,13 +37370,13 @@
       },
       "license": "Apache-2.0"
     },
-    "similar 2.2.0": {
+    "similar 1.3.0": {
       "name": "similar",
-      "version": "2.2.0",
+      "version": "1.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/similar/2.2.0/download",
-          "sha256": "62ac7f900db32bf3fd12e0117dd3dc4da74bc52ebaac97f39668446d89694803"
+          "url": "https://crates.io/api/v1/crates/similar/1.3.0/download",
+          "sha256": "1ad1d488a557b235fc46dae55512ffbfc429d2482b08b4d9435ab07384ca8aec"
         }
       },
       "targets": [
@@ -37335,7 +37404,7 @@
           "text"
         ],
         "edition": "2018",
-        "version": "2.2.0"
+        "version": "1.3.0"
       },
       "license": "Apache-2.0"
     },

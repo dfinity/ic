@@ -124,7 +124,7 @@ fn test_instrument_module_with_exported_global() {
 fn compressed_test_contents(name: &str) -> Vec<u8> {
     let path = format!(
         "{}/tests/compressed/{}",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
         name
     );
     std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {}: {}", path, e))
