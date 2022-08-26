@@ -38,6 +38,7 @@ buildifier_test(
         "external",
         "local",
         "no-sandbox",
+        "precommit",
         "small",
         "smoke",
     ],
@@ -45,9 +46,7 @@ buildifier_test(
 
 test_suite(
     name = "precommit",
-    tests = [
-        ":buildifier_test",
-    ],
+    tags = ["precommit"],
 )
 
 alias(
