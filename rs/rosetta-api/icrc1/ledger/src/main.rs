@@ -239,21 +239,9 @@ fn supported_standards() -> Vec<StandardRecord> {
 #[query]
 #[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
-    let start = req.start.0.to_u64().unwrap_or_else(|| {
-        ic_cdk::api::trap(&format!(
-            "transaction index {} is too large, max allowed: {}",
-            req.start,
-            u64::MAX
-        ))
-    });
-    let length = req.length.0.to_u64().unwrap_or_else(|| {
-        ic_cdk::api::trap(&format!(
-            "requested length {} is too large, max allowed: {}",
-            req.length,
-            u64::MAX
-        ))
-    }) as usize;
-
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
     Access::with_ledger(|ledger| ledger.get_transactions(start, length))
 }
 

@@ -5786,6 +5786,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "leb128",
+ "num-traits",
  "serde",
  "serde_bytes",
 ]

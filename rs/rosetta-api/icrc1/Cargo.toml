@@ -13,6 +13,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
+num-traits = "0.2.12"
 serde = "1.0"
 serde_bytes = "0.11"
 

@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:ciborium",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]

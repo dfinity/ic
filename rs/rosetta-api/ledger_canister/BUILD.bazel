@@ -67,27 +67,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_library(
-    name = "ledger_canister_test_feature",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
-    crate_features = ["test"],
-    crate_name = "ledger_canister",
-    data = [
-        "wasm/ledger-archive-node-canister-bazel.wasm",
-    ],
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_env = {
-        # Circular dependency between ledger-canister-wasm and ledger_canister.
-        # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
-        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister-bazel.wasm",
-    },
-    deps = DEPENDENCIES,
-)
-
 rust_binary(
     name = "test_notified",
     srcs = ["test/notified.rs"],

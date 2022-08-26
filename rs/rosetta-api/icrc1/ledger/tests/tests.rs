@@ -3,7 +3,8 @@ use candid::{CandidType, Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
     endpoints::{
-        ArchiveInfo, StandardRecord, Transaction as Tx, Transfer, TransferArg, TransferError, Value,
+        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, StandardRecord,
+        Transaction as Tx, TransactionRange, Transfer, TransferArg, TransferError, Value,
     },
     Account, Block, Memo, Operation, Transaction,
 };
@@ -200,6 +201,52 @@ fn get_archive_transaction(
         Option<Tx>
     )
     .expect("failed to decode get_transaction response")
+}
+
+fn get_transactions(
+    env: &StateMachine,
+    ledger: CanisterId,
+    start: u64,
+    length: usize,
+) -> GetTransactionsResponse {
+    Decode!(
+        &env.query(
+            ledger,
+            "get_transactions",
+            Encode!(&GetTransactionsRequest {
+                start: Nat::from(start),
+                length: Nat::from(length)
+            })
+            .unwrap()
+        )
+        .expect("failed to query ledger transactions")
+        .bytes(),
+        GetTransactionsResponse
+    )
+    .expect("failed to decode get_transactions response")
+}
+
+fn get_archive_transactions(
+    env: &StateMachine,
+    archive: CanisterId,
+    start: u64,
+    length: usize,
+) -> TransactionRange {
+    Decode!(
+        &env.query(
+            archive,
+            "get_transactions",
+            Encode!(&GetTransactionsRequest {
+                start: Nat::from(start),
+                length: Nat::from(length)
+            })
+            .unwrap()
+        )
+        .expect("failed to query archive transactions")
+        .bytes(),
+        TransactionRange
+    )
+    .expect("failed to decode get_transactions archive response")
 }
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
@@ -677,19 +724,42 @@ fn test_archiving() {
 
     let archive_canister_id = archive_info[0].canister_id;
 
+    let resp = get_transactions(&env, canister_id, 0, 1_000_000);
+    assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
+    assert_eq!(
+        resp.transactions.len(),
+        (ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE + 1) as usize
+    );
+    assert_eq!(resp.archived_transactions.len(), 1);
+    assert_eq!(resp.archived_transactions[0].start, Nat::from(0));
+    assert_eq!(
+        resp.archived_transactions[0].length,
+        Nat::from(NUM_BLOCKS_TO_ARCHIVE)
+    );
+
+    let archived_transactions =
+        get_archive_transactions(&env, archive_canister_id, 0, NUM_BLOCKS_TO_ARCHIVE as usize)
+            .transactions;
+
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
+        let expected_tx = Transfer {
+            from: p1.into(),
+            to: p2.into(),
+            amount: Nat::from(10_000 + i - 1),
+            fee: Some(Nat::from(FEE)),
+            memo: None,
+            created_at_time: None,
+        };
         assert_eq!(
             get_archive_transaction(&env, archive_canister_id, i)
                 .unwrap()
-                .transfer,
-            Some(Transfer {
-                from: p1.into(),
-                to: p2.into(),
-                amount: Nat::from(10_000 + i - 1),
-                fee: Some(Nat::from(FEE)),
-                memo: None,
-                created_at_time: None,
-            })
+                .transfer
+                .as_ref(),
+            Some(&expected_tx)
+        );
+        assert_eq!(
+            archived_transactions[i as usize].transfer.as_ref(),
+            Some(&expected_tx)
         );
     }
 
@@ -726,6 +796,20 @@ fn test_archiving() {
         archive_info[0].block_range_end,
         2 * NUM_BLOCKS_TO_ARCHIVE - 1
     );
+
+    // Check that the archive handles requested ranges correctly.
+    let archived_transactions =
+        get_archive_transactions(&env, archive_canister_id, 0, 1_000_000).transactions;
+    let n = 2 * NUM_BLOCKS_TO_ARCHIVE as usize;
+    assert_eq!(archived_transactions.len(), n);
+
+    for start in 0..n {
+        for end in start..n {
+            let tx = get_archive_transactions(&env, archive_canister_id, start as u64, end - start)
+                .transactions;
+            assert_eq!(archived_transactions[start..end], tx);
+        }
+    }
 }
 
 fn arb_amount() -> impl Strategy<Value = u64> {
