@@ -256,6 +256,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 quadruples_to_create_in_advance: 100,
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                signature_request_timeout_ns: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -292,6 +293,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                         subnet_id: Some(*system_subnet_principal),
                     }],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    signature_request_timeout_ns: None,
                 });
                 payload
             };

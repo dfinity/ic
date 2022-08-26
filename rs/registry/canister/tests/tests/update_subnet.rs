@@ -482,6 +482,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
@@ -538,6 +539,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
@@ -567,6 +569,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                         quadruples_to_create_in_advance: 10,
                         key_ids: vec![make_ecdsa_key("key_id_1")],
                         max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                        signature_request_timeout_ns: None,
                     }
                     .into()
                 ),
@@ -580,6 +583,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)

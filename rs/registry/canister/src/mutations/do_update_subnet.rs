@@ -411,6 +411,7 @@ mod tests {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
             ecdsa_key_signing_disable: None,
@@ -531,6 +532,7 @@ mod tests {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
             ecdsa_key_signing_disable: None,
@@ -583,6 +585,7 @@ mod tests {
                         quadruples_to_create_in_advance: 10,
                         key_ids: vec![make_ecdsa_key("key_id_1")],
                         max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                        signature_request_timeout_ns: None,
                     }
                     .into()
                 ),
@@ -1058,6 +1061,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
         payload.ecdsa_key_signing_enable = Some(vec![key]);
 
@@ -1096,6 +1100,7 @@ mod tests {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![existing_key_id],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -1126,6 +1131,7 @@ mod tests {
                 name: "existing_key_id".to_string(),
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         registry.do_update_subnet(payload);
@@ -1163,6 +1169,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![first_key.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         registry.do_update_subnet(payload);
@@ -1181,6 +1188,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![first_key.clone(), second_key.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         registry.do_update_subnet(payload);
@@ -1217,6 +1225,7 @@ mod tests {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -1233,6 +1242,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
         payload.ecdsa_key_signing_enable = Some(vec![key.clone()]);
 
@@ -1259,6 +1269,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
         payload.ecdsa_key_signing_disable = Some(vec![key.clone()]);
         registry.do_update_subnet(payload);
@@ -1301,6 +1312,7 @@ mod tests {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_held_by_subnet.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -1317,6 +1329,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key_held_by_subnet.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
         payload.ecdsa_key_signing_enable = Some(vec![key_held_by_subnet.clone()]);
 
@@ -1384,6 +1397,7 @@ mod tests {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -1400,6 +1414,7 @@ mod tests {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
         payload.ecdsa_key_signing_enable = Some(vec![key.clone()]);
         payload.ecdsa_key_signing_disable = Some(vec![key]);

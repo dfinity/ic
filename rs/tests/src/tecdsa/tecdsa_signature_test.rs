@@ -362,6 +362,7 @@ pub(crate) async fn enable_ecdsa_signing(
             quadruples_to_create_in_advance: 10,
             key_ids: vec![key_id.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         }),
         ..empty_subnet_update()
     };
@@ -424,6 +425,7 @@ async fn create_new_subnet_with_keys(
             quadruples_to_create_in_advance: 4,
             keys,
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         }),
     };
     execute_create_subnet_proposal(governance, payload).await;

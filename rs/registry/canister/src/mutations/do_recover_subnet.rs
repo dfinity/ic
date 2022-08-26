@@ -303,6 +303,7 @@ mod test {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -418,6 +419,7 @@ mod test {
                 subnet_id: None,
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -448,6 +450,7 @@ mod test {
                 subnet_id: None,
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -478,6 +481,7 @@ mod test {
                 subnet_id: Some(subnet_id_to_request_key_from.get()),
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -506,6 +510,7 @@ mod test {
                 subnet_id: Some(subnet_id.get()),
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
