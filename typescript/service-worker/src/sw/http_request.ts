@@ -262,9 +262,14 @@ export async function handleRequest(request: Request): Promise<Response> {
         shouldFetchRootKey
       );
       const requestHeaders: [string, string][] = [];
-      request.headers.forEach((value, key) =>
-        requestHeaders.push([key, value])
-      );
+      request.headers.forEach((value, key) => {
+        if (key.toLowerCase() === 'if-none-match') {
+          // Drop the if-none-match header because we do not want a "304 not modified" response back.
+          // See TT-30.
+          return;
+        }
+        requestHeaders.push([key, value]);
+      });
 
       // If the accept encoding isn't given, add it because we want to save bandwidth.
       if (!request.headers.has('Accept-Encoding')) {
