@@ -29,6 +29,8 @@ rust_test(
     size = "large",
     crate = ":local_registry",
     edition = "2018",
+    flaky = True,  # TODO(IDX-2447): remove when tests will be stable.
+    tags = ["exclusive-if-local"],
     deps = [
         "//rs/registry/local_store/artifacts",
         "@crate_index//:tempfile",
