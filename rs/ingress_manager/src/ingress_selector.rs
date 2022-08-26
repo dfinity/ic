@@ -350,7 +350,7 @@ impl IngressManager {
             } => match state.canister_state(&payer) {
                 Some(canister) => {
                     let cumulative_ingress_cost =
-                        cycles_needed.entry(payer).or_insert_with(|| Cycles::zero());
+                        cycles_needed.entry(payer).or_insert_with(Cycles::zero);
                     if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,

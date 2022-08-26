@@ -163,9 +163,9 @@ impl BackupAge for FileSystemAge {
     fn get_elapsed_time(&self, path: &Path) -> Result<Duration, PurgingError> {
         // return elapsed time since last modification as reported by file system
         path.metadata()
-            .map_err(|err| PurgingError::Permanent(err))?
+            .map_err(PurgingError::Permanent)?
             .modified()
-            .map_err(|err| PurgingError::Permanent(err))?
+            .map_err(PurgingError::Permanent)?
             .elapsed()
             .map_err(|err| PurgingError::Transient(err.to_string()))
     }
