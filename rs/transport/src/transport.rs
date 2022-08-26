@@ -188,20 +188,16 @@ impl Transport for TransportImpl {
     fn send(
         &self,
         peer_id: &NodeId,
-        flow_tag: FlowTag,
+        _flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportError> {
         let peer_map = self.peer_map.blocking_read();
-        let peer_state = match peer_map.get(peer_id) {
+        let peer_state_mu = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportError::NotFound),
         };
-        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-            Some(flow_state) => flow_state,
-            None => return Err(TransportError::NotFound),
-        };
-        let flow_state = flow_state_mu.blocking_read();
-        match flow_state.send_queue.enqueue(message) {
+        let peer_state = peer_state_mu.blocking_read();
+        match peer_state.send_queue.enqueue(message) {
             Some(unsent) => Err(TransportError::SendQueueFull(unsent)),
             None => Ok(()),
         }
@@ -212,11 +208,6 @@ impl Transport for TransportImpl {
         let peer_state = peer_map
             .get_mut(peer_id)
             .expect("Transport client not found");
-        peer_state
-            .flow_map
-            .iter_mut()
-            .for_each(|(_flow_id, flow_state)| {
-                flow_state.blocking_write().send_queue.clear();
-            });
+        peer_state.blocking_write().send_queue.clear();
     }
 }

@@ -8,8 +8,8 @@ use crate::{
     data_plane::create_connected_state,
     metrics::{IntGaugeResource, STATUS_ERROR, STATUS_SUCCESS},
     types::{
-        Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize,
-        ServerPortState, TransportImpl,
+        Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
+        TransportImpl,
     },
     utils::get_flow_label,
 };
@@ -17,7 +17,7 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{FlowTag, TransportError, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 use strum::AsRefStr;
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream},
@@ -72,15 +72,12 @@ impl TransportImpl {
         if peer_map.get(peer_id).is_some() {
             return Err(TransportError::AlreadyExists);
         }
-        let mut peer_state = PeerState {
-            flow_map: HashMap::new(),
-        };
 
         // TODO: P2P-514
         let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
         if role == ConnectionRole::Server {
             let flow_label = get_flow_label(&peer_addr.ip().to_string(), peer_id);
-            let flow_state = FlowState::new(
+            let peer_state = PeerState::new(
                 self.log.clone(),
                 flow_tag,
                 flow_label,
@@ -89,12 +86,7 @@ impl TransportImpl {
                 self.send_queue_metrics.clone(),
                 self.control_plane_metrics.clone(),
             );
-            peer_state
-                .flow_map
-                .insert(flow_tag, RwLock::new(flow_state));
-        }
-        if role == ConnectionRole::Server {
-            peer_map.insert(*peer_id, peer_state);
+            peer_map.insert(*peer_id, RwLock::new(peer_state));
             return Ok(());
         }
 
@@ -104,7 +96,7 @@ impl TransportImpl {
             peer_addr,
             connecting_task,
         };
-        let flow_state = FlowState::new(
+        let peer_state = PeerState::new(
             self.log.clone(),
             flow_tag,
             flow_label,
@@ -113,11 +105,8 @@ impl TransportImpl {
             self.send_queue_metrics.clone(),
             self.control_plane_metrics.clone(),
         );
-        peer_state
-            .flow_map
-            .insert(flow_tag, RwLock::new(flow_state));
 
-        peer_map.insert(*peer_id, peer_state);
+        peer_map.insert(*peer_id, RwLock::new(peer_state));
         Ok(())
     }
 
@@ -194,16 +183,12 @@ impl TransportImpl {
                             };
 
                             let peer_map = arc_self.peer_map.read().await;
-                            let peer_state = match peer_map.get(&peer_id) {
+                            let peer_state_mu = match peer_map.get(&peer_id) {
                                 Some(peer_state) => peer_state,
                                 None => return,
                             };
-                            let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-                                Some(flow_state) => flow_state,
-                                None => return,
-                            };
-                            let mut flow_state = flow_state_mu.write().await;
-                            if flow_state.get_connected().is_some() {
+                            let mut peer_state = peer_state_mu.write().await;
+                            if peer_state.get_connected().is_some() {
                                 // TODO: P2P-516
                                 return;
                             }
@@ -214,8 +199,8 @@ impl TransportImpl {
                             let connected_state = create_connected_state(
                                 peer_id,
                                 flow_tag,
-                                flow_state.flow_label.clone(),
-                                flow_state.send_queue.get_reader(),
+                                peer_state.flow_label.clone(),
+                                peer_state.send_queue.get_reader(),
                                 ConnectionRole::Server,
                                 peer_addr,
                                 tls_stream,
@@ -229,7 +214,7 @@ impl TransportImpl {
                                 .call(TransportEvent::PeerUp(peer_id))
                                 .await
                                 .expect("Can't panic on infallible");
-                            flow_state.update(ConnectionState::Connected(connected_state));
+                            peer_state.update(ConnectionState::Connected(connected_state));
                             arc_self.control_plane_metrics
                                 .tcp_accept_conn_success
                                 .with_label_values(&[&flow_tag.to_string()])
@@ -284,16 +269,12 @@ impl TransportImpl {
                             .inc();
 
                         let peer_map = arc_self.peer_map.read().await;
-                        let peer_state = match peer_map.get(&peer_id) {
+                        let peer_state_mu = match peer_map.get(&peer_id) {
                             Some(peer_state) => peer_state,
                             None => continue,
                         };
-                        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-                            Some(flow_state) => flow_state,
-                            None => continue,
-                        };
-                        let mut flow_state = flow_state_mu.write().await;
-                        if flow_state.get_connected().is_some() {
+                        let mut peer_state = peer_state_mu.write().await;
+                        if peer_state.get_connected().is_some() {
                             // TODO: P2P-516
                             continue;
                         }
@@ -329,8 +310,8 @@ impl TransportImpl {
                         let connected_state = create_connected_state(
                             peer_id,
                             flow_tag,
-                            flow_state.flow_label.clone(),
-                            flow_state.send_queue.get_reader(),
+                            peer_state.flow_label.clone(),
+                            peer_state.send_queue.get_reader(),
                             ConnectionRole::Client,
                             peer_addr,
                             tls_stream,
@@ -344,7 +325,7 @@ impl TransportImpl {
                             .call(TransportEvent::PeerUp(peer_id))
                             .await
                             .expect("Can't panic on infallible");
-                        flow_state.update(ConnectionState::Connected(connected_state));
+                        peer_state.update(ConnectionState::Connected(connected_state));
                         arc_self.control_plane_metrics
                             .tcp_conn_to_server_success
                             .with_label_values(&[
@@ -386,16 +367,12 @@ impl TransportImpl {
             peer_id
         );
         let peer_map = self.peer_map.read().await;
-        let peer_state = match peer_map.get(&peer_id) {
+        let peer_state_mu = match peer_map.get(&peer_id) {
             Some(peer_state) => peer_state,
             None => return,
         };
-        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-            Some(flow_state) => flow_state,
-            None => return,
-        };
-        let mut flow_state = flow_state_mu.write().await;
-        let connected = match flow_state.get_connected() {
+        let mut peer_state = peer_state_mu.write().await;
+        let connected = match peer_state.get_connected() {
             Some(connected) => connected,
             // Flow is already disconnected/reconnecting, skip reconnect processing
             None => return,
@@ -446,7 +423,7 @@ impl TransportImpl {
             .call(TransportEvent::PeerDown(peer_id))
             .await
             .expect("Can't panic on infallible");
-        flow_state.update(connection_state);
+        peer_state.update(connection_state);
     }
 
     /// Performs the server side TLS hand shake processing
