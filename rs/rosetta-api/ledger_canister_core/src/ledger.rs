@@ -1,7 +1,8 @@
-use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, runtime::Runtime};
+use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
 use ic_base_types::CanisterId;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::ops::Range;
 use std::time::Duration;
 
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
@@ -388,4 +389,35 @@ pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
             ));
         }
     });
+}
+
+/// The distribution of a block range across canisters.
+pub struct BlockLocations {
+    /// Blocks currently owned by the main ledger canister.
+    pub local_blocks: Range<u64>,
+    /// Blocks stored in the archive canisters.
+    pub archived_blocks: Vec<(CanisterId, Range<u64>)>,
+}
+
+/// Returns the locations of the specified block range.
+pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> BlockLocations {
+    let requested_range = range_utils::make_range(start, length);
+    let local_range = ledger.blockchain().local_block_range();
+    let local_blocks = range_utils::intersect(&requested_range, &local_range);
+
+    let archive = ledger.blockchain().archive.read().unwrap();
+
+    let archived_blocks: Vec<_> = archive
+        .iter()
+        .flat_map(|archive| archive.index().into_iter())
+        .filter_map(|((from, to), canister_id)| {
+            let slice = range_utils::intersect(&(from..to + 1), &requested_range);
+            (!slice.is_empty()).then(|| (canister_id, slice))
+        })
+        .collect();
+
+    BlockLocations {
+        local_blocks,
+        archived_blocks,
+    }
 }

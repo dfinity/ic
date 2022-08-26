@@ -1,4 +1,32 @@
+type Account = record { owner : principal; subaccount : opt blob };
+
+type Transaction = record {
+     kind : text;
+     mint : opt record {
+         amount : nat;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     burn : opt record {
+         amount : nat;
+         from : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     transfer : opt record {
+         amount : nat;
+         from : Account;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     timestamp : nat64;
+};
+
 service : (principal, nat64, opt nat64) -> {
     append_blocks : (vec blob) -> ();
     remaining_capacity : () -> (nat64) query;
+    get_transaction : (nat64) -> (opt Transaction) query;
+    get_transactions : (record { start : nat; length : nat }) -> (record { transactions : vec Transaction }) query;
 }

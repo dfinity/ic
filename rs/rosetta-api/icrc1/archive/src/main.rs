@@ -1,6 +1,9 @@
 use candid::{candid_method, Principal};
 use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{endpoints::Transaction, Block};
+use ic_icrc1::{
+    endpoints::{GetTransactionsRequest, Transaction, TransactionRange},
+    Block,
+};
 use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock};
 use serde::{Deserialize, Serialize};
 use stable_structures::{
@@ -16,6 +19,9 @@ const DEFAULT_MEMORY_LIMIT: usize = 3 * GIB;
 
 /// The minimum block size in bytes, computed empirically.
 const MIN_BLOCK_SIZE: usize = 90;
+
+/// The maximum number of blocks to return in a single get_transactions request.
+const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
 /// The expected number of blocks that fits into stable memory.
 const MAX_BLOCKS: usize = DEFAULT_MEMORY_LIMIT / MIN_BLOCK_SIZE;
@@ -95,6 +101,12 @@ fn with_archive_opts<R>(f: impl FnOnce(&ArchiveConfig) -> R) -> R {
 /// A helper function to access the block list.
 fn with_blocks<R>(f: impl FnOnce(&StableLog<Memory>) -> R) -> R {
     BLOCKS.with(|cell| f(&*cell.borrow()))
+}
+
+fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
+    Block::decode(EncodedBlock::from(bytes))
+        .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
+        .into()
 }
 
 #[init]
@@ -177,13 +189,34 @@ fn get_transaction(index: BlockHeight) -> Option<Transaction> {
     let relative_idx = (idx_offset < index).then(|| (index - idx_offset) as usize)?;
 
     let block = with_blocks(|blocks| blocks.get(relative_idx))?;
-    Some(
-        Block::decode(EncodedBlock::from(block))
-            .unwrap_or_else(|e| {
-                ic_cdk::api::trap(&format!("failed to decode block {}: {}", index, e))
-            })
-            .into(),
-    )
+    Some(decode_transaction(index, block))
+}
+
+#[query]
+#[candid_method(query)]
+fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+
+    let offset = with_archive_opts(|opts| {
+        if start < opts.block_index_offset {
+            ic_cdk::api::trap(&format!(
+                "requested index {} is less than the minimal index {} this archive serves",
+                start, opts.block_index_offset
+            ));
+        }
+        (start - opts.block_index_offset) as usize
+    });
+
+    let length = length.min(MAX_BLOCKS_PER_REQUEST);
+    let transactions = with_blocks(|blocks| {
+        let limit = blocks.len().min(offset.saturating_add(length));
+        (offset..limit)
+            .map(|i| decode_transaction(start + i as u64, blocks.get(i).unwrap()))
+            .collect()
+    });
+    TransactionRange { transactions }
 }
 
 fn main() {}
