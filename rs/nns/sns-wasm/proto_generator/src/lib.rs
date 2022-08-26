@@ -22,7 +22,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Add universally needed types to all definitions in this namespace
     config.type_attribute(
         ".ic_sns_wasm.pb.v1",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
     // Add additional customizations
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");

@@ -86,6 +86,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -350,6 +351,9 @@ enum SubCommand {
     ProposeToCompleteCanisterMigration(ProposeToCompleteCanisterMigrationCmd),
     /// Get the latest canister migrations.
     GetCanisterMigrations,
+    /// Submits a proposal to add an SNS wasm (e.g. Governance, Ledger, etc) to the SNS-WASM NNS
+    /// canister.
+    ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -1886,6 +1890,61 @@ impl ProposalTitleAndPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd
     }
 }
 
+/// A command to propose to add an SNS wasm to the SNS-WASM canister
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddWasmToSnsWasmCmd {
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
+    #[clap(long, required = true)]
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
+
+    #[clap(long, required = true)]
+    /// The Canister type, one of: Root, Governance, Ledger, Swap, Archive
+    canister_type: String,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Add {} SNS canister wasm to SNS-WASM", self.canister_type),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> AddWasmRequest {
+        let wasm = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
+
+        let canister_type = SnsCanisterType::from_str(&*self.canister_type).expect(
+            "Invalid canister_type, expected one of: \
+                        Root, Governance, Ledger, Swap, Archive",
+        ) as i32;
+
+        let sns_wasm = SnsWasm {
+            wasm,
+            canister_type,
+        };
+
+        AddWasmRequest {
+            wasm: Some(sns_wasm),
+            hash: hex::decode(&self.wasm_module_sha256).unwrap(),
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to clear the provisional whitelist.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -2835,6 +2894,7 @@ async fn main() {
             SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
+            SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3470,6 +3530,15 @@ async fn main() {
             print_and_get_last_value::<CanisterMigrations>(
                 make_canister_migrations_record_key().as_bytes().to_vec(),
                 &registry_canister,
+            )
+            .await;
+        }
+        SubCommand::ProposeToAddWasmToSnsWasm(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::AddSnsWasm,
+                opts.nns_url,
+                sender,
             )
             .await;
         }

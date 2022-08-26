@@ -168,6 +168,7 @@ impl NnsCanisters<'_> {
             &self.genesis_token,
             &self.identity,
             &self.nns_ui,
+            &self.sns_wasms,
         ]
     }
 

@@ -19,6 +19,7 @@ candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 futures = "0.3.21"
+hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.5.2"
 ic-crypto-sha = {path = "../../crypto/sha/"}
@@ -30,6 +31,7 @@ ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types"}
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.85"
 prost = "0.10.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

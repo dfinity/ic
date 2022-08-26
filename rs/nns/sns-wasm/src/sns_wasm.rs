@@ -22,6 +22,8 @@ use std::convert::TryInto;
 use std::iter::zip;
 use std::thread::LocalKey;
 
+const LOG_PREFIX: &str = "[SNS-WASM] ";
+
 /// The struct that implements the public API of the canister
 #[derive(Clone, Default)]
 pub struct SnsWasmCanister<M: StableMemory + Clone + Default>
@@ -212,9 +214,14 @@ where
         let sns_canister_type = match wasm.checked_sns_canister_type() {
             Ok(canister_type) => canister_type,
             Err(message) => {
+                println!(
+                    "{}add_wasm invalid sns_canister_type: {}",
+                    LOG_PREFIX, &message
+                );
+
                 return AddWasmResponse {
                     result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
-                }
+                };
             }
         };
 
@@ -245,9 +252,13 @@ where
 
                 Some(add_wasm_response::Result::Hash(hash.to_vec()))
             }
-            Err(e) => Some(add_wasm_response::Result::Error(SnsWasmError {
-                message: format!("Unable to persist WASM: {}", e),
-            })),
+            Err(e) => {
+                println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
+
+                Some(add_wasm_response::Result::Error(SnsWasmError {
+                    message: format!("Unable to persist WASM: {}", e),
+                }))
+            }
         };
 
         AddWasmResponse { result }
@@ -723,6 +734,27 @@ where
             .and_then(|sns_version| self.upgrade_path.upgrade_path.get(&sns_version).cloned());
 
         GetNextSnsVersionResponse { next_version }
+    }
+
+    /// Gets the latest/current SNS version in a human-readable format
+    pub fn get_latest_sns_version_pretty(&self) -> HashMap<String, String> {
+        let version = &self.upgrade_path.latest_version;
+
+        let mut versions_str = HashMap::<String, String>::new();
+
+        versions_str.insert("Root".into(), hex::encode(&version.root_wasm_hash));
+        versions_str.insert(
+            "Governance".into(),
+            hex::encode(&version.governance_wasm_hash),
+        );
+        versions_str.insert("Ledger".into(), hex::encode(&version.ledger_wasm_hash));
+        versions_str.insert("Swap".into(), hex::encode(&version.swap_wasm_hash));
+        versions_str.insert(
+            "Ledger Archive".into(),
+            hex::encode(&version.archive_wasm_hash),
+        );
+
+        versions_str
     }
 
     /// Get the latest version of the WASMs based on the latest SnsVersion
