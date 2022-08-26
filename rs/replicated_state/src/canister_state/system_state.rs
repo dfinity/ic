@@ -652,10 +652,7 @@ impl SystemState {
             CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => {
-                call_context_manager.callbacks().is_empty()
-                    && call_context_manager.call_contexts().is_empty()
-            }
+            } => call_context_manager.canister_ready_to_stop(),
             CanisterStatus::Stopped => true,
         }
     }

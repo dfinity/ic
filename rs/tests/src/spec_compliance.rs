@@ -21,15 +21,12 @@ use crate::util;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    "$0 ~ /non-existence proofs for non-existing request id/",
-    "$0 ~ /module_hash of empty canister/",
     // the replica does not yet check that the effective canister id is valid
     "$0 ~ /wrong effective canister id/",
     "$0 ~ /access denied two status to different canisters/",
-    // In the replica, contexts marked as “deleted” (due to `canister_uninstall` or
-    // running out of cycles) currently still block the transition from stopping to
-    // stopped.
-    "$0 ~ /deleted call contexts do not prevent stopping/",
+    // the replica does not implement proofs of path non-existence
+    "$0 ~ /non-existence proofs for non-existing request id/",
+    "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
     "$0 ~ /zero-length metadata name/",
     // TODO(RUN-314): Re-enable this test.
