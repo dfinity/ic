@@ -80,7 +80,7 @@ pub(crate) struct TransportImpl {
     /// Port used to accept connections for this transport-client
     pub accept_port: Mutex<Option<ServerPortState>>,
     /// Mapping of peers to their corresponding state
-    pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
+    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerState>>>,
     /// Event handler to report back to the transport client
     pub event_handler: Mutex<Option<TransportEventHandler>>,
 
@@ -132,12 +132,6 @@ impl Drop for ServerPortState {
 
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
-    /// State of the flows with the peer
-    pub flow_map: HashMap<FlowTag, RwLock<FlowState>>,
-}
-
-/// Per-flow state, specific to a transport-client and a peer.
-pub(crate) struct FlowState {
     log: ReplicaLogger,
     /// Flow tag as a metrics label
     flow_tag_label: String,
@@ -151,7 +145,7 @@ pub(crate) struct FlowState {
     control_plane_metrics: ControlPlaneMetrics,
 }
 
-impl FlowState {
+impl PeerState {
     pub(crate) fn new(
         log: ReplicaLogger,
         flow_tag: FlowTag,
@@ -201,7 +195,7 @@ impl FlowState {
     }
 }
 
-impl Drop for FlowState {
+impl Drop for PeerState {
     fn drop(&mut self) {
         if self
             .control_plane_metrics
@@ -211,7 +205,7 @@ impl Drop for FlowState {
         {
             warn!(
                 self.log,
-                "Transport:FlowState drop: Could not remove flow metric {:?}", self.flow_label
+                "Transport:PeerState drop: Could not remove flow metric {:?}", self.flow_label
             )
         }
     }
