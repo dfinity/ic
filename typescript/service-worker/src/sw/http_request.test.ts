@@ -208,6 +208,32 @@ it('should send canister calls to https://ic0.app for any mapped domain in hostn
   );
 });
 
+it('should drop if-none-match request header', async () => {
+  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.queryData.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.queryData.certificate
+  );
+  mockFetchResponses(TEST_DATA.queryData.root_key, {
+    query: queryHttpPayload,
+    reqValidator: (req: HttpRequest) =>
+      headerPresent(req, 'If-None-Match2') &&
+      !headerPresent(req, 'If-None-Match'),
+  });
+
+  let request = new Request(`https://identity.ic0.app/`);
+  request.headers.append('If-None-Match', '"some etag"');
+  request.headers.append('If-None-Match2', '"some etag"');
+  const response = await handleRequest(request);
+
+  expect(response.status).toEqual(200);
+  expect(fetch.mock.calls).toHaveLength(2);
+  expect(fetch.mock.calls[1][0]).toEqual(
+    `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
+  );
+});
+
 it('should accept valid certification for index.html fallback', async () => {
   jest.setSystemTime(TEST_DATA.fallbackToIndexHtml.certificate_time);
   const queryHttpPayload = createHttpQueryResponsePayload(
@@ -587,11 +613,15 @@ function fetchRootKeyResponse(rootKey: string) {
 
 function mockFetchResponses(
   rootKey: string,
-  ...httpPayloads: { query: ArrayBuffer; update?: ArrayBuffer }[]
+  ...httpPayloads: {
+    query: ArrayBuffer;
+    update?: ArrayBuffer;
+    reqValidator?: (req: HttpRequest) => boolean;
+  }[]
 ) {
   // index to track how far we are into the (sequential) httpPayloads response array
   let fetchCounter = 0;
-  fetch.doMock((req) => {
+  fetch.doMock(async (req) => {
     // status is just used to fetch the rootKey and is independent of the response payloads
     // -> no need to do anything with the fetchCounter
     if (req.url.endsWith('status')) {
@@ -600,6 +630,22 @@ function mockFetchResponses(
         body: fetchRootKeyResponse(rootKey),
       });
     }
+
+    // if a predicate for the request was supplied: decode request and validate
+    if (httpPayloads[fetchCounter].reqValidator) {
+      let body = await req.arrayBuffer();
+      let cborDecoded: { content: { arg: ArrayBuffer } } =
+        Agent.Cbor.decode(body);
+      let request = IDL.decode([HttpRequestType], cborDecoded.content.arg)[0];
+      if (
+        !httpPayloads[fetchCounter].reqValidator(
+          request as unknown as HttpRequest
+        )
+      ) {
+        return Promise.reject('request rejected by validator');
+      }
+    }
+
     if (req.url.endsWith('query')) {
       const promise = Promise.resolve({
         status: 200,
@@ -706,4 +752,12 @@ function createCallbackResponsePayload(
     },
   };
   return Agent.Cbor.encode(candidResponse);
+}
+
+function headerPresent(req: HttpRequest, headerName: string) {
+  let result = req.headers.find(
+    ([key, _]: [string, string]) =>
+      key.toLowerCase() === headerName.toLowerCase()
+  );
+  return result !== undefined;
 }
