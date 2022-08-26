@@ -21,7 +21,7 @@ impl TryFrom<&Module> for SerializedModuleBytes {
     type Error = HypervisorError;
 
     fn try_from(module: &Module) -> Result<Self, Self::Error> {
-        module.serialize().map(|b| Self(b)).map_err(|e| {
+        module.serialize().map(Self).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToSerializeModule(format!(
                 "{:?}",
                 e
