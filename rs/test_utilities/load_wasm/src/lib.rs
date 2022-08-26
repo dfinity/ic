@@ -36,13 +36,18 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
     // the location of the Wasm file.
     match env::var_os(&var_name) {
         Some(path) => {
-            eprintln!("Using pre-built binary for {}", binary_name);
-            return std::fs::read(&path).unwrap_or_else(|e| {
+            let bytes = std::fs::read(&path).unwrap_or_else(|e| {
                 panic!(
                     "failed to load Wasm file from path {:?} (env var {}): {}",
                     path, var_name, e
                 )
             });
+            eprintln!(
+                "Using pre-built binary for {} (size = {} bytes)",
+                binary_name,
+                bytes.len()
+            );
+            return bytes;
         }
         None => {
             if env::var("CI").is_ok() {

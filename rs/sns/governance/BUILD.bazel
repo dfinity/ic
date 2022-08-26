@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -84,13 +84,18 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-governance-canister",
+    name = "sns-governance-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-governance-canister",
+    wasm = ":sns-governance-canister-raw",
 )
 
 generated_files_check(
