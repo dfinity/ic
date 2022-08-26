@@ -1,5 +1,5 @@
 {
-  "checksum": "51a99a88a4d054dfcc4185e66beac51c2fe0cd1b81390d8d7a5c6020eccfdb1e",
+  "checksum": "4ac4f53685a913fbeca218c3c4ce5498b11d7d8fc055336f496f46cc7fdebb2c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -898,7 +898,7 @@
               "target": "socket2"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             },
             {
@@ -7603,7 +7603,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             }
           ],
@@ -11085,7 +11085,7 @@
               "target": "either"
             },
             {
-              "id": "erased-serde 0.3.22",
+              "id": "erased-serde 0.3.23",
               "target": "erased_serde"
             },
             {
@@ -11829,6 +11829,10 @@
             {
               "id": "walkdir 2.3.2",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.19.0",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.2",
@@ -13142,13 +13146,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "erased-serde 0.3.22": {
+    "erased-serde 0.3.23": {
       "name": "erased-serde",
-      "version": "0.3.22",
+      "version": "0.3.23",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/erased-serde/0.3.22/download",
-          "sha256": "003000e712ad0f95857bd4d2ef8d1890069e06554101697d12050668b2f6f020"
+          "url": "https://crates.io/api/v1/crates/erased-serde/0.3.23/download",
+          "sha256": "54558e0ba96fbe24280072642eceb9d7d442e32c7ec0ea9e7ecd7b4ea2cf4e11"
         }
       },
       "targets": [
@@ -13189,7 +13193,7 @@
         "deps": {
           "common": [
             {
-              "id": "erased-serde 0.3.22",
+              "id": "erased-serde 0.3.23",
               "target": "build_script_build"
             },
             {
@@ -13200,7 +13204,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.22"
+        "version": "0.3.23"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -37432,7 +37436,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             }
           ],
@@ -37695,7 +37699,7 @@
         "deps": {
           "common": [
             {
-              "id": "erased-serde 0.3.22",
+              "id": "erased-serde 0.3.23",
               "target": "erased_serde"
             },
             {
@@ -37900,7 +37904,7 @@
         "deps": {
           "common": [
             {
-              "id": "erased-serde 0.3.22",
+              "id": "erased-serde 0.3.23",
               "target": "erased_serde"
             },
             {
@@ -37916,7 +37920,7 @@
               "target": "slog"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             }
           ],
@@ -38077,7 +38081,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             }
           ],
@@ -40770,13 +40774,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "time 0.3.13": {
+    "time 0.3.14": {
       "name": "time",
-      "version": "0.3.13",
+      "version": "0.3.14",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/time/0.3.13/download",
-          "sha256": "db76ff9fa4b1458b3c7f077f3ff9887394058460d21e634355b273aaf11eea45"
+          "url": "https://crates.io/api/v1/crates/time/0.3.14/download",
+          "sha256": "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
         }
       },
       "targets": [
@@ -40839,7 +40843,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.13"
+        "version": "0.3.14"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -40989,7 +40993,7 @@
               "target": "log"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             },
             {
@@ -42761,7 +42765,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "time 0.3.13",
+              "id": "time 0.3.14",
               "target": "time"
             },
             {
@@ -44540,8 +44544,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44564,8 +44568,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

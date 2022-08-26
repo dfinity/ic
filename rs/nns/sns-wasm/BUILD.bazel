@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,9 +15,9 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
+    "//rs/sns/governance",
     "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/governance",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
@@ -32,6 +33,36 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
+
+DEV_DEPENDENCIES = [
+    "//rs/nervous_system/common",
+    "//rs/nns/sns-wasm/proto_generator:lib",
+    "//rs/nns/test_utils",
+    "//rs/registry/helpers",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/on_wire",
+    "//rs/sns/swap",
+    "//rs/state_machine_tests",
+    "//rs/test_utilities",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:walrus",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/keys",
+        "//rs/interfaces",
+    ],
+})
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -61,6 +92,66 @@ rust_canister(
 optimized_canister(
     name = "sns-wasm-canister",
     wasm = "sns-wasm-canister-raw",
+)
+
+rust_test(
+    name = "sns-wasm_test",
+    aliases = ALIASES,
+    crate = ":sns-wasm",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "sns-wasm_integration_test",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = [
+            "tests/common/mod.rs",
+            "tests/check_generated_files.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    data = [
+        ":sns-wasm-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/cmc:cycles-minting-canister",
+        "//rs/nns/governance:governance-canister-test",
+        "//rs/nns/gtc:genesis-token-canister",
+        "//rs/nns/handlers/lifeline:lifeline_actor",
+        "//rs/nns/handlers/root:root-canister",
+        "//rs/registry/canister:registry-canister",
+        "//rs/rosetta-api/icrc1/archive:archive_canister",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+        "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
+        "//rs/sns/governance:sns-governance-canister",
+        "//rs/sns/root:sns-root-canister",
+        "//rs/sns/swap:sns-swap-canister",
+    ],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/sns-wasm",
+        "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method)",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
+        "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath :sns-wasm-canister)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+        "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
+        "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
+        "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline:lifeline_actor)",
+    },
+    extra_srcs = ["tests/common/mod.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":sns-wasm"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 generated_files_check(

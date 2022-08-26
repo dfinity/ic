@@ -197,7 +197,7 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "socket2 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
 ]
 
@@ -1458,7 +1458,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94d4706de1b0fa5b132270cddffa8585166037822e260a944fe161acd137ca05"
 dependencies = [
  "percent-encoding",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "version_check",
 ]
 
@@ -2306,6 +2306,7 @@ dependencies = [
  "vsock",
  "wait-timeout",
  "walkdir",
+ "walrus",
  "warp",
  "wasm-bindgen",
  "wasmtime",
@@ -2549,9 +2550,9 @@ dependencies = [
 
 [[package]]
 name = "erased-serde"
-version = "0.3.22"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "003000e712ad0f95857bd4d2ef8d1890069e06554101697d12050668b2f6f020"
+checksum = "54558e0ba96fbe24280072642eceb9d7d442e32c7ec0ea9e7ecd7b4ea2cf4e11"
 dependencies = [
  "serde",
 ]
@@ -6983,7 +6984,7 @@ dependencies = [
  "num-bigint 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits",
  "thiserror",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7064,7 +7065,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7099,7 +7100,7 @@ dependencies = [
  "slog",
  "term 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thread_local",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7609,9 +7610,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.13"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db76ff9fa4b1458b3c7f077f3ff9887394058460d21e634355b273aaf11eea45"
+checksum = "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
 dependencies = [
  "itoa 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
@@ -7643,7 +7644,7 @@ dependencies = [
  "ascii",
  "chunked_transfer",
  "log",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
 ]
 
@@ -7991,7 +7992,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
 dependencies = [
  "crossbeam-channel",
- "time 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "tracing-subscriber 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

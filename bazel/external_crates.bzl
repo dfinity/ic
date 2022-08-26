@@ -955,6 +955,9 @@ def external_crates_repository(name, annotations):
             "vsock": crate.spec(
                 version = "^0.2.6",
             ),
+            "walrus": crate.spec(
+                version = "^0.19.0",
+            ),
             "wait-timeout": crate.spec(
                 version = "^0.2.0",
             ),

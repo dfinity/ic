@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
@@ -62,13 +62,18 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-root-canister",
+    name = "sns-root-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/root.did"],
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-root-canister",
+    wasm = ":sns-root-canister-raw",
 )
 
 generated_files_check(

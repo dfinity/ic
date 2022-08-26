@@ -69,8 +69,13 @@ impl Wasm {
         eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
-                eprintln!("Using pre-built binary for {}", bin_name);
-                Some(Wasm::from_file(path))
+                let wasm = Wasm::from_file(path);
+                eprintln!(
+                    "Using pre-built binary for {} (size = {})",
+                    bin_name,
+                    wasm.0.len()
+                );
+                Some(wasm)
             }
             Err(env::VarError::NotPresent) => {
                 if env::var("CI").is_ok() {
