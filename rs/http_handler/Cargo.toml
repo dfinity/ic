@@ -12,9 +12,11 @@ futures = "0.3.13"
 futures-util = "0.3.13"
 hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../async_utils" }
+ic-certification = { path = "../certification" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
