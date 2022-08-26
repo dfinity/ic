@@ -21,9 +21,13 @@ tower = "0.4.12"
 tower-test = "0.4.0"
 
 [dev-dependencies]
+async-trait = "0.1.57"
 ic-crypto = { path = "../crypto" }
+ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-types-test-utils = { path = "../types/types_test_utils"}
+mockall = "0.11.2"
+tower-test = "0.4.0"
