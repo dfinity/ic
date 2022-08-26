@@ -682,6 +682,8 @@ mod tests {
         temp_crypto
     }
 
+    // TODO(NET-1182): this test hangs on CI sometimes
+    #[ignore]
     #[test]
     fn test_single_transient_failure_of_tls_client_handshake() {
         with_test_replica_logger(|log| {
