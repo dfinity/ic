@@ -26,7 +26,7 @@ struct Args {
     #[clap(
         short = 'l',
         long = "log-config-file",
-        default_value = "log_config.yml"
+        default_value = "../log_config.yml"
     )]
     pub log_config_file: PathBuf,
 
