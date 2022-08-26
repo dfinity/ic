@@ -108,6 +108,7 @@ fn main() -> Result<()> {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![(&key_id).into()],
             max_queue_size: 64,
+            signature_request_timeout_ns: None,
         });
 
         let mut topology_config = TopologyConfig::default();

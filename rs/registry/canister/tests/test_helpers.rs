@@ -63,6 +63,7 @@ pub fn get_subnet_holding_ecdsa_keys(
             quadruples_to_create_in_advance: 1,
             key_ids: ecdsa_key_ids.to_vec(),
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         }
         .into(),
     );

@@ -262,6 +262,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                signature_request_timeout_ns: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -339,6 +340,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                         subnet_id: Some(system_subnet_id.get()),
                     }],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    signature_request_timeout_ns: None,
                 }),
             };
 
@@ -449,6 +451,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                signature_request_timeout_ns: None,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -532,6 +535,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
                     quadruples_to_create_in_advance: 1,
                     keys: vec![],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    signature_request_timeout_ns: None,
                 }),
             };
 
