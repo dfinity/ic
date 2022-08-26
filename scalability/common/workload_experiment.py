@@ -112,12 +112,25 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             if FLAGS.wg_testnet != FLAGS.testnet:
                 # In case wg_testnet and testnet are different, we can use all app-subnet hosts as workload generators
                 workload_generator_machines = self.get_app_subnet_hostnames(f"http://[{wg_testnet_nns_host}]:8080")
-            else:
-                workload_generator_machines = self.get_hostnames(
-                    FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080"
+                print(
+                    (
+                        f"Selecting workload generator machines from all subnets {wg_testnet_nns_host}: "
+                        f"{workload_generator_machines}"
+                    )
                 )
-                if workload_generator_machines is None:
-                    raise Exception(f"Could not find any machines in subnet {FLAGS.wg_subnet} in {FLAGS.wg_testnet}")
+            else:
+                workload_generator_machines = self.get_app_subnet_hostnames(
+                    f"http://[{wg_testnet_nns_host}]:8080", FLAGS.wg_subnet
+                )
+                print(
+                    (
+                        f"Selecting workload generator machines from {wg_testnet_nns_host} on subnet {FLAGS.wg_subnet}: "
+                        f"{workload_generator_machines}"
+                    )
+                )
+
+        if workload_generator_machines is None:
+            raise Exception(f"Could not find any machines in subnet {FLAGS.wg_subnet} in {FLAGS.wg_testnet}")
 
         if self.num_workload_gen > 0 and self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
@@ -384,8 +397,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
                 # Try to open file in exclusive mode
                 with open(filename, "x") as cmd_file:
-                    for cmd in commands:
-                        cmd_file.write(cmd + "\n")
+                    for cmd, generator in zip(commands, load_generators):
+                        cmd_file.write(generator + ":" + cmd + "\n")
                 break
             except FileExistsError:
                 print(f"Failed to open - file {filename} already exists, trying next sequential file name.")
@@ -401,7 +414,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Evaluating results from {} machines".format(len(destinations)))
         return report.evaluate_summaries(destinations)
 
-    def __build_summary_file(self):
+    def _build_summary_file(self):
         """Build dictionary used to render summary file for report."""
         return {
             "wg_testnet": self.wg_testnet,
