@@ -561,11 +561,11 @@ fn connection_role(my_id: &NodeId, peer: &NodeId) -> ConnectionRole {
 #[cfg(test)]
 mod tests {
     use crate::transport::create_transport;
-    use async_trait::async_trait;
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::TransportConfig;
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces_transport::TransportEvent;
+    use ic_interfaces_transport::{Transport, TransportEvent, TransportEventHandler};
+    use ic_logger::ReplicaLogger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_crypto_tls_cert_key;
@@ -573,14 +573,12 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use std::convert::Infallible;
-    use std::future::Future;
     use std::net::SocketAddr;
-    use std::pin::Pin;
     use std::str::FromStr;
     use std::sync::Arc;
-    use std::task::{Context, Poll};
     use tokio::sync::mpsc::{channel, Sender};
-    use tower::{util::BoxCloneService, Service};
+    use tower::{util::BoxCloneService, Service, ServiceExt};
+    use tower_test::mock::Handle;
 
     const NODE_ID_1: NodeId = NODE_1;
     const NODE_ID_2: NodeId = NODE_2;
@@ -591,96 +589,48 @@ mod tests {
     const PORT_1: u16 = 65001;
     const PORT_2: u16 = 65002;
 
-    #[derive(Clone)]
-    struct FakeEventHandler {
-        connected: Sender<bool>,
-    }
-
-    #[async_trait]
-    impl Service<TransportEvent> for FakeEventHandler {
-        type Response = ();
-        type Error = Infallible;
-        #[allow(clippy::type_complexity)]
-        type Future =
-            Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
-
-        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-            Poll::Ready(Ok(()))
-        }
-
-        fn call(&mut self, event: TransportEvent) -> Self::Future {
-            if let TransportEvent::PeerUp(_) = event {
-                self.connected.try_send(true).unwrap()
-            }
-            Box::pin(async { Ok(()) })
-        }
-    }
-
     #[test]
     fn test_start_connection_between_two_peers() {
         with_test_replica_logger(|logger| {
             let registry_version = REG_V1;
-            // Setup registry and crypto component
-            let registry_and_data = RegistryAndDataProvider::new();
-            let crypto_1 =
-                temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_1);
-            let crypto_2 =
-                temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
-            registry_and_data.registry.update_to_latest_version();
+
             let rt = tokio::runtime::Runtime::new().unwrap();
 
-            let client_config_1 = TransportConfig {
-                node_ip: "0.0.0.0".to_string(),
-                legacy_flow_tag: FLOW_TAG_1,
-                listening_port: PORT_1,
-                send_queue_size: 10,
-            };
-            let control_plane_1 = create_transport(
-                NODE_ID_1,
-                client_config_1,
-                registry_version,
-                MetricsRegistry::new(),
-                Arc::new(crypto_1),
-                rt.handle().clone(),
-                logger.clone(),
-            );
+            let (connected_1, mut done_1) = channel(1);
+            let (event_handler_1, handle_1) = setup_mock_event_handler();
+            create_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
 
-            let client_config_2 = TransportConfig {
-                node_ip: "0.0.0.0".to_string(),
-                legacy_flow_tag: FLOW_TAG_2,
-                listening_port: PORT_2,
-                send_queue_size: 10,
-            };
-            let control_plane_2 = create_transport(
-                NODE_ID_2,
-                client_config_2,
-                registry_version,
-                MetricsRegistry::new(),
-                Arc::new(crypto_2),
+            let (connected_2, mut done_2) = channel(1);
+            let (event_handler_2, handle_2) = setup_mock_event_handler();
+            create_peer_up_ack_event_handler(rt.handle().clone(), handle_2, connected_2);
+
+            let (_control_plane_1, _control_plane_2) = start_connection_between_two_peers(
                 rt.handle().clone(),
                 logger,
+                registry_version,
+                10,
+                event_handler_1,
+                event_handler_2,
             );
 
-            let (connected_1, mut done_1) = channel(1);
-            let fake_event_handler_1 = BoxCloneService::new(FakeEventHandler {
-                connected: connected_1,
-            });
-            control_plane_1.set_event_handler(fake_event_handler_1);
-            let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_2)).unwrap();
-            assert!(control_plane_1
-                .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
-                .is_ok());
-            let (connected_2, mut done_2) = channel(1);
-            let fake_event_handler_2 = BoxCloneService::new(FakeEventHandler {
-                connected: connected_2,
-            });
-            control_plane_2.set_event_handler(fake_event_handler_2);
-            let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_1)).unwrap();
-            assert!(control_plane_2
-                .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
-                .is_ok());
             assert_eq!(done_1.blocking_recv(), Some(true));
             assert_eq!(done_2.blocking_recv(), Some(true));
+        });
+    }
+
+    // helper functions
+
+    fn create_peer_up_ack_event_handler(
+        rt: tokio::runtime::Handle,
+        mut handle: Handle<TransportEvent, ()>,
+        connected: Sender<bool>,
+    ) {
+        rt.spawn(async move {
+            let (event, rsp) = handle.next_request().await.unwrap();
+            if let TransportEvent::PeerUp(_) = event {
+                connected.try_send(true).unwrap()
+            }
+            rsp.send_response(());
         });
     }
 
@@ -717,5 +667,89 @@ mod tests {
             )
             .expect("failed to add TLS cert to registry");
         temp_crypto
+    }
+
+    fn setup_mock_event_handler() -> (TransportEventHandler, Handle<TransportEvent, ()>) {
+        let (service, handle) = tower_test::mock::pair::<TransportEvent, ()>();
+
+        let infallible_service = tower::service_fn(move |request: TransportEvent| {
+            let mut service_clone = service.clone();
+            async move {
+                service_clone
+                    .ready()
+                    .await
+                    .expect("Mocking Infallible service. Waiting for readiness failed.")
+                    .call(request)
+                    .await
+                    .expect("Mocking Infallible service and can therefore not return an error.");
+                Ok::<(), Infallible>(())
+            }
+        });
+        (BoxCloneService::new(infallible_service), handle)
+    }
+
+    fn start_connection_between_two_peers(
+        rt_handle: tokio::runtime::Handle,
+        logger: ReplicaLogger,
+        registry_version: RegistryVersion,
+        send_queue_size: usize,
+        event_handler_1: TransportEventHandler,
+        event_handler_2: TransportEventHandler,
+    ) -> (Arc<dyn Transport>, Arc<dyn Transport>) {
+        // Setup registry and crypto component
+        let registry_and_data = RegistryAndDataProvider::new();
+        let crypto_1 =
+            temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_1);
+        let crypto_2 =
+            temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
+        registry_and_data.registry.update_to_latest_version();
+
+        let peer_a_config = TransportConfig {
+            node_ip: "0.0.0.0".to_string(),
+            listening_port: PORT_1,
+            legacy_flow_tag: FLOW_TAG_1,
+            send_queue_size,
+        };
+
+        let peer_a = create_transport(
+            NODE_ID_1,
+            peer_a_config,
+            registry_version,
+            MetricsRegistry::new(),
+            Arc::new(crypto_1),
+            rt_handle.clone(),
+            logger.clone(),
+        );
+        peer_a.set_event_handler(event_handler_1);
+
+        let peer_b_config = TransportConfig {
+            node_ip: "0.0.0.0".to_string(),
+            listening_port: PORT_2,
+            legacy_flow_tag: FLOW_TAG_2,
+            send_queue_size,
+        };
+
+        let peer_b = create_transport(
+            NODE_ID_2,
+            peer_b_config,
+            registry_version,
+            MetricsRegistry::new(),
+            Arc::new(crypto_2),
+            rt_handle,
+            logger,
+        );
+        peer_b.set_event_handler(event_handler_2);
+        let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_2)).unwrap();
+
+        peer_a
+            .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
+            .expect("start_connection");
+
+        let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_1)).unwrap();
+        peer_b
+            .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
+            .expect("start_connection");
+
+        (peer_a, peer_b)
     }
 }
