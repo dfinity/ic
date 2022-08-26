@@ -11,9 +11,9 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_r
 
 http_archive(
     name = "rules_rust",
-    sha256 = "35ba92d62e5341c177cd09c83c4623cb507fbab4f3770327fae13b82e43fefdd",
+    sha256 = "9a3bb15fe63c111ea6cbfdb25fdd76ce1119a0d5ce7266721d228028f1b55ee7",
     urls = [
-        "https://github.com/dfinity-lab/rules_rust/releases/download/0.8.2/rules_rust-v0.8.2.tar.gz",
+        "https://github.com/dfinity-lab/rules_rust/releases/download/0.9.0/rules_rust-v0.9.0.tar.gz",
     ],
 )
 
