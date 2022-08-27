@@ -7343,6 +7343,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replica",
  "ic-replicated-state",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-test-utilities",
