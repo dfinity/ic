@@ -85,19 +85,13 @@ pub(crate) fn execute_upgrade(
     mut old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     original: OriginalContext,
-    compute_allocation_used: u64,
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     // Stage 0: validate input and reserve execution cycles.
 
-    if let Err(err) = validate_install_code(
-        &old_canister,
-        &context,
-        round_limits,
-        &original.config,
-        compute_allocation_used,
-    ) {
+    if let Err(err) = validate_install_code(&old_canister, &context, round_limits, &original.config)
+    {
         return DtsInstallCodeResult::Finished {
             canister: old_canister,
             message: original.message,

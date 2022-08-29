@@ -291,10 +291,9 @@ pub(crate) fn validate_install_code(
     context: &InstallCodeContext,
     round_limits: &RoundLimits,
     config: &CanisterMgrConfig,
-    compute_allocation_used: u64,
 ) -> Result<(), CanisterManagerError> {
     validate_compute_allocation(
-        compute_allocation_used,
+        round_limits.compute_allocation_used,
         canister,
         context.compute_allocation,
         config,

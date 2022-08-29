@@ -656,6 +656,7 @@ impl SchedulerImpl {
             subnet_available_memory: (round_limits.subnet_available_memory.get()
                 / self.config.scheduler_cores as i64)
                 .into(),
+            compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
         thread_pool.scoped(|scope| {
@@ -679,6 +680,7 @@ impl SchedulerImpl {
                         .subnet_available_memory
                         .get()
                         .into(),
+                    compute_allocation_used: round_limits.compute_allocation_used,
                 };
                 let config = &self.config;
                 scope.execute(move || {
@@ -1170,6 +1172,7 @@ impl Scheduler for SchedulerImpl {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(self.config.max_instructions_per_round / 16),
             subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
+            compute_allocation_used: state.total_compute_allocation(),
         };
 
         // Execute subnet messages.
