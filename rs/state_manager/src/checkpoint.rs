@@ -1,6 +1,5 @@
 use crate::{
-    BitcoinPageMap, CheckpointError, CheckpointMetrics, PageMapType, PersistenceError,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
@@ -21,7 +20,7 @@ use ic_types::Height;
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use rand::prelude::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeMap;
 use std::os::unix::prelude::MetadataExt;
@@ -32,6 +31,7 @@ use std::{
 };
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
+const DEFRAG_SAMPLE: usize = 100;
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -66,7 +66,13 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["defrag_tip"])
             .start_timer();
-        defrag_tip(&tip, DEFRAG_SIZE, height.get())?;
+        defrag_tip(
+            &tip,
+            &PageMapType::list_all(state),
+            DEFRAG_SIZE,
+            DEFRAG_SAMPLE,
+            height.get(),
+        )?;
     }
 
     let cp = {
@@ -283,18 +289,23 @@ fn serialize_bitcoin_state_to_tip(
 /// now, only the bitcoin PageMap files are being considered.
 fn defrag_tip(
     tip: &CheckpointLayout<RwPolicy>,
+    page_maps: &[PageMapType],
     max_size: u64,
+    max_files: usize,
     seed: u64,
 ) -> Result<(), CheckpointError> {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
-    // We only defrag bitcoin files for now
-    let bitcoin_files = vec![
-        PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
-        PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
-        PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
-    ];
-    let path_with_sizes: Vec<(PathBuf, u64)> = bitcoin_files
+    // We sample the set of page maps down in order to avoid reading
+    // the metadata of each file. This is a compromise between
+    // weighting the probabilities by size and picking a uniformly
+    // random file.  The former (without subsampling) would be
+    // unnecessarily expensive, the latter would perform poorly in a
+    // situation with many empty files and a few large ones, doing
+    // no-ops on empty files with high probability.
+    let page_map_subset = page_maps.iter().choose_multiple(&mut rng, max_files);
+
+    let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
         .iter()
         .filter_map(|entry| {
             let path = entry.path(tip).ok()?;
@@ -632,7 +643,7 @@ fn load_or_create_pagemap(path: &Path, height: Height) -> Result<PageMap, Persis
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::NUMBER_OF_CHECKPOINT_THREADS;
+    use crate::{BitcoinPageMap, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
     use ic_registry_subnet_type::SubnetType;
@@ -1290,20 +1301,24 @@ mod tests {
 
             let defrag_size = 1 << 20; // 1MB
 
-            let paths: Vec<PathBuf> = vec![
-                BitcoinPageMap::AddressOutpoints,
-                BitcoinPageMap::UtxosSmall,
-                BitcoinPageMap::UtxosMedium,
-            ]
-            .drain(..)
-            .map(|inner| PageMapType::Bitcoin(inner).path(&tip).unwrap())
-            .collect();
+            let page_maps: Vec<PageMapType> = vec![
+                PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
+                PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
+                PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
+                PageMapType::StableMemory(canister_test_id(100)),
+                PageMapType::WasmMemory(canister_test_id(100)),
+            ];
+
+            let paths: Vec<PathBuf> = page_maps
+                .iter()
+                .map(|page_map_type| page_map_type.path(&tip).unwrap())
+                .collect();
 
             for path in &paths {
                 assert!(!path.exists());
             }
 
-            defrag_tip(&tip, defrag_size, 0).unwrap();
+            defrag_tip(&tip, &page_maps, defrag_size, 100, 0).unwrap();
 
             for path in &paths {
                 assert!(!path.exists());
@@ -1329,7 +1344,7 @@ mod tests {
                 check_files();
 
                 for i in 0..100 {
-                    defrag_tip(&tip, defrag_size, i).unwrap();
+                    defrag_tip(&tip, &page_maps, defrag_size, i as usize, i).unwrap();
                     check_files();
                 }
             }
