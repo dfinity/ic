@@ -504,13 +504,18 @@ impl SchedulerImpl {
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
-            state.put_canister_states(
+
+            // Put back the executed canisters into the canisters map. Since usually most
+            // canisters have no messages to execute, this is likely to be more efficient
+            // than rebuilding the map from scratch.
+            let mut canisters = inactive_canisters;
+            canisters.extend(
                 executed_canisters
                     .into_iter()
-                    .map(|canister| (canister.canister_id(), canister))
-                    .chain(inactive_canisters)
-                    .collect(),
+                    .map(|canister| (canister.canister_id(), canister)),
             );
+            state.put_canister_states(canisters);
+
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
             round_limits.instructions -= as_round_instructions(
