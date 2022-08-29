@@ -346,8 +346,6 @@ impl Hypervisor {
     }
 
     /// Executes the given WebAssembly function with deterministic time slicing.
-    /// TODO(RUN-232): Change all callers of `execute()` to call `execute_dts()`
-    /// and rename `execute_dts()` to `execute()`.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_dts(
         &self,
