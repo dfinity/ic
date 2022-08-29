@@ -120,6 +120,21 @@ opt_stripped_binary(
     binary = "//rs/recovery:ic-recovery",
 )
 
+opt_stripped_binary(
+    name = "ic-balance-exporter",
+    binary = "//rs/boundary_node/ic_balance_exporter:ic_balance_exporter",
+)
+
+opt_stripped_binary(
+    name = "boundary-node-prober",
+    binary = "//rs/boundary_node/prober:prober",
+)
+
+opt_stripped_binary(
+    name = "boundary-node-control-plane",
+    binary = "//rs/boundary_node/control_plane:control_plane",
+)
+
 optimized_canister(
     name = "ledger_archive_canister",
     wasm = "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
