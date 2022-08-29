@@ -31,44 +31,70 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:reqwest",
-    "@crate_index//:serde_json",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:url",
 ]
 
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:assert_matches",
+    "@crate_index//:pretty_assertions",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "prep",
     srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
     crate_name = "ic_prep_lib",
     edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
-)
-
-rust_test(
-    name = "prep_test",
-    crate = ":prep",
-    edition = "2018",
-    deps = DEPENDENCIES + [
-        "@crate_index//:assert_matches",
-        "@crate_index//:pretty_assertions",
-    ],
 )
 
 rust_binary(
     name = "ic-prep",
     srcs = ["src/bin/prep.rs"],
+    aliases = ALIASES,
     edition = "2018",
-    deps = [":prep"] + DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":prep"],
 )
 
 rust_binary(
     name = "ic-principal-id",
     srcs = ["src/bin/principal_id.rs"],
+    aliases = ALIASES,
     edition = "2018",
-    deps = [":prep"] + DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":prep"],
+)
+
+rust_test(
+    name = "prep_test",
+    aliases = ALIASES,
+    crate = ":prep",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "prep_bin_tests",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_root = "src/bin/prep.rs",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":prep"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 # Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
