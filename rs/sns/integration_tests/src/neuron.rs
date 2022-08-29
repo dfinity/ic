@@ -589,7 +589,7 @@ fn test_neuron_action_is_not_authorized() {
 }
 
 #[test]
-fn test_disburse_maturity_a() {
+fn test_disburse_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {

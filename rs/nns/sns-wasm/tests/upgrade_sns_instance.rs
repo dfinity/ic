@@ -107,8 +107,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 1_000_000_000,
-                    initial_swap_amount_e8s: 1_000_000_000,
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
                 }),
                 airdrop_distribution: Some(AirdropDistribution {
                     airdrop_neurons: vec![NeuronDistribution {
@@ -295,8 +295,8 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 1_000_000_000,
-                    initial_swap_amount_e8s: 1_000_000_000,
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
                 }),
                 airdrop_distribution: Some(AirdropDistribution {
                     airdrop_neurons: vec![NeuronDistribution {
