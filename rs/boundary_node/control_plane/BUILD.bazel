@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,13 +33,27 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_binary(
     name = "control_plane",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    crate_name = "boundary_node_control_plane",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "control_plane_test",
+    aliases = ALIASES,
+    crate = ":control_plane",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
