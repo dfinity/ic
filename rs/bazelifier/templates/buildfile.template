@@ -55,7 +55,7 @@ cargo_build_script(
 
 {{ build_type }}(
     name = "{{ target_name }}",
-    srcs = glob(["src/**"{% if protobufs.is_some() %}, "gen/**"{% endif %}]),
+    srcs = glob(["src/**/*.rs"{% if protobufs.is_some() %}, "gen/**"{% endif %}]),
     crate_name = "{{ crate_name }}",
     edition = "{{ edition }}",
     proc_macro_deps = MACRO_DEPENDENCIES,
