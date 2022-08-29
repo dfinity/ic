@@ -201,8 +201,6 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     ///
     /// If the execution finishes, then it returns the new canister state and
     /// the result of the execution.
-    /// TODO(RUN-231): Add paused execution to `ExecuteMessageResult` to support
-    /// the other case.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
