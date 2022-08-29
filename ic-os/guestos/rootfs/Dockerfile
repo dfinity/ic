@@ -24,7 +24,9 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/* && \
     chmod 0440 /etc/sudoers && \
-    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id
+    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
+    chmod 755 /etc/initramfs-tools/scripts/init-premount/verity-root && \
+    chmod 755 /etc/initramfs-tools/hooks/veritysetup
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
 # but we want to prohibit it from writing to user home dirs
@@ -184,7 +186,7 @@ RUN apt-get clean && \
         /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
         /var/log/alternatives.log /var/log/apt/history.log /var/log/apt/term.log /var/log/dpkg.log \
         /var/lib/apt/lists/* /var/lib/dbus/machine-id \
-        /var/lib/initramfs-tools/5.8.0-50-generic && \
+        /var/lib/initramfs-tools/* && \
     find /usr/local/share/fonts -name .uuid | xargs rm && \
     find /usr/share/fonts -name .uuid | xargs rm && \
     find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
