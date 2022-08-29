@@ -90,14 +90,6 @@ else
     BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
 fi
 
-# Compute arguments for actual build stage.
-
-declare -a IC_EXECUTABLES=(
-    "boundary-node-control-plane"
-    "boundary-node-prober"
-    "ic-balance-exporter"
-)
-
 # Build sev-tool
 (
     cd "${EXTERNAL_DIR}"
@@ -110,6 +102,15 @@ declare -a IC_EXECUTABLES=(
     fi
     cd sev-tool
     autoreconf -i && ./configure && make
+)
+
+# Compute arguments for actual build stage.
+
+declare -a IC_EXECUTABLES=(
+    "boundary-node-control-plane"
+    "boundary-node-prober"
+    "denylist-updater"
+    "ic-balance-exporter"
 )
 
 declare -a INSTALL_EXEC_ARGS=()

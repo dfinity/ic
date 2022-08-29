@@ -21,6 +21,7 @@ RUST_BINARIES = [
     "boundary-node-control-plane",
     "boundary-node-prober",
     "canister_sandbox",
+    "denylist-updater",
     "e2e-test-driver",
     "ic-admin",
     "ic-balance-exporter",

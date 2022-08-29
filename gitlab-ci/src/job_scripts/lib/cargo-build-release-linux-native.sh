@@ -17,9 +17,10 @@ export CARGO_BUILD_TARGET
 cd "$ROOT_DIR"/rs || exit 1
 # this must match 'output' in `rs/Capsule.toml:cargo-build-release-linux-native`
 cargo build --target $CARGO_BUILD_TARGET --release \
-    --bin ic-rosetta-api \
     --bin boundary-node-control-plane \
     --bin boundary-node-prober \
+    --bin denylist-updater \
+    --bin e2e-test-driver \
     --bin ic-admin \
     --bin ic-balance-exporter \
     --bin ic-btc-adapter \
@@ -28,22 +29,21 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-crypto-csp \
     --bin ic-cup-explorer \
     --bin ic-get-neuron-ids \
-    --bin ic-p8s-service-discovery \
+    --bin ic-nns-init \
     --bin ic-p8s-sd \
+    --bin ic-p8s-service-discovery \
     --bin ic-prep \
     --bin ic-regedit \
     --bin ic-rosetta-api \
     --bin ic-starter \
     --bin ic-workload-generator \
     --bin orchestrator \
-    --bin replica \
-    --bin state-tool \
-    --bin vsock_agent \
-    --bin system-tests \
     --bin prod-test-driver \
-    --bin e2e-test-driver \
+    --bin replica \
     --bin sns \
-    --bin ic-nns-init
+    --bin state-tool \
+    --bin system-tests \
+    --bin vsock_agent
 
 cargo build --target $CARGO_BUILD_TARGET --profile release-stripped \
     --bin ic-recovery \

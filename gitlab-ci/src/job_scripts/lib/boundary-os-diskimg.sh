@@ -18,10 +18,15 @@ ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR" || exit 1
+
 # When you change the list below, please update ic-os/boundary-guestos/Capsule.toml accordingly!
-for f in boundary-node-control-plane boundary-node-prober ic-balance-exporter; do
-    gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
-done
+pushd artifacts/release
+gunzip \
+    boundary-node-control-plane.gz \
+    boundary-node-prober.gz \
+    denylist-updater.gz \
+    ic-balance-exporter.gz
+popd
 
 cd "$ROOT_DIR"/ic-os/boundary-guestos || exit 1
 mkdir -p "$BUILD_OUT" "$BUILD_TMP"
