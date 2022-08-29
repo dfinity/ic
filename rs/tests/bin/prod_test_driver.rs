@@ -263,10 +263,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "tecdsa_pre_master",
             vec![
-                pot(
+                pot_with_setup(
                     "tecdsa_add_nodes_pot",
-                    tecdsa::tecdsa_add_nodes_test::config(),
-                    par(vec![t(
+                    tecdsa::tecdsa_add_nodes_test::config,
+                    par(vec![sys_t(
                         "test_tecdsa_add_nodes",
                         tecdsa::tecdsa_add_nodes_test::test,
                     )]),
