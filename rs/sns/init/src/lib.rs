@@ -115,8 +115,8 @@ impl SnsInitPayload {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 1_000_000_000,
-                    initial_swap_amount_e8s: 1_000_000_000,
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
                 }),
                 airdrop_distribution: Some(AirdropDistribution {
                     airdrop_neurons: Default::default(),
@@ -563,11 +563,18 @@ impl SnsInitPayload {
         let min_participant_icp_e8s = self
             .min_participant_icp_e8s
             .ok_or_else(|| "Error: min_participant_icp_e8s must be specified.".to_string())?;
+        let neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .ok_or_else(|| "Error: neuron_minimum_stake_e8s must be specified.".to_string())?;
+        let transaction_fee_e8s = self
+            .transaction_fee_e8s
+            .ok_or_else(|| "Error: transaction_fee_e8s must be specified.".to_string())?;
+
         let initial_token_distribution = self
             .initial_token_distribution
             .as_ref()
             .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
-        let sale_tokens = match initial_token_distribution {
+        let initial_swap_amount_e8s = match initial_token_distribution {
             FractionalDeveloperVotingPower(fractional_developer_voting_power) => {
                 let swap_distribution = fractional_developer_voting_power
                     .swap_distribution
@@ -576,14 +583,28 @@ impl SnsInitPayload {
                 swap_distribution.initial_swap_amount_e8s
             }
         };
-        let neuron_minimum_stake_e8s = self
-            .neuron_minimum_stake_e8s
-            .ok_or_else(|| "Error: neuron_minimum_stake_e8s must be specified.".to_string())?;
-        let min_participant_token = min_participant_icp_e8s * sale_tokens / max_icp_e8s;
-        if min_participant_token < neuron_minimum_stake_e8s {
-            Err("Error: min_participant_icp_e8s is too small. If max_icp are obtained, a contribution \
-of min_participant_icp would result in a neuron with a stake smaller than \
-neuron_minimum_stake".to_string())
+
+        // It is possible to calculate what the smallest amount of SNS tokens distributed to
+        // sale participants will be. Calculate the sale ratio where the greatest amount of ICP
+        // is contributed (i.e. a sale reaches max_icp_e8s), and multiply that with the minimum
+        // amount of ICP that a participant must contribute to participate.
+        let smallest_sns_token_sale_amount_e8s = min_participant_icp_e8s
+            .checked_mul(initial_swap_amount_e8s)
+            .ok_or("Overflow when calculating smallest_sns_token_sale_amount_e8s")?
+            .checked_div(max_icp_e8s)
+            .ok_or("Underflow when calculating smallest_sns_tokens_sale_amounts_e8s")?;
+
+        if (smallest_sns_token_sale_amount_e8s - transaction_fee_e8s) < neuron_minimum_stake_e8s {
+            Err(
+                "Error: min_participant_icp_e8s is too small. If max_icp_e8s is reached during \
+                 the sale, a contribution of min_participant_icp_e8s would result in a neuron \
+                 with a stake smaller than neuron_minimum_stake_e8s and a failed Neuron claim. \
+                 Consider adjusting initial_swap_amount_e8s, max_icp_e8s, min_participant_icp_e8s, \
+                 or neuron_minimum_stake_e8s such that \
+                 ((initial_swap_amount_e8s / max_icp_e8s) * min_participant_icp_e8s) - \
+                 transaction_fee_e8s >= neuron_minimum_stake_e8s"
+                    .to_string(),
+            )
         } else {
             Ok(())
         }
@@ -727,8 +748,8 @@ mod test {
                 total_e8s: 500_000_000,
             }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 1_000_000_000,
-                initial_swap_amount_e8s: 1_000_000_000,
+                total_e8s: 10_000_000_000,
+                initial_swap_amount_e8s: 10_000_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
                 airdrop_neurons: Default::default(),
@@ -743,10 +764,12 @@ mod test {
             token_symbol: Some("SNS".to_string()),
             proposal_reject_cost_e8s: Some(100_000_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            max_icp_e8s: Some(1_000_000_000),
+            max_icp_e8s: Some(5_000_000_000),
             min_participants: Some(10),
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),
+            // Account for the transaction_fee_e8s
+            min_participant_icp_e8s: Some(100_010_000),
             max_participant_icp_e8s: Some(1_000_000_000),
             fallback_controller_principal_ids: vec![Principal::from(
                 PrincipalId::new_user_test_id(1_552_301),
@@ -756,7 +779,6 @@ mod test {
             name: Some("ServiceNervousSystem".to_string()),
             description: Some("A project that decentralizes a dapp".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
-            min_participant_icp_e8s: Some(100_000_000),
         }
     }
 
@@ -817,6 +839,8 @@ mod test {
                     .expect("Expected min_participant_icp_e8s to be Some"))
                 - 1,
         );
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
 
         sns_init_payload.description = None;
         assert!(sns_init_payload.validate().is_err());
@@ -960,7 +984,6 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        sns_init_payload.validate().expect("");
         assert!(sns_init_payload.validate().is_ok());
 
         // Create valid CanisterIds
@@ -1044,5 +1067,44 @@ mod test {
             }
         );
         assert_eq!(ledger.transfer_fee, transaction_fee);
+    }
+
+    /// min_participant_icp_e8s validation is difficult to setup so it
+    /// gets its own test.
+    #[test]
+    fn test_min_participant_icp_e8s_is_valid() {
+        let get_sns_init_payload = || {
+            get_test_sns_init_payload()
+                .validate()
+                .expect("Payload did not pass validation.")
+        };
+        let mut sns_init_payload = get_sns_init_payload();
+
+        let custom_initial_token_distribution = FractionalDeveloperVotingPower(FractionalDVP {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 100_000_000_000,
+                initial_swap_amount_e8s: 10_000_000_000,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        });
+
+        sns_init_payload.initial_token_distribution = Some(custom_initial_token_distribution);
+        sns_init_payload.max_icp_e8s = Some(10_000_000_000);
+        sns_init_payload.transaction_fee_e8s = Some(10_000);
+        sns_init_payload.neuron_minimum_stake_e8s = Some(100_000_000);
+
+        sns_init_payload.min_participant_icp_e8s = Some(100_000_000);
+
+        assert!(sns_init_payload.validate().is_err());
+
+        // Account for the transaction fee
+        sns_init_payload.min_participant_icp_e8s = Some(100_010_000);
+        assert!(sns_init_payload.validate().is_ok());
     }
 }
