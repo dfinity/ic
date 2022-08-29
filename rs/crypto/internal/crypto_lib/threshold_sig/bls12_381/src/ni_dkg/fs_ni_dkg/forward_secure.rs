@@ -25,15 +25,6 @@ use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
 use zeroize::Zeroize;
 
-lazy_static! {
-    static ref PRECOMP_SYS_H: G2Prepared = precomp_sys_h();
-}
-
-fn precomp_sys_h() -> G2Prepared {
-    let sys = mk_sys_params();
-    G2Prepared::from(&sys.h)
-}
-
 /// The ciphertext is an element of Fr which is 256-bits
 pub(crate) const MESSAGE_BYTES: usize = 32;
 
@@ -191,6 +182,7 @@ pub struct SysParam {
     pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
     pub f_h: Vec<G2Affine>, // The remaining lambda_H f_i's in the paper.
     pub h: G2Affine,
+    h_prep: G2Prepared,
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -850,8 +842,6 @@ pub fn verify_ciphertext_integrity(
     //      e(g1^{-1}, Z_j) *
     //      e(R_j, f_0 \Prod_{i=0}^{\lambda} f_i^{\tau_i}) *
     //      e(S_j,h)
-    //   (PRECOMP_SYS_H is the system-parameter h value,
-    //   pre-loaded before this function call)
     let checks: Result<(), ()> = crsz
         .rr
         .iter()
@@ -859,7 +849,7 @@ pub fn verify_ciphertext_integrity(
         .try_for_each(|(spec_r, (s, z))| {
             let z = G2Prepared::from(z);
 
-            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &PRECOMP_SYS_H), (&g1_neg, &z)]);
+            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
             if v.is_identity() {
                 Ok(())
@@ -949,31 +939,45 @@ pub const LAMBDA_T: usize = 32;
 /// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
 const LAMBDA_H: usize = 256;
 
-/// Return NI-DKG system parameters
-pub fn mk_sys_params() -> SysParam {
-    let dst = b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-    let f0 = G2Affine::hash(dst, b"f0");
+lazy_static! {
+    static ref SYSTEM_PARAMS: SysParam =
+        SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_");
+}
 
-    let mut f = Vec::with_capacity(LAMBDA_T);
-    for i in 0..LAMBDA_T {
-        let s = format!("f{}", i + 1);
-        f.push(G2Affine::hash(dst, s.as_bytes()));
+impl SysParam {
+    /// Create a set of system parameters
+    fn create(dst: &[u8]) -> Self {
+        let f0 = G2Affine::hash(dst, b"f0");
+
+        let mut f = Vec::with_capacity(LAMBDA_T);
+        for i in 0..LAMBDA_T {
+            let s = format!("f{}", i + 1);
+            f.push(G2Affine::hash(dst, s.as_bytes()));
+        }
+        let mut f_h = Vec::with_capacity(LAMBDA_H);
+        for i in 0..LAMBDA_H {
+            let s = format!("f_h{}", i);
+            f_h.push(G2Affine::hash(dst, s.as_bytes()));
+        }
+
+        let h = G2Affine::hash(dst, b"h");
+
+        let h_prep = G2Prepared::from(h);
+
+        SysParam {
+            lambda_t: LAMBDA_T,
+            lambda_h: LAMBDA_H,
+            f0,
+            f,
+            f_h,
+            h,
+            h_prep,
+        }
     }
-    let mut f_h = Vec::with_capacity(LAMBDA_H);
-    for i in 0..LAMBDA_H {
-        let s = format!("f_h{}", i);
-        f_h.push(G2Affine::hash(dst, s.as_bytes()));
-    }
 
-    let h = G2Affine::hash(dst, b"h");
-
-    SysParam {
-        lambda_t: LAMBDA_T,
-        lambda_h: LAMBDA_H,
-        f0,
-        f,
-        f_h,
-        h,
+    /// Return a reference to the global NI-DKG system parameters
+    pub fn global() -> &'static Self {
+        &SYSTEM_PARAMS
     }
 }
 

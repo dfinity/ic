@@ -13,7 +13,7 @@ proptest! {
 
     #[test]
     fn should_update_initial_epochs(seed: [u8;32], associated_data: [u8;4]) {
-        let sys = &mk_sys_params();
+        let sys = SysParam::global();
 
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
@@ -31,7 +31,7 @@ proptest! {
         prop_assume!(epochs.len()<15);
         prop_assume!(epochs.len()>5);
 
-        let sys = &mk_sys_params();
+        let sys = SysParam::global();
 
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
@@ -48,7 +48,7 @@ proptest! {
     }
     #[test]
     fn should_update_to_the_highest_epoch(seed: [u8;32], associated_data: [u8;4]) {
-        let sys = &mk_sys_params();
+        let sys = SysParam::global();
 
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
@@ -75,7 +75,7 @@ proptest! {
 proptest! {
     #[test]
     fn should_convert_tau_to_epoch(epoch: u32) {
-        let sys = &mk_sys_params();
+        let sys = SysParam::global();
 
         let epoch = Epoch::from(epoch);
         let tau = tau_from_epoch(sys, epoch);

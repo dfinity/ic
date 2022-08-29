@@ -11,7 +11,7 @@ use rand::Rng;
 
 #[test]
 fn potpourri() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let mut rng = rand::thread_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
 
@@ -82,7 +82,7 @@ fn potpourri() {
 /// * Varying the secret key epoch; this is always zero in this test.
 /// * Varying the plaintexts more; here we have only fairly noddy variation.
 fn encrypted_chunks_should_validate(epoch: Epoch) {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let mut rng = rand::thread_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 8u8, 4u8];
 
