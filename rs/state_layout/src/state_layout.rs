@@ -1,9 +1,9 @@
-use crate::basic_cpmgr::BasicCheckpointManager;
 use crate::error::LayoutError;
+use crate::utils::do_copy;
 
 use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -21,81 +21,15 @@ use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
     ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
 };
+use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
+use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
-use std::convert::{From, TryFrom, TryInto};
+use std::collections::{BTreeMap, BTreeSet};
+use std::convert::{identity, From, TryFrom, TryInto};
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
-
-pub trait CheckpointManager: Send + Sync {
-    /// Returns the base directory path managed by checkpoint manager.
-    fn raw_path(&self) -> &Path;
-
-    /// Atomically creates a checkpoint from the "tip" directory.
-    /// "name" identifies the name of the checkpoint to be created
-    /// and it need not be a directory path.
-    ///
-    /// If a thread-pool is provided then files are copied in parallel.
-    fn tip_to_checkpoint(
-        &self,
-        tip: &Path,
-        name: &str,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> std::io::Result<PathBuf>;
-
-    /// Removes a checkpoint identified by "name".
-    fn remove_checkpoint(&self, name: &str) -> std::io::Result<()>;
-
-    /// Promotes the scratchpad at "path" to a checkpoint identified by "name".
-    fn scratchpad_to_checkpoint(&self, path: &Path, name: &str) -> std::io::Result<PathBuf>;
-
-    /// Creates a mutable copy of a checkpoint in a the specified path.
-    fn checkpoint_to_scratchpad(&self, name: &str, path: &Path) -> std::io::Result<()>;
-
-    /// Gets the path for a checkpoint identified by "name".
-    fn get_checkpoint_path(&self, name: &str) -> PathBuf;
-
-    /// Marks checkpoint identified by "name" as diverged.
-    ///
-    /// Post-condition: name ∉ self.list_checkpoints()
-    fn mark_checkpoint_diverged(&self, name: &str) -> std::io::Result<()>;
-
-    /// Creates a backup of the checkpoint identified by "name".
-    fn backup_checkpoint(&self, name: &str) -> std::io::Result<()>;
-
-    /// Returns the list of names of diverged checkpoints.
-    fn list_diverged_checkpoints(&self) -> std::io::Result<Vec<String>>;
-
-    /// Returns the list of names of checkpoint backups.
-    fn list_backups(&self) -> std::io::Result<Vec<String>>;
-
-    /// Returns a path to diverged checkpoint with the specified name.
-    fn get_diverged_checkpoint_path(&self, name: &str) -> PathBuf;
-
-    /// Returns a path to a backup the specified name.
-    fn get_backup_path(&self, name: &str) -> PathBuf;
-
-    /// Removes the diverged checkpoint with the specified name.
-    fn remove_diverged_checkpoint(&self, name: &str) -> std::io::Result<()>;
-
-    /// Removes the backup with the specified name.
-    fn remove_backup(&self, name: &str) -> std::io::Result<()>;
-
-    /// List names of all the existing checkpoints.
-    fn list_checkpoints(&self) -> std::io::Result<Vec<String>>;
-
-    /// Moves a checkpoint with the specified name into the backup checkpoints
-    /// directory.
-    fn archive_checkpoint(&self, name: &str) -> std::io::Result<()>;
-
-    /// Atomically resets containts of "tip" directory to that of checkpoint
-    fn reset_tip_to(&self, tip: &Path, name: &str) -> std::io::Result<()>;
-}
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -244,7 +178,7 @@ impl Default for BitcoinStateBits {
 /// │           ├── stable_memory.(pbuf|bin)
 /// │           └── software.wasm
 /// │
-/// ├── [checkpoints] {owned and varies by checkpoint manager}
+/// ├── [checkpoints, backups, diverged_checkpoints]
 /// │   └──<hex(round)>
 /// │      ├── system_metadata.pbuf
 /// │      ├── subnet_queues.pbuf
@@ -263,33 +197,75 @@ impl Default for BitcoinStateBits {
 /// │              └── software.wasm
 /// │
 /// └── tmp
+/// └── fs_tmp
 /// ```
 ///
 /// Needs to be pub for criterion performance regression tests.
+///
+/// Checkpoints management
+///
+/// Checkpoints are created under "checkpoints" directory. fs_tmp directory
+/// is used as intermediate scratchpad area. Additional directory structure
+/// could be overlaid by state_layout on top of following directory structure.
+///
+/// For correctness reasons we need to make sure that checkpoints we create are
+/// internally consistent and only "publish" them in the `checkpoints` directory
+/// once they are fully synced to disk.
+///
+/// There are 2 ways to construct a checkpoint:
+///   1. Compute it locally by applying blocks to an older state.
+///   2. Fetch it from a peer using the state sync protocol.
+///
+/// Let's look at how each case is handled.
+///
+/// ## Promoting a TIP to a checkpoint
+///
+///   1. Dump the state to files and directories under "<state_root>/tip", sync
+///      all the files.  This sync is probably not required, but it makes
+///      it easier to reason about reflinking (see the next step).
+///
+///   2. Reflink/copy all the files from "<state_root>/tip" to
+///      "<state_root>/fs_tmp/scratchpad_<height>", sync both files and
+///      directories under the scratchpad directory, including the scratchpad
+///      directory itself.
+///
+///   3. Rename "<state_root>/fs_tmp/scratchpad_<height>" to
+///      "<state_root>/checkpoints/<height>", sync "<state_root>/checkpoints".
+///
+/// ## Promoting a State Sync artifact to a checkpoint
+///
+///   1. Create state files directly in
+///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
+///
+///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
+///      syncs all the files and directories under the scratchpad directory,
+///      including the scratchpad directory itself.
+///
+///   3. Rename "<state_root>/fs_tmp/state_sync_scratchpad_<height>" to
+///      "<state_root>/checkpoints/<height>", sync "<state_root>/checkpoints".
+
 #[derive(Clone)]
 pub struct StateLayout {
-    cp_manager: Arc<dyn CheckpointManager>,
-    _log: ReplicaLogger,
+    root: PathBuf,
+    log: ReplicaLogger,
 }
 
 impl StateLayout {
     /// Needs to be pub for criterion performance regression tests.
     pub fn new(log: ReplicaLogger, root: PathBuf) -> Self {
-        Self {
-            cp_manager: Arc::new(BasicCheckpointManager::new(log.clone(), root)),
-            _log: log,
-        }
+        Self { root, log }
     }
 
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
-        self.cp_manager.raw_path()
+        &self.root
     }
 
     /// Returns the path to the temporary directory.
     /// This directory is cleaned during restart of a node.
     pub fn tmp(&self) -> Result<PathBuf, LayoutError> {
-        let tmp = self.cp_manager.raw_path().join("tmp");
+        let tmp = self.root.join("tmp");
         WriteOnly::check_dir(&tmp)?;
         Ok(tmp)
     }
@@ -316,7 +292,7 @@ impl StateLayout {
 
     /// Returns the path to the serialized states metadata.
     pub fn states_metadata(&self) -> PathBuf {
-        self.cp_manager.raw_path().join("states_metadata.pbuf")
+        self.root.join("states_metadata.pbuf")
     }
 
     /// Returns scratchpad used during statesync
@@ -352,13 +328,14 @@ impl StateLayout {
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let height = tip.height;
         let cp_name = self.checkpoint_name(height);
-        match self
-            .cp_manager
-            .tip_to_checkpoint(tip.raw_path(), &cp_name, thread_pool)
-        {
-            Ok(new_cp) => CheckpointLayout::new(new_cp, height),
-            Err(err) if is_dir_already_exists_err(&err) => Err(LayoutError::AlreadyExists(height)),
-            Err(err) => Err(LayoutError::IoError {
+        WriteOnly::check_dir(&self.checkpoints())?;
+        let new_cp = self.checkpoints().join(&cp_name);
+
+        if new_cp.exists() {
+            return Err(LayoutError::AlreadyExists(height));
+        }
+        self.copy_checkpoint(&cp_name, tip.raw_path(), new_cp.as_path(), thread_pool)
+            .map_err(|err| LayoutError::IoError {
                 path: tip.raw_path().to_path_buf(),
                 message: format!(
                     "Failed to convert tip to checkpoint to {} (err kind: {:?})",
@@ -366,8 +343,8 @@ impl StateLayout {
                     err.kind()
                 ),
                 io_err: err,
-            }),
-        }
+            })?;
+        CheckpointLayout::new(new_cp, height)
     }
 
     pub fn scratchpad_to_checkpoint(
@@ -376,22 +353,32 @@ impl StateLayout {
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        match self
-            .cp_manager
-            .scratchpad_to_checkpoint(layout.raw_path(), &cp_name)
-        {
-            Ok(cp_path) => CheckpointLayout::new(cp_path, height),
-            Err(err) if is_dir_already_exists_err(&err) => Err(LayoutError::AlreadyExists(height)),
-            Err(err) => Err(LayoutError::IoError {
-                path: layout.raw_path().to_path_buf(),
-                message: format!(
-                    "Failed to convert scratchpad to checkpoint {} (err kind: {:?})",
-                    height,
-                    err.kind()
-                ),
-                io_err: err,
-            }),
+        WriteOnly::check_dir(&self.checkpoints())?;
+        let scratchpad = layout.raw_path();
+        sync_and_mark_files_readonly(scratchpad).map_err(|err| LayoutError::IoError {
+            path: scratchpad.to_path_buf(),
+            message: format!(
+                "Could not sync and mark readonly scratchpad for checkpoint {}",
+                height
+            ),
+            io_err: err,
+        })?;
+        let checkpoints_path = self.checkpoints();
+        let cp_path = checkpoints_path.join(cp_name);
+        if cp_path.exists() {
+            return Err(LayoutError::AlreadyExists(height));
         }
+        std::fs::rename(scratchpad, &cp_path).map_err(|err| LayoutError::IoError {
+            path: scratchpad.to_path_buf(),
+            message: format!("Failed to rename scratchpad to checkpoint {}", height),
+            io_err: err,
+        })?;
+        sync_path(&checkpoints_path).map_err(|err| LayoutError::IoError {
+            path: checkpoints_path,
+            message: "Could not sync checkpoints".to_string(),
+            io_err: err,
+        })?;
+        CheckpointLayout::new(cp_path, height)
     }
 
     pub fn checkpoint_to_scratchpad(
@@ -404,39 +391,71 @@ impl StateLayout {
             .tempdir()
             .map_err(|io_err| LayoutError::IoError {
                 path: tmp_path,
-                message: "failed to create a temporary directory".to_string(),
+                message: "Failed to create a temporary directory".to_string(),
                 io_err,
             })?;
 
         let cp_name = self.checkpoint_name(height);
-        match self
-            .cp_manager
-            .checkpoint_to_scratchpad(&cp_name, scratchpad_dir.path())
-        {
-            Ok(_) => CheckpointLayout::<RwPolicy>::new(scratchpad_dir.into_path(), height),
-            Err(io_err) => Err(LayoutError::IoError {
-                path: scratchpad_dir.into_path(),
-                message: format!("failed to create a copy of checkpoint {}", height),
-                io_err,
-            }),
-        }
+        let cp_path = self.checkpoints().join(cp_name);
+        copy_recursively_respecting_tombstones(
+            &self.log,
+            &cp_path,
+            scratchpad_dir.path(),
+            FilePermissions::ReadWrite,
+            None,
+        )
+        .map_err(|err| LayoutError::IoError {
+            path: scratchpad_dir.path().to_path_buf(),
+            message: format!("Failed to create a copy of checkpoint {}", height),
+            io_err: err,
+        })?;
+        CheckpointLayout::<RwPolicy>::new(scratchpad_dir.into_path(), height)
     }
 
     /// Resets "tip" to a checkpoint identified by height.
     pub fn reset_tip_to(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
         let tip = self.tip_path();
-        match self.cp_manager.reset_tip_to(&tip, &cp_name) {
-            Ok(()) => Ok(()),
-            Err(err) => Err(LayoutError::IoError {
-                path: tip,
-                message: format!(
-                    "Failed to convert reset tip to checkpoint to {} (err kind: {:?})",
-                    cp_name,
-                    err.kind()
-                ),
+        if tip.exists() {
+            std::fs::remove_dir_all(&tip).map_err(|err| LayoutError::IoError {
+                path: tip.to_path_buf(),
+                message: format!("Cannot remove tip for checkpoint {}", height),
                 io_err: err,
-            }),
+            })?;
+        }
+
+        let cp_path = self.checkpoints().join(&cp_name);
+        if !cp_path.exists() {
+            return Ok(());
+        }
+
+        match copy_recursively_respecting_tombstones(
+            &self.log,
+            cp_path.as_path(),
+            &tip,
+            FilePermissions::ReadWrite,
+            None,
+        ) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if let Err(err) = std::fs::remove_dir_all(&tip) {
+                    error!(
+                        self.log,
+                        "Failed to tip directory. Path: {}, Error: {}.",
+                        tip.display(),
+                        err
+                    )
+                }
+                Err(LayoutError::IoError {
+                    path: tip,
+                    message: format!(
+                        "Failed to convert reset tip to checkpoint to {} (err kind: {:?})",
+                        cp_name,
+                        e.kind()
+                    ),
+                    io_err: e,
+                })
+            }
         }
     }
 
@@ -444,7 +463,7 @@ impl StateLayout {
     /// there is one).
     pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        let path = self.cp_manager.get_checkpoint_path(&cp_name);
+        let path = self.checkpoints().join(&cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
@@ -453,14 +472,11 @@ impl StateLayout {
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let names = self
-            .cp_manager
-            .list_checkpoints()
-            .map_err(|err| LayoutError::IoError {
-                path: "NO_PATH".into(),
-                message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
-                io_err: err,
-            })?;
+        let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+            path: "NO_PATH".into(),
+            message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
+            io_err: err,
+        })?;
 
         parse_checkpoint_heights(&names[..])
     }
@@ -468,28 +484,24 @@ impl StateLayout {
     /// Returns a sorted list of `Height`s of checkpoints that were marked as
     /// diverged.
     pub fn diverged_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let names = self
-            .cp_manager
-            .list_diverged_checkpoints()
-            .map_err(|io_err| LayoutError::IoError {
+        let names = dir_file_names(&self.diverged_checkpoints()).map_err(|io_err| {
+            LayoutError::IoError {
                 path: "NO_PATH".into(),
                 message: "failed to enumerate diverged checkpoints".to_string(),
                 io_err,
-            })?;
+            }
+        })?;
         parse_checkpoint_heights(&names[..])
     }
 
     /// Returns a sorted list of heights of checkpoints that were "backed up"
     /// for future inspection because they corresponded to diverged states.
     pub fn backup_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let names = self
-            .cp_manager
-            .list_backups()
-            .map_err(|io_err| LayoutError::IoError {
-                path: "NO_PATH".into(),
-                message: "failed to enumerate backups".to_string(),
-                io_err,
-            })?;
+        let names = dir_file_names(&self.backups()).map_err(|io_err| LayoutError::IoError {
+            path: "NO_PATH".into(),
+            message: "failed to enumerate backups".to_string(),
+            io_err,
+        })?;
         parse_checkpoint_heights(&names[..])
     }
 
@@ -501,8 +513,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn diverged_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.cp_manager
-            .get_diverged_checkpoint_path(self.checkpoint_name(h).as_str())
+        self.diverged_checkpoints().join(self.checkpoint_name(h))
     }
 
     /// Returns a path to a backed up state given its height.
@@ -510,8 +521,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.backup_heights()
     pub fn backup_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.cp_manager
-            .get_backup_path(self.checkpoint_name(h).as_str())
+        self.backups().join(self.checkpoint_name(h))
     }
 
     /// Removes a checkpoint for a given height if it exists.
@@ -520,10 +530,12 @@ impl StateLayout {
     ///   height ∉ self.checkpoint_heights()
     pub fn remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        self.cp_manager
-            .remove_checkpoint(&cp_name)
+        let cp_path = self.checkpoints().join(&cp_name);
+        let tmp_path = self.fs_tmp().join(&cp_name);
+
+        self.atomically_remove_via_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_checkpoint_path(&cp_name),
+                path: cp_path,
                 message: format!(
                     "failed to remove checkpoint {} (err kind: {:?})",
                     cp_name,
@@ -543,13 +555,25 @@ impl StateLayout {
     ///   height ∉ self.checkpoint_heights()
     pub fn mark_checkpoint_diverged(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        self.cp_manager
-            .mark_checkpoint_diverged(&cp_name)
-            .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_checkpoint_path(&cp_name),
-                message: format!("failed to mark checkpoint {} diverged", height),
+        let cp_path = self.checkpoints().join(&cp_name);
+        let diverged_checkpoints_dir = self.diverged_checkpoints();
+        WriteOnly::check_dir(&diverged_checkpoints_dir)?;
+
+        let dst_path = diverged_checkpoints_dir.join(&cp_name);
+
+        match std::fs::rename(&cp_path, &dst_path) {
+            Ok(()) => sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+                path: self.checkpoints(),
+                message: "Failed to sync checkpoints".to_string(),
                 io_err: err,
-            })
+            }),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other.map_err(|err| LayoutError::IoError {
+                path: cp_path,
+                message: format!("Failed to mark checkpoint {} diverged", height),
+                io_err: err,
+            }),
+        }
     }
 
     /// Removes a diverged checkpoint given its height.
@@ -558,10 +582,13 @@ impl StateLayout {
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn remove_diverged_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
         let checkpoint_name = self.checkpoint_name(height);
-        self.cp_manager
-            .remove_diverged_checkpoint(&checkpoint_name)
+        let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
+        let tmp_path = self
+            .fs_tmp()
+            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+        self.atomically_remove_via_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_backup_path(checkpoint_name.as_str()),
+                path: cp_path,
                 message: format!("failed to remove diverged checkpoint {}", height),
                 io_err: err,
             })
@@ -576,13 +603,25 @@ impl StateLayout {
     /// non-determinism even if the whole subnet moved forward.
     pub fn backup_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        self.cp_manager
-            .backup_checkpoint(&cp_name)
+        let cp_path = self.checkpoints().join(&cp_name);
+        if !cp_path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+
+        let backups_dir = self.backups();
+        WriteOnly::check_dir(&backups_dir)?;
+        let dst = backups_dir.join(&cp_name);
+        self.copy_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_checkpoint_path(&cp_name),
-                message: format!("failed to backup checkpoint {}", height),
+                path: cp_path,
+                message: format!("Failed to backup checkpoint {}", height),
                 io_err: err,
-            })
+            })?;
+        sync_path(&backups_dir).map_err(|err| LayoutError::IoError {
+            path: backups_dir,
+            message: "Failed to sync backups".to_string(),
+            io_err: err,
+        })
     }
 
     /// Removes a backed up state given its height.
@@ -591,10 +630,11 @@ impl StateLayout {
     ///   h ∈ self.backup_heights()
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = self.checkpoint_name(height);
-        self.cp_manager
-            .remove_backup(&backup_name)
+        let backup_path = self.backups().join(&backup_name);
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path())
             .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_backup_path(backup_name.as_str()),
+                path: backup_path,
                 message: format!("failed to remove backup {}", height),
                 io_err: err,
             })
@@ -607,13 +647,44 @@ impl StateLayout {
     /// removed.
     pub fn archive_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        self.cp_manager
-            .archive_checkpoint(&cp_name)
-            .map_err(|err| LayoutError::IoError {
-                path: self.cp_manager.get_checkpoint_path(&cp_name),
-                message: format!("failed to archive checkpoint {}", height),
-                io_err: err,
-            })
+        let cp_path = self.checkpoints().join(&cp_name);
+        if !cp_path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+
+        let backups_dir = self.backups();
+        WriteOnly::check_dir(&backups_dir)?;
+        let dst = backups_dir.join(&cp_name);
+
+        if dst.exists() {
+            // This might happen if we archived a checkpoint, then
+            // recomputed it again, and then restarted again.  We don't need
+            // another copy.
+            return self.remove_checkpoint(height);
+        }
+
+        std::fs::rename(&cp_path, &dst).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!("failed to archive checkpoint {}", height),
+            io_err: err,
+        })?;
+
+        sync_path(&backups_dir).map_err(|err| LayoutError::IoError {
+            path: backups_dir,
+            message: "Failed to sync backups".to_string(),
+            io_err: err,
+        })?;
+        sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+            path: self.checkpoints(),
+            message: "Failed to sync checkpoints".to_string(),
+            io_err: err,
+        })
+    }
+
+    // Returns the path to the temporary directory for checkpoint operations,
+    // aka fs_tmp.
+    fn fs_tmp(&self) -> PathBuf {
+        self.root.join("fs_tmp")
     }
 
     fn checkpoint_name(&self, height: Height) -> String {
@@ -621,7 +692,93 @@ impl StateLayout {
     }
 
     pub fn tip_path(&self) -> PathBuf {
-        self.cp_manager.raw_path().join("tip")
+        self.raw_path().join("tip")
+    }
+
+    fn checkpoints(&self) -> PathBuf {
+        self.root.join("checkpoints")
+    }
+
+    fn diverged_checkpoints(&self) -> PathBuf {
+        self.root.join("diverged_checkpoints")
+    }
+
+    fn backups(&self) -> PathBuf {
+        self.root.join("backups")
+    }
+
+    fn ensure_dir_exists(&self, p: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(p)
+    }
+
+    /// Atomically copies a checkpoint with the specified name located at src
+    /// path into the specified dst path.
+    ///
+    /// If a thread-pool is provided then files are copied in parallel.
+    fn copy_checkpoint(
+        &self,
+        name: &str,
+        src: &Path,
+        dst: &Path,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> std::io::Result<()> {
+        let scratch_name = format!("scratchpad_{}", name);
+        let scratchpad = self.fs_tmp().join(&scratch_name);
+        self.ensure_dir_exists(&scratchpad)?;
+
+        if dst.exists() {
+            return Err(Error::new(std::io::ErrorKind::AlreadyExists, name));
+        }
+
+        let copy_atomically = || {
+            copy_recursively_respecting_tombstones(
+                &self.log,
+                src,
+                scratchpad.as_path(),
+                FilePermissions::ReadOnly,
+                thread_pool,
+            )?;
+            std::fs::rename(&scratchpad, &dst)?;
+            sync_path(&dst)
+        };
+
+        match copy_atomically() {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                let _ = std::fs::remove_dir_all(&scratchpad);
+                Err(err)
+            }
+        }
+    }
+
+    /// Atomically removes path by first renaming it into tmp_path, and then
+    /// deleting tmp_path.
+    fn atomically_remove_via_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
+        // We first move the checkpoint directory into a temporary directory to
+        // maintain the invariant that <root>/checkpoints/<height> are always
+        // internally consistent.
+        if let Some(parent) = tmp_path.parent() {
+            self.ensure_dir_exists(parent)?;
+        }
+        match std::fs::rename(path, tmp_path) {
+            Ok(_) => {
+                if let Some(parent) = path.parent() {
+                    sync_path(parent)?;
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                error!(
+                    self.log,
+                    "Failed to move checkpoint to tmp dir. Source: {}, Destination: {}, Error: {}.",
+                    path.display(),
+                    tmp_path.display(),
+                    err
+                );
+                return Ok(());
+            }
+            Err(err) => return Err(err),
+        }
+        std::fs::remove_dir_all(tmp_path)
     }
 }
 
@@ -677,11 +834,6 @@ fn parse_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError
     heights.sort_unstable();
 
     Ok(heights)
-}
-
-fn is_dir_already_exists_err(err: &std::io::Error) -> bool {
-    err.kind() == std::io::ErrorKind::AlreadyExists
-        || err.raw_os_error() == Some(libc::ENOTEMPTY as i32)
 }
 
 pub struct CheckpointLayout<Permissions: AccessPolicy> {
@@ -1300,6 +1452,172 @@ impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
     }
 }
 
+fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
+    if !p.exists() {
+        return Ok(vec![]);
+    }
+    let mut result = vec![];
+    for e in p.read_dir()? {
+        let string = e?.file_name().into_string().map_err(|file_name| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("failed to convert file name {:?} to string", file_name),
+            )
+        })?;
+        result.push(string);
+    }
+    Ok(result)
+}
+
+#[derive(Clone, Copy)]
+enum FilePermissions {
+    ReadOnly,
+    ReadWrite,
+}
+
+/// Recursively copies `src` to `dst` using the given permission policy for
+/// files. Directories containing a file called "tombstone" are not copied to
+/// the destination. If a thread-pool is provided then files are copied in
+/// parallel.
+///
+/// NOTE: If the function returns an error, the changes to the file
+/// system applied by this function are not undone.
+fn copy_recursively_respecting_tombstones(
+    log: &ReplicaLogger,
+    root_src: &Path,
+    root_dst: &Path,
+    dst_permissions: FilePermissions,
+    thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<()> {
+    let mut copy_plan = CopyPlan {
+        create_and_sync_dir: vec![],
+        copy_and_sync_file: vec![],
+    };
+
+    build_copy_plan(root_src, root_dst, &mut copy_plan)?;
+
+    // Ensure that the target root directory exists.
+    // Note: all the files and directories below the target root (including the
+    // target root itself) will be synced after this function returns.  However,
+    // create_dir_all might create some parents that won't be synced. It's fine
+    // because:
+    //   1. We only care about internal consistency of checkpoints, and the
+    //   parents create_dir_all might have created do not belong to a
+    //   checkpoint.
+    //
+    //   2. We only invoke this function with DST being a child of a
+    //   directory that is wiped out on replica start, so we don't care much
+    //   about this temporary directory being properly synced.
+    std::fs::create_dir_all(&root_dst)?;
+    match thread_pool {
+        Some(thread_pool) => {
+            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                std::fs::create_dir_all(&op.dst)
+            });
+            results.into_iter().try_for_each(identity)?;
+            let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
+                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)
+            });
+            results.into_iter().try_for_each(identity)?;
+            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
+                sync_path(&op.dst)
+            });
+            results.into_iter().try_for_each(identity)?;
+        }
+        None => {
+            for op in copy_plan.create_and_sync_dir.iter() {
+                std::fs::create_dir_all(&op.dst)?;
+            }
+            for op in copy_plan.copy_and_sync_file.into_iter() {
+                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)?;
+            }
+            for op in copy_plan.create_and_sync_dir.iter() {
+                sync_path(&op.dst)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Copies the given file and ensures that the `read/write` permission of the
+/// target file match the given permission.
+fn copy_and_sync_file(
+    log: &ReplicaLogger,
+    src: &Path,
+    dst: &Path,
+    dst_permissions: FilePermissions,
+) -> std::io::Result<()> {
+    do_copy(log, src, dst)?;
+
+    // We keep the directory writable though to make sure we can rename
+    // them or delete the files.
+    let dst_metadata = dst.metadata()?;
+    let mut permissions = dst_metadata.permissions();
+    match dst_permissions {
+        FilePermissions::ReadOnly => permissions.set_readonly(true),
+        FilePermissions::ReadWrite => permissions.set_readonly(false),
+    }
+    std::fs::set_permissions(&dst, permissions)?;
+    sync_path(&dst)
+}
+
+// Describes how to copy one directory to another.
+// The order of operations is improtant:
+// 1. All directories should be created first.
+// 2. After that files can be copied in _any_ order.
+// 3. Finally, directories should be synced.
+struct CopyPlan {
+    create_and_sync_dir: Vec<CreateAndSyncDir>,
+    copy_and_sync_file: Vec<CopyAndSyncFile>,
+}
+
+// Describes an operation for creating and syncing a directory.
+// Note that a directory can be synced only after all its children are created.
+struct CreateAndSyncDir {
+    dst: PathBuf,
+}
+
+// Describes an operation for copying and syncing a file.
+struct CopyAndSyncFile {
+    src: PathBuf,
+    dst: PathBuf,
+}
+
+/// Traverse the source file tree and constructs a copy-plan:
+/// a collection of I/O operations that need to be performed to copy the source
+/// to the destination while ignoring directories that have tombstones.
+fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Result<()> {
+    let src_metadata = src.metadata()?;
+
+    if src_metadata.is_dir() {
+        if src.join("tombstone").exists() {
+            // The source directory was marked as removed by placing a
+            // 'tombstone' file inside. We don't want this directory in
+            // a checkpoint.
+            return Ok(());
+        }
+
+        // First create the target directory.
+        plan.create_and_sync_dir.push(CreateAndSyncDir {
+            dst: PathBuf::from(dst),
+        });
+
+        // Then copy and sync all children.
+        let entries = src.read_dir()?;
+        for entry_result in entries {
+            let entry = entry_result?;
+            let dst_entry = dst.join(entry.file_name());
+            build_copy_plan(&entry.path(), &dst_entry, plan)?;
+        }
+    } else {
+        plan.copy_and_sync_file.push(CopyAndSyncFile {
+            src: PathBuf::from(src),
+            dst: PathBuf::from(dst),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1310,6 +1628,7 @@ mod test {
         ids::canister_test_id,
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     };
+    use std::sync::Arc;
 
     fn default_canister_state_bits() -> CanisterStateBits {
         CanisterStateBits {
