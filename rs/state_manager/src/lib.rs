@@ -1631,7 +1631,7 @@ impl StateManagerImpl {
                     .map(|certification| (*height, certification, Arc::clone(hash_tree)))
             })
             .or_else(|| {
-                warn!(every_n_seconds => 5, self.log, "No state available with certification.");
+                warn!(self.log, "No state available with certification.");
                 None
             })?;
         let state = states
