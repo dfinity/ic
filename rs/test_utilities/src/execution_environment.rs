@@ -642,11 +642,13 @@ impl ExecutionTest {
     /// Executes the heartbeat method of the given canister.
     pub fn heartbeat(&mut self, canister_id: CanisterId) -> Result<(), CanisterHeartbeatError> {
         let mut state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
+            compute_allocation_used,
         };
         let instructions_before = round_limits.instructions;
         let (canister, result) = self.exec_env.execute_canister_heartbeat(
@@ -705,11 +707,13 @@ impl ExecutionTest {
         response: Response,
     ) -> ExecutionResponse {
         let mut state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
+            compute_allocation_used,
         };
         let instructions_before = round_limits.instructions;
         let result = self.exec_env.execute_canister_response(
@@ -797,6 +801,7 @@ impl ExecutionTest {
     // Return a progress flag indicating if the message was executed or not.
     fn execute_subnet_message(&mut self) -> bool {
         let mut state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let message = match state.pop_subnet_input() {
             Some(message) => message,
             None => {
@@ -808,6 +813,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
+            compute_allocation_used,
         };
         let instructions_before = round_limits.instructions;
         let new_state = self.exec_env.execute_subnet_message(
@@ -853,11 +859,13 @@ impl ExecutionTest {
             executed_any = true;
         }
         let mut state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory.get().into(),
+            compute_allocation_used,
         };
         for canister_id in canister_ids {
             let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -916,6 +924,7 @@ impl ExecutionTest {
     /// Executes a slice of the given canister.
     pub fn execute_slice(&mut self, canister_id: CanisterId) {
         let mut state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut canister = canisters.remove(&canister_id).unwrap();
@@ -930,6 +939,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory.get().into(),
+                    compute_allocation_used,
                 };
                 let instructions_before = round_limits.instructions;
                 state = self.exec_env.resume_install_code(
@@ -953,6 +963,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory.get().into(),
+                    compute_allocation_used,
                 };
                 let instructions_before = round_limits.instructions;
                 let result = execute_canister(

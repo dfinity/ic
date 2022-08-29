@@ -60,6 +60,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
             let (_, _, result) = execute_non_replicated_query(

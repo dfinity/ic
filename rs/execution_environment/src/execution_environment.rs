@@ -189,6 +189,10 @@ pub struct RoundLimits {
     /// - Wasm execution grows the Wasm/stable memory.
     /// - Wasm execution pushes a new request to the output queue.
     pub subnet_available_memory: SubnetAvailableMemory,
+
+    // TODO would be nice to change that to available, but this requires
+    // a lot of changes since available allocation sits in CanisterManager config
+    pub compute_allocation_used: u64,
 }
 
 /// Represent a paused execution that can be resumed or aborted.
@@ -1354,6 +1358,8 @@ impl ExecutionEnvironment {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_message),
             subnet_available_memory,
+            // Ignore compute allocation
+            compute_allocation_used: 0,
         };
         let result = execute_non_replicated_query(
             NonReplicatedQueryKind::Pure {
@@ -1684,7 +1690,9 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ReplicatedState {
-        let compute_allocation_used = state.total_compute_allocation();
+        // overwrite this for now
+        // TODO update round_limits.compute_allocation_used when it changes
+        round_limits.compute_allocation_used = state.total_compute_allocation();
 
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
@@ -1751,7 +1759,6 @@ impl ExecutionEnvironment {
             old_canister,
             state.time(),
             state.path().to_path_buf(),
-            compute_allocation_used,
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,
