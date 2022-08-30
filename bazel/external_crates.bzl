@@ -20,6 +20,9 @@ def external_crates_repository(name, annotations):
             "actix-web": crate.spec(
                 version = "^4.0.0-beta.6",
             ),
+            "arbitrary": crate.spec(
+                version = "=1.1.3",
+            ),
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
             ),
@@ -124,6 +127,7 @@ def external_crates_repository(name, annotations):
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
                 rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                default_features = False,
             ),
             "byte-unit": crate.spec(
                 version = "^4.0.14",
