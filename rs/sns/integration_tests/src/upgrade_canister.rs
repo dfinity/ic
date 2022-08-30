@@ -19,7 +19,7 @@ use ic_types::PrincipalId;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 // The minimum WASM payload.
 lazy_static! {
@@ -82,7 +82,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
         // Step 2: Execute code under test: Propose that we upgrade dapp.
 
-        // Step 2.a: Make sure that the proposal will have a discernable
+        // Step 2.a: Make sure that the proposal will have a discernible
         // effect (verified in Step 3). Specifically, that the wasm will
         // have changed (upon successful execution).
         let status: CanisterStatusResult = sns_canisters
@@ -123,13 +123,10 @@ fn test_upgrade_canister_proposal_is_successful() {
         // Step 3: Inspect result(s).
 
         // Step 3.a: Assert that the proposal was approved.
-        let mut proposal = sns_canisters.get_proposal(proposal_id).await;
-        let mut attempts = 0;
-        while proposal.executed_timestamp_seconds == 0 && attempts < 25 {
-            sleep(Duration::from_millis(100)).await;
-            proposal = sns_canisters.get_proposal(proposal_id).await;
-            attempts += 1;
-        }
+        let proposal = sns_canisters
+            .await_proposal_execution_or_failure(&proposal_id)
+            .await;
+
         assert_ne!(
             proposal.decided_timestamp_seconds, 0,
             "proposal: {:?}",
@@ -148,28 +145,9 @@ fn test_upgrade_canister_proposal_is_successful() {
         assert_eq!(proposal.failure_reason, None, "proposal: {:?}", proposal);
 
         // Step 3.b: Wait until new dapp is running.
-        let mut attempt_count = 0;
-        let status = loop {
-            // Query dapp status.
-            let status: CanisterStatusResult = sns_canisters
-                .root
-                .update_(
-                    "canister_status",
-                    candid_one,
-                    CanisterIdRecord::from(dapp_canister.canister_id()),
-                )
-                .await
-                .unwrap();
-            attempt_count += 1;
-
-            // Stop waiting once it dapp has reached the Running state.
-            if status.status == CanisterStatusType::Running {
-                break status;
-            }
-
-            assert!(attempt_count < 25, "status: {:?}", status);
-            sleep(Duration::from_millis(100)).await;
-        };
+        let status = sns_canisters
+            .await_canister_upgrade(dapp_canister.canister_id())
+            .await;
 
         // Step 3.c: Assert that the new wasm hash is new_dapp_wasm_hash.
         assert_eq!(
