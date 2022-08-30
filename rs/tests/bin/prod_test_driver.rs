@@ -236,12 +236,36 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                         ),
                         sys_t(
-                            "boundary_nodes_nginx_request_response_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_request_response_test,
-                        ),
-                        sys_t(
                             "boundary_nodes_denylist_test",
                             boundary_nodes_integration::boundary_nodes::denylist_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_http_to_https_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_dashboard_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_non_raw_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_sw_test",
+                            boundary_nodes_integration::boundary_nodes::sw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_icx_proxy_test",
+                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_rosetta_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
                         ),
                     ]),
                 ),
@@ -546,12 +570,36 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                         ),
                         sys_t(
-                            "boundary_nodes_nginx_request_response_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_request_response_test,
-                        ),
-                        sys_t(
                             "boundary_nodes_denylist_test",
                             boundary_nodes_integration::boundary_nodes::denylist_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_http_to_https_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_dashboard_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_non_raw_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_sw_test",
+                            boundary_nodes_integration::boundary_nodes::sw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_icx_proxy_test",
+                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_rosetta_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
                         ),
                     ]),
                 ),
