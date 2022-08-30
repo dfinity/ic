@@ -11,7 +11,7 @@ use crate::{
         Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
         TransportImpl,
     },
-    utils::get_flow_label,
+    utils::get_peer_label,
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
@@ -76,11 +76,11 @@ impl TransportImpl {
         // TODO: P2P-514
         let flow_tag = FlowTag::from(self.config.legacy_flow_tag);
         if role == ConnectionRole::Server {
-            let flow_label = get_flow_label(&peer_addr.ip().to_string(), peer_id);
+            let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
             let peer_state = PeerState::new(
                 self.log.clone(),
                 flow_tag,
-                flow_label,
+                peer_label,
                 ConnectionState::Listening,
                 QueueSize::from(self.config.send_queue_size),
                 self.send_queue_metrics.clone(),
@@ -90,7 +90,7 @@ impl TransportImpl {
             return Ok(());
         }
 
-        let flow_label = get_flow_label(&peer_addr.ip().to_string(), peer_id);
+        let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
         let connecting_task = self.spawn_connect_task(flow_tag, *peer_id, peer_addr);
         let connecting_state = Connecting {
             peer_addr,
@@ -99,7 +99,7 @@ impl TransportImpl {
         let peer_state = PeerState::new(
             self.log.clone(),
             flow_tag,
-            flow_label,
+            peer_label,
             ConnectionState::Connecting(connecting_state),
             QueueSize::from(self.config.send_queue_size),
             self.send_queue_metrics.clone(),
@@ -199,7 +199,7 @@ impl TransportImpl {
                             let connected_state = create_connected_state(
                                 peer_id,
                                 flow_tag,
-                                peer_state.flow_label.clone(),
+                                peer_state.peer_label.clone(),
                                 peer_state.send_queue.get_reader(),
                                 ConnectionRole::Server,
                                 peer_addr,
@@ -310,7 +310,7 @@ impl TransportImpl {
                         let connected_state = create_connected_state(
                             peer_id,
                             flow_tag,
-                            peer_state.flow_label.clone(),
+                            peer_state.peer_label.clone(),
                             peer_state.send_queue.get_reader(),
                             ConnectionRole::Client,
                             peer_addr,
