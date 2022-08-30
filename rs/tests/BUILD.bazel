@@ -40,6 +40,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/nns_data_provider",
     "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
     "//rs/registry/regedit",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
