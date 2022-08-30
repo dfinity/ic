@@ -15,9 +15,7 @@ use openssl::x509::{X509NameEntries, X509NameEntryRef};
 use std::str::FromStr;
 use tokio::net::TcpStream;
 
-mod client_handshake;
 mod rustls;
-mod server_handshake;
 
 #[async_trait]
 impl<CSP> TlsHandshake for CryptoComponentFatClient<CSP>
