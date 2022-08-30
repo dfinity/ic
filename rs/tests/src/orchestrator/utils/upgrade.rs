@@ -33,13 +33,13 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     match image_type {
         UpdateImageType::Image => {
             format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
                 git_revision
             )
         }
         UpdateImageType::ImageTest => {
             format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst",
                 git_revision
             )
         }
@@ -86,8 +86,8 @@ pub(crate) async fn fetch_update_file_sha256(
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
         let suffix = match is_test_img {
-            true => "-img-test.tar.gz",
-            false => "-img.tar.gz",
+            true => "-img-test.tar.zst",
+            false => "-img.tar.zst",
         };
         if words.len() == 2 && words[1].ends_with(suffix) {
             return Ok(words[0].to_string());
