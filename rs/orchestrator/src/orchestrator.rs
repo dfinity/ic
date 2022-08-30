@@ -27,6 +27,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{convert::TryFrom, time::Duration};
+use tokio::sync::watch::{self, Receiver, Sender};
 use tokio::{sync::RwLock, task::JoinHandle};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
@@ -40,7 +41,8 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     // A flag used to communicate to async tasks, that their job is done.
-    exit_signal: Arc<RwLock<bool>>,
+    exit_sender: Sender<bool>,
+    exit_signal: Receiver<bool>,
     // The subnet id of the node.
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     // Handles of async tasks used to wait for their completion
@@ -210,6 +212,9 @@ impl Orchestrator {
             cup_provider,
             logger.clone(),
         ));
+
+        let (exit_sender, exit_signal) = watch::channel(false);
+
         Ok(Self {
             logger,
             _async_log_guard,
@@ -218,7 +223,8 @@ impl Orchestrator {
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
-            exit_signal: Default::default(),
+            exit_sender,
+            exit_signal,
             subnet_id,
             task_handles: Default::default(),
         })
@@ -240,7 +246,7 @@ impl Orchestrator {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut upgrade: Upgrade,
-            exit_signal: Arc<RwLock<bool>>,
+            exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
             // This timeout is a last resort trying to revive the upgrade monitoring
@@ -265,24 +271,27 @@ impl Orchestrator {
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
-            exit_signal: Arc<RwLock<bool>>,
+            mut exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
-            while !*exit_signal.read().await {
+            while !*exit_signal.borrow() {
                 // Check if new SSH keys need to be deployed
                 ssh_access_manager
                     .check_for_keyset_changes(*maybe_subnet_id.read().await)
                     .await;
                 // Check and update the firewall rules
                 firewall.check_and_update().await;
-                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = exit_signal.changed() => {}
+                };
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
         }
 
         async fn serve_dashboard(
             dashboard: OrchestratorDashboard,
-            exit_signal: Arc<RwLock<bool>>,
+            exit_signal: Receiver<bool>,
             logger: ReplicaLogger,
         ) {
             dashboard.run(exit_signal).await;
@@ -294,7 +303,7 @@ impl Orchestrator {
             self.task_handles.push(tokio::spawn(upgrade_checks(
                 Arc::clone(&self.subnet_id),
                 upgrade,
-                Arc::clone(&self.exit_signal),
+                self.exit_signal.clone(),
                 self.logger.clone(),
             )));
         }
@@ -310,7 +319,7 @@ impl Orchestrator {
                     Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
-                    Arc::clone(&self.exit_signal),
+                    self.exit_signal.clone(),
                     self.logger.clone(),
                 )));
         }
@@ -395,7 +404,9 @@ impl Orchestrator {
     pub async fn shutdown(self) {
         info!(self.logger, "Shutting down orchestrator...");
         // Communicate to async tasks that the y should exit.
-        *self.exit_signal.write().await = true;
+        self.exit_sender
+            .send(true)
+            .expect("Failed to send exit signal");
         // Wait until tasks are done.
         for handle in self.task_handles {
             let _ = handle.await;
