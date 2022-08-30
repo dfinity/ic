@@ -555,7 +555,7 @@ mod tests {
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::Arc;
-    use tokio::net::TcpStream;
+    use tokio::net::{TcpSocket, TcpStream};
     use tokio::sync::mpsc::{channel, Sender};
     use tower::{util::BoxCloneService, Service, ServiceExt};
     use tower_test::mock::Handle;
@@ -564,9 +564,6 @@ mod tests {
     const NODE_ID_2: NodeId = NODE_2;
     const REG_V1: RegistryVersion = RegistryVersion::new(1);
     const FLOW_TAG: u32 = 1234;
-
-    const PORT_1: u16 = 65001;
-    const PORT_2: u16 = 65002;
 
     fn setup_test_peer<F>(
         log: ReplicaLogger,
@@ -682,8 +679,18 @@ mod tests {
         temp_crypto
     }
 
+    // Get a free port on this host to which we can connect transport to.
+    fn get_free_localhost_port() -> std::io::Result<u16> {
+        let socket = TcpSocket::new_v4()?;
+        // This allows transport to bind to this address,
+        //  even though the socket is already bound.
+        socket.set_reuseport(true)?;
+        socket.set_reuseaddr(true)?;
+        socket.bind("127.0.0.1:0".parse().unwrap())?;
+        Ok(socket.local_addr()?.port())
+    }
+
     // TODO(NET-1182): this test hangs on CI sometimes
-    #[ignore]
     #[test]
     fn test_single_transient_failure_of_tls_client_handshake() {
         with_test_replica_logger(|log| {
@@ -704,15 +711,15 @@ mod tests {
                     mock_client_tls_handshake
                         .expect_perform_tls_client_handshake()
                         .times(1)
-                        .returning(
+                        .returning({
                             move |_tcp_stream: TcpStream,
                                   _server: NodeId,
                                   _registry_version: RegistryVersion| {
                                 Err(TlsClientHandshakeError::HandshakeError {
                                     internal_error: "transient".to_string(),
                                 })
-                            },
-                        );
+                            }
+                        });
 
                     mock_client_tls_handshake
                         .expect_perform_tls_client_handshake()
@@ -751,26 +758,28 @@ mod tests {
                 )) as Arc<dyn TlsHandshake + Send + Sync>
             };
 
+            let peer1_port = get_free_localhost_port().expect("Failed to get free localhost port");
             let (peer_1, mut mock_handle_peer_1, peer_1_addr) = setup_test_peer(
                 log.clone(),
                 rt.handle().clone(),
                 NODE_1,
-                PORT_1,
+                peer1_port,
                 REG_V1,
                 &mut registry_and_data,
                 crypto_factory_with_single_tls_handshake_client_failures,
             );
+            let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
             let (peer_2, mut mock_handle_peer_2, peer_2_addr) = setup_test_peer(
                 log,
                 rt.handle().clone(),
                 NODE_2,
-                PORT_2,
+                peer2_port,
                 REG_V1,
                 &mut registry_and_data,
                 crypto_factory,
             );
-
             registry_and_data.registry.update_to_latest_version();
+
             let (connected_1, mut done_1) = channel(1);
             let (connected_2, mut done_2) = channel(1);
             rt.spawn(async move {
@@ -834,9 +843,10 @@ mod tests {
             temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
         registry_and_data.registry.update_to_latest_version();
 
+        let peer1_port = get_free_localhost_port().expect("Failed to get free localhost port");
         let peer_a_config = TransportConfig {
-            node_ip: "0.0.0.0".to_string(),
-            listening_port: PORT_1,
+            node_ip: "127.0.0.1".to_string(),
+            listening_port: peer1_port,
             legacy_flow_tag: FLOW_TAG,
             send_queue_size,
         };
@@ -852,9 +862,10 @@ mod tests {
         );
         peer_a.set_event_handler(event_handler_1);
 
+        let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
         let peer_b_config = TransportConfig {
-            node_ip: "0.0.0.0".to_string(),
-            listening_port: PORT_2,
+            node_ip: "127.0.0.1".to_string(),
+            listening_port: peer2_port,
             legacy_flow_tag: FLOW_TAG,
             send_queue_size,
         };
@@ -869,13 +880,13 @@ mod tests {
             logger,
         );
         peer_b.set_event_handler(event_handler_2);
-        let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_2)).unwrap();
+        let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
 
         peer_a
             .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
             .expect("start_connection");
 
-        let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", PORT_1)).unwrap();
+        let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer1_port)).unwrap();
         peer_b
             .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
             .expect("start_connection");
