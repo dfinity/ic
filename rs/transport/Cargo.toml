@@ -18,7 +18,6 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 strum = { version = "0.24", features = ["derive"] }
 tokio = { version = "1.15.0", features = ["full"] }
 tower = "0.4.12"
-tower-test = "0.4.0"
 
 [dev-dependencies]
 async-trait = "0.1.57"
