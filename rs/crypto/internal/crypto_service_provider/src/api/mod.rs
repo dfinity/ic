@@ -14,6 +14,4 @@ pub use sign::CspSigner;
 pub use threshold::{
     threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
-pub use tls::{
-    tls_errors, CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake,
-};
+pub use tls::CspTlsHandshakeSignerProvider;
