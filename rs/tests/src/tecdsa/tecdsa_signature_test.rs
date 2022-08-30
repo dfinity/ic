@@ -639,7 +639,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
                 .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string()
             }
         );
         assert_eq!(
@@ -654,7 +654,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
             }
         );
 
@@ -762,7 +762,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
             }
         );
 

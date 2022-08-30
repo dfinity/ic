@@ -3,6 +3,7 @@ mod queue;
 mod tests;
 
 use crate::{InputQueueType, NextInputQueue, StateError};
+use ic_ic00_types::IC_00;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -10,7 +11,10 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
     xnet::{QueueId, SessionId},
     CanisterId, CountBytes, Cycles, QueueIndex, Time,
 };
@@ -583,6 +587,39 @@ impl CanisterQueues {
         debug_assert!(self.stats_ok());
 
         Ok(())
+    }
+
+    /// Immediately reject an output request by pushing a `Response` onto the
+    /// input queue without ever putting the `Request` on an output queue. This
+    /// can only be used for `IC00` requests and will panic if used on a request
+    /// to any other address.
+    ///
+    /// This is expected to be used in cases of `IC00` routing where no
+    /// destination subnet is found that the `Request` could be routed to and
+    /// therefore an immediate (reject) `Response` is added to the relevant
+    /// input queue.
+    pub(crate) fn reject_ic00_output_request(
+        &mut self,
+        request: Request,
+        reject_context: RejectContext,
+    ) -> Result<(), StateError> {
+        assert_eq!(
+            request.receiver, IC_00,
+            "reject_ic00_output_request can only be used to reject management canister requests"
+        );
+        let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
+        input_queue.reserve_slot()?;
+        self.input_queues_stats.reserved_slots += 1;
+        self.memory_usage_stats += MemoryUsageStats::response_slot_delta();
+        let response = RequestOrResponse::Response(Arc::new(Response {
+            originator: request.sender,
+            respondent: IC_00,
+            originator_reply_callback: request.sender_reply_callback,
+            refund: request.payment,
+            response_payload: Payload::Reject(reject_context),
+        }));
+        self.push_input(QUEUE_INDEX_NONE, response, InputQueueType::LocalSubnet)
+            .map_err(|(e, _msg)| e)
     }
 
     /// Returns the number of output requests that can be pushed to each
@@ -1164,6 +1201,17 @@ impl MemoryUsageStats {
                 QueueOp::Pop => 0,
             },
             // No change in requests overhead (as this is a response).
+            oversized_requests_extra_bytes: 0,
+            transient_stream_responses_size_bytes: 0,
+        }
+    }
+
+    /// Stats change from reserving a response slot without enqueueing any
+    /// messages.
+    fn response_slot_delta() -> MemoryUsageStats {
+        MemoryUsageStats {
+            responses_size_bytes: 0,
+            reserved_slots: 1,
             oversized_requests_extra_bytes: 0,
             transient_stream_responses_size_bytes: 0,
         }

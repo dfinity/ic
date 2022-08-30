@@ -1430,6 +1430,14 @@ impl ExecutionTestBuilder {
                 .network_topology
                 .ecdsa_signing_subnets
                 .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            state
+                .metadata
+                .network_topology
+                .subnets
+                .get_mut(&self.own_subnet_id)
+                .unwrap()
+                .ecdsa_keys_held
+                .insert(ecdsa_key.clone());
         }
         let ecdsa_subnet_public_keys = self
             .ecdsa_key
