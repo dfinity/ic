@@ -315,46 +315,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-boundary-nodes-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "boundary_nodes_pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-tecdsa-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "tecdsa_pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-subnet-recover-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "subnet_recovery"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
 rosetta-hourly:
   extends:
     - .system-tests
