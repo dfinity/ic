@@ -29,10 +29,6 @@ validation utils for public keys of a node
 | `sha/..` | `ic-crypto-sha`^**[Wasm]**^ |
 hashing algorithms, incl. SHA256 and SHA224
 
-| `tls/..` | `ic-crypto-tls` |
-estabilishing & using TLS connections in a standalone setting, where the caller manages the keys
-(unlike TLS from `ic-crypto`, where Crypto Component manages the keys)
-
 | `tls_interfaces/..` | `ic-crypto-tls-interfaces` |
 interfaces of TLS functionality (used by both `ic-crypto` and  `ic-crypto-tls`)
 

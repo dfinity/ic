@@ -5273,24 +5273,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-tls"
-version = "0.8.0"
-dependencies = [
- "async-trait",
- "ic-crypto-internal-tls",
- "ic-crypto-test-utils",
- "ic-crypto-tls-interfaces",
- "ic-protobuf",
- "ic-types 0.8.0",
- "maplit",
- "openssl",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "tokio-openssl",
-]
-
-[[package]]
 name = "ic-crypto-tls-cert-validation"
 version = "0.8.0"
 dependencies = [
