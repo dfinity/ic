@@ -513,15 +513,6 @@ pub trait TlsHandshake {
         registry_version: RegistryVersion,
     ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>;
 
-    /// This method will eventually replace `perform_tls_server_handshake`.
-    /// Please refer to the docs of that method.
-    async fn perform_tls_server_handshake_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        allowed_clients: AllowedClients,
-        registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError>;
-
     /// Transforms a TCP stream into a TLS stream by performing a TLS server
     /// handshake. No client authentication is performed.
     ///
@@ -553,15 +544,6 @@ pub trait TlsHandshake {
     ///   found or is malformed in the server's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
     async fn perform_tls_server_handshake_without_client_auth(
-        &self,
-        tcp_stream: TcpStream,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError>;
-
-    /// This method will eventually replace
-    /// `perform_tls_server_handshake_without_client_auth`. Please refer to
-    /// the docs of that method.
-    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
         &self,
         tcp_stream: TcpStream,
         registry_version: RegistryVersion,
@@ -614,15 +596,6 @@ pub trait TlsHandshake {
     ///   found or is malformed in the client's secret key store. Note that this
     ///   is an error in the setup of the node and registry.
     async fn perform_tls_client_handshake(
-        &self,
-        tcp_stream: TcpStream,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError>;
-
-    /// This method will eventually replace `perform_tls_client_handshake`.
-    /// Please refer to the docs of that method.
-    async fn perform_tls_client_handshake_with_rustls(
         &self,
         tcp_stream: TcpStream,
         server: NodeId,
