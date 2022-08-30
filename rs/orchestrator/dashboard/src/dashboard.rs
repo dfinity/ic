@@ -5,12 +5,10 @@
 use async_trait::async_trait;
 use std::io::BufRead;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
+use tokio::sync::watch::Receiver;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::RwLock,
 };
 
 /// A simplest HTTP dashboard that listens to a port and responds to GET
@@ -18,16 +16,11 @@ use tokio::{
 #[async_trait]
 pub trait Dashboard {
     /// Starts the HTTP server and monitors the exit signal. Exits on whenever the exit signal is
-    /// activated.
-    async fn run(&self, exit_signal: Arc<RwLock<bool>>) {
-        async fn wait_for_exit(exit_signal: Arc<RwLock<bool>>) {
-            while !*exit_signal.read().await {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        }
+    /// changed.
+    async fn run(&self, mut exit_signal: Receiver<bool>) {
         tokio::select! {
             _ = self.serve_requests() => {}
-            _ = wait_for_exit(exit_signal) => {}
+            _ = exit_signal.changed() => {}
         };
     }
 
