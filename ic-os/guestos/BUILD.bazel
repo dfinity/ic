@@ -1,14 +1,5 @@
 load("//bazel:artifacts.bzl", "upload_artifacts", "urls_test")
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image", "vfat_image")
-
-docker_tar(
-    name = "bootloader-tree.tar",
-    src = ":bootloader",
-    dep = glob(["bootloader/**"]),
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
 
 docker_tar(
     name = "rootfs-tree.tar",
@@ -23,30 +14,6 @@ docker_tar(
     # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
     # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
     tags = ["no-remote-cache"],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-vfat_image(
-    name = "partition-esp.tar",
-    src = ":bootloader-tree.tar",
-    partition_size = "100M",
-    subdir = "boot/efi",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-vfat_image(
-    name = "partition-grub.tar",
-    src = ":bootloader-tree.tar",
-    extra_files = {
-        ":grub.cfg": "/boot/grub/grub.cfg:0644",
-        ":grubenv": "/boot/grub/grubenv:0644",
-    },
-    partition_size = "100M",
-    subdir = "boot/grub",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -192,8 +159,8 @@ disk_image(
     name = "disk.img.tar",
     layout = "//ic-os/guestos/scripts:partitions.csv",
     partitions = [
-        ":partition-esp.tar",
-        ":partition-grub.tar",
+        "//ic-os/bootloader:partition-esp.tar",
+        "//ic-os/bootloader:partition-grub.tar",
         ":partition-config.tar",
         ":partition-boot.tar",
         ":partition-root.tar",
