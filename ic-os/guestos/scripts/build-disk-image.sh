@@ -119,11 +119,11 @@ fi
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
     --build-arg BASE_IMAGE="${BASE_IMAGE}" \
     "${BASE_DIR}/rootfs"
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
+"${BASE_DIR}"/../bootloader/build-bootloader-tree.sh -o "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMPDIR}/boot-tree.tar" \
-    "${BASE_DIR}/grub.cfg:/boot/grub/grub.cfg:644" \
-    "${BASE_DIR}/grubenv:/boot/grub/grubenv:644"
+    "${BASE_DIR}/../bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
+    "${BASE_DIR}/../bootloader/grubenv:/boot/grub/grubenv:644"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-config.tar" -s 100M
 tar xOf "${TMPDIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMPDIR}/file_contexts"
 "${TOOL_DIR}"/build_ext4_image.py --strip-paths /run /boot -o "${TMPDIR}/partition-root-unsigned.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" \
