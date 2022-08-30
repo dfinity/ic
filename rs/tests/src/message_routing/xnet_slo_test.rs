@@ -18,6 +18,9 @@ Success::
 1. Xnet canisters are successfully installed and started on each subnet.
 2. Metrics collected for subnets are within the limits.
 
+Notes::
+If the NNS canisters are not deployed, the subnets will stop making progress after 50min, therefore the test either needs to be short enough in this case.
+
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
@@ -112,7 +115,7 @@ pub fn config_prod_slo_3_subnets() -> Config {
 }
 
 pub fn config_120_subnets() -> Config {
-    Config::new(120, 1, Duration::from_secs(1200), 10) // 1200s = 20min
+    Config::new(120, 1, Duration::from_secs(600), 10) // 600s = 10min
 }
 
 pub fn config_hotfix_slo_3_subnets() -> Config {
@@ -136,7 +139,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     );
     // Install NNS for long tests (note that for large numbers of subnets or
     // nodes the registry might be too big for installation as a canister)
-    if config.runtime > Duration::from_secs(1500) {
+    if config.runtime > Duration::from_secs(1200) {
         info!(
             &ctx.logger,
             "Installing NNS canisters on the root subnet ..."
