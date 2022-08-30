@@ -5,7 +5,7 @@ build --incompatible_strict_action_env # use an environment with a static value 
 build --compilation_mode=opt
 build --strip=always
 
-build --strategy_regexp=ic-os/guestos/.*=local
+build --strategy_regexp=ic-os/.*=local
 
 build:ci --remote_cache=buildfarm.zh1-idx1.dfinity.network # TODO: set as default when the infrastructure will be reliably accessible from development machines
 build --experimental_remote_cache_async
