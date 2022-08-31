@@ -4446,6 +4446,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
+        .with_subnet_total_memory(100 * 1024 * 1024) // 100 MiB
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let c2 = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -4472,11 +4473,45 @@ fn update_settings_makes_subnet_oversubscribed() {
     test.subnet_message(Method::UpdateSettings, args.encode())
         .unwrap();
 
-    // Go over the limit.
+    // Go over the compute capacity.
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgs {
             compute_allocation: Some(candid::Nat::from(30_u32)),
+            ..Default::default()
+        },
+    };
+    let err = test
+        .subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+
+    // Updating the memory allocation.
+    let args = UpdateSettingsArgs {
+        canister_id: c1.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(10 * 1024 * 1024)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    let args = UpdateSettingsArgs {
+        canister_id: c2.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(30 * 1024 * 1024)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Go over the memory capacity.
+    let args = UpdateSettingsArgs {
+        canister_id: c3.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(65 * 1024 * 1024)),
             ..Default::default()
         },
     };
