@@ -50,9 +50,12 @@ rust_test(
     name = "transport_test_client_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    args = [
+        "--test-threads",
+        "1",
+    ],
     crate_root = "src/main.rs",
     edition = "2018",
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
