@@ -12,13 +12,13 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
-use ic_types::NumInstructions;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    NumRounds, PrincipalId, QueueIndex, Time,
+    PrincipalId, QueueIndex, Time,
 };
+use ic_types::{LongExecutionMode, NumInstructions};
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
@@ -48,10 +48,11 @@ pub struct SchedulerState {
     /// During the long execution, the Canister is temporarily credited with priority
     /// to slightly boost the long execution priority. Only when the long execution
     /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
+    /// TODO(RUN-305): store priority credit and long execution mode across checkpoints
     pub priority_credit: AccumulatedPriority,
 
-    /// Tracks the Long Execution progress, i.e. how many rounds the execution lasts.
-    pub long_execution_progress: NumRounds,
+    /// Long execution mode: Opportunistic (default) or Prioritized
+    pub long_execution_mode: LongExecutionMode,
 
     /// The amount of heap delta debit. The canister skips execution of update
     /// messages if this value is non-zero.
@@ -68,8 +69,8 @@ impl Default for SchedulerState {
             last_full_execution_round: 0.into(),
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
-            priority_credit: 0.into(),
-            long_execution_progress: 0.into(),
+            priority_credit: AccumulatedPriority::default(),
+            long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
         }
@@ -105,6 +106,15 @@ impl CanisterState {
             execution_state,
             scheduler_state,
         }
+    }
+
+    /// Apply priority credit
+    pub fn apply_priority_credit(&mut self) {
+        self.scheduler_state.accumulated_priority =
+            (self.scheduler_state.accumulated_priority.value()
+                - self.scheduler_state.priority_credit.value())
+            .into();
+        self.scheduler_state.priority_credit = 0.into();
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -194,6 +204,16 @@ impl CanisterState {
             | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode(..)), _)
             | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
+        }
+    }
+
+    /// Returns `true` if the canister has a pending long execution.
+    pub fn has_long_execution(&self) -> bool {
+        match self.next_execution() {
+            NextExecution::None | NextExecution::StartNew | NextExecution::ContinueInstallCode => {
+                false
+            }
+            NextExecution::ContinueLong => true,
         }
     }
 

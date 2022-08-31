@@ -519,6 +519,7 @@ fn test_state_machine_consumes_instructions() {
 #[test]
 fn test_set_stable_memory() {
     let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
 
     let from_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
@@ -546,6 +547,7 @@ fn test_set_stable_memory() {
 #[test]
 fn can_query_cycle_balance_and_top_up_canisters() {
     let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
 
     let canister_id = env.install_canister_wat(
         r#"

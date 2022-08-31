@@ -300,7 +300,7 @@ impl ExecutionEnvironment {
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        num_cores: usize,
+        compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
@@ -311,7 +311,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             config.max_controllers,
-            num_cores,
+            compute_capacity,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
         );
@@ -1932,6 +1932,7 @@ impl ExecutionEnvironment {
     pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
         for canister in state.canisters_iter_mut() {
             if !canister.system_state.task_queue.is_empty() {
+                canister.apply_priority_credit();
                 let task_queue = std::mem::take(&mut canister.system_state.task_queue);
                 canister.system_state.task_queue = task_queue
                     .into_iter()

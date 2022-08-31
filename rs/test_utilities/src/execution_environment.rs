@@ -1180,7 +1180,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let config = SubnetConfigs::default()
+        let scheduler_config = SubnetConfigs::default()
             .own_subnet_config(subnet_type)
             .scheduler_config;
         let subnet_total_memory = ic_config::execution_environment::Config::default()
@@ -1198,9 +1198,9 @@ impl Default for ExecutionTestBuilder {
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             ecdsa_key: None,
-            instruction_limit: config.max_instructions_per_message,
-            install_code_instruction_limit: config.max_instructions_per_install_code,
-            slice_instruction_limit: config.max_instructions_per_slice,
+            instruction_limit: scheduler_config.max_instructions_per_message,
+            install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
+            slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
             subnet_message_memory,
@@ -1507,7 +1507,9 @@ impl ExecutionTestBuilder {
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            1,
+            // Compute capacity for 2-core scheduler is 100%
+            // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
+            100,
             config,
             Arc::clone(&cycles_account_manager),
         );

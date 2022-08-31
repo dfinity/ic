@@ -47,7 +47,7 @@ fn assert_floats_are_equal(val0: f64, val1: f64) {
 fn can_fully_execute_canisters_with_one_input_message_each() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -79,7 +79,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
 fn stops_executing_messages_when_heap_delta_capacity_reached() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -108,7 +108,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
 fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -148,7 +148,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
 fn canister_gets_heap_delta_rate_limited() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -183,7 +183,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     // instructions are consumed.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -217,7 +217,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
     // iteration of the loop and then the loop breaks.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -253,7 +253,7 @@ fn basic_induct_messages_on_same_subnet_works() {
     // same-subnet message induction.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -291,7 +291,7 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
     // should not be inducted.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -320,7 +320,7 @@ fn induct_messages_to_self_works() {
     // same-subnet message induction.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -365,7 +365,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     let run_test = |subnet_available_memory: AvailableMemory, subnet_type| {
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
-                scheduler_cores: 1,
+                scheduler_cores: 2,
                 max_instructions_per_round: NumInstructions::new(1),
                 max_instructions_per_message: NumInstructions::new(1),
                 instruction_overhead_per_message: NumInstructions::from(0),
@@ -452,7 +452,7 @@ fn test_message_limit_from_message_overhead() {
     // Create two canisters on the same subnet. When each one receives a
     // message, it sends a message to the other so that they ping-pong forever.
     let scheduler_config = SchedulerConfig {
-        scheduler_cores: 1,
+        scheduler_cores: 2,
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
         instruction_overhead_per_message: NumInstructions::from(2_000_000),
@@ -511,7 +511,7 @@ fn test_multiple_iterations_of_inner_loop() {
     // executes the received message.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -550,7 +550,7 @@ fn canister_can_run_for_multiple_iterations() {
     // Create a canister which sends a message to itself on each iteration.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
@@ -586,7 +586,7 @@ fn canister_can_run_for_multiple_iterations() {
 fn validate_consumed_instructions_metric() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
             max_instructions_per_round: NumInstructions::from(400),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -679,7 +679,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
     let instructions_per_message = NumInstructions::from(5);
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
             max_instructions_per_message: instructions_per_message,
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -763,7 +763,7 @@ fn can_execute_messages_with_just_enough_instructions() {
     // expect that we have just enough instructions to execute all messages.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(50 * 3),
             max_instructions_per_message: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -803,7 +803,7 @@ fn can_execute_messages_with_just_enough_instructions() {
 fn execute_only_canisters_with_messages() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -854,7 +854,7 @@ fn execute_only_canisters_with_messages() {
 fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -993,7 +993,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(400),
             max_instructions_per_message: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
@@ -1031,7 +1031,7 @@ fn subnet_messages_respect_bitcoin_request_limit_per_round() {
     // `MAX_BITCOIN_REQUESTS_PER_ROUND` are executed.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1069,7 +1069,7 @@ fn non_bitcoin_subnet_messages_not_affected_by_bitcoin_request_limit() {
     // all of them are executed.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1104,7 +1104,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     // expected to run once each.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -1130,7 +1130,7 @@ fn execute_heartbeat_before_messages() {
     // call. That call should be the heartbeat call.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -1157,7 +1157,7 @@ fn execute_heartbeat_before_messages() {
 fn test_drain_subnet_messages_with_some_long_running_canisters() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -1247,7 +1247,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
 fn test_drain_subnet_messages_no_long_running_canisters() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -1286,7 +1286,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
 fn test_drain_subnet_messages_all_long_running_canisters() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -1383,7 +1383,7 @@ fn execute_multiple_heartbeats() {
 fn can_record_metrics_single_scheduler_thread() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -1419,8 +1419,8 @@ fn can_record_metrics_single_scheduler_thread() {
 fn can_record_metrics_for_a_round() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(51),
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(25),
             max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -1428,12 +1428,12 @@ fn can_record_metrics_for_a_round() {
         })
         .build();
 
-    // The first two canisters have an `Allocation` of 1 and the last 1/3. We'll be
+    // The first two canisters have an `Allocation` of 45% and the last 9%. We'll be
     // forced to execute the first two and then run out of instructions (based on
     // the limits) which will result in a violation of third canister's
     // `Allocation`.
     for i in 0..3 {
-        let compute_allocation = if i < 2 { 100 } else { 33 };
+        let compute_allocation = if i < 2 { 45 } else { 9 };
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
@@ -1445,7 +1445,8 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    test.advance_to_round(ExecutionRound::from(4));
+    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
+    test.advance_to_round(ExecutionRound::from(12));
 
     test.state_mut().metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     test.state_mut().metadata.batch_time = UNIX_EPOCH
@@ -1461,7 +1462,7 @@ fn can_record_metrics_for_a_round() {
         metrics.executable_canisters_per_round.get_sample_sum() as i64,
         3
     );
-    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 4);
+    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
@@ -1485,7 +1486,7 @@ fn can_record_metrics_for_a_round() {
 #[test]
 fn heap_delta_rate_limiting_metrics_recorded() {
     let scheduler_config = SchedulerConfig {
-        scheduler_cores: 1,
+        scheduler_cores: 2,
         instruction_overhead_per_message: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     };
@@ -1820,7 +1821,7 @@ fn heartbeat_metrics_are_recorded() {
     // This test sets up a canister on a system subnet with a heartbeat method.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -2099,7 +2100,7 @@ fn scheduler_maintains_canister_order() {
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
@@ -2163,6 +2164,8 @@ fn construct_scheduler_for_prop_test(
     instructions_per_message: usize,
     heartbeat: bool,
 ) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
+    // Note: the DTS scheduler requires at least 2 scheduler cores
+    assert!(scheduler_cores >= 2);
     let scheduler_config = SchedulerConfig {
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
@@ -2175,7 +2178,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = (scheduler_cores * 100 - 1) as u64;
+    let capacity = SchedulerImpl::compute_capacity(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());
@@ -2323,7 +2326,7 @@ proptest! {
             scheduler_cores,
             instructions_per_round,
             instructions_per_message,
-        ) in arb_scheduler_test(1..10, 1..20, 1..100, M..B, 1..M, 100, false),
+        ) in arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
     ) {
         let available_messages = get_available_messages(test.state());
         let minimum_executed_messages = min(
@@ -2365,7 +2368,7 @@ proptest! {
             _scheduler_cores,
             _instructions_per_round,
             _instructions_per_message,
-        ) in arb_scheduler_test_double(1..10, 1..20, 1..100, M..B, 1..M, 100, false),
+        ) in arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
     ) {
         assert_eq!(test1.state(), test2.state());
         test1.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2382,7 +2385,7 @@ proptest! {
             _scheduler_cores,
             instructions_per_round,
             instructions_per_message,
-        ) in arb_scheduler_test(1..10, 1..20, 1..100, M..B, 1..M, 100, false),
+        ) in arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
     ) {
         let available_messages = get_available_messages(test.state());
         let minimum_executed_messages = min(
@@ -2411,7 +2414,7 @@ proptest! {
             _scheduler_cores,
             _instructions_per_round,
             _instructions_per_message,
-        ) in arb_scheduler_test(1..2, 1..10, 1..100, M..B, 1..M, 100, false),
+        ) in arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, 100, false),
     ) {
         let canisters_before = test.state().canisters_iter().count();
          test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2433,7 +2436,7 @@ proptest! {
             scheduler_cores,
             _instructions_per_round,
             _instructions_per_message,
-        ) in arb_scheduler_test(1..10, 1..20, 0..1, B..B+1, B..B+1, 0, true),
+        ) in arb_scheduler_test(2..10, 1..20, 0..1, B..B+1, B..B+1, 0, true),
     ) {
         let replicated_state = test.state();
         let number_of_canisters = replicated_state.canister_states.len();
@@ -2498,7 +2501,7 @@ proptest! {
 fn rate_limiting_of_install_code() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -2576,7 +2579,7 @@ fn rate_limiting_of_install_code() {
 fn dts_long_execution_completes() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -2602,7 +2605,7 @@ fn dts_long_execution_completes() {
 fn dts_long_execution_runs_out_of_instructions() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 1,
+            scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(1000),

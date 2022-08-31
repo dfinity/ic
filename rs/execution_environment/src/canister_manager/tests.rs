@@ -238,7 +238,9 @@ fn canister_manager_config(
         subnet_id,
         subnet_type,
         MAX_CONTROLLERS,
-        1,
+        // Compute capacity for 2-core scheduler is 100%
+        // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
+        100,
         rate_limiting_of_instructions,
         100,
     )
@@ -4441,6 +4443,7 @@ fn create_canister_makes_subnet_oversubscribed() {
 
 #[test]
 fn update_settings_makes_subnet_oversubscribed() {
+    // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
         .build();
