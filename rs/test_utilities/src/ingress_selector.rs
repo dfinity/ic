@@ -10,7 +10,7 @@ use ic_types::{
     ingress::IngressSets,
     messages::SignedIngress,
     time::UNIX_EPOCH,
-    Height, NumBytes, Time,
+    CountBytes, Height, NumBytes, Time,
 };
 
 /// A fake `IngressSelector` implementation based on a `FakeQueue` of ingress
@@ -22,9 +22,31 @@ impl IngressSelector for FakeIngressSelector {
         &self,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-        _byte_limit: NumBytes,
+        byte_limit: NumBytes,
     ) -> IngressPayload {
-        self.dequeue().unwrap_or_default().into()
+        let mut queue = self.queue.lock().unwrap();
+
+        // Find the index of a payload that fits in byte_limit
+        let payload_idx = queue
+            .iter()
+            .enumerate()
+            .find(|(_, payloads)| {
+                (payloads
+                    .iter()
+                    .map(|payload| payload.count_bytes())
+                    .sum::<usize>() as u64)
+                    < byte_limit.get()
+            })
+            .map(|(idx, _)| idx);
+
+        // Return the found payload or default
+        match payload_idx {
+            Some(idx) => queue
+                .remove(idx)
+                .map(|payload| payload.into())
+                .unwrap_or_default(),
+            None => IngressPayload::default(),
+        }
     }
     fn validate_ingress_payload(
         &self,

@@ -4590,7 +4590,7 @@ dependencies = [
  "num-integer",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest 1.0.0",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
