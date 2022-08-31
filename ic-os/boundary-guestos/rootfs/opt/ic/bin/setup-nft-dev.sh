@@ -12,7 +12,7 @@ function setup_dev_nftables() {
             "DOMAIN") DOMAIN="${value}" ;;
             "TLD") TLD="${value}" ;;
         esac
-    done </boot/config/nginxdomain.conf
+    done </boot/config/domain.conf
 
     if [[ -z "$DOMAIN" ]] || [[ -z "$TLD" ]]; then
         echo "\$DOMAIN or \$TLD variable not set. " 1>&2

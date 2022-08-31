@@ -1,9 +1,9 @@
 [Unit]
-Description=Set extra rules for testing domains based on domain.conf
-After=bootstrap-ic-node.service
+Description=Set variable files (i.e. ELASTICSEARCH_URL) for vector
 Before=systemd-networkd.target
-Before=nftables.service
 DefaultDependencies=no
+After=bootstrap-ic-node.service
+Before=systemd-networkd.service
 
 [Install]
 WantedBy=multi-user.target
@@ -11,7 +11,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-nft-dev.sh
+ExecStart=/opt/ic/bin/setup-vector.sh
 
 [Install]
 WantedBy=multi-user.target

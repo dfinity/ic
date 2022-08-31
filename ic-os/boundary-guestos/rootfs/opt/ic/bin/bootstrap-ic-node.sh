@@ -58,7 +58,11 @@ function process_bootstrap() {
     tar xf "${BOOTSTRAP_TAR}" -C "${TMPDIR}"
 
     # stash a couple of things away to config store
-    for FILE in journalbeat.conf network.conf nns.conf nns_public_key.pem deployment_type nginxdomain.conf denylist.map; do
+    FILES=(
+        denylist.conf domain.conf journalbeat.conf network.conf nns.conf vector.conf
+        nns_public_key.pem deployment_type denylist.map
+    )
+    for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"

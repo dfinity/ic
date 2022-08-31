@@ -94,6 +94,7 @@ function build_ic_bootstrap_tar() {
     local IPV4_ADDRESS IPV4_GATEWAY NAME_SERVERS HOSTNAME
     local NNS_URL NNS_PUBLIC_KEY
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
+    local ELASTICSEARCH_URL
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     while true; do
         if [ $# == 0 ]; then
@@ -124,6 +125,9 @@ function build_ic_bootstrap_tar() {
             --journalbeat_tags)
                 JOURNALBEAT_TAGS="$2"
                 ;;
+            --elasticsearch_url)
+                ELASTICSEARCH_URL="$2"
+                ;;
             --nns_url)
                 NNS_URL="$2"
                 ;;
@@ -134,7 +138,10 @@ function build_ic_bootstrap_tar() {
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
             --denylist)
-                DENY_LIST="$2"
+                DENYLIST="$2"
+                ;;
+            --denylist_url)
+                DENYLIST_URL="$2"
                 ;;
             --prober-identity)
                 PROBER_IDENTITY="$2"
@@ -147,8 +154,8 @@ function build_ic_bootstrap_tar() {
                     exit 1
                 fi
                 ;;
-            --nginx-domainname)
-                NGINX_DOMAIN_NAME="$2"
+            --domain-name)
+                DOMAIN_NAME="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -165,22 +172,22 @@ function build_ic_bootstrap_tar() {
         exit 1
     }
 
-    NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
-    DENY_LIST="${DENY_LIST:=""}"
+    DOMAIN_NAME="${DOMAIN_NAME:="ic0.app"}"
+    DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
 
-    if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
-        echo "malformed domain name $NGINX_DOMAIN_NAME"
-        NGINX_DOMAIN_NAME="ic0.app"
+    if ! echo $DOMAIN_NAME | grep -q ".*\..*"; then
+        echo "malformed domain name $DOMAIN_NAME"
+        DOMAIN_NAME="ic0.app"
     fi
 
-    echo "Using domain name $NGINX_DOMAIN_NAME"
-    NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
-    NGINX_TLD=${NGINX_DOMAIN_NAME#*.}
-    if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
-        echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
-        NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
-        NGINX_TLD="${NGINX_TLD:="app"}"
+    echo "Using domain name $DOMAIN_NAME"
+    DOMAIN=${DOMAIN_NAME%.*}
+    TLD=${DOMAIN_NAME#*.}
+    if [[ $DOMAIN == "" ]] || [[ $TLD == "" ]]; then
+        echo "Malformed nginx domain $DOMAIN_NAME using defaults"
+        DOMAIN="${DOMAIN:="ic0"}"
+        TLD="${TLD:="app"}"
     fi
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
@@ -219,17 +226,18 @@ EOF
     echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
 
     # Set the domain name
-    echo DOMAIN=${NGINX_DOMAIN} >"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
-    echo TLD=${NGINX_TLD} >>"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
+    echo DOMAIN=${DOMAIN} >"${BOOTSTRAP_TMPDIR}/domain.conf"
+    echo TLD=${TLD} >>"${BOOTSTRAP_TMPDIR}/domain.conf"
 
     # setup the deny list
-    if [[ -f ${DENY_LIST} ]]; then
-        echo "Using deny list ${DENY_LIST}"
-        cp ${DENY_LIST} ${BOOTSTRAP_TMPDIR}/denylist.map
+    if [[ -f ${DENYLIST} ]]; then
+        echo "Using deny list ${DENYLIST}"
+        cp ${DENYLIST} ${BOOTSTRAP_TMPDIR}/denylist.map
     else
         echo "Using empty denylist"
         touch ${BOOTSTRAP_TMPDIR}/denylist.map
     fi
+    echo DENYLIST_URL=${DENYLIST_URL} >"${BOOTSTRAP_TMPDIR}/denylist.conf"
 
     # setup the prober identity
     if [[ -f ${PROBER_IDENTITY} ]]; then

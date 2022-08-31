@@ -52,7 +52,7 @@ function setup_domain_name() {
             "DOMAIN") DOMAIN="${value}" ;;
             "TLD") TLD="${value}" ;;
         esac
-    done </boot/config/nginxdomain.conf
+    done </boot/config/domain.conf
 
     if [[ -z "$DOMAIN" ]] || [[ -z "$TLD" ]]; then
         echo "\$DOMAIN or \$TLD variable not set. Nginx won't be configured. " 1>&2

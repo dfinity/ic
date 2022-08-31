@@ -30,7 +30,6 @@ Arguments:
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
-       --prober-hosts=                  specify hosts to run the prober on
        --git-revision=                  git revision for which to prepare the media
        --deployment-type={prod|dev}     production or development deployment type
   -x,  --debug                          enable verbose console output
@@ -66,9 +65,6 @@ Arguments:
             ;;
         --prober-identity=*)
             PROBER_IDENTITY="${argument#*=}"
-            ;;
-        --prober-hosts=*)
-            PROBER_HOSTS="${argument#*=}"
             ;;
         --deployment-type=*)
             DEPLOYMENT_TYPE="${argument#*=}"
@@ -110,9 +106,11 @@ VALUES=$(echo ${CONFIG} | jq -r -c '[
     (.name_servers | join(" ")),
     (.name_servers_fallback | join(" ")),
     (.journalbeat_hosts | join(" ")),
-    (.journalbeat_tags | join(" "))
+    (.journalbeat_tags | join(" ")),
+    .elasticsearch_url
+    .denylist_url
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NGINX_DOMAIN_NAME NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT DOMAIN_NAME NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS ELASTICSEARCH_URL DENYLIST_URL < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -125,6 +123,7 @@ VALUES=$(echo ${CONFIG} \
     .ipv6_address,
     .ipv4_gateway,
     .ipv4_address,
+    .prober,
     .hostname,
     .subnet_type,
     .subnet_idx,
@@ -132,15 +131,16 @@ VALUES=$(echo ${CONFIG} \
     .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx use_hsm type; do
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_prefix']=$ipv6_prefix
         ['ipv6_subnet']=$ipv6_subnet
         ['ipv6_address']=$ipv6_address
-	['ipv4_gateway']=$ipv4_gateway
+	    ['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
-        ['subnet_type']=$subnet_type
+        ['prober']=$prober
         ['hostname']=$hostname
+        ['subnet_type']=$subnet_type
         ['subnet_idx']=$subnet_idx
         ['node_idx']=$node_idx
         ['use_hsm']=$use_hsm
@@ -150,17 +150,17 @@ while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_a
 done < <(printf "%s\n" "${VALUES[@]}")
 NODES=${!__RAW_NODE_@}
 
-if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
-    echo "malformed domain name $NGINX_DOMAIN_NAME"
+if ! echo $DOMAIN_NAME | grep -q ".*\..*"; then
+    echo "malformed domain name $DOMAIN_NAME"
     exit 1
 fi
-NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
-NGINX_TLD=${NGINX_DOMAIN_NAME##*.}
-if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
-    echo "malformed domain name $NGINX_DOMAIN_NAME"
+DOMAIN=${DOMAIN_NAME%.*}
+TLD=${DOMAIN_NAME##*.}
+if [[ $DOMAIN == "" ]] || [[ $TLD == "" ]]; then
+    echo "malformed domain name $DOMAIN_NAME"
     exit 1
 fi
-echo "Using domain name $NGINX_DOMAIN_NAME"
+echo "Using domain name $DOMAIN_NAME"
 
 function prepare_build_directories() {
     TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
@@ -219,7 +219,7 @@ function create_tarball_structure() {
     done
 }
 
-function generate_journalbeat_config() {
+function generate_logging_config() {
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" == "boundary" ]]; then
@@ -235,6 +235,8 @@ function generate_journalbeat_config() {
             if [ "${JOURNALBEAT_TAGS}" != "" ]; then
                 echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
             fi
+
+            echo "ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-https://elasticsearch.testnet.dfinity.systems}" >>"${CONFIG_DIR}/$NODE_PREFIX/vector.conf"
         fi
     done
 }
@@ -243,15 +245,19 @@ function generate_boundary_node_config() {
     rm -rf ${IC_PREP_DIR}/NNS_URL
     if [ -z ${NNS_URL_OVERRIDE+x} ]; then
         # Query and list all NNS nodes in subnet
-        echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-            local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-            echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
-                NNS_DC_URL=$(echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))' | while read nns_node; do
-                    local ipv6_address=$(echo "${nns_node}" | jq -r '.ipv6_address')
-                    echo -n "http://[${ipv6_address}]:8080"
-                done)
-                echo ${NNS_DC_URL} >>"${IC_PREP_DIR}/NNS_URL"
-            done
+        for n in $NODES; do
+            declare -n NODE=$n
+
+            local ipv6_address=${NODE["ipv6_address"]}
+
+            if [[ "${NODE["type"]}" != "replica" ]]; then
+                continue
+            fi
+            if [[ "${NODE["subnet_type"]}" != "root_subnet" ]]; then
+                continue
+            fi
+
+            echo "http://[${ipv6_address}]:8080" >>"${IC_PREP_DIR}/NNS_URL"
         done
         NNS_URL_FILE=${IC_PREP_DIR}/NNS_URL
     else
@@ -261,25 +267,34 @@ function generate_boundary_node_config() {
     #echo ${NNS_URL}
 
     # nns config for boundary nodes
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.boundary_nodes[]][]' | while read nodes; do
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [ -f "${IC_PREP_DIR}/nns_public_key.pem" ]; then
-                cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
-            fi
-            echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-            echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
-            echo DOMAIN=${NGINX_DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
-            echo TLD=${NGINX_TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
-            mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
-            cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
+    for n in $NODES; do
+        declare -n NODE=$n
+
+        local ipv6_address=${NODE["ipv6_address"]}
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+        local subnet_type=${NODE["subnet_type"]}
+
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+        if [[ "$type" != "boundary" ]]; then
+            continue
+        fi
+
+        if [ -f "${IC_PREP_DIR}/nns_public_key.pem" ]; then
+            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
+        fi
+
+        echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
+        echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
+        echo DOMAIN=${DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/domain.conf
+        echo TLD=${TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/domain.conf
+        mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
+        cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
 # HELP bn_version_info version information for the boundary node
 # TYPE bn_version_info counter
 bn_version_info{git_revision="${GIT_REVISION}"} 1
 EOF
-        done
     done
 }
 
@@ -328,6 +343,7 @@ function generate_prober_config() {
             local hostname=${NODE["hostname"]}
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
+            local prober=${NODE["prober"]}
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
@@ -339,12 +355,32 @@ function generate_prober_config() {
             fi
 
             # enable/disable prober
-            IFS=',' read -r -a PROBER_HOSTS <<<"${PROBER_HOSTS}"
-            if [[ ! "${PROBER_HOSTS[*]}" =~ "${hostname}" ]]; then
+            if [ -z ${prober:-} ]; then
                 echo "Disabling prober"
                 mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
                 touch ${CONFIG_DIR}/$NODE_PREFIX/prober/prober.disabled
             fi
+        fi
+    done
+}
+
+function generate_denylist_config() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
+
+            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+            if [[ -f ${DENY_LIST} ]]; then
+                echo "Using deny list ${DENY_LIST}"
+                cp ${DENY_LIST} ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
+            else
+                echo "Using empty denylist"
+                touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
+            fi
+
+            echo "DENYLIST_URL=${DENYLIST_URL}" >>"${CONFIG_DIR}/$NODE_PREFIX/denylist.conf"
         fi
     done
 }
@@ -364,25 +400,6 @@ function copy_ssh_keys() {
             # can lead to confusion and side effects when overwriting one
             # file changes another).
             cp -Lr "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
-        fi
-    done
-}
-
-function copy_deny_list() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [[ -f ${DENY_LIST} ]]; then
-                echo "Using deny list ${DENY_LIST}"
-                cp ${DENY_LIST} ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
-            else
-                echo "Using empty denylist"
-                touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
-            fi
         fi
     done
 }
@@ -454,12 +471,12 @@ function main() {
     place_binaries
     create_tarball_structure
     generate_boundary_node_config
-    generate_journalbeat_config
+    generate_logging_config
     generate_network_config
     generate_prober_config
+    generate_denylist_config
     copy_ssh_keys
     copy_certs
-    copy_deny_list
     build_tarball
     build_removable_media
     # remove_temporary_directories

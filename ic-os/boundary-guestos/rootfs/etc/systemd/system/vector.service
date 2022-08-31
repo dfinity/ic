@@ -1,5 +1,6 @@
 [Unit]
 Description=Vector
+After=setup-vector.service
 
 [Service]
 User=vector

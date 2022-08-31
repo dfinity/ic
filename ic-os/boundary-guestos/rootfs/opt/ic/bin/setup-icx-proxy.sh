@@ -11,8 +11,8 @@ else
     cp -a /etc/default/icx-proxy "$WLOC_ICX_PROXY"
 fi
 
-if [ ! -f "/boot/config/nginxdomain.conf" ]; then
-    echo "nginxdomain.conf is not provided. icx-proxy won't be configured. " 1>&2
+if [ ! -f "/boot/config/domain.conf" ]; then
+    echo "domain.conf is not provided. icx-proxy won't be configured. " 1>&2
     exit 1
 fi
 
@@ -23,7 +23,7 @@ while IFS="=" read -r key value; do
         "DOMAIN") DOMAIN="${value}" ;;
         "TLD") TLD="${value}" ;;
     esac
-done </boot/config/nginxdomain.conf
+done </boot/config/domain.conf
 
 if [[ -z "$DOMAIN" ]] || [[ -z "$TLD" ]]; then
     echo "\$DOMAIN or \$TLD variable not set. icx-proxy won't be configured. " 1>&2
