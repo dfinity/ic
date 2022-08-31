@@ -121,6 +121,8 @@ in
         # Needed by gitlab-ci/src/test_results/summary.py
         pkgs.python3Packages.termcolor
         pkgs.python3Packages.requests
+        pkgs.python3Packages.paramiko
+        pkgs.python3Packages.tqdm
       ];
 
       RUST_SRC_PATH = pkgs.rustPlatform.rustcSrc;
