@@ -2170,6 +2170,7 @@ dependencies = [
  "itertools",
  "jemalloc-ctl",
  "jemallocator",
+ "json-patch",
  "json5",
  "k256",
  "lazy_static",
@@ -3790,6 +3791,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "258451ab10b34f8af53416d1fdab72c22e805f0c92a1136d59470ec0b11138b2"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-patch"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f995a3c8f2bc3dd52a18a583e90f9ec109c047fa1603a853e46bcda14d2e279d"
+dependencies = [
+ "serde",
+ "serde_json",
+ "treediff",
 ]
 
 [[package]]
@@ -8084,6 +8096,15 @@ name = "traitobject"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
+
+[[package]]
+name = "treediff"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "try-lock"
