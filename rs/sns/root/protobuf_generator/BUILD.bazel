@@ -25,6 +25,6 @@ rust_library(
 protobuf_generator(
     name = "protobuf_generator",
     srcs = ["src/main.rs"],
-    manifest_dir = "rs/sns/root/protobuf_generator",
+    manifest_dir = "rs/sns/root/protobuf_generator/",
     deps = [":lib"],
 )
