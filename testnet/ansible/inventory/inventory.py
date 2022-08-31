@@ -602,6 +602,8 @@ class IcDeploymentInventory:
                     node_config["host"] = node_vars["ansible_host"]
                 if "batch" in node_vars.keys():
                     node_config["batch"] = node_vars["batch"]
+                if "prober" in node_vars.keys():
+                    node_config["prober"] = node_vars["prober"]
 
                 use_hsm = node_vars.get("use_hsm")
                 if use_hsm:
