@@ -543,7 +543,9 @@ mod tests {
     use ic_crypto::utils::TempCryptoComponent;
     use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
     use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
-    use ic_interfaces_transport::{Transport, TransportEvent, TransportEventHandler};
+    use ic_interfaces_transport::{
+        FlowTag, Transport, TransportError, TransportEvent, TransportEventHandler, TransportPayload,
+    };
     use ic_logger::ReplicaLogger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -557,6 +559,8 @@ mod tests {
     use std::sync::Arc;
     use tokio::net::{TcpSocket, TcpStream};
     use tokio::sync::mpsc::{channel, Sender};
+    use tokio::sync::Notify;
+    use tokio::time::Duration;
     use tower::{util::BoxCloneService, Service, ServiceExt};
     use tower_test::mock::Handle;
 
@@ -594,7 +598,7 @@ mod tests {
             log,
         );
         let addr = SocketAddr::from_str(&format!("127.0.0.1:{}", port)).unwrap();
-        let (event_handler, mock_handle) = setup_mock_event_handler();
+        let (event_handler, mock_handle) = create_mock_event_handler();
         peer.set_event_handler(event_handler);
         (peer, mock_handle, addr)
     }
@@ -607,12 +611,13 @@ mod tests {
             let rt = tokio::runtime::Runtime::new().unwrap();
 
             let (connected_1, mut done_1) = channel(1);
-            let (event_handler_1, handle_1) = setup_mock_event_handler();
-            create_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
+
+            let (event_handler_1, handle_1) = create_mock_event_handler();
+            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
 
             let (connected_2, mut done_2) = channel(1);
-            let (event_handler_2, handle_2) = setup_mock_event_handler();
-            create_peer_up_ack_event_handler(rt.handle().clone(), handle_2, connected_2);
+            let (event_handler_2, handle_2) = create_mock_event_handler();
+            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_2, connected_2);
 
             let (_control_plane_1, _control_plane_2) = start_connection_between_two_peers(
                 rt.handle().clone(),
@@ -628,9 +633,97 @@ mod tests {
         });
     }
 
+    /*
+    Verifies that transport suffers "head of line problem" when peer is slow to consume messages.
+    - Peer A sends Peer B message, which will work fine.
+    - Then, B's event handler blocks to prevent B from reading additional messages.
+    - A sends a few more messages, but at this point queue will be full.
+    - Finally, we unblock B's event handler, and confirm all in-flight messages are delivered.
+    */
+    #[test]
+    fn head_of_line_test() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            // Setup registry and crypto component
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            let (connected_1, _done_1) = channel(5);
+            let (event_handler_1, handle_1) = create_mock_event_handler();
+            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
+
+            let (connected_2, mut done_2) = channel(5);
+
+            let notify = Arc::new(Notify::new());
+            let listener = notify.clone();
+
+            let (hol_event_handler, mut hol_handle) = create_mock_event_handler();
+            let blocking_msg = TransportPayload(vec![0xa; 1000000]);
+            let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
+            let blocking_msg_copy = blocking_msg.clone();
+            // Create event handler that blocks on message
+            rt.spawn(async move {
+                loop {
+                    let (event, rsp) = hol_handle.next_request().await.unwrap();
+                    match event {
+                        TransportEvent::Message(msg) => {
+                            connected_2.send(true).await.expect("Channel full");
+                            // This will block the read task
+                            if msg.payload == blocking_msg_copy {
+                                listener.notified().await;
+                            }
+                        }
+                        TransportEvent::PeerUp(_) => {}
+                        TransportEvent::PeerDown(_) => {}
+                    };
+                    rsp.send_response(());
+                }
+            });
+
+            let (client, _server) = start_connection_between_two_peers(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                1,
+                event_handler_1,
+                hol_event_handler,
+            );
+
+            let flow_tag = FlowTag::from(FLOW_TAG);
+
+            // Send message from A -> B
+            let res = client.send(&NODE_ID_2, flow_tag, blocking_msg);
+            assert_eq!(res, Ok(()));
+            assert_eq!(done_2.blocking_recv(), Some(true));
+
+            // Send more messages from A->B until TCP Queue is full
+            // Then, A's send queue should be blocked from dequeuing, triggering error
+            let mut messages_sent = 0;
+            loop {
+                let _temp = normal_msg.clone();
+                if let Err(TransportError::SendQueueFull(ref _temp)) =
+                    client.send(&NODE_ID_2, flow_tag, normal_msg.clone())
+                {
+                    break;
+                }
+                messages_sent += 1;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let res2 = client.send(&NODE_ID_2, flow_tag, normal_msg.clone());
+            assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
+
+            // Unblock event handler and confirm in-flight messages are received.
+            notify.notify_one();
+
+            for _ in 1..=messages_sent {
+                assert_eq!(done_2.blocking_recv(), Some(true));
+            }
+        });
+    }
+
     // helper functions
 
-    fn create_peer_up_ack_event_handler(
+    fn setup_peer_up_ack_event_handler(
         rt: tokio::runtime::Handle,
         mut handle: Handle<TransportEvent, ()>,
         connected: Sender<bool>,
@@ -808,7 +901,7 @@ mod tests {
         });
     }
 
-    fn setup_mock_event_handler() -> (TransportEventHandler, Handle<TransportEvent, ()>) {
+    fn create_mock_event_handler() -> (TransportEventHandler, Handle<TransportEvent, ()>) {
         let (service, handle) = tower_test::mock::pair::<TransportEvent, ()>();
 
         let infallible_service = tower::service_fn(move |request: TransportEvent| {
