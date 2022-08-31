@@ -37,6 +37,7 @@ RUST_BINARIES = [
     "ic-prep",
     "ic-recovery",
     "ic-regedit",
+    "ic-registry-replicator",
     "ic-replay",
     "ic-rosetta-api",
     "ic-starter",

@@ -7060,6 +7060,7 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.1.0"
 dependencies = [
+ "clap 3.2.14",
  "ic-config",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
@@ -7075,6 +7076,7 @@ dependencies = [
  "ic-types 0.8.0",
  "prost",
  "slog",
+ "tempfile",
  "tokio",
  "url",
 ]
