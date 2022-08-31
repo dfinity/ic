@@ -10,7 +10,7 @@ pub use canister_threshold::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
 pub use keygen::{CspKeyGenerator, CspSecretKeyStoreChecker, NodePublicKeyData};
-pub use sign::CspSigner;
+pub use sign::{CspSigVerifier, CspSigner};
 pub use threshold::{
     threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
