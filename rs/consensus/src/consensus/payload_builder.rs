@@ -219,9 +219,9 @@ impl PayloadBuilderImpl {
     }
 }
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use super::*;
-    use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_btc_types_internal::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponse,
     };
@@ -239,11 +239,7 @@ mod test {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
-        consensus::{
-            certification::{Certification, CertificationContent},
-            dkg::Dealings,
-            BlockPayload, DataPayload, Payload,
-        },
+        consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,
         signature::ThresholdSignature,
@@ -251,9 +247,22 @@ mod test {
         CryptoHashOfPartialState, RegistryVersion,
     };
     use std::collections::BTreeMap;
-    /// Builds a `PayloadBuilderImpl` wrapping fake ingress and XNet payload
+
+    #[cfg(feature = "proptest")]
+    impl PayloadBuilderImpl {
+        /// Return the number of critical errors that have occured.
+        ///
+        /// This is useful for proptests.
+        pub(crate) fn count_critical_errors(&self) -> u64 {
+            self.metrics.cricital_error_payload_too_large.get()
+                + self.metrics.critical_error_subnet_record_data_issue.get()
+                + self.metrics.critical_error_validation_not_passed.get()
+        }
+    }
+
+    /// Builds a `PayloadBuilderImpl` wrapping fake payload
     /// builders that return the supplied ingress and XNet data.
-    fn make_test_payload_impl(
+    pub(crate) fn make_test_payload_impl(
         registry: Arc<dyn RegistryClient>,
         mut ingress_messages: Vec<Vec<SignedIngress>>,
         mut certified_streams: Vec<BTreeMap<SubnetId, CertifiedStreamSlice>>,
@@ -303,18 +312,6 @@ mod test {
                 },
             },
         }
-    }
-
-    /// Wraps a [`BatchPayload`] into the full [`Payload`] structure.
-    fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
-        Payload::new(
-            ic_crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: payload,
-                dealings: Dealings::new_empty(Height::from(height)),
-                ecdsa: None,
-            }),
-        )
     }
 
     // Test that confirms that the output of messaging.get_messages aligns with the
@@ -388,121 +385,5 @@ mod test {
                 param_msgs_test(i, j);
             }
         }
-    }
-
-    /// This test executes the `get_payload` and `validate_payload` functions
-    /// in `PayloadBuilderImpl`.
-    /// It builds the following blocks:
-    /// - 3/4 of size is `XNetPayload`, 1/4 `IngressPayload`. Expected to pass validation.
-    /// - 1/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to pass validation.
-    /// - 3/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to pass validation with only a single payload.
-    #[test]
-    #[ignore = "Test breaks a lot and covers little code. Will be reworked into a proptest (CON-841)"]
-    fn test_payload_size_validation() {
-        const MAX_SIZE: u64 = 2 * 1024 * 1024;
-        // NOTE: Since the messages will also contain headers, the payload needs to be a
-        // little bit smaller than the overall size
-        const ONE_QUARTER: usize = 512 * 1024 - 1000;
-        const THREE_QUARTER: usize = 3 * 512 * 1024 - 1000;
-
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
-            // NOTE: We can't set smaller values
-            subnet_record.max_block_payload_size = MAX_SIZE;
-            subnet_record.max_ingress_bytes_per_message = MAX_SIZE;
-
-            let subnet_records = SubnetRecords {
-                membership_version: subnet_record.clone(),
-                context_version: subnet_record.clone(),
-            };
-
-            let Dependencies { registry, .. } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(1, subnet_record)],
-            );
-            let context = ValidationContext {
-                certified_height: Height::from(0),
-                registry_version: RegistryVersion::from(1),
-                time: mock_time(),
-            };
-
-            let certified_streams: Vec<BTreeMap<SubnetId, CertifiedStreamSlice>> = vec![
-                make_slice(0, THREE_QUARTER),
-                make_slice(1, ONE_QUARTER),
-                make_slice(2, THREE_QUARTER),
-            ];
-            let ingress = vec![
-                make_ingress(0, ONE_QUARTER),
-                make_ingress(1, THREE_QUARTER),
-                make_ingress(2, THREE_QUARTER),
-            ];
-            let payload_builder =
-                make_test_payload_impl(registry, ingress, certified_streams, vec![], vec![]);
-
-            // Build first payload and then validate it
-            let payload0 =
-                payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
-            assert_eq!(count_payload_msgs(&payload0), 2);
-            let wrapped_payload0 = wrap_batch_payload(0, payload0);
-
-            payload_builder
-                .validate_payload(Height::from(0), &wrapped_payload0, &[], &context)
-                .unwrap();
-
-            // Build second payload and validate it
-            let past_payload0 = [(Height::from(0), mock_time(), wrapped_payload0)];
-            let payload1 = payload_builder.get_payload(
-                Height::from(1),
-                &past_payload0,
-                &context,
-                &subnet_records,
-            );
-            assert_eq!(count_payload_msgs(&payload1), 2);
-            let wrapped_payload1 = wrap_batch_payload(0, payload1);
-
-            payload_builder
-                .validate_payload(Height::from(1), &wrapped_payload1, &past_payload0, &context)
-                .unwrap();
-
-            // Build third payload and validate it
-            // This payload is oversized, therefore we expect the validator to fail
-            let past_payload1 = [(Height::from(1), mock_time(), wrapped_payload1)];
-            let payload2 = payload_builder.get_payload(
-                Height::from(2),
-                &past_payload1,
-                &context,
-                &subnet_records,
-            );
-            assert_eq!(count_payload_msgs(&payload2), 1);
-            let wrapped_payload2 = wrap_batch_payload(1, payload2);
-
-            payload_builder
-                .validate_payload(Height::from(2), &wrapped_payload2, &past_payload1, &context)
-                .unwrap();
-        });
-    }
-
-    /// Mock up a map of [`CertifiedStreamSlice`] of specified size
-    fn make_slice(height: u64, size: usize) -> BTreeMap<SubnetId, CertifiedStreamSlice> {
-        let mut map = BTreeMap::new();
-        map.insert(
-            subnet_test_id(1),
-            make_certified_stream_slice(height, vec![0; size], vec![]),
-        );
-        map
-    }
-
-    /// Mock up vector of [`SignedIngress`] of specidied size
-    fn make_ingress(nonce: u64, size: usize) -> Vec<SignedIngress> {
-        vec![SignedIngressBuilder::new()
-            .method_payload(vec![0; size])
-            .nonce(nonce)
-            .build()]
-    }
-
-    /// Count the number of payloads (Ingress and XNet) totally contained within a [`BatchPayload`]
-    fn count_payload_msgs(payload: &BatchPayload) -> usize {
-        payload.ingress.message_count() + payload.xnet.stream_slices.len()
     }
 }
