@@ -42,7 +42,7 @@ async fn send_request(
                 response_headers.push((header.name, header.value));
             }
             let response = RemoteHttpResponse::new(
-                decoded.status as u8,
+                decoded.status as u128,
                 response_headers,
                 String::from_utf8_lossy(&decoded.body).to_string(),
             );

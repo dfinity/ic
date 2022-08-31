@@ -23,7 +23,7 @@ use crate::util::*;
 use anyhow::bail;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformType};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -41,9 +41,12 @@ pub fn test(env: TestEnv) {
             request: CanisterHttpRequestArgs {
                 url: url_to_succeed.clone(),
                 headers: vec![],
-                http_method: HttpMethod::GET,
+                method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform_method_name: Some("transform".to_string()),
+                transform: Some(TransformType::Function(candid::Func {
+                    principal: proxy_canister.canister_id().get().0,
+                    method: "transform".to_string(),
+                })),
                 max_response_bytes: None,
             },
             cycles: 500_000_000_000,

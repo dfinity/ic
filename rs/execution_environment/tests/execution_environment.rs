@@ -7,7 +7,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    IC_00,
+    TransformType, IC_00,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 
@@ -1473,15 +1473,18 @@ fn execute_canister_http_request() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name: transform_method_name.clone(),
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: transform_method_name.clone(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1504,7 +1507,7 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.url, url);
     assert_eq!(
         http_request_context.transform_method_name,
-        transform_method_name
+        Some(transform_method_name)
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
@@ -1530,14 +1533,16 @@ fn execute_canister_http_request_disabled() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: None,
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name,
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: "transform".to_string(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.

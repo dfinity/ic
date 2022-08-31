@@ -169,7 +169,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             .await?
                         }
                         None => Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: adapter_response.status as u64,
+                            status: adapter_response.status as u128,
                             headers: adapter_response
                                 .headers
                                 .into_iter()
@@ -250,7 +250,7 @@ async fn transform_adapter_response(
     // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
     // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
     let method_payload = Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-        status: adapter_response.status as u64,
+        status: adapter_response.status as u128,
         headers: adapter_response
             .headers
             .into_iter()
@@ -425,7 +425,7 @@ mod tests {
     fn build_mock_canister_http_response_success(
         request_id: u64,
         request_timeout: Time,
-        status: u64,
+        status: u128,
         headers: Vec<HttpHeader>,
         body: Vec<u8>,
     ) -> CanisterHttpResponse {
@@ -745,7 +745,7 @@ mod tests {
                 reply: ic_types::messages::AnonymousQueryResponseReply {
                     arg: Blob(
                         Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: 200_u64,
+                            status: 200_u128,
                             headers: adapter_h
                                 .clone()
                                 .into_iter()
