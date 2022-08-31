@@ -45,11 +45,11 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 ///
 /// Currently heap delta pages are stored in memory and not backed by a file.
 /// The gen 1 machines in production have 500GiB of RAM available to replica.
-/// Set the upper limit to 150GiB to reserve memory for other components and
+/// Set the upper limit to 140GiB to reserve memory for other components and
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(150 * GB);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
