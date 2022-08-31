@@ -311,6 +311,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
                     )]),
                 ),
+                pot_with_setup(
+                    "tecdsa_signature_timeout",
+                    tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_timeout",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_timeout,
+                    )]),
+                ),
             ],
         )
         .with_alert(ENG_CONSENSUS_CHANNEL),
