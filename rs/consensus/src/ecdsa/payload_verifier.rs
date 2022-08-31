@@ -829,6 +829,7 @@ mod test {
 
         let all_requests = get_signing_requests(
             Height::from(0),
+            None,
             &mut ecdsa_payload,
             &sign_with_ecdsa_contexts,
             &valid_keys,
