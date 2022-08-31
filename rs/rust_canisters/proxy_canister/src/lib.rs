@@ -16,13 +16,13 @@ pub struct RemoteHttpRequest {
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct RemoteHttpResponse {
-    pub status: u8,
+    pub status: u128,
     pub headers: Vec<(String, String)>,
     pub body: String,
 }
 
 impl RemoteHttpResponse {
-    pub fn new(status: u8, headers: Vec<(String, String)>, body: String) -> Self {
+    pub fn new(status: u128, headers: Vec<(String, String)>, body: String) -> Self {
         Self {
             status,
             headers,
