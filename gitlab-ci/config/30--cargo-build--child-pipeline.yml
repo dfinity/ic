@@ -51,6 +51,7 @@ cargo-build-release-linux-native:
   artifacts:
     paths:
       - "artifacts/release${ARTIFACT_EXT}/*"
+      - bazel-build-log*.json*
   script:
     - |
       "${CI_PROJECT_DIR}/gitlab-ci/tools/job-driver.py" "${CI_JOB_NAME}"

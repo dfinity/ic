@@ -32,7 +32,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "state_tool",
+    name = "state-tool",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     edition = "2018",
@@ -43,7 +43,7 @@ rust_binary(
 rust_test(
     name = "state_tool_test",
     aliases = ALIASES,
-    crate = ":state_tool",
+    crate = ":state-tool",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

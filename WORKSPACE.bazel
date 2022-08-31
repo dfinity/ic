@@ -9,12 +9,11 @@ load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
-http_archive(
+git_repository(
     name = "rules_rust",
-    sha256 = "9a3bb15fe63c111ea6cbfdb25fdd76ce1119a0d5ce7266721d228028f1b55ee7",
-    urls = [
-        "https://github.com/dfinity-lab/rules_rust/releases/download/0.9.0/rules_rust-v0.9.0.tar.gz",
-    ],
+    commit = "e702f3d1cea8a43021ea37317e2448c6137abe9a",
+    remote = "https://github.com/dfinity-lab/rules_rust.git",
+    shallow_since = "1661883448 +0000",
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -60,6 +59,11 @@ external_crates_repository(
                 "-C",
                 "opt-level=3",
             ],
+        )],
+        "ring": [crate.annotation(
+            build_script_env = {
+                "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+            },
         )],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {

@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from os import path
 from typing import List
+from typing import Optional
 
 from ci import cwd
 from ci import ENV
@@ -73,21 +74,19 @@ class Collector:
 
     artifacts_dir: str
     files: List[str]
+    srcdir: Optional[str]
 
-    def __init__(
-        self,
-        artifacts_dir="artifacts/nix-release",
-        files=RUST_BINARIES,
-    ) -> None:
+    def __init__(self, artifacts_dir="artifacts/nix-release", files=RUST_BINARIES, srcdir=None) -> None:
         self.artifacts_dir = artifacts_dir
         self.files = files
+        self.srcdir = srcdir
 
         self.temp = tempfile.mkdtemp()
 
     @classmethod
-    def collect(cls, artifacts_dir="artifacts/nix-release", files=RUST_BINARIES):
+    def collect(cls, artifacts_dir="artifacts/nix-release", files=RUST_BINARIES, srcdir=None):
         with log_section("Click here to see artifact processing output"):
-            cls(artifacts_dir, files).run()
+            cls(artifacts_dir, files, srcdir).run()
 
     def run(self):
         with cwd(ENV.top):
@@ -118,7 +117,8 @@ class Collector:
         * On Darwin, fix dylibs, which accomplishes the same goal as the previous bullet point
         * If REALLY_STRIP is set, strip Nix store references and fail if there are any we don't recognize (disabled right now because the nix shell path ends up in every rpath for some reason)
         """
-        src_path = path.join(ENV.target_dir, ENV.build_target, "release", binary)
+        srcdir = path.join(ENV.target_dir, ENV.build_target, "release") if self.srcdir is None else self.srcdir
+        src_path = path.join(srcdir, binary)
         bin_path = path.join(self.temp, binary)
 
         if not os.access(src_path, os.R_OK):

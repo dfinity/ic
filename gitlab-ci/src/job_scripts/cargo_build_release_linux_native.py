@@ -8,7 +8,7 @@ from ci import sh
 from ci import show_sccache_stats
 
 
-def run(build_command: Optional[str] = None, artifact_ext: str = ""):
+def run(build_command: Optional[str] = None, artifact_ext: str = "", sccache_stats=False):
     # TODO: get rid of this usage of git revision
     environ["VERSION"] = ENV.build_id
 
@@ -45,4 +45,5 @@ def run(build_command: Optional[str] = None, artifact_ext: str = ""):
     with buildevent("collect-artifacts"):
         Collector.collect(artifacts_dir=f"artifacts/release{artifact_ext}")
 
-    show_sccache_stats()
+    if sccache_stats:
+        show_sccache_stats()
