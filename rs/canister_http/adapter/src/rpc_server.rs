@@ -6,7 +6,7 @@ use hyper::{
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
-use ic_async_utils::receive_body_without_timeout;
+use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_canister_http_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
@@ -122,10 +122,15 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         .await
         .map_err(|err| {
             debug!(self.logger, "Failed to fetch body: {}", err);
-            Status::new(
-                tonic::Code::Unavailable,
-                format!("Failed to fetch body: {}", err),
-            )
+            match err {
+                // SysTransient error
+                BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => Status::new(
+                    tonic::Code::Unavailable,
+                    format!("Failed to fetch body: {}", e),
+                ),
+                // SysFatal error
+                BodyReceiveError::TooLarge(e) => Status::new(tonic::Code::OutOfRange, e),
+            }
         })?;
 
         Ok(Response::new(CanisterHttpSendResponse {

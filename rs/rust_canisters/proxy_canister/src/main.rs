@@ -92,6 +92,17 @@ fn transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
     transformed
 }
 
+#[ic_cdk_macros::query(name = "bloat_transform")]
+#[candid_method(query, rename = "bloat_transform")]
+fn bloat_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
+    let mut transformed = raw;
+    transformed.headers = vec![];
+    // Return response that is bigger than allowed limit.
+    transformed.body = vec![0; 2 * 1024 * 1024 + 1024];
+
+    transformed
+}
+
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
