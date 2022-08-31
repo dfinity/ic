@@ -190,11 +190,12 @@ pub fn test(env: TestEnv) {
         step.exec()
             .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
+    info!(logger, "NNS recovery has finished");
 
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
 
-    // wait until state sync is completed
+    info!(logger, "Wait for state sync to complete");
     install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
 
     info!(logger, "Ensure the old message is still readable");

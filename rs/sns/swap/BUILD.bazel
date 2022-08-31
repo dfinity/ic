@@ -1,7 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,8 +26,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",
-    "//rs/types/ic00_types",
     "//rs/types/base_types",
+    "//rs/types/ic00_types",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
@@ -49,6 +49,23 @@ BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
     "@crate_index//:prost-build",
 ]
+
+DEV_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/nns/common",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/sns/swap/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:criterion",
+    "@crate_index//:futures",
+    "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:proptest",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -72,9 +89,7 @@ rust_library(
     crate_name = "ic_sns_swap",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-    ],
+    deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_library(
@@ -94,12 +109,52 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-swap-canister",
+    name = "sns-swap-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":swap"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-swap-canister",
+    wasm = ":sns-swap-canister-raw",
+)
+
+rust_test(
+    name = "swap_test",
+    aliases = ALIASES,
+    crate = ":swap",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_test",
+    srcs = glob(["canister/*.rs"]),
+    aliases = ALIASES,
+    crate_root = "canister/canister.rs",
+    data = ["canister/swap.did"],
+    edition = "2021",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/sns/swap",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "swap_integration_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/check_generated_files.rs"],
+    ),
+    aliases = ALIASES,
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

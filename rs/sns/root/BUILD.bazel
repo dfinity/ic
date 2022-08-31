@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
@@ -62,13 +62,18 @@ rust_library(
 )
 
 rust_canister(
-    name = "sns-root-canister",
+    name = "sns-root-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/root.did"],
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-root-canister",
+    wasm = ":sns-root-canister-raw",
 )
 
 generated_files_check(
@@ -84,4 +89,44 @@ generated_files_check(
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
     ],
+)
+
+DEV_DEPENDENCIES = [
+    "//rs/sns/root/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+rust_test(
+    name = "root_test",
+    aliases = ALIASES,
+    crate = ":root",
+    data = [
+        "//rs/sns/root:proto/ic_sns_root/pb/v1/root.proto",
+        "//rs/types/base_types:proto/ic_base_types/pb/v1/types.proto",
+    ],
+    edition = "2021",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/sns/root/",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test_suite(
+    name = "root_integration_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/check_generated_files.rs"],
+    ),
+    aliases = ALIASES,
+    edition = "2021",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/sns/root/",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

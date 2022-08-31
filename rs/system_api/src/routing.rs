@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::{collections::BTreeSet, fmt::Write};
 
 use candid::Decode;
 use ic_base_types::{CanisterId, SubnetId};
@@ -14,6 +15,7 @@ pub(super) enum ResolveDestinationError {
     CandidError(candid::Error),
     MethodNotFound(String),
     SubnetNotFound(CanisterId, Ic00Method),
+    EcdsaKeyError(String),
 }
 
 impl From<candid::Error> for ResolveDestinationError {
@@ -162,9 +164,21 @@ fn route_ecdsa_message(
     requested_subnet: &Option<SubnetId>,
     signing_must_be_enabled: EcdsaSubnetKind,
 ) -> Result<SubnetId, ResolveDestinationError> {
+    fn format_keys<'a>(mut found_keys: impl Iterator<Item = &'a EcdsaKeyId>) -> String {
+        let mut keys = "[".to_string();
+        if let Some(key) = found_keys.next() {
+            write!(keys, "{}", key).unwrap();
+        }
+        for key in found_keys {
+            write!(keys, ", {}", key).unwrap();
+        }
+        keys.push(']');
+        keys
+    }
+
     match requested_subnet {
         Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
-            None => Err(ResolveDestinationError::MethodNotFound(format!(
+            None => Err(ResolveDestinationError::EcdsaKeyError(format!(
                 "Requested ECDSA key {} from unknown subnet {}",
                 key_id, subnet_id
             ))),
@@ -172,9 +186,11 @@ fn route_ecdsa_message(
                 if subnet_topology.ecdsa_keys_held.contains(key_id) {
                     Ok(*subnet_id)
                 } else {
-                    Err(ResolveDestinationError::MethodNotFound(format!(
-                        "Requested ECDSA key {} on subnet {}, subnet has keys: {:?}",
-                        key_id, subnet_id, subnet_topology.ecdsa_keys_held
+                    Err(ResolveDestinationError::EcdsaKeyError(format!(
+                        "Requested ECDSA key {} on subnet {}, subnet has keys: {}",
+                        key_id,
+                        subnet_id,
+                        format_keys(subnet_topology.ecdsa_keys_held.iter())
                     )))
                 }
             }
@@ -188,20 +204,24 @@ fn route_ecdsa_message(
             // find one with the key if signing isn't required.
             match signing_must_be_enabled {
                 EcdsaSubnetKind::HoldsAndSignWithKey => {
-                    Err(ResolveDestinationError::MethodNotFound(format!(
-                        "Requested ECDSA key: {}, existing keys with signing enabled: {:?}",
-                        key_id, network_topology.ecdsa_signing_subnets
+                    let keys = format_keys(network_topology.ecdsa_signing_subnets.keys());
+                    Err(ResolveDestinationError::EcdsaKeyError(format!(
+                        "Requested ECDSA key: {}, existing keys with signing enabled: {}",
+                        key_id, keys
                     )))
                 }
                 EcdsaSubnetKind::OnlyHoldsKey => {
+                    let mut keys = BTreeSet::new();
                     for (subnet_id, topology) in &network_topology.subnets {
                         if topology.ecdsa_keys_held.contains(key_id) {
                             return Ok(*subnet_id);
                         }
+                        keys.extend(topology.ecdsa_keys_held.iter().cloned());
                     }
-                    Err(ResolveDestinationError::MethodNotFound(format!(
-                        "No subnet was found with requested ECDSA key: {}",
-                        key_id
+                    let keys = format_keys(keys.iter());
+                    Err(ResolveDestinationError::EcdsaKeyError(format!(
+                        "Requested ECDSA key: {}, existing keys: {}",
+                        key_id, keys
                     )))
                 }
             }
@@ -320,9 +340,9 @@ mod tests {
                 subnet_test_id(2),
             )
             .unwrap_err(),
-            ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+            ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
-                format!("Requested ECDSA key {} on subnet {}, subnet has keys: {{}}", key_id1(), subnet_test_id(2))
+                format!("Requested ECDSA key {} on subnet {}, subnet has keys: []", key_id1(), subnet_test_id(2))
             )
         )
     }
@@ -337,7 +357,7 @@ mod tests {
                 subnet_test_id(2),
             )
             .unwrap_err(),
-            ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+            ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
                 format!("Requested ECDSA key {} from unknown subnet {}", key_id1(), subnet_test_id(3))
             )
@@ -355,9 +375,9 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+                ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                     err,
-                    format!("Requested ECDSA key {} on subnet {}, subnet has keys: {{}}",
+                    format!("Requested ECDSA key {} on subnet {}, subnet has keys: []",
                         key_id1(),
                         subnet_test_id(2),
                 )
@@ -376,7 +396,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+                ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                     err,
                     format!("Requested ECDSA key {} from unknown subnet {}",
                         key_id1(),
@@ -409,9 +429,9 @@ mod tests {
             subnet_test_id(1),
         )
         .unwrap_err(),
-        ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+        ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
-                format!("Requested ECDSA key: {}, existing keys with signing enabled: {{}}", key_id1())
+                format!("Requested ECDSA key: {}, existing keys with signing enabled: []", key_id1())
             )
         )
     }

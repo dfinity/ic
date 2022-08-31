@@ -156,7 +156,7 @@ fn sharing_prover_should_panic_on_empty_coefficients() {
 fn sharing_prover_should_panic_on_invalid_instance() {
     let mut rng = rand::thread_rng();
     let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(&mut rng);
-    pk.push(G1Affine::generator());
+    pk.push(*G1Affine::generator());
 
     let instance = SharingInstance::new(pk, aa, rr, cc);
 
@@ -171,7 +171,7 @@ fn sharing_nizk_should_fail_on_invalid_instance() {
 
     let instance = SharingInstance::new(pk.clone(), aa.clone(), rr, cc.clone());
 
-    pk.push(G1Affine::generator());
+    pk.push(*G1Affine::generator());
 
     let invalid_instance = SharingInstance::new(pk, aa, rr, cc);
 
@@ -200,7 +200,7 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     let invalid_proof = ProofSharing {
         ff: sharing_proof.ff,
         aa: sharing_proof.aa,
-        yy: G1Affine::generator(),
+        yy: *G1Affine::generator(),
         z_r: sharing_proof.z_r,
         z_alpha: sharing_proof.z_alpha,
     };
@@ -303,7 +303,7 @@ fn chunking_prover_should_panic_on_invalid_instance() {
     let mut rng = rand::thread_rng();
     let (mut instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
-    instance.public_keys.push(G1Affine::generator());
+    instance.public_keys.push(*G1Affine::generator());
 
     let _panic = prove_chunking(&instance, &witness, &mut rng);
 }
@@ -314,7 +314,7 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
     let (valid_instance, witness) = setup_chunking_instance_and_witness(&mut rng);
 
     let mut invalid_instance = valid_instance.clone();
-    invalid_instance.public_keys.push(G1Affine::generator());
+    invalid_instance.public_keys.push(*G1Affine::generator());
 
     let chunking_proof = prove_chunking(&valid_instance, &witness, &mut rng);
     assert_eq!(

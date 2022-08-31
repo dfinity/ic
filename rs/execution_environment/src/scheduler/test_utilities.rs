@@ -390,6 +390,7 @@ impl SchedulerTest {
         long_running_canister_ids: &BTreeSet<CanisterId>,
     ) -> ReplicatedState {
         let state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_seed_and_purpose(
             &Randomness::from([0; 32]),
             &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
@@ -403,6 +404,7 @@ impl SchedulerTest {
                 .exec_env
                 .subnet_available_memory(&state)
                 .into(),
+            compute_allocation_used,
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
@@ -619,7 +621,7 @@ impl SchedulerTestBuilder {
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            1,
+            SchedulerImpl::compute_capacity(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
         );

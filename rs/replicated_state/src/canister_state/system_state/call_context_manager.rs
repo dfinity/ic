@@ -525,6 +525,18 @@ impl CallContextManager {
             .count()
     }
 
+    /// Returns true iff all open call contexts are marked as deleted
+    /// and all outstanding callbacks refer to open call contexts.
+    pub fn canister_ready_to_stop(&self) -> bool {
+        self.call_contexts()
+            .iter()
+            .all(|(_, ctxt)| ctxt.is_deleted())
+            && self
+                .callbacks
+                .iter()
+                .all(|(_, callback)| self.call_contexts.contains_key(&callback.call_context_id))
+    }
+
     /// Expose the `next_callback_id` field so that the canister sandbox can
     /// predict what the new ids will be.
     pub fn next_callback_id(&self) -> u64 {

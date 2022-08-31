@@ -996,6 +996,11 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
 
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
+
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
     #[clap(long, multiple_values(true))]
@@ -1019,6 +1024,7 @@ fn parse_initial_ecdsa_config_options(
     ecdsa_quadruples_to_create_in_advance: &Option<u32>,
     ecdsa_keys_to_request: &Option<String>,
     max_ecdsa_queue_size: &Option<u32>,
+    signature_request_timeout_ns: &Option<u64>,
 ) -> Option<EcdsaInitialConfig> {
     if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
         return None;
@@ -1056,6 +1062,7 @@ fn parse_initial_ecdsa_config_options(
                     .collect()
             }),
         max_queue_size: Some(max_ecdsa_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)),
+        signature_request_timeout_ns: *signature_request_timeout_ns,
     })
 }
 
@@ -1083,6 +1090,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
             &self.max_ecdsa_queue_size,
+            &self.signature_request_timeout_ns,
         );
 
         let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
@@ -1252,6 +1260,11 @@ struct ProposeToUpdateRecoveryCupCmd {
     /// time. Requests will be rejected if the queue is full.
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
+
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
 }
 
 #[async_trait]
@@ -1286,6 +1299,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
             &self.max_ecdsa_queue_size,
+            &self.signature_request_timeout_ns,
         );
         RecoverSubnetPayload {
             subnet_id,
@@ -1486,6 +1500,12 @@ struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
 
+    /// Configuration for ECDSA:
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
@@ -1553,6 +1573,10 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 .map(|c| c.quadruples_to_create_in_advance);
             let current_max_queue_size =
                 subnet.ecdsa_config.as_ref().and_then(|c| c.max_queue_size);
+            let signature_request_timeout_ns = subnet
+                .ecdsa_config
+                .as_ref()
+                .and_then(|c| c.signature_request_timeout_ns);
 
             let keys_to_remove = parse_ecdsa_keys_option(&self.ecdsa_keys_to_remove);
             let mut keys_to_add = parse_ecdsa_keys_option(&self.ecdsa_keys_to_generate);
@@ -1574,6 +1598,9 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 max_queue_size: Some(self.max_ecdsa_queue_size.unwrap_or_else(|| {
                     current_max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)
                 })),
+                signature_request_timeout_ns: self
+                    .signature_request_timeout_ns
+                    .or(signature_request_timeout_ns),
             })
         };
 

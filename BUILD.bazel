@@ -38,6 +38,7 @@ buildifier_test(
         "external",
         "local",
         "no-sandbox",
+        "precommit",
         "small",
         "smoke",
     ],
@@ -45,9 +46,7 @@ buildifier_test(
 
 test_suite(
     name = "precommit",
-    tests = [
-        ":buildifier_test",
-    ],
+    tags = ["precommit"],
 )
 
 alias(
@@ -106,6 +105,11 @@ opt_stripped_binary(
 )
 
 opt_stripped_binary(
+    name = "ic-registry-replicator",
+    binary = "//rs/orchestrator/registry_replicator:registry_replicator",
+)
+
+opt_stripped_binary(
     name = "ic-crypto-csp",
     binary = "//rs/crypto:ic-crypto-csp",
 )
@@ -118,6 +122,21 @@ opt_stripped_binary(
 opt_stripped_binary(
     name = "ic-recovery",
     binary = "//rs/recovery:ic-recovery",
+)
+
+opt_stripped_binary(
+    name = "ic-balance-exporter",
+    binary = "//rs/boundary_node/ic_balance_exporter:ic_balance_exporter",
+)
+
+opt_stripped_binary(
+    name = "boundary-node-prober",
+    binary = "//rs/boundary_node/prober:prober",
+)
+
+opt_stripped_binary(
+    name = "boundary-node-control-plane",
+    binary = "//rs/boundary_node/control_plane:control_plane",
 )
 
 optimized_canister(

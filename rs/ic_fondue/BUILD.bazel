@@ -77,6 +77,7 @@ rust_library(
     crate_name = "ic_fondue",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
 )
 
@@ -86,5 +87,6 @@ rust_test(
     crate = ":ic_fondue",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

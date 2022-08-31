@@ -136,12 +136,14 @@ fi
     --build-arg BASE_IMAGE="${BASE_IMAGE}" \
     "${BASE_DIR}/rootfs"
 tar xOf "${TMPDIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMPDIR}/file_contexts"
-"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" -p boot/ \
-    "${TMPDIR}/version.txt:/boot/version.txt:0644" \
-    "${BASE_DIR}/extra_boot_args.${BUILD_TYPE}:/boot/extra_boot_args:0644"
-"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-root.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" \
+"${TOOL_DIR}"/build_ext4_image.py --strip-paths /run /boot -o "${TMPDIR}/partition-root-unsigned.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" \
     "${INSTALL_EXEC_ARGS[@]}" \
     "${TMPDIR}/version.txt:/opt/ic/share/version.txt:0644"
+"${TOOL_DIR}"/verity_sign.py -i "${TMPDIR}/partition-root-unsigned.tar" -o "${TMPDIR}/partition-root.tar" -r "${TMPDIR}/partition-root-hash"
+sed -e s/ROOT_HASH/$(cat "${TMPDIR}/partition-root-hash")/ <"${BASE_DIR}/extra_boot_args.template" >"${TMPDIR}/extra_boot_args"
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" -p boot/ \
+    "${TMPDIR}/version.txt:/boot/version.txt:0644" \
+    "${TMPDIR}/extra_boot_args:/boot/extra_boot_args:0644"
 
 # Now assemble the upgrade image
 

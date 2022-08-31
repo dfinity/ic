@@ -60,8 +60,15 @@ use std::time::{Duration, Instant, SystemTime};
 /// be before it's created.
 pub const NONCE: u64 = 12345_u64;
 
-/// Constant that defines the time in tenths of a second to wait for a test
-pub const TIME_FOR_HEARTBEAT: u64 = 200;
+/// Constant that defines the number of retries to attempt while waiting for a canister heartbeat.
+pub const RETRIES_FOR_HEARTBEAT: u64 = 200;
+
+/// Constant that defines the number of retries to attempt while waiting for a canister upgrade.
+pub const RETRIES_FOR_UPGRADE: u64 = 200;
+
+/// Constant that defines the number of retries to attempt while waiting for a proposal to
+/// execute or fail.
+pub const RETRIES_FOR_PROPOSAL_EXECUTION_OR_FAILURE: u64 = 200;
 
 /// Packages commonly used test data into a single struct.
 #[derive(Clone)]
@@ -1020,7 +1027,7 @@ impl SnsCanisters<'_> {
 
     /// Await a RewardEvent to be created.
     pub async fn await_reward_event(&self, last_round: u64) -> RewardEvent {
-        for _ in 0..TIME_FOR_HEARTBEAT {
+        for _ in 0..RETRIES_FOR_HEARTBEAT {
             let reward_event = self.get_latest_reward_event().await;
 
             if reward_event.round > last_round {
@@ -1034,7 +1041,7 @@ impl SnsCanisters<'_> {
 
     /// Await a Proposal being rewarded via it's reward_event_round field.
     pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> u64 {
-        for _ in 0..TIME_FOR_HEARTBEAT {
+        for _ in 0..RETRIES_FOR_HEARTBEAT {
             let proposal = self.get_proposal(proposal_id).await;
 
             if proposal.reward_event_round != 0 {
@@ -1059,12 +1066,12 @@ impl SnsCanisters<'_> {
 
     /// Await an SNS canister completing an upgrade. This method should be called after the
     /// execution of an upgrade proposal.
-    pub async fn await_canister_upgrade(&self, canister_id: CanisterId) {
-        for _ in 0..25 {
+    pub async fn await_canister_upgrade(&self, canister_id: CanisterId) -> CanisterStatusResult {
+        for _ in 0..RETRIES_FOR_UPGRADE {
             let status = self.canister_status(canister_id).await;
             // Stop waiting once the canister has reached the Running state.
             if status.status == CanisterStatusType::Running {
-                return;
+                return status;
             }
 
             sleep(Duration::from_millis(100));
@@ -1073,6 +1080,26 @@ impl SnsCanisters<'_> {
             "Canister {} didn't reach the running state after upgrading",
             canister_id
         )
+    }
+
+    pub async fn await_proposal_execution_or_failure(
+        &self,
+        proposal_id: &ProposalId,
+    ) -> ProposalData {
+        let mut proposal = self.get_proposal(*proposal_id).await;
+        for _ in 0..RETRIES_FOR_PROPOSAL_EXECUTION_OR_FAILURE {
+            if proposal.executed_timestamp_seconds != 0 || proposal.failed_timestamp_seconds != 0 {
+                return proposal;
+            }
+
+            sleep(Duration::from_millis(100));
+            proposal = self.get_proposal(*proposal_id).await;
+        }
+
+        panic!(
+            "Proposal {:?} didn't execute or fail in a reasonable time. {:?}",
+            proposal_id, proposal
+        );
     }
 
     /// Get the summary of the SNS from root

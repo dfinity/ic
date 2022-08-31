@@ -40,6 +40,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/nns_data_provider",
     "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
     "//rs/registry/regedit",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
@@ -151,6 +152,7 @@ rust_library(
     crate_name = "ic_tests",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
 )
 
@@ -160,6 +162,7 @@ rust_binary(
     aliases = ALIASES,
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -169,6 +172,7 @@ rust_binary(
     aliases = ALIASES,
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -178,5 +182,6 @@ rust_test(
     crate = ":tests",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
 )

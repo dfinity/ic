@@ -17,16 +17,15 @@ use ic_interfaces::registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+use ic_types::{ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{convert::TryFrom, time::Duration};
+use tokio::sync::watch::{self, Receiver, Sender};
 use tokio::{sync::RwLock, task::JoinHandle};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
@@ -40,7 +39,8 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     // A flag used to communicate to async tasks, that their job is done.
-    exit_signal: Arc<RwLock<bool>>,
+    exit_sender: Sender<bool>,
+    exit_signal: Receiver<bool>,
     // The subnet id of the node.
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     // Handles of async tasks used to wait for their completion
@@ -99,7 +99,7 @@ impl Orchestrator {
         let (nns_urls, nns_pub_key) =
             registry_replicator.parse_registry_access_info_from_config(&config);
         if let Err(err) = registry_replicator
-            .fetch_and_start_polling(nns_urls, nns_pub_key)
+            .start_polling(nns_urls, nns_pub_key)
             .await
         {
             warn!(logger, "{}", err);
@@ -210,6 +210,9 @@ impl Orchestrator {
             cup_provider,
             logger.clone(),
         ));
+
+        let (exit_sender, exit_signal) = watch::channel(false);
+
         Ok(Self {
             logger,
             _async_log_guard,
@@ -218,7 +221,8 @@ impl Orchestrator {
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
-            exit_signal: Default::default(),
+            exit_sender,
+            exit_signal,
             subnet_id,
             task_handles: Default::default(),
         })
@@ -240,7 +244,7 @@ impl Orchestrator {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut upgrade: Upgrade,
-            exit_signal: Arc<RwLock<bool>>,
+            exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
             // This timeout is a last resort trying to revive the upgrade monitoring
@@ -265,24 +269,27 @@ impl Orchestrator {
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
-            exit_signal: Arc<RwLock<bool>>,
+            mut exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
-            while !*exit_signal.read().await {
+            while !*exit_signal.borrow() {
                 // Check if new SSH keys need to be deployed
                 ssh_access_manager
                     .check_for_keyset_changes(*maybe_subnet_id.read().await)
                     .await;
                 // Check and update the firewall rules
                 firewall.check_and_update().await;
-                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = exit_signal.changed() => {}
+                };
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
         }
 
         async fn serve_dashboard(
             dashboard: OrchestratorDashboard,
-            exit_signal: Arc<RwLock<bool>>,
+            exit_signal: Receiver<bool>,
             logger: ReplicaLogger,
         ) {
             dashboard.run(exit_signal).await;
@@ -294,7 +301,7 @@ impl Orchestrator {
             self.task_handles.push(tokio::spawn(upgrade_checks(
                 Arc::clone(&self.subnet_id),
                 upgrade,
-                Arc::clone(&self.exit_signal),
+                self.exit_signal.clone(),
                 self.logger.clone(),
             )));
         }
@@ -310,7 +317,7 @@ impl Orchestrator {
                     Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
-                    Arc::clone(&self.exit_signal),
+                    self.exit_signal.clone(),
                     self.logger.clone(),
                 )));
         }
@@ -324,78 +331,13 @@ impl Orchestrator {
         }
     }
 
-    /// Print the replica's current node ID.
-    pub fn node_id(args: OrchestratorArgs) {
-        let config = args.get_ic_config();
-        let node_id = tokio::task::block_in_place({
-            let crypto_config = config.crypto;
-            move || {
-                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
-                    &crypto_config,
-                    Some(tokio::runtime::Handle::current()),
-                );
-                node_id
-            }
-        });
-
-        println!("{}", node_id);
-    }
-
-    /// Print the DC ID where the current replica is located.
-    pub fn dc_id(args: OrchestratorArgs) {
-        let config = args.get_ic_config();
-        let node_id = tokio::task::block_in_place({
-            let crypto_config = config.crypto.clone();
-            move || {
-                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
-                    &crypto_config,
-                    Some(tokio::runtime::Handle::current()),
-                );
-                node_id
-            }
-        });
-
-        let (logger, _async_log_guard) =
-            new_replica_logger_from_config(&config.orchestrator_logger);
-
-        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
-            logger.clone(),
-            Some(node_id),
-            &config,
-        ));
-        let registry_client = registry_replicator.get_registry_client();
-        let registry = Arc::new(RegistryHelper::new(
-            node_id,
-            registry_client.clone(),
-            logger,
-        ));
-
-        let registry_version = registry.get_latest_version();
-        let node_record = registry_client
-            .get_transport_info(node_id, registry_version)
-            .ok()
-            .flatten();
-        let node_operator_id =
-            node_record.and_then(|v| PrincipalId::try_from(v.node_operator_id).ok());
-
-        let node_operator_record = node_operator_id.and_then(|id| {
-            registry_client
-                .get_node_operator_record(id, registry_version)
-                .ok()
-                .flatten()
-        });
-        let dc_id = node_operator_record.map(|v| v.dc_id);
-
-        if let Some(dc_id) = dc_id {
-            println!("{}", dc_id);
-        }
-    }
-
     /// Shuts down the orchestrator: stops async tasks and the replica process
     pub async fn shutdown(self) {
         info!(self.logger, "Shutting down orchestrator...");
         // Communicate to async tasks that the y should exit.
-        *self.exit_signal.write().await = true;
+        self.exit_sender
+            .send(true)
+            .expect("Failed to send exit signal");
         // Wait until tasks are done.
         for handle in self.task_handles {
             let _ = handle.await;

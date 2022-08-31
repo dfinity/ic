@@ -27,6 +27,10 @@ rust_library(
 rust_test(
     name = "local_registry_test",
     size = "large",
+    args = [
+        "--test-threads",
+        "1",
+    ],
     crate = ":local_registry",
     edition = "2018",
     deps = [

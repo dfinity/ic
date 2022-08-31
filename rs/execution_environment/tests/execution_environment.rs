@@ -7,7 +7,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    IC_00,
+    TransformType, IC_00,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 
@@ -917,30 +917,13 @@ fn subnet_canister_request_unknown_method() {
                 .on_reject(wasm().reject_message().reject()),
         )
         .build();
-    let (_, ingress_status) = test.ingress_raw(canister, "update", run);
-
-    // The routing::resolve_destination() returns an error for unknown methods
-    // of the IC management canisters. This means that `IC_00` is not replaced
-    // with the destination subnet id and the request is treated as a cross-
-    // subnet request.
     assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: canister.get(),
-            user_id: test.user_id(),
-            time: test.time(),
-            state: IngressState::Processing,
-        }
+        test.ingress(canister, "update", run).unwrap(),
+        WasmResult::Reject(
+            "Unable to route management canister request unknown: MethodNotFound(\"unknown\")"
+                .to_string()
+        )
     );
-    let xnet_messages = test.xnet_messages();
-    assert_eq!(1, xnet_messages.len());
-    match &xnet_messages[0] {
-        RequestOrResponse::Request(request) => {
-            assert_eq!(request.receiver, ic00::IC_00);
-            assert_eq!(request.sender, canister);
-        }
-        RequestOrResponse::Response(_) => unreachable!("Expected request, but got a response"),
-    }
 }
 
 #[test]
@@ -1473,15 +1456,18 @@ fn execute_canister_http_request() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name: transform_method_name.clone(),
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: transform_method_name.clone(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1504,7 +1490,7 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.url, url);
     assert_eq!(
         http_request_context.transform_method_name,
-        transform_method_name
+        Some(transform_method_name)
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
@@ -1530,14 +1516,16 @@ fn execute_canister_http_request_disabled() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: None,
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name,
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: "transform".to_string(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1755,6 +1743,78 @@ fn ecdsa_signature_rejected_without_fee() {
             "sign_with_ecdsa request sent with 1999999 cycles, but 2000000 cycles are required."
                 .into()
         ),
+        result
+    );
+}
+
+#[test]
+fn ecdsa_signature_with_unknown_key_rejected() {
+    let correct_key = make_key("correct_key");
+    let wrong_key = make_key("wrong_key");
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(subnet_test_id(1))
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_ecdsa_key(correct_key.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let esda_args = ic00::SignWithECDSAArgs {
+        message_hash: [1; 32],
+        derivation_path: vec![],
+        key_id: wrong_key.clone(),
+    };
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::SignWithECDSA,
+            call_args()
+                .other_side(esda_args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            (0, 1_000_000_000),
+        )
+        .build();
+
+    let result = test.ingress(canister_id, "update", run).unwrap();
+    assert_eq!(
+        WasmResult::Reject(
+            format!("Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys with signing enabled: [{}]\")", wrong_key, correct_key
+        )),
+        result
+    );
+}
+
+#[test]
+fn ecdsa_public_key_req_with_unknown_key_rejected() {
+    let correct_key = make_key("correct_key");
+    let wrong_key = make_key("wrong_key");
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(subnet_test_id(1))
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_ecdsa_key(correct_key.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let esda_args = ic00::ECDSAPublicKeyArgs {
+        canister_id: None,
+        derivation_path: vec![],
+        key_id: wrong_key.clone(),
+    };
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::ECDSAPublicKey,
+            call_args()
+                .other_side(esda_args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            (0, 1_000_000_000),
+        )
+        .build();
+
+    let result = test.ingress(canister_id, "update", run).unwrap();
+    assert_eq!(
+        WasmResult::Reject(
+            format!("Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys: [{}]\")", wrong_key, correct_key
+        )),
         result
     );
 }

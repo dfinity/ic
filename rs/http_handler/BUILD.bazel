@@ -5,9 +5,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
+    "//rs/certification",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig",
     "//rs/interfaces",
     "//rs/interfaces/p2p",
     "//rs/interfaces/state_manager",

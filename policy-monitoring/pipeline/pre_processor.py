@@ -593,17 +593,14 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "needs_end_event": False,
         },
         "finalized_height": {
-            "enabled": False,
+            "enabled": True,
             "preamble_dependencies": frozenset(
                 [
-                    # "originally_in_ic" -- TODO
-                    "originally_in_subnet"
+                    "originally_in_subnet",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
-                    # "registry__node_removed_from_ic", -- TODO
-                    # "registry__node_added_to_ic", -- TODO
                     "registry__node_added_to_subnet",
                     "registry__node_removed_from_subnet",
                     "p2p__node_added",

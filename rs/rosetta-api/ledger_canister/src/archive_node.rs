@@ -199,7 +199,7 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
     let requested_range = range_utils::make_range(start, length);
     let effective_range = range_utils::intersect(
         &block_range,
-        &range_utils::head(&requested_range, MAX_BLOCKS_PER_REQUEST),
+        &range_utils::take(&requested_range, MAX_BLOCKS_PER_REQUEST),
     );
 
     let mut candid_blocks: Vec<CandidBlock> =

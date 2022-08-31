@@ -26,7 +26,6 @@ use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_38
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
-use lazy_static::lazy_static;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
@@ -37,9 +36,8 @@ pub(crate) mod conversions;
 mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, mk_sys_params,
-        verify_ciphertext_integrity, BTENode, Bit, EncryptionWitness, FsEncryptionCiphertext,
-        PublicKeyWithPop, SecretKey, SysParam,
+        dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, verify_ciphertext_integrity, BTENode,
+        Bit, EncryptionWitness, FsEncryptionCiphertext, PublicKeyWithPop, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -51,10 +49,6 @@ mod crypto {
 
 #[cfg(test)]
 mod tests;
-
-lazy_static! {
-    static ref SYS_PARAMS: crypto::SysParam = crypto::mk_sys_params();
-}
 
 /// Generates a forward secure key pair.
 ///
@@ -69,7 +63,7 @@ pub fn create_forward_secure_key_pair(
 ) -> FsEncryptionKeySetWithPop {
     let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let (lib_public_key_with_pop, lib_secret_key) =
-        crypto::kgen(associated_data, &SYS_PARAMS, &mut rng);
+        crypto::kgen(associated_data, crypto::SysParam::global(), &mut rng);
     let (public_key, pop) = public_key_from_miracl(&lib_public_key_with_pop);
     let secret_key = secret_key_from_miracl(&lib_secret_key);
     FsEncryptionKeySetWithPop {
@@ -95,7 +89,7 @@ pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Ep
     let mut rng = ChaCha20Rng::from_seed(seed.into_rng().gen::<[u8; 32]>());
     let tau = Tau::from(epoch);
     if epoch_from_miracl_secret_key(secret_key) < epoch {
-        secret_key.update_to(&tau.0, &SYS_PARAMS, &mut rng);
+        secret_key.update_to(&tau.0, crypto::SysParam::global(), &mut rng);
     }
 }
 
@@ -149,7 +143,7 @@ pub fn encrypt_and_prove(
         &public_keys,
         &tau.0[..],
         associated_data,
-        &SYS_PARAMS,
+        crypto::SysParam::global(),
         &mut rng,
     )
     .expect(
@@ -384,12 +378,17 @@ pub fn verify_zk_proofs(
     })?;
 
     let tau = Tau::from(epoch);
-    crypto::verify_ciphertext_integrity(&ciphertext, &tau.0[..], associated_data, &SYS_PARAMS)
-        .map_err(|_| {
-            CspDkgVerifyDealingError::InvalidDealingError(InvalidArgumentError {
-                message: "Ciphertext integrity check failed".to_string(),
-            })
-        })?;
+    crypto::verify_ciphertext_integrity(
+        &ciphertext,
+        &tau.0[..],
+        associated_data,
+        crypto::SysParam::global(),
+    )
+    .map_err(|_| {
+        CspDkgVerifyDealingError::InvalidDealingError(InvalidArgumentError {
+            message: "Ciphertext integrity check failed".to_string(),
+        })
+    })?;
 
     let chunking_proof = crypto::ProofChunking::deserialize(chunking_proof).ok_or_else(|| {
         CspDkgVerifyDealingError::MalformedDealingError(InvalidArgumentError {
@@ -460,7 +459,7 @@ mod util {
     /// Combine a big endian array of group elements (first chunk is the
     /// most significant) into a single group element.
     pub fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
-        let mut acc = G1Projective::identity();
+        let mut acc = *G1Projective::identity();
 
         for term in terms {
             for _ in 0..16 {

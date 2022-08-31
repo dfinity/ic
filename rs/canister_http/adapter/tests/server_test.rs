@@ -243,7 +243,7 @@ async fn test_response_limit_exceeded() {
     assert!(response.is_err());
     assert_eq!(
         response.as_ref().unwrap_err().code(),
-        tonic::Code::Unavailable
+        tonic::Code::OutOfRange
     );
     assert!(response
         .unwrap_err()

@@ -22,10 +22,11 @@ use crate::driver::{
 };
 use crate::util::block_on;
 use anyhow::bail;
+use candid;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload, TransformType};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 use std::time::Duration;
@@ -50,9 +51,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("http://[{webserver_ipv6}]:20443"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -71,9 +75,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("http://[{webserver_ipv6}]:20443"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 0,
@@ -87,9 +94,12 @@ pub fn test(env: TestEnv) {
         let request = CanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]:20443"),
             headers: vec![],
-            http_method: HttpMethod::GET,
+            method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
-            transform_method_name: Some("transform".to_string()),
+            transform: Some(TransformType::Function(candid::Func {
+                principal: proxy_canister.canister_id().get().0,
+                method: "transform".to_string(),
+            })),
             max_response_bytes: None,
         };
         let cycle_cost = 400_000_000
@@ -125,9 +135,12 @@ pub fn test(env: TestEnv) {
         let request = CanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]:20443"),
             headers: vec![],
-            http_method: HttpMethod::GET,
+            method: HttpMethod::GET,
             body: Some("".as_bytes().to_vec()),
-            transform_method_name: Some("transform".to_string()),
+            transform: Some(TransformType::Function(candid::Func {
+                principal: proxy_canister.canister_id().get().0,
+                method: "transform".to_string(),
+            })),
             max_response_bytes: Some(16384),
         };
         let cycle_cost = 400_000_000
@@ -171,9 +184,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: Some(4 * 1024 * 1024),
                     },
                     cycles: 0,
@@ -192,9 +208,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("bloat_transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "bloat_transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -213,9 +232,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("idontexist".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "idontexist".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -237,9 +259,12 @@ pub fn test(env: TestEnv) {
                             name: "Content-Type".to_string(),
                             value: "application/x-www-form-urlencoded".to_string(),
                         }],
-                        http_method: HttpMethod::POST,
+                        method: HttpMethod::POST,
                         body: Some("satoshi=me".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -258,9 +283,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/bytes/100000"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: Some(8 * 1024),
                     },
                     cycles: 500_000_000_000,
@@ -280,9 +308,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/delay/9"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -301,9 +332,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/redirect/10"),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -324,9 +358,12 @@ pub fn test(env: TestEnv) {
                             "https://[{webserver_ipv6}]:20443/drip?duration=100&numbytes=100"
                         ),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,
@@ -345,9 +382,12 @@ pub fn test(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{}]:9090", node.get_ip_addr()),
                         headers: vec![],
-                        http_method: HttpMethod::GET,
+                        method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),
-                        transform_method_name: Some("transform".to_string()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "transform".to_string(),
+                        })),
                         max_response_bytes: None,
                     },
                     cycles: 500_000_000_000,

@@ -69,6 +69,13 @@ loggers:
       - stdout
     additive: false
 
+  ic_ledger_canister_blocks_synchronizer::ledger_blocks_sync:
+    level: trace
+    appenders:
+      - rosetta-api
+      - stdout
+    additive: false
+
   ledger_blocks_synch:
     level: trace
     appenders:

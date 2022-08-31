@@ -25,15 +25,6 @@ use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
 use zeroize::Zeroize;
 
-lazy_static! {
-    static ref PRECOMP_SYS_H: G2Prepared = precomp_sys_h();
-}
-
-fn precomp_sys_h() -> G2Prepared {
-    let sys = mk_sys_params();
-    G2Prepared::from(&sys.h)
-}
-
 /// The ciphertext is an element of Fr which is 256-bits
 pub(crate) const MESSAGE_BYTES: usize = 32;
 
@@ -175,7 +166,7 @@ pub struct PublicKeyWithPop {
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
         let instance = EncryptionKeyInstance {
-            g1_gen: G1Affine::generator(),
+            g1_gen: *G1Affine::generator(),
             public_key: self.key_value,
             associated_data: associated_data.to_vec(),
         };
@@ -191,6 +182,7 @@ pub struct SysParam {
     pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
     pub f_h: Vec<G2Affine>, // The remaining lambda_H f_i's in the paper.
     pub h: G2Affine,
+    h_prep: G2Prepared,
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -241,7 +233,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
     let y = G1Affine::from(g1 * spec_x);
 
     let pop_instance = EncryptionKeyInstance {
-        g1_gen: G1Affine::generator(),
+        g1_gen: *G1Affine::generator(),
         public_key: y,
         associated_data: associated_data.to_vec(),
     };
@@ -670,7 +662,7 @@ pub fn baby_giant(tgt: &Gt, base: &Gt, lo: isize, range: isize) -> Option<isize>
 
     let mut babies = std::collections::HashMap::new();
     let mut n = 0;
-    let mut g = Gt::identity();
+    let mut g = *Gt::identity();
 
     loop {
         if n * n >= range {
@@ -770,7 +762,7 @@ pub fn dec_chunks(
 
     for i in 0..spec_m {
         let x = Gt::multipairing(&[
-            (&cj[i], &G2Prepared::generator()),
+            (&cj[i], G2Prepared::generator()),
             (&crsz.rr[i], &bneg),
             (&dk.a, &G2Prepared::from(&crsz.zz[i])),
             (&crsz.ss[i], &eneg),
@@ -782,7 +774,7 @@ pub fn dec_chunks(
     // Find discrete log of powers with baby-step-giant-step.
     let mut dlogs = Vec::new();
     for item in &powers {
-        match baby_giant(item, &Gt::generator(), 0, CHUNK_SIZE) {
+        match baby_giant(item, Gt::generator(), 0, CHUNK_SIZE) {
             // Happy path: honest DKG participants.
             Some(dlog) => dlogs.push(Scalar::from_isize(dlog)),
             // It may take hours to brute force a cheater's discrete log.
@@ -850,8 +842,6 @@ pub fn verify_ciphertext_integrity(
     //      e(g1^{-1}, Z_j) *
     //      e(R_j, f_0 \Prod_{i=0}^{\lambda} f_i^{\tau_i}) *
     //      e(S_j,h)
-    //   (PRECOMP_SYS_H is the system-parameter h value,
-    //   pre-loaded before this function call)
     let checks: Result<(), ()> = crsz
         .rr
         .iter()
@@ -859,7 +849,7 @@ pub fn verify_ciphertext_integrity(
         .try_for_each(|(spec_r, (s, z))| {
             let z = G2Prepared::from(z);
 
-            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &PRECOMP_SYS_H), (&g1_neg, &z)]);
+            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
             if v.is_identity() {
                 Ok(())
@@ -949,31 +939,45 @@ pub const LAMBDA_T: usize = 32;
 /// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
 const LAMBDA_H: usize = 256;
 
-/// Return NI-DKG system parameters
-pub fn mk_sys_params() -> SysParam {
-    let dst = b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
-    let f0 = G2Affine::hash(dst, b"f0");
+lazy_static! {
+    static ref SYSTEM_PARAMS: SysParam =
+        SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_");
+}
 
-    let mut f = Vec::with_capacity(LAMBDA_T);
-    for i in 0..LAMBDA_T {
-        let s = format!("f{}", i + 1);
-        f.push(G2Affine::hash(dst, s.as_bytes()));
+impl SysParam {
+    /// Create a set of system parameters
+    fn create(dst: &[u8]) -> Self {
+        let f0 = G2Affine::hash(dst, b"f0");
+
+        let mut f = Vec::with_capacity(LAMBDA_T);
+        for i in 0..LAMBDA_T {
+            let s = format!("f{}", i + 1);
+            f.push(G2Affine::hash(dst, s.as_bytes()));
+        }
+        let mut f_h = Vec::with_capacity(LAMBDA_H);
+        for i in 0..LAMBDA_H {
+            let s = format!("f_h{}", i);
+            f_h.push(G2Affine::hash(dst, s.as_bytes()));
+        }
+
+        let h = G2Affine::hash(dst, b"h");
+
+        let h_prep = G2Prepared::from(h);
+
+        SysParam {
+            lambda_t: LAMBDA_T,
+            lambda_h: LAMBDA_H,
+            f0,
+            f,
+            f_h,
+            h,
+            h_prep,
+        }
     }
-    let mut f_h = Vec::with_capacity(LAMBDA_H);
-    for i in 0..LAMBDA_H {
-        let s = format!("f_h{}", i);
-        f_h.push(G2Affine::hash(dst, s.as_bytes()));
-    }
 
-    let h = G2Affine::hash(dst, b"h");
-
-    SysParam {
-        lambda_t: LAMBDA_T,
-        lambda_h: LAMBDA_H,
-        f0,
-        f,
-        f_h,
-        h,
+    /// Return a reference to the global NI-DKG system parameters
+    pub fn global() -> &'static Self {
+        &SYSTEM_PARAMS
     }
 }
 
@@ -987,7 +991,7 @@ pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Sc
     let ee = 1 << CHALLENGE_BITS;
     let ss = spec_n * spec_m * (bb_constant - 1) * (ee - 1);
     let zz = (2 * NUM_ZK_REPETITIONS * ss) as isize;
-    let mut target_power = Gt::identity();
+    let mut target_power = *Gt::identity();
 
     // For each Delta in [1..E - 1] we compute target^Delta and use
     // baby-step-giant-step to find `scaled_answer` such that:
@@ -997,7 +1001,7 @@ pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Sc
     // That is, answer = scaled_answer * invDelta.
     for delta in 1..ee {
         target_power += target;
-        match baby_giant(&target_power, &Gt::generator(), 1 - zz, 2 * zz - 1) {
+        match baby_giant(&target_power, Gt::generator(), 1 - zz, 2 * zz - 1) {
             None => {}
             Some(scaled_answer) => {
                 let mut answer = Scalar::from_usize(delta);

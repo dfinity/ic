@@ -144,6 +144,28 @@ pub struct GetTransactionsRequest {
     pub length: Nat,
 }
 
+impl GetTransactionsRequest {
+    pub fn as_start_and_length(&self) -> Result<(u64, usize), String> {
+        use num_traits::cast::ToPrimitive;
+
+        let start = self.start.0.to_u64().ok_or_else(|| {
+            format!(
+                "transaction index {} is too large, max allowed: {}",
+                self.start,
+                u64::MAX
+            )
+        })?;
+        let length = self.length.0.to_u64().ok_or_else(|| {
+            format!(
+                "requested length {} is too large, max allowed: {}",
+                self.length,
+                u64::MAX
+            )
+        })?;
+        Ok((start, length as usize))
+    }
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct Mint {
     pub amount: Nat,
@@ -196,7 +218,7 @@ pub struct GetTransactionsResponse {
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct TransactionRange {
-    transactions: Vec<Transaction>,
+    pub transactions: Vec<Transaction>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]

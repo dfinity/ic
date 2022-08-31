@@ -27,10 +27,32 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
         &self,
         _validation_context: &ValidationContext,
         _past_payloads: &[&XNetPayload],
-        _byte_limit: NumBytes,
+        byte_limit: NumBytes,
     ) -> XNetPayload {
-        XNetPayload {
-            stream_slices: self.0.lock().unwrap().pop_front().unwrap_or_default(),
+        let mut streams = self.0.lock().unwrap();
+
+        // Pick a stream that fits the size requirements
+        let mut picked_stream = None;
+        for (index, stream_slice) in streams.iter().enumerate() {
+            let stream_size: usize = stream_slice
+                .iter()
+                .map(|(_, stream_slice)| {
+                    stream_slice.payload.len() + stream_slice.merkle_proof.len()
+                })
+                .sum();
+            if NumBytes::from(stream_size as u64) < byte_limit {
+                picked_stream = Some(index);
+            }
+        }
+
+        match picked_stream {
+            None => XNetPayload::default(),
+            Some(stream_index) => {
+                let stream = streams.remove(stream_index).unwrap();
+                XNetPayload {
+                    stream_slices: stream,
+                }
+            }
         }
     }
 

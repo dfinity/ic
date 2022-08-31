@@ -21,12 +21,12 @@ cargo_build_script(
     build_script_env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/service",
         "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
-        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_exec_rustfmt_files)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
     },
     data = [
         "proto/btc_service/v1/proto.proto",
         "@com_google_protobuf//:protoc",
-        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     edition = "2021",
     deps = [

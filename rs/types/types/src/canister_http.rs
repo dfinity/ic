@@ -24,7 +24,7 @@ use crate::{
     signature::*,
     CanisterId, CountBytes, RegistryVersion, Time,
 };
-use ic_base_types::NumBytes;
+use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
 use ic_protobuf::{
@@ -128,6 +128,16 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
 
     fn try_from(input: (Time, &Request, CanisterHttpRequestArgs)) -> Result<Self, Self::Error> {
         let (time, request, args) = input;
+        if let Some(transform_principal_id) = args.transform_principal() {
+            if request.sender.get() != transform_principal_id {
+                return Err(CanisterHttpRequestContextError::TransformPrincipalId(
+                    InvalidTransformPrincipalId {
+                        expected_principal_id: request.sender.get(),
+                        actual_principal_id: transform_principal_id,
+                    },
+                ));
+            }
+        };
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -146,6 +156,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             None => Ok(None),
         }?;
 
+        let transform_method_name = args.transform_method();
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
@@ -160,12 +171,12 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
                 })
                 .collect(),
             body: args.body,
-            http_method: match args.http_method {
+            http_method: match args.method {
                 HttpMethod::GET => CanisterHttpMethod::GET,
                 HttpMethod::POST => CanisterHttpMethod::POST,
                 HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             },
-            transform_method_name: args.transform_method_name,
+            transform_method_name,
             time,
         })
     }
@@ -179,10 +190,16 @@ pub struct InvalidMaxResponseBytes {
     given: u64,
 }
 
+pub struct InvalidTransformPrincipalId {
+    expected_principal_id: PrincipalId,
+    actual_principal_id: PrincipalId,
+}
+
 /// Errors that can occur when converting from (time, request, [`CanisterHttpRequestArgs`]) to
 /// an [`CanisterHttpRequestContext`].
 pub enum CanisterHttpRequestContextError {
     MaxResponseBytes(InvalidMaxResponseBytes),
+    TransformPrincipalId(InvalidTransformPrincipalId),
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -193,6 +210,13 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 format!(
                     "max_response_bytes expected to be in the range [{}..{}], got {}",
                     err.min, err.max, err.given
+                ),
+            ),
+            CanisterHttpRequestContextError::TransformPrincipalId(err) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "transform principal id expected to be {}, got {}",
+                    err.expected_principal_id, err.actual_principal_id,
                 ),
             ),
         }

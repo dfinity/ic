@@ -89,6 +89,7 @@
 /rs/canonical_state/                    @dfinity-lab/teams/message-routing-owners
 /rs/certification/                      @dfinity-lab/teams/message-routing-owners
 /rs/config/                             @dfinity-lab/teams/interface-owners
+/rs/config/src/embedders.rs             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                          @dfinity-lab/teams/interface-owners
@@ -235,3 +236,4 @@
 *.lock                    @dfinity-lab/teams/ghost
 /rs/Cargo.toml            @dfinity-lab/teams/ghost
 .gitignore                @dfinity-lab/teams/ghost
+Capsule.toml              @dfinity-lab/teams/ghost

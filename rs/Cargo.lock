@@ -136,7 +136,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77f5f9d66a8730d0fae62c26f3424f5751e5518086628a40b7ab6fca4a705034"
 dependencies = [
  "futures-core",
- "paste 1.0.5",
+ "paste 1.0.7",
  "pin-project-lite",
 ]
 
@@ -506,9 +506,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.56"
+version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96cf8829f67d2eab0b2dfa42c5d0ef737e0724e4a82b01b3e292456202b19716"
+checksum = "76464446b8bc32758d7e88ee1a804d9914cd9b1cb264c029899680b0be29826f"
 dependencies = [
  "proc-macro2 1.0.39",
  "quote 1.0.17",
@@ -1193,7 +1193,7 @@ dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "num_enum",
- "paste 1.0.5",
+ "paste 1.0.7",
  "pretty 0.10.0",
  "serde",
  "serde_bytes",
@@ -4589,7 +4589,7 @@ dependencies = [
  "num-integer",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest 1.0.0",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4810,6 +4810,7 @@ dependencies = [
  "ed25519-consensus",
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -4877,6 +4878,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "lazy_static",
  "pairing",
+ "paste 1.0.7",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.9.9",
@@ -5096,7 +5098,7 @@ dependencies = [
  "k256",
  "lazy_static",
  "p256",
- "paste 1.0.5",
+ "paste 1.0.7",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -5270,24 +5272,6 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types 0.8.0",
  "rand 0.8.5",
-]
-
-[[package]]
-name = "ic-crypto-tls"
-version = "0.8.0"
-dependencies = [
- "async-trait",
- "ic-crypto-internal-tls",
- "ic-crypto-test-utils",
- "ic-crypto-tls-interfaces",
- "ic-protobuf",
- "ic-types 0.8.0",
- "maplit",
- "openssl",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "tokio-openssl",
 ]
 
 [[package]]
@@ -5704,9 +5688,11 @@ dependencies = [
  "http",
  "hyper",
  "ic-async-utils",
+ "ic-certification",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig",
  "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-p2p",
@@ -5784,6 +5770,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "leb128",
+ "num-traits",
  "serde",
  "serde_bytes",
 ]
@@ -7073,6 +7060,7 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.1.0"
 dependencies = [
+ "clap 3.2.14",
  "ic-config",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
@@ -7088,6 +7076,7 @@ dependencies = [
  "ic-types 0.8.0",
  "prost",
  "slog",
+ "tempfile",
  "tokio",
  "url",
 ]
@@ -7340,6 +7329,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replica",
  "ic-replicated-state",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-test-utilities",
@@ -7403,7 +7393,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -7571,6 +7561,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-test-utils",
  "ic-sns-wasm",
+ "json-patch",
  "ledger-canister",
  "maplit",
  "on_wire",
@@ -8309,6 +8300,7 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
@@ -8317,6 +8309,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-test-utilities-logger",
  "ic-types-test-utils",
+ "mockall 0.11.2",
  "phantom_newtype",
  "prometheus 0.12.0",
  "serde",
@@ -8324,6 +8317,7 @@ dependencies = [
  "strum 0.24.0",
  "tokio",
  "tower",
+ "tower-test",
 ]
 
 [[package]]
@@ -8469,7 +8463,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
- "paste 1.0.5",
+ "paste 1.0.7",
  "semver 1.0.10",
  "serde",
  "serde_bytes",
@@ -8916,6 +8910,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83bdfbace3a0e81a4253f73b49e960b053e396a11012cbd49b9b74d6a2b67062"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-patch"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f995a3c8f2bc3dd52a18a583e90f9ec109c047fa1603a853e46bcda14d2e279d"
+dependencies = [
+ "serde",
+ "serde_json",
+ "treediff",
 ]
 
 [[package]]
@@ -10480,9 +10485,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.5"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acbf547ad0c65e31259204bd90935776d1c693cec2f4ff7abb7a1bbbd40dfe58"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 
 [[package]]
 name = "paste-impl"
@@ -11743,7 +11748,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rustls 0.20.6",
- "rustls-pemfile 1.0.0",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -12035,23 +12040,14 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ca9ebdfa27d3fc180e42879037b5338ab1c040c06affd00d8338598e7800943"
+checksum = "0167bac7a9f490495f3c33013e7722b53cb087ecbe082fb0c6387c96f634ea50"
 dependencies = [
  "openssl-probe",
- "rustls-pemfile 0.2.1",
+ "rustls-pemfile",
  "schannel",
  "security-framework",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eebeaeb360c87bfb72e84abdb3447159c0eaececf1bef2aecd65a8be949d1c9"
-dependencies = [
- "base64 0.13.0",
 ]
 
 [[package]]
@@ -12608,7 +12604,7 @@ dependencies = [
  "approx",
  "num-complex",
  "num-traits",
- "paste 1.0.5",
+ "paste 1.0.7",
 ]
 
 [[package]]
@@ -13310,6 +13306,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-nns-data-provider",
  "ic-registry-provisional-whitelist",
+ "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
@@ -13929,6 +13926,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "treediff"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "treeline"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14405,7 +14411,7 @@ dependencies = [
  "log",
  "object 0.28.4",
  "once_cell",
- "paste 1.0.5",
+ "paste 1.0.7",
  "psm",
  "rayon",
  "region",

@@ -20,6 +20,9 @@ def external_crates_repository(name, annotations):
             "actix-web": crate.spec(
                 version = "^4.0.0-beta.6",
             ),
+            "arbitrary": crate.spec(
+                version = "=1.1.3",
+            ),
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
             ),
@@ -124,6 +127,7 @@ def external_crates_repository(name, annotations):
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
                 rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                default_features = False,
             ),
             "byte-unit": crate.spec(
                 version = "^4.0.14",
@@ -364,7 +368,7 @@ def external_crates_repository(name, annotations):
                 version = "^1.0.6",
             ),
             "insta": crate.spec(
-                version = "^1.8.0",
+                version = "=1.8.0",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",
@@ -381,6 +385,9 @@ def external_crates_repository(name, annotations):
             ),
             "jemallocator": crate.spec(
                 version = "^0.3.2",
+            ),
+            "json-patch": crate.spec(
+                version = "^0.2.6",
             ),
             "json5": crate.spec(
                 version = "^0.4.1",
@@ -954,6 +961,9 @@ def external_crates_repository(name, annotations):
             ),
             "vsock": crate.spec(
                 version = "^0.2.6",
+            ),
+            "walrus": crate.spec(
+                version = "^0.19.0",
             ),
             "wait-timeout": crate.spec(
                 version = "^0.2.0",

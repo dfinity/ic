@@ -8,6 +8,7 @@
 
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
+use paste::paste;
 use rand::{CryptoRng, RngCore};
 use std::fmt;
 use zeroize::Zeroize;
@@ -599,6 +600,13 @@ macro_rules! declare_mul_scalar_ops_for {
             }
         }
 
+        impl std::ops::Mul<Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> $typ {
+                *self * scalar
+            }
+        }
+
         impl std::ops::MulAssign<Scalar> for $typ {
             fn mul_assign(&mut self, other: Scalar) {
                 self.value *= other.inner()
@@ -618,6 +626,13 @@ declare_mul_scalar_ops_for!(Scalar);
 
 macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
+        paste! {
+            lazy_static::lazy_static! {
+                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(bls12_381::$affine::generator());
+                static ref [<$affine:upper _IDENTITY>] : $affine = $affine::new(bls12_381::$affine::identity());
+            }
+        }
+
         /// An element of the group in affine form
         #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $affine {
@@ -639,13 +654,13 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> Self {
-                Self::new(bls12_381::$affine::identity())
+            pub fn identity() -> &'static Self {
+                paste! { &[<$affine:upper _IDENTITY>] }
             }
 
             /// Return the generator element in this group
-            pub fn generator() -> Self {
-                Self::new(bls12_381::$affine::generator())
+            pub fn generator() -> &'static Self {
+                paste! { &[<$affine:upper _GENERATOR>] }
             }
 
             /// Hash into the group
@@ -727,6 +742,13 @@ macro_rules! define_affine_and_projective_types {
             pub fn neg(&self) -> Self {
                 use std::ops::Neg;
                 Self::new(self.value.neg())
+            }
+        }
+
+        paste! {
+            lazy_static::lazy_static! {
+                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(bls12_381::$projective::generator());
+                static ref [<$projective:upper _IDENTITY>] : $projective = $projective::new(bls12_381::$projective::identity());
             }
         }
 
@@ -812,13 +834,13 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> Self {
-                Self::new(bls12_381::$projective::identity())
+            pub fn identity() -> &'static Self {
+                paste! { &[<$projective:upper _IDENTITY>] }
             }
 
             /// Return the generator element in this group
-            pub fn generator() -> Self {
-                Self::new(bls12_381::$projective::generator())
+            pub fn generator() -> &'static Self {
+                paste! { &[<$projective:upper _GENERATOR>] }
             }
 
             /// Hash into the group
@@ -868,6 +890,22 @@ macro_rules! define_affine_and_projective_types {
 
             fn mul(self, scalar: &Scalar) -> $projective {
                 <$projective>::from(self).windowed_mul(scalar)
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for &$affine {
+            type Output = $projective;
+
+            fn mul(self, scalar: Scalar) -> $projective {
+               *self * scalar
+            }
+        }
+
+        impl std::ops::Mul<&Scalar> for &$affine {
+            type Output = $projective;
+
+            fn mul(self, scalar: &Scalar) -> $projective {
+               *self * scalar
             }
         }
 
@@ -938,7 +976,7 @@ macro_rules! declare_mul2_impl_for {
                 We build up the table incrementally using additions and doubling, to
                 avoid the cost of full scalar mul.
                  */
-                let mut tbl = [Self::identity(); TABLE_SIZE];
+                let mut tbl = [*Self::identity(); TABLE_SIZE];
 
                 // Precompute the table (tbl[0] is left as the identity)
                 for i in 1..TABLE_SIZE {
@@ -961,7 +999,7 @@ macro_rules! declare_mul2_impl_for {
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = *Self::identity();
 
                 for i in 0..Window::WINDOWS {
                     // skip on first iteration: doesn't leak secrets as index is public
@@ -1011,7 +1049,7 @@ macro_rules! declare_muln_vartime_impl_for {
                     windows.push(window);
                 }
 
-                let id = Self::identity();
+                let id = *Self::identity();
                 let mut accum = id;
 
                 let mut buckets = [id; Window::ELEMENTS];
@@ -1083,7 +1121,7 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                 // Derived constants
                 const TABLE_SIZE: usize = Window::ELEMENTS;
 
-                let mut tbl = [Self::identity(); TABLE_SIZE];
+                let mut tbl = [*Self::identity(); TABLE_SIZE];
 
                 for i in 1..TABLE_SIZE {
                     tbl[i] = tbl[i - 1] + *self;
@@ -1091,7 +1129,7 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let s = scalar.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = *Self::identity();
 
                 for i in 0..Window::WINDOWS {
                     // skip on first iteration: doesn't leak secrets as index is public
@@ -1120,6 +1158,13 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
             type Output = Self;
             fn mul(self, scalar: &Scalar) -> Self {
                 self.windowed_mul(scalar)
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> Self::Output {
+                *self * scalar
             }
         }
 
@@ -1162,6 +1207,11 @@ pub struct Gt {
     value: bls12_381::Gt,
 }
 
+lazy_static::lazy_static! {
+    static ref GT_GENERATOR : Gt = Gt::new(bls12_381::Gt::generator());
+    static ref GT_IDENTITY : Gt = Gt::new(bls12_381::Gt::identity());
+}
+
 impl Gt {
     /// The size in bytes of this type
     pub const BYTES: usize = 576;
@@ -1176,13 +1226,13 @@ impl Gt {
     }
 
     /// Return the identity element in the group
-    pub fn identity() -> Self {
-        Self::new(bls12_381::Gt::identity())
+    pub fn identity() -> &'static Self {
+        &GT_IDENTITY
     }
 
     /// Return the generator element in the group
-    pub fn generator() -> Self {
-        Self::new(bls12_381::Gt::generator())
+    pub fn generator() -> &'static Self {
+        &GT_GENERATOR
     }
 
     /// Compute the pairing function e(g1,g2) -> gt
@@ -1248,13 +1298,13 @@ impl G2Prepared {
     }
 
     /// Return the generator element in the group
-    pub fn generator() -> Self {
-        G2PREPARED_G.clone()
+    pub fn generator() -> &'static Self {
+        &G2PREPARED_G
     }
 
     /// Return the inverse of the generator element in the group
-    pub fn neg_generator() -> Self {
-        G2PREPARED_NEG_G.clone()
+    pub fn neg_generator() -> &'static Self {
+        &G2PREPARED_NEG_G
     }
 }
 
@@ -1296,7 +1346,7 @@ pub fn verify_bls_signature(
 
     let g2_gen = G2Prepared::neg_generator();
     let pub_key_prepared = G2Prepared::from(public_key);
-    Gt::multipairing(&[(signature, &g2_gen), (message, &pub_key_prepared)]).is_identity()
+    Gt::multipairing(&[(signature, g2_gen), (message, &pub_key_prepared)]).is_identity()
 }
 
 struct WindowInfo<const WINDOW_SIZE: usize> {}

@@ -74,7 +74,6 @@ members = [
   "crypto/tecdsa",
   "crypto/tls_interfaces",
   "crypto/tls_interfaces/mocks",
-  "crypto/tls",
   "crypto/tree_hash",
   "crypto/utils/basic_sig",
   "crypto/utils/threshold_sig",

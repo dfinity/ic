@@ -126,10 +126,6 @@ pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
     check_or_init_ic(topology, true)
 }
 
-pub(crate) fn await_all_nodes_are_ready(topology: TopologySnapshot) {
-    check_or_init_ic(topology, false)
-}
-
 fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
     let logger = topology.test_env().logger();
 

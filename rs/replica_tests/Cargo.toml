@@ -46,6 +46,7 @@ candid = "0.7.4"
 canister-test = { path = "../rust_canisters/canister_test" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"

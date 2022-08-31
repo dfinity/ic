@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [1.6.1] - 2022-08-25
+## [1.6.1] - 2022-08-26
 ### Added
 - `blockchain` command line flag that overrides the blockchain name in the network identifier.
 ### Changed

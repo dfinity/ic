@@ -187,7 +187,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             crypto.signature => format!("{:?}", signature.signatures_map),
         );
         let start_time = self.metrics.now();
-        let result = BasicSigVerifierInternal::verify_basic_sig_batch(
+        let result = BasicSigVerifierInternal::verify_basic_sig_batch_vartime(
             &self.csp,
             Arc::clone(&self.registry_client),
             signature,

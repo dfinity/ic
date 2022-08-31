@@ -138,7 +138,7 @@ pub const SAMPLE_CONFIG: &str = r#"
     // ========================================
     scheduler: {
         // The max number of cores to use for canister code execution.
-        scheduler_cores: 1,
+        scheduler_cores: 2,
 
         // Maximum amount of instructions a single round can consume.
         max_instructions_per_round: 26843545600,

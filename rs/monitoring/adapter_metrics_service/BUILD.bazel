@@ -21,13 +21,13 @@ cargo_build_script(
     build_script_env = {
         "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
         "PROTOC_INCLUDE": "../../../external/com_github_protocolbuffers_protobuf/src",
-        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_exec_rustfmt_files)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
     },
     data = [
         "proto/adapter_metrics/v1/proto.proto",
         "@com_google_protobuf//:protoc",
         "@com_google_protobuf//:well_known_protos",
-        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     edition = "2021",
     deps = [

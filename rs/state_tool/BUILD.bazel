@@ -1,28 +1,50 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto/sha",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/state_layout",
+    "//rs/state_manager",
+    "//rs/sys",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:scoped_threadpool",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_binary(
     name = "state_tool",
-    srcs = glob(["src/**"]),
-    crate_name = "ic_state_tool",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
     edition = "2018",
-    deps = [
-        "//rs/config",
-        "//rs/crypto/sha",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/protobuf",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/state_layout",
-        "//rs/state_manager",
-        "//rs/sys",
-        "//rs/types/types",
-        "//rs/utils",
-        "@crate_index//:clap",
-        "@crate_index//:hex",
-        "@crate_index//:prost",
-        "@crate_index//:scoped_threadpool",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "state_tool_test",
+    aliases = ALIASES,
+    crate = ":state_tool",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -836,12 +836,13 @@ pub fn total_compute_allocation_cannot_be_exceeded(
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     // See the corresponding field in the execution environment config.
-    // TODO(RUN-314): Set the compute allocation capacity to 50%.
     let allocatable_compute_capacity_in_percent = 0;
-    let app_sched_cores = ic_config::subnet_config::SchedulerConfig::application_subnet()
-        .scheduler_cores
-        * allocatable_compute_capacity_in_percent
-        / 100;
+    // Note: the DTS scheduler requires at least 2 scheduler cores
+    assert!(ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores >= 2);
+    let app_sched_cores =
+        (ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores - 1)
+            * allocatable_compute_capacity_in_percent
+            / 100;
     const MAX_COMP_ALLOC: Option<u64> = Some(99);
     rt.block_on(async move {
         let mut canister_principals = Vec::new();

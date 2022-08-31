@@ -40,7 +40,7 @@ import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
+gflags.DEFINE_integer("num_workload_generators", -1, "Number of workload generators to run")
 
 
 class BaselineExperiment(workload_experiment.WorkloadExperiment):

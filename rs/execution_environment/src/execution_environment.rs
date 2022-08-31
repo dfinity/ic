@@ -189,6 +189,10 @@ pub struct RoundLimits {
     /// - Wasm execution grows the Wasm/stable memory.
     /// - Wasm execution pushes a new request to the output queue.
     pub subnet_available_memory: SubnetAvailableMemory,
+
+    // TODO would be nice to change that to available, but this requires
+    // a lot of changes since available allocation sits in CanisterManager config
+    pub compute_allocation_used: u64,
 }
 
 /// Represent a paused execution that can be resumed or aborted.
@@ -201,8 +205,6 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     ///
     /// If the execution finishes, then it returns the new canister state and
     /// the result of the execution.
-    /// TODO(RUN-231): Add paused execution to `ExecuteMessageResult` to support
-    /// the other case.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
@@ -298,7 +300,7 @@ impl ExecutionEnvironment {
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        num_cores: usize,
+        compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
@@ -309,7 +311,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             config.max_controllers,
-            num_cores,
+            compute_capacity,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
         );
@@ -1356,6 +1358,8 @@ impl ExecutionEnvironment {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_message),
             subnet_available_memory,
+            // Ignore compute allocation
+            compute_allocation_used: 0,
         };
         let result = execute_non_replicated_query(
             NonReplicatedQueryKind::Pure {
@@ -1686,7 +1690,9 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ReplicatedState {
-        let compute_allocation_used = state.total_compute_allocation();
+        // overwrite this for now
+        // TODO update round_limits.compute_allocation_used when it changes
+        round_limits.compute_allocation_used = state.total_compute_allocation();
 
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
@@ -1753,7 +1759,6 @@ impl ExecutionEnvironment {
             old_canister,
             state.time(),
             state.path().to_path_buf(),
-            compute_allocation_used,
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,
@@ -1927,6 +1932,7 @@ impl ExecutionEnvironment {
     pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
         for canister in state.canisters_iter_mut() {
             if !canister.system_state.task_queue.is_empty() {
+                canister.apply_priority_credit();
                 let task_queue = std::mem::take(&mut canister.system_state.task_queue);
                 canister.system_state.task_queue = task_queue
                     .into_iter()

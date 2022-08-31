@@ -109,7 +109,7 @@ impl CanisterMgrConfig {
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         max_controllers: usize,
-        num_cores: usize,
+        compute_capacity: usize,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
     ) -> Self {
@@ -120,7 +120,8 @@ impl CanisterMgrConfig {
             own_subnet_id,
             own_subnet_type,
             max_controllers,
-            compute_capacity: (num_cores * allocatable_capacity_in_percent.min(100)) as u64,
+            compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
+                as u64,
             rate_limiting_of_instructions,
         }
     }
@@ -591,6 +592,8 @@ impl CanisterManager {
         let canister_layout_path = state.path().to_path_buf();
         let compute_allocation_used = state.total_compute_allocation();
         let network_topology = state.metadata.network_topology.clone();
+        // overwrite for now
+        round_limits.compute_allocation_used = compute_allocation_used;
 
         let old_canister = match state.take_canister_state(&context.canister_id) {
             None => {
@@ -612,7 +615,6 @@ impl CanisterManager {
             old_canister,
             time,
             canister_layout_path,
-            compute_allocation_used,
             &network_topology,
             execution_parameters,
             round_limits,
@@ -665,7 +667,6 @@ impl CanisterManager {
         canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
-        compute_allocation_used: u64,
         network_topology: &NetworkTopology,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -697,7 +698,6 @@ impl CanisterManager {
                 canister,
                 execution_parameters,
                 original,
-                compute_allocation_used,
                 round.clone(),
                 round_limits,
             ),
@@ -706,7 +706,6 @@ impl CanisterManager {
                 canister,
                 execution_parameters,
                 original,
-                compute_allocation_used,
                 round.clone(),
                 round_limits,
             ),

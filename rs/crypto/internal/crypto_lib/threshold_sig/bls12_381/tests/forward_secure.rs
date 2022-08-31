@@ -8,7 +8,7 @@ use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 
 #[test]
 fn output_of_mk_sys_params_is_expected_values() {
-    let sys = mk_sys_params();
+    let sys = SysParam::global();
 
     assert_eq!(sys.lambda_t, 32);
     assert_eq!(sys.lambda_h, 256);
@@ -27,7 +27,7 @@ fn output_of_mk_sys_params_is_expected_values() {
                     "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6");
 
     let mut sha256 = Sha256::new();
-    for val in sys.f {
+    for val in &sys.f {
         sha256.write(&val.serialize());
     }
     assert_eq!(
@@ -36,7 +36,7 @@ fn output_of_mk_sys_params_is_expected_values() {
     );
 
     let mut sha256 = Sha256::new();
-    for val in sys.f_h {
+    for val in &sys.f_h {
         sha256.write(&val.serialize());
     }
     assert_eq!(
@@ -47,7 +47,7 @@ fn output_of_mk_sys_params_is_expected_values() {
 
 #[test]
 fn fs_keys_should_be_valid() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let mut rng = rand_chacha::ChaCha20Rng::from_seed([99; 32]);
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[3u8, 0u8, 0u8, 0u8];
 
@@ -67,7 +67,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
     Vec<Vec<isize>>,
     FsEncryptionCiphertext,
 ) {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 1u8, 0u8, 6u8];
 
     let mut keys = Vec::new();
@@ -100,7 +100,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
 
 #[test]
 fn integrity_check_should_return_error_on_wrong_associated_data() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let mut rng = rand::thread_rng();
     let epoch = Epoch::from(0);
     let associated_data: Vec<u8> = vec![3u8; 12];
@@ -117,7 +117,7 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
 
 #[test]
 fn should_encrypt_with_empty_associated_data() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let epoch = Epoch::from(0);
     let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = Vec::new();
@@ -137,7 +137,7 @@ fn should_encrypt_with_empty_associated_data() {
 
 #[test]
 fn should_decrypt_correctly_for_epoch_0() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let epoch = Epoch::from(0);
     let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
@@ -157,7 +157,7 @@ fn should_decrypt_correctly_for_epoch_0() {
 }
 #[test]
 fn should_decrypt_correctly_for_epoch_1() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let epoch = Epoch::from(1);
     let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
@@ -177,7 +177,7 @@ fn should_decrypt_correctly_for_epoch_1() {
 }
 #[test]
 fn should_decrypt_correctly_for_epoch_5() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let epoch = Epoch::from(5);
     let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
@@ -197,7 +197,7 @@ fn should_decrypt_correctly_for_epoch_5() {
 }
 #[test]
 fn should_decrypt_correctly_for_epoch_10() {
-    let sys = &mk_sys_params();
+    let sys = SysParam::global();
     let epoch = Epoch::from(10);
     let mut rng = rand::thread_rng();
     let associated_data: Vec<u8> = rng.gen::<[u8; 10]>().to_vec();
@@ -221,7 +221,7 @@ fn gt_rand() -> Gt {
     let mut rng = rand::thread_rng();
     let g1 = G1Affine::hash(b"ic-crypto-test-fp12-random", &rng.gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
-    Gt::pairing(&g1, &g2)
+    Gt::pairing(&g1, g2)
 }
 
 #[test]

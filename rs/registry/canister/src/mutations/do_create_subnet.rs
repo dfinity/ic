@@ -273,6 +273,7 @@ pub struct EcdsaInitialConfig {
     pub keys: Vec<EcdsaKeyRequest>,
     /// Must be optional for registry candid backwards compatibility.
     pub max_queue_size: Option<u32>,
+    pub signature_request_timeout_ns: Option<u64>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -291,6 +292,7 @@ impl From<EcdsaInitialConfig> for EcdsaConfig {
                 .map(|val| (&val.key_id).into())
                 .collect::<Vec<_>>(),
             max_queue_size: val.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: val.signature_request_timeout_ns,
         }
     }
 }
@@ -380,6 +382,7 @@ mod test {
                     subnet_id: None,
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ..Default::default()
         };
@@ -412,6 +415,7 @@ mod test {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -429,6 +433,7 @@ mod test {
                     subnet_id: None,
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ..Default::default()
         };
@@ -461,6 +466,7 @@ mod test {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -478,6 +484,7 @@ mod test {
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }),
             ..Default::default()
         };

@@ -90,14 +90,6 @@ else
     BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
 fi
 
-# Compute arguments for actual build stage.
-
-declare -a IC_EXECUTABLES=(
-    "boundary-node-control-plane"
-    "boundary-node-prober"
-    "ic-balance-exporter"
-)
-
 # Build sev-tool
 (
     cd "${EXTERNAL_DIR}"
@@ -112,6 +104,15 @@ declare -a IC_EXECUTABLES=(
     autoreconf -i && ./configure && make
 )
 
+# Compute arguments for actual build stage.
+
+declare -a IC_EXECUTABLES=(
+    "boundary-node-control-plane"
+    "boundary-node-prober"
+    "denylist-updater"
+    "ic-balance-exporter"
+)
+
 declare -a INSTALL_EXEC_ARGS=()
 for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
     INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
@@ -123,12 +124,12 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
+"${BASE_DIR}"/../bootloader/build-bootloader-tree.sh -o "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMPDIR}/boot-tree.tar" \
-    "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
-    "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
+    "${BASE_DIR}/../bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
+    "${BASE_DIR}/../bootloader/grubenv:/boot/grub/grubenv:644"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-config.tar" -s 100M
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-root.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" \
     "${INSTALL_EXEC_ARGS[@]}" \

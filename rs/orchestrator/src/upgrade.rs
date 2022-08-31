@@ -62,7 +62,7 @@ impl Upgrade {
             replica_version,
             replica_config_file,
             ic_binary_dir,
-            image_path: release_content_dir.join("guest-os.tar.gz"),
+            image_path: release_content_dir.join("image.bin"),
             registry_replicator,
             logger: logger.clone(),
             prepared_upgrade_version: None,

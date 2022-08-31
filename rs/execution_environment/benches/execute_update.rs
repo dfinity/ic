@@ -381,6 +381,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
             let res = ee_test.execution_environment().execute_canister_message(

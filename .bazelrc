@@ -5,9 +5,9 @@ build --incompatible_strict_action_env # use an environment with a static value 
 build --compilation_mode=opt
 build --strip=always
 
-build --strategy_regexp=ic-os/guestos/.*=local
+build --strategy_regexp=ic-os/.*=local
 
-build:ci --remote_cache=buildfarm.dfinity.systems # TODO: set as default when the infrastructure will be reliably accessible from development machines
+build:ci --remote_cache=buildfarm.zh1-idx1.dfinity.network # TODO: set as default when the infrastructure will be reliably accessible from development machines
 build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
@@ -34,9 +34,10 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test"
 test --test_tag_filters="-system_test,-post_master"
-test --test_output=errors
-
 test:alltests --test_tag_filters=""
+
+test --test_output=errors
+test --test_env=RUST_BACKTRACE=full
 
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests

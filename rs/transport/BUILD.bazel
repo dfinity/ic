@@ -34,10 +34,13 @@ rust_test(
     edition = "2018",
     deps = [
         "//rs/crypto",
+        "//rs/crypto/tls_interfaces/mocks",
         "//rs/registry/fake",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/logger",
         "//rs/types/types_test_utils",
+        "@crate_index//:mockall",
+        "@crate_index//:tower-test",
     ],
 )

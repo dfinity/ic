@@ -13,7 +13,7 @@ use ic_protobuf::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response, StopCanisterContext},
+    messages::{Ingress, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex, Time,
 };
@@ -471,10 +471,6 @@ impl SystemState {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    ///
-    /// Returns a `CanisterOutOfCycles` error along with the provided message if
-    /// the canister's cycles balance is not sufficient to pay for cost of
-    /// sending the message.
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
@@ -486,6 +482,21 @@ impl SystemState {
             self.canister_id, msg.sender
         );
         self.queues.push_output_request(msg, time)
+    }
+
+    /// See documentation for [`CanisterQueues::reject_ic00_output_request`].
+    pub fn reject_ic00_output_request(
+        &mut self,
+        request: Request,
+        reject_context: RejectContext,
+    ) -> Result<(), StateError> {
+        assert_eq!(
+            request.sender, self.canister_id,
+            "Expected `Request` to have been sent from canister ID {}, but instead got {}",
+            self.canister_id, request.sender
+        );
+        self.queues
+            .reject_ic00_output_request(request, reject_context)
     }
 
     /// Returns the number of output requests that can be pushed onto the queue
@@ -652,10 +663,7 @@ impl SystemState {
             CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => {
-                call_context_manager.callbacks().is_empty()
-                    && call_context_manager.call_contexts().is_empty()
-            }
+            } => call_context_manager.canister_ready_to_stop(),
             CanisterStatus::Stopped => true,
         }
     }

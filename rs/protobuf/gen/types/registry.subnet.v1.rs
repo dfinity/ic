@@ -337,6 +337,9 @@ pub struct EcdsaConfig {
     /// The maximum number of signature requests that can be enqueued at once.
     #[prost(uint32, tag = "4")]
     pub max_queue_size: u32,
+    /// Signature requests will timeout after the given number of nano seconds.
+    #[prost(uint64, optional, tag = "5")]
+    pub signature_request_timeout_ns: ::core::option::Option<u64>,
 }
 #[derive(
     serde::Serialize,

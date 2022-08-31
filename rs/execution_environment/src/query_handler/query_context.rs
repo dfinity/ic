@@ -136,6 +136,8 @@ impl<'a> QueryContext<'a> {
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_message),
             subnet_available_memory,
+            // Ignore compute allocation
+            compute_allocation_used: 0,
         };
         Self {
             log,
