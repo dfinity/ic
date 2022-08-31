@@ -4810,6 +4810,7 @@ dependencies = [
  "ed25519-consensus",
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",

@@ -1,5 +1,5 @@
 use super::*;
-use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
 use ic_crypto_internal_csp::types::SigConverter;
 
 #[cfg(test)]
@@ -42,7 +42,8 @@ impl BasicSigVerifierInternal {
 
         Ok(BasicSignatureBatch { signatures_map })
     }
-    pub fn verify_basic_sig_batch<S: CspSigner, H: Signable>(
+
+    pub fn verify_basic_sig_batch_vartime<S: CspSigVerifier, H: Signable>(
         csp_signer: &S,
         registry: Arc<dyn RegistryClient>,
         signature: &BasicSignatureBatch<H>,
@@ -55,17 +56,46 @@ impl BasicSigVerifierInternal {
                     .to_string(),
             });
         };
+        let mut pk_sig_pairs =
+            Vec::<(CspPublicKey, CspSignature)>::with_capacity(signature.signatures_map.len());
+        let mut first_algorithm_id: Option<AlgorithmId> = None;
 
         for (signer, signature) in signature.signatures_map.iter() {
-            Self::verify_basic_sig(
-                csp_signer,
-                Arc::clone(&registry),
-                signature,
-                message,
+            let pk_proto = key_from_registry(
+                registry.to_owned(),
                 *signer,
+                KeyPurpose::NodeSigning,
                 registry_version,
-            )?
+            )?;
+
+            let this_algorithm_id = AlgorithmId::from(pk_proto.algorithm);
+            match first_algorithm_id {
+                Some(algorithm_id) => {
+                    if algorithm_id != this_algorithm_id {
+                        return Err(CryptoError::InvalidArgument {
+                            message: format!(
+                                "Inconsistent input AlgorithmIds in batched basic sig verification: {}, {}",
+                                algorithm_id, this_algorithm_id
+                            ),
+                        });
+                    }
+                }
+                None => first_algorithm_id = Some(this_algorithm_id),
+            }
+
+            let csp_pk = CspPublicKey::try_from(pk_proto)?;
+            let csp_sig = SigConverter::for_target(this_algorithm_id).try_from_basic(signature)?;
+            pk_sig_pairs.push((csp_pk, csp_sig));
         }
+        // `first_algorithm_id.expect()` does not panic because it's guaranteed that there was at least one valid AlgorithmId by
+        // 1) it's checked that `signature_map` is not empty, and
+        // 2) it's checked that at least `pk_proto` is well-formed,
+        // and thus `this_algorithm_id` is never `None` at this point in code.
+        csp_signer.verify_batch_vartime(
+            &pk_sig_pairs[..],
+            &message.as_signed_bytes(),
+            first_algorithm_id.expect("Something went wrong with the AlgorithmId assignment"),
+        )?;
         Ok(())
     }
 }

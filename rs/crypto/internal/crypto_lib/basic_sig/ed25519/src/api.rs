@@ -1,6 +1,7 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
@@ -103,6 +104,44 @@ pub fn verify(
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: verification_key.to_bytes().to_vec(),
             sig_bytes: sig.to_bytes().to_vec(),
+            internal_error: e.to_string(),
+        })
+}
+
+/// Verifies one or more signatures of the same message using
+/// the respective Ed25519 public key(s).
+///
+/// # Errors
+/// * `MalformedPublicKey` if the public key is malformed
+/// * `SignatureVerification` if the signature is invalid
+/// * `MalformedSignature` if the signature is malformed
+pub fn verify_batch_vartime(
+    key_signature_map: &[(&types::PublicKeyBytes, &types::SignatureBytes)],
+    msg: &[u8],
+    seed: Seed,
+) -> CryptoResult<()> {
+    let mut batch_verifier = ed25519_consensus::batch::Verifier::new();
+    for (pk, &sig) in key_signature_map {
+        let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
+            CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::Ed25519,
+                key_bytes: Some(pk.0.to_vec()),
+                internal_error: e.to_string(),
+            }
+        })?;
+        let verification_key_bytes: ed25519_consensus::VerificationKeyBytes =
+            verification_key.into();
+        let sig = ed25519_consensus::Signature::from(sig.0);
+        batch_verifier.queue((verification_key_bytes, sig, &msg));
+    }
+
+    let rng = seed.into_rng();
+    batch_verifier
+        .verify(rng)
+        .map_err(|e| CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::Ed25519,
+            public_key_bytes: vec![],
+            sig_bytes: vec![],
             internal_error: e.to_string(),
         })
 }

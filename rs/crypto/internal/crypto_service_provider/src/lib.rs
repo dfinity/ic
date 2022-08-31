@@ -21,7 +21,7 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
+    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
     NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
 };
@@ -53,6 +53,7 @@ const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 /// signing and key generation. The Csp struct implements this trait.
 pub trait CryptoServiceProvider:
     CspSigner
+    + CspSigVerifier
     + CspKeyGenerator
     + ThresholdSignatureCspClient
     + NiDkgCspClient
@@ -67,6 +68,7 @@ pub trait CryptoServiceProvider:
 
 impl<T> CryptoServiceProvider for T where
     T: CspSigner
+        + CspSigVerifier
         + CspKeyGenerator
         + ThresholdSignatureCspClient
         + CspIDkgProtocol

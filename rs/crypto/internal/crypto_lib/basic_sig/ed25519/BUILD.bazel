@@ -8,6 +8,7 @@ rust_library(
     visibility = ["//rs/crypto:__subpackages__"],
     deps = [
         "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+        "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/secrets_containers",
         "//rs/protobuf",

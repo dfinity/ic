@@ -5,9 +5,10 @@
 #![allow(clippy::too_many_arguments)]
 
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
-    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspThresholdSignError,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
+    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker,
+    CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
+    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyData,
+    ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
@@ -81,6 +82,15 @@ mock! {
             &self,
             signers: Vec<CspPublicKey>,
             signature: CspSignature,
+            msg: &[u8],
+            algorithm_id: AlgorithmId,
+        ) -> CryptoResult<()>;
+    }
+
+    pub trait CspSigVerifier{
+        fn verify_batch_vartime(
+            &self,
+            key_signature_pairs: &[(CspPublicKey, CspSignature)],
             msg: &[u8],
             algorithm_id: AlgorithmId,
         ) -> CryptoResult<()>;
