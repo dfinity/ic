@@ -126,7 +126,7 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            scheduler_config.scheduler_cores,
+            SchedulerImpl::compute_capacity(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
         ));

@@ -109,7 +109,7 @@ impl CanisterMgrConfig {
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         max_controllers: usize,
-        num_cores: usize,
+        compute_capacity: usize,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
     ) -> Self {
@@ -120,7 +120,8 @@ impl CanisterMgrConfig {
             own_subnet_id,
             own_subnet_type,
             max_controllers,
-            compute_capacity: (num_cores * allocatable_capacity_in_percent.min(100)) as u64,
+            compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
+                as u64,
             rate_limiting_of_instructions,
         }
     }
