@@ -177,8 +177,7 @@ after_script:
     # Finish and collapse the after_script section
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
 
-.nix-build-env-base:
-  extends: .cargo-rules
+.build-env-base:
   # Generally only the last push to a branch matters and older jobs can be cancelled
   # https://docs.gitlab.com/ee/ci/yaml/#interruptible
   # Jobs can override this by setting `interruptible: false`
@@ -193,6 +192,13 @@ after_script:
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0  # Pull the complete repo initially
     GIT_STRATEGY: "fetch"  # And then pull only new commits
+    SHELL_WRAPPER: "/usr/bin/time"
+
+.nix-build-env-base:
+  extends:
+    - .cargo-rules
+    - .build-env-base
+  variables:
     # Disable cargo incremental - it's incompatible with sccache.
     CARGO_INCREMENTAL: "0"
     CARGO_BUILD_INCREMENTAL: "false"
@@ -204,7 +210,6 @@ after_script:
     BUILD_COMMAND_PRE: ""
     BUILD_COMMAND: "echo Replace this with a build command"
     BUILD_COMMAND_POST: ""
-    SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -eExuo pipefail
@@ -233,8 +238,19 @@ after_script:
       "$RUSTC_WRAPPER" --show-stats || true
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
+.ubuntu-docker:
+  extends: .build-env-base
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:89320234dde8878586869729b3427dc8281fad2aba656f46307c705e488fb652"
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+
 .ubuntu-nix-docker:
-  extends: .nix-build-env-base
+  extends:
+    - .nix-build-env-base
+    - .ubuntu-docker
   # Here is how docker builds work:
   # - The $CI_COMMIT_SHA is checked out at: /builds/dfinity/ic
   # - The repo is built with $BUILD_COMMAND
@@ -242,11 +258,6 @@ after_script:
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:89320234dde8878586869729b3427dc8281fad2aba656f46307c705e488fb652"
-  tags:
-    # Build on runners that have following tags
-    - dfinity
-    - docker
-    - ubuntu
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"
