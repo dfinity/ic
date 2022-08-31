@@ -58,7 +58,7 @@ fn scalar_multiexp_naive(terms: &[(Scalar, Scalar)]) -> Scalar {
 }
 
 fn g1_multiexp_naive(terms: &[(G1Projective, Scalar)]) -> G1Projective {
-    let mut accum = G1Projective::identity();
+    let mut accum = *G1Projective::identity();
     for (pt, s) in terms {
         accum += *pt * s;
     }

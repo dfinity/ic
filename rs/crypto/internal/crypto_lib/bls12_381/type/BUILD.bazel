@@ -15,7 +15,9 @@ DEPENDENCIES = [
     "@crate_index//:zeroize",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:paste",
+]
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",

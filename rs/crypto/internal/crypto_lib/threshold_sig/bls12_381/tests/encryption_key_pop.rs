@@ -12,7 +12,7 @@ fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
     let associated_data = rng.gen::<[u8; 10]>().to_vec();
 
     let instance = EncryptionKeyInstance {
-        g1_gen: g1,
+        g1_gen: *g1,
         public_key,
         associated_data,
     };

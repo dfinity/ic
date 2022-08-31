@@ -35,8 +35,8 @@ impl SharingInstance {
         combined_ciphertexts: Vec<G1Affine>,
     ) -> Self {
         Self {
-            g1_gen: G1Affine::generator(),
-            g2_gen: G2Affine::generator(),
+            g1_gen: *G1Affine::generator(),
+            g2_gen: *G2Affine::generator(),
             public_keys,
             public_coefficients,
             combined_randomizer,

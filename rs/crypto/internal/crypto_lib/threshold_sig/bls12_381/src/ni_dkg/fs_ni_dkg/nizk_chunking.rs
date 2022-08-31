@@ -58,7 +58,7 @@ impl ChunkingInstance {
         randomizers_r: Vec<G1Affine>,
     ) -> Self {
         Self {
-            g1_gen: G1Affine::generator(),
+            g1_gen: *G1Affine::generator(),
             public_keys,
             ciphertext_chunks,
             randomizers_r,
@@ -270,7 +270,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // Y = product [y_i^delta_i | i <- [0..n]]
     let mut delta = Vec::with_capacity(spec_n + 1);
     let mut dd = Vec::with_capacity(spec_n + 1);
-    let mut yy = G1Projective::identity();
+    let mut yy = *G1Projective::identity();
     for i in 0..spec_n + 1 {
         let delta_i = Scalar::miracl_random(rng);
         dd.push(G1Affine::from(g1 * delta_i));

@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 bls12_381 = { git = "https://github.com/dfinity/bls12_381", branch = "main", default-features = false, features = ["groups", "pairings", "alloc", "experimental", "zeroize"] }
 pairing = "0.22"
+paste = "1.0.7"
 subtle = "2.4"
 sha2 = "0.9"
 rand = "0.8"
