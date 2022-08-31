@@ -70,6 +70,7 @@ type TreasuryDistribution = record { total_e8s : nat64 };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
+  get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
     ) query;

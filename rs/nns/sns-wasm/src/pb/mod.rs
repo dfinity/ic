@@ -8,9 +8,10 @@ use crate::stable_memory::SnsWasmStableMemory;
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha::Sha256;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
+use std::str::FromStr;
 
 #[allow(clippy::all)]
 #[path = "../../gen/ic_sns_wasm.pb.v1.rs"]
@@ -76,6 +77,23 @@ impl From<SnsVersion> for GetNextSnsVersionResponse {
         GetNextSnsVersionResponse {
             next_version: Some(version),
         }
+    }
+}
+
+impl Display for SnsVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut versions_str = HashMap::<&str, String>::new();
+
+        versions_str.insert("Root", hex::encode(&self.root_wasm_hash));
+        versions_str.insert("Governance", hex::encode(&self.governance_wasm_hash));
+        versions_str.insert("Ledger", hex::encode(&self.ledger_wasm_hash));
+        versions_str.insert("Swap", hex::encode(&self.swap_wasm_hash));
+        versions_str.insert("Archive", hex::encode(&self.archive_wasm_hash));
+
+        let json = serde_json::to_string(&versions_str)
+            .unwrap_or_else(|e| format!("Unable to serialize SnsVersion: {}", e));
+
+        write!(f, "{}", json)
     }
 }
 
@@ -215,5 +233,21 @@ impl SnsCanisterIds {
             principal_id.map(|principal_id| (label, CanisterId::new(principal_id).unwrap()))
         })
         .collect()
+    }
+}
+
+impl FromStr for SnsCanisterType {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<SnsCanisterType, Self::Err> {
+        match input {
+            "Unspecified" => Ok(SnsCanisterType::Unspecified),
+            "Root" => Ok(SnsCanisterType::Root),
+            "Governance" => Ok(SnsCanisterType::Governance),
+            "Ledger" => Ok(SnsCanisterType::Ledger),
+            "Swap" => Ok(SnsCanisterType::Swap),
+            "Archive" => Ok(SnsCanisterType::Archive),
+            _ => Err(()),
+        }
     }
 }
