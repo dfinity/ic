@@ -1,6 +1,6 @@
 bazel-test-all:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-docker
     - .bazel-rules-pipeline
   tags:
     - dfinity
@@ -8,9 +8,6 @@ bazel-test-all:
     - ubuntu
     # Run in ZH since BuildFarm is in ZH
     - zh
-  image:
-    # use the docker image without nix-shell as docker-run uses it too.
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:89320234dde8878586869729b3427dc8281fad2aba656f46307c705e488fb652"
   stage: test
   needs: []
   artifacts:
