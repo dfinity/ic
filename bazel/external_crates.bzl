@@ -386,6 +386,9 @@ def external_crates_repository(name, annotations):
             "jemallocator": crate.spec(
                 version = "^0.3.2",
             ),
+            "json-patch": crate.spec(
+                version = "^0.2.6",
+            ),
             "json5": crate.spec(
                 version = "^0.4.1",
             ),

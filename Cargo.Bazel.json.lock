@@ -1,5 +1,5 @@
 {
-  "checksum": "4aa40f9303ec2b3a7a60a7ed158e3d6c8e5bc47f69971cb6d1faeb5693e72e6e",
+  "checksum": "adf7c24368f3cd8b7ffcc2d3935713482c923360d0ce699fe07dd92d626003bb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11313,6 +11313,10 @@
               "target": "jemallocator"
             },
             {
+              "id": "json-patch 0.2.6",
+              "target": "json_patch"
+            },
+            {
               "id": "json5 0.4.1",
               "target": "json5"
             },
@@ -19774,6 +19778,61 @@
         },
         "edition": "2018",
         "version": "0.3.59"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "json-patch 0.2.6": {
+      "name": "json-patch",
+      "version": "0.2.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/json-patch/0.2.6/download",
+          "sha256": "f995a3c8f2bc3dd52a18a583e90f9ec109c047fa1603a853e46bcda14d2e279d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "json_patch",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "json_patch",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "diff",
+          "treediff"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.144",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.85",
+              "target": "serde_json"
+            },
+            {
+              "id": "treediff 3.0.2",
+              "target": "treediff"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.6"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -43196,6 +43255,52 @@
         ],
         "edition": "2015",
         "version": "0.1.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "treediff 3.0.2": {
+      "name": "treediff",
+      "version": "3.0.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/treediff/3.0.2/download",
+          "sha256": "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "treediff",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "treediff",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "serde_json",
+          "with-serde-json"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde_json 1.0.85",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "3.0.2"
       },
       "license": "MIT/Apache-2.0"
     },
