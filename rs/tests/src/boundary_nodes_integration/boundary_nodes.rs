@@ -590,10 +590,10 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "redirect http to https";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect http to https";
-
             let res = client.get("http://ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
@@ -611,10 +611,10 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client;
+        let name = "redirect raw http to https";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect raw http to https";
-
             let res = client.get("http://raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
@@ -632,6 +632,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -684,10 +685,10 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "redirect to dashboard";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect to dashboard";
-
             let res = client.get("https://ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::FOUND {
@@ -705,10 +706,10 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client;
+        let name = "redirect raw to dashboard";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect raw to dashboard";
-
             let res = client.get("https://raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::FOUND {
@@ -726,6 +727,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -777,10 +779,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "redirect status to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect status to non-raw domain";
-
             let res = client
                 .get("https://raw.ic0.app/api/v2/status")
                 .send()
@@ -801,10 +803,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "redirect query to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect query to non-raw domain";
-
             let res = client
                 .post("https://raw.ic0.app/api/v2/canister/CID/query")
                 .send()
@@ -825,10 +827,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "redirect call to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect call to non-raw domain";
-
             let res = client
                 .post("https://raw.ic0.app/api/v2/canister/CID/call")
                 .send()
@@ -849,10 +851,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client;
+        let name = "redirect read_state to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "redirect read_state to non-raw domain";
-
             let res = client
                 .post("https://raw.ic0.app/api/v2/canister/CID/read_state")
                 .send()
@@ -873,6 +875,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -924,10 +927,10 @@ pub fn sw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "get index.html with sw.js include from root path";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get index.html with sw.js include from root path";
-
             let res = client.get("https://CID.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
@@ -950,10 +953,10 @@ pub fn sw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "get index.html with sw.js include from non-root path";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get index.html with sw.js include from non-root path";
-
             let res = client.get("https://CID.ic0.app/a/b/c").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
@@ -976,10 +979,10 @@ pub fn sw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "get service-worker bundle";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get service-worker bundle";
-
             let res = client.get("https://CID.ic0.app/sw.js").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
@@ -1009,10 +1012,10 @@ pub fn sw_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client;
+        let name = "get uninstall script";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get uninstall script";
-
             let res = client
                 .get("https://CID.ic0.app/anything.js")
                 .header("Service-Worker", "script")
@@ -1046,6 +1049,7 @@ pub fn sw_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -1098,10 +1102,10 @@ pub fn icx_proxy_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "get sent to icx-proxy via /_/raw/";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get sent to icx-proxy via /_/raw/";
-
             let res = client.get("https://CID.ic0.app/_/raw/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
@@ -1121,10 +1125,10 @@ pub fn icx_proxy_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client;
+        let name = "get sent to icx-proxy via raw domain";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "get sent to icx-proxy via raw domain";
-
             let res = client.get("https://CID.raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
@@ -1144,6 +1148,7 @@ pub fn icx_proxy_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -1197,10 +1202,10 @@ pub fn direct_to_replica_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "status from random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "status from random node";
-
             let res = client.get("https://ic0.app/api/v2/status").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
@@ -1231,10 +1236,10 @@ pub fn direct_to_replica_test(env: TestEnv) {
         let logger = logger.clone();
         let client = client.clone();
         let install_url = install_url.clone();
+        let name = "query random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "query random node";
-
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
@@ -1274,10 +1279,10 @@ pub fn direct_to_replica_test(env: TestEnv) {
         let logger = logger.clone();
         let client = client;
         let install_url = install_url;
+        let name = "update random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "update random node";
-
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
@@ -1321,6 +1326,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -1374,10 +1380,10 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
 
     futs.push(rt.spawn({
         let client = client.clone();
+        let name = "rosetta: status from random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "rosetta: status from random node";
-
             let res = client
                 .get("https://rosetta.dfinity.network/api/v2/status")
                 .send()
@@ -1411,10 +1417,10 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         let logger = logger.clone();
         let client = client.clone();
         let install_url = install_url.clone();
+        let name = "rosetta: query random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "rosetta: query random node";
-
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
@@ -1457,10 +1463,10 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         let logger = logger.clone();
         let client = client;
         let install_url = install_url;
+        let name = "rosetta: update random node";
+        info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let name = "rosetta: update random node";
-
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
@@ -1506,6 +1512,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
 
     rt.block_on(async move {
         let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
