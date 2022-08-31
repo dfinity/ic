@@ -198,6 +198,35 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
+fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
+    let mut rng = test_rng::test_rng();
+    for curve_type in EccCurveType::all() {
+        for window_size in [3, 4, 5, 6, 7] {
+            let g = EccPoint::generator_g(curve_type)?;
+
+            // 0, 1, -1 (maximum value), 100 random values
+            let mut scalars = Vec::with_capacity(103);
+            scalars.push(EccScalar::zero(curve_type));
+            scalars.push(EccScalar::one(curve_type));
+            scalars.push(EccScalar::one(curve_type).negate());
+            for _ in 0..100 {
+                scalars.push(EccScalar::random(curve_type, &mut rng)?);
+            }
+
+            // test correctness for the generated scalars
+            for scalar in scalars {
+                let p = EccPointWithLut::new(&g, window_size)?;
+                let computed_point = p.scalar_mul_vartime(&scalar)?;
+                let expected_point = g.scalar_mul(&scalar)?;
+                assert_eq!(computed_point, expected_point);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_point_negate() -> ThresholdEcdsaResult<()> {
     let mut rng = test_rng::test_rng();
 
@@ -217,6 +246,62 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 
             let should_be_zero = n_random_point.add_points(&random_point)?;
             assert_eq!(should_be_zero, id);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
+    assert_eq!(EccPointWithLut::MIN_WINDOW_SIZE, 3);
+    assert_eq!(EccPointWithLut::MAX_WINDOW_SIZE, 7);
+
+    let mut rng = test_rng::test_rng();
+
+    for curve_type in EccCurveType::all() {
+        for window_size in [3, 4, 5, 6, 7] {
+            let g = EccPoint::generator_g(curve_type)?;
+            let mut random_pair = || -> ThresholdEcdsaResult<_> {
+                Ok((
+                    g.scalar_mul(&EccScalar::random(curve_type, &mut rng)?)?,
+                    EccScalar::random(curve_type, &mut rng)?,
+                ))
+            };
+
+            for num_terms in [1, 2, 3, 4, 5, 10, 30, 50] {
+                // generate point-scalar pairs
+                let pairs: Vec<_> = (0..num_terms)
+                    .map(|_| random_pair())
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let mut prec_points = Vec::<EccPointWithLut>::with_capacity(num_terms);
+
+                for (p, _s) in pairs.iter() {
+                    prec_points.push(EccPointWithLut::new(p, window_size)?);
+                }
+
+                // create refs of pairs
+                let mut refs_of_pairs =
+                    Vec::<(&EccPointWithLut, &EccScalar)>::with_capacity(num_terms);
+
+                for i in 0..num_terms {
+                    refs_of_pairs.push((&prec_points[i], &pairs[i].1));
+                }
+
+                // compute the result using an optimized algorithm, which is to be tested
+                let computed_result = EccPointWithLut::mul_n_points_vartime_naf(&refs_of_pairs)?;
+                // compute the result using a non-optimized algorithm, which is assumed to always be correct
+                let expected_result =
+                    pairs
+                        .iter()
+                        .try_fold(EccPoint::identity(curve_type), |acc, &pair| {
+                            let &(p, s) = &pair;
+                            // acc += p * s
+                            acc.add_points(&p.scalar_mul(&s)?)
+                        })?;
+                assert_eq!(computed_result, expected_result);
+            }
         }
     }
 

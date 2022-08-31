@@ -31,6 +31,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "@crate_index//:bip32",
     "@crate_index//:criterion",
+    "@crate_index//:num-traits",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

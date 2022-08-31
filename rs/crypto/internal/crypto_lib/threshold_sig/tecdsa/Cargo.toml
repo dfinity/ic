@@ -30,6 +30,7 @@ lazy_static = "1.4.0"
 criterion = { version = "0.3", features = ["html_reports"] }
 k256 = { version = "0.11", features = ["ecdsa"] }
 bip32 = { version = "0.4", features = ["secp256k1"] }
+num-traits = { version = "0.2.15" }
 
 [[bench]]
 name = "field_ops"
@@ -49,4 +50,8 @@ harness = false
 
 [[bench]]
 name = "zk"
+harness = false
+
+[[bench]]
+name = "group_ops"
 harness = false
