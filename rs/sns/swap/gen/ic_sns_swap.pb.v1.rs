@@ -1,8 +1,170 @@
+/// The 'swap' canister smart contract is used to perform a type of
+/// single-price auction (SNS/ICP) of one token type SNS for another token
+/// type ICP (this is typically ICP, but can be treated as a variable) at a
+/// specific date/time in the future.
+///
+/// Such a single-price auction is typically used to decentralize an SNS,
+/// i.e., to ensure that a sufficient number of governance tokens of the
+/// SNS are distributed among different participants.
+///
+/// State (lifecycle) diagram for the swap canister's state.
+///
+/// ```text
+///                                  sufficient_participantion && (swap_due || icp_target_reached)
+/// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
+///                             |                                                                  |
+///                             | swap_due && not sufficient_participation                         |
+///                             v                                                                  v
+///                             ABORTED -------------------------------------------------------> <DELETED>
+/// ```
+///
+/// Here `sufficient_participation` means that the minimum number of
+/// participants `min_participants` has been reached, each contributing
+/// between `min_participant_icp_e8s` and `max_participant_icp_e8s`, and
+/// their total contributions add up to at least `min_icp_e8s` and at most
+/// `max_icp_e8s`.
+///
+///
+/// The dramatis personae of the 'swap' canister are as follows:
+///
+/// - The swap canister itself.
+///
+/// - The NNS governance canister - which is the only principal that can open the swap.
+///
+/// - The governance canister of the SNS to be decentralized.
+///
+/// - The ledger canister of the SNS, i.e., the ledger of the token type
+///   being sold.
+///
+/// - The ICP ledger cansiter, or more generally of the base currency of
+///   the auction.
+///
+/// - The root canister of the SNS to control aspects of the SNS not
+///   controlled by the SNS governance canister.
+///
+/// When the swap canister is initialized, it must be configured with
+/// the canister IDs of the other participant canisters.
+///
+/// The next step is to provide SNS tokens for the swap. This normally
+/// happens when the canister is in the PENDING state, and the amount
+/// is validated in the call to `open`.
+///
+/// The request to open the swap has to originate from the NNS governance
+/// cansiter. The request specifies the parameters of the swap, i.e., the
+/// date/time at which the token swap will take place, the minimal number
+/// of participants, the minimum number of base tokens (ICP) of each
+/// paricipant, as well as the minimum and maximum number (reserve and
+/// target) of base tokens (ICP) of the swap.
+///
+/// Step 0. The canister is created, specifying the initalization
+/// parameters, which are henceforth fixed for the lifetime of the
+/// canister.
+///
+/// Step 1 (State PENDING). The swap canister is loaded with the right
+/// amount of SNS tokens. A call to `open` will then transition the
+/// canister to the OPEN state.
+///
+/// Step 2. (State OPEN). The field `params` is received as an argument
+/// to the call to `open` and is henceforth immutable. The amount of
+/// SNS token is verified against the SNS ledger. The swap is open for
+/// paricipants who can enter into the auction with a number of ICP
+/// tokens until either the target amount has been reached or the
+/// auction is due, i.e., the date/time of the auction has been
+/// reached. The transition to COMMITTED or ABORTED happens
+/// automatically (on the canister heartbeat) when the necessary
+/// conditions are fulfilled.
+///
+/// Step 3a. (State COMMITTED). Tokens are allocated to partcipants at
+/// a single clearing price, i.e., the number of SNS tokens being
+/// offered divided by the total number of ICP tokens contributed to
+/// the swap. In this state, a call to `finalize` will create SNS
+/// neurons for each participant and transfer ICP to the SNS governance
+/// canister. The call to `finalize` does not happen automatically
+/// (i.e., on the canister heartbeat) so that there is a caller to
+/// respond to with potential errors.
+///
+/// Step 3b. (State ABORTED). If the parameters of the swap have not
+/// been satisfied before the due date/time, the swap is aborted and
+/// the ICP tokens transferred back to their respective owners.
+///
+/// The 'swap' canister can be deleted when all tokens registered with the
+/// 'swap' canister have been disbursed to their rightful owners.
+///
+/// The logic of this canister is based on the following principles.
+///
+/// * Message fields are never removed.
+///
+/// * Integer and enum fields can only have their values increase (with
+/// one exception, viz., the timestamp field for the start of a
+/// transfer is reset if the transfer fails).
+///
+/// Data flow for the community fund.
+///
+/// - A SNS is created.
+/// - Proposal to open a decentralization sale for the SNS is submitted to the NNS.
+///   - ProposalToOpenDecentralizationSale
+///     - The Community Fund investment amount
+///     - The parameters of the decentralization sale (`Params`).
+///   - Call to open swap:
+///     - Parameters
+///     - CF Investments
+///     - NNS Proposal ID of the NNS proposal to open the swap.
+/// - On accept of proposal to open decentralization sale:
+///   - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
+///   - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
+///   - Call back to NNS governance after the swap is committed or aborted:
+///     - On committed swap:
+///       - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
+///     - On aborted swap:
+///       - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
+/// - On reject of proposal to open decentralization sale:
+///   - Assign the control of the dapp (now under the SNS control) back to the specified principals.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Swap {
+    /// The current lifecycle of the swap.
+    #[prost(enumeration = "Lifecycle", tag = "3")]
+    pub lifecycle: i32,
+    /// Specified on creation. That is, always specified and immutable.
+    #[prost(message, optional, tag = "1")]
+    pub init: ::core::option::Option<Init>,
+    /// Specified in the transition from PENDING to OPEN and immutable
+    /// thereafter.
+    #[prost(message, optional, tag = "4")]
+    pub params: ::core::option::Option<Params>,
+    /// Community fund participation.  Specified in the transition from
+    /// PENDING to OPEN and immutable thereafter.
+    #[prost(message, repeated, tag = "5")]
+    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
+    /// Empty in the PENDING state. In the OPEN state, new buyers can be
+    /// added and existing buyers can increase their bids. In the
+    /// COMMITTED and ABORTED states, the amount cannot be modified, and
+    /// the transfer timestamps are filled in.
+    ///
+    /// The key is the textual representation of the buyer's principal
+    /// and the value represents the bid.
+    #[prost(btree_map = "string, message", tag = "6")]
+    pub buyers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, BuyerState>,
+    /// When the swap is committed, this field is initialized according
+    /// to the outcome of the swap.
+    #[prost(message, repeated, tag = "7")]
+    pub neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
+    /// This field represents the request to NNS governance to mint ICP
+    /// for SNS governance on behalf of the community fund investments.
+    #[prost(message, optional, tag = "8")]
+    pub cf_minting: ::core::option::Option<TransferableAmount>,
+}
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
 ///
 /// If the initialization parameters are incorrect, the swap will
-/// immediately become aborted.
+/// immediately be aborted.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -28,26 +190,65 @@ pub struct Init {
     /// so, in principle, any token type can be used as base token.
     #[prost(string, tag = "4")]
     pub icp_ledger_canister_id: ::prost::alloc::string::String,
-    /// The number of ICP that is "targeted" by this token swap. If this
-    /// amount is achieved, the swap can be triggered immediately,
-    /// without waiting for the due date (end_timestamp_seconds). Must be
-    /// at least `min_participants * min_participant_icp_e8s`.
-    #[prost(uint64, tag = "5")]
-    pub max_icp_e8s: u64,
+    /// Analogous to `sns_governance_canister_id`, but for the "root"
+    /// canister instead of the governance canister.
+    #[prost(string, tag = "12")]
+    pub sns_root_canister_id: ::prost::alloc::string::String,
+    /// If the swap is aborted, control of the canister(s) should be set to these
+    /// principals. Must not be empty.
+    #[prost(string, repeated, tag = "11")]
+    pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// Represents one NNS neuron from the community fund participating in this swap.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CfNeuron {
+    /// The NNS neuron ID of the participating neuron.
+    #[prost(fixed64, tag = "1")]
+    pub nns_neuron_id: u64,
+    /// The amount of ICP that the community fund invests associated
+    /// with this neuron.
+    #[prost(uint64, tag = "2")]
+    pub amount_icp_e8s: u64,
+}
+/// Represent CF participant, possibly with several neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CfParticipant {
+    /// The principal that can vote on behalf of these CF neurons.
+    #[prost(string, tag = "1")]
+    pub hotkey_principal: ::prost::alloc::string::String,
+    /// Information about the participating neurons. Must not be empty.
+    #[prost(message, repeated, tag = "2")]
+    pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
+}
+/// The parameters of the swap, provided in the call to 'open'. Cannot
+/// be modified after the call to 'open'.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Params {
     /// The minimum number of buyers that must participate for the swap
     /// to take place. Must be greater than zero.
-    #[prost(uint32, tag = "7")]
+    #[prost(uint32, tag = "1")]
     pub min_participants: u32,
-    /// The minimum amount of ICP that each buyer must contribute to
-    /// participate. Must be greater than zero.
-    #[prost(uint64, tag = "8")]
-    pub min_participant_icp_e8s: u64,
-    /// The maximum amount of ICP that each buyer can contribute. Must be
-    /// greater than or equal to `min_participant_icp_e8s` and less than
-    /// or equal to `max_icp_e8s`. Can effectively be disabled by
-    /// setting it to `max_icp_e8s`.
-    #[prost(uint64, tag = "9")]
-    pub max_participant_icp_e8s: u64,
     /// The total number of ICP that is required for this token swap to
     /// take place. This number divided by the number of SNS tokens being
     /// offered gives the seller's reserve price for the swap, i.e., the
@@ -55,16 +256,57 @@ pub struct Init {
     /// tokens is willing to accept. If this amount is not achieved, the
     /// swap will be aborted (instead of committed) when the due date/time
     /// occurs. Must be smaller than or equal to `max_icp_e8s`.
-    #[prost(uint64, tag = "10")]
+    #[prost(uint64, tag = "2")]
     pub min_icp_e8s: u64,
-    /// If the swap is aborted, control of the canister(s) should be set to these
-    /// principal(s). Must not be empty.
-    #[prost(string, repeated, tag = "11")]
-    pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// Analogous to sns_governance_canister_id. Of course, this relates to SNS
-    /// root, rather than SNS governance.
-    #[prost(string, tag = "12")]
-    pub sns_root_canister_id: ::prost::alloc::string::String,
+    /// The number of ICP that is "targetted" by this token swap. If this
+    /// amount is achieved, the swap will be triggered immediately,
+    /// without waiting for the due date (`end_timestamp_seconds`). This
+    /// means that an investor knows the minimum number of SNS tokens
+    /// received per invested ICP. Must be at least `min_participants *
+    /// min_participant_icp_e8s`.
+    #[prost(uint64, tag = "3")]
+    pub max_icp_e8s: u64,
+    /// The minimum amount of ICP that each buyer must contribute to
+    /// participate. Must be greater than zero.
+    #[prost(uint64, tag = "4")]
+    pub min_participant_icp_e8s: u64,
+    /// The maximum amount of ICP that each buyer can contribute. Must be
+    /// greater than or equal to `min_participant_icp_e8s` and less than
+    /// or equal to `max_icp_e8s`. Can effectively be disabled by
+    /// setting it to `max_icp_e8s`.
+    #[prost(uint64, tag = "5")]
+    pub max_participant_icp_e8s: u64,
+    /// The date/time when the swap is due, i.e., it will automatically
+    /// end and commit or abort depending on whether the parameters have
+    /// been fulfilled.
+    #[prost(uint64, tag = "6")]
+    pub swap_due_timestamp_seconds: u64,
+    /// The number of tokens (of `init.sns_ledger_canister_id`) that are
+    /// being offered. The tokens are held in escrow for the the SNS
+    /// governance canister.
+    ///
+    /// Invariant for the OPEN state:
+    /// ```text
+    /// state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
+    /// ```
+    #[prost(uint64, tag = "7")]
+    pub sns_token_e8s: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TransferableAmount {
+    #[prost(uint64, tag = "1")]
+    pub amount_e8s: u64,
+    #[prost(uint64, tag = "2")]
+    pub transfer_start_timestamp_seconds: u64,
+    #[prost(uint64, tag = "3")]
+    pub transfer_success_timestamp_seconds: u64,
 }
 #[derive(
     candid::CandidType,
@@ -75,50 +317,32 @@ pub struct Init {
     ::prost::Message,
 )]
 pub struct BuyerState {
+    /// The amount of ICP accepted from this buyer. ICP is accepted by
+    /// first making a ledger transfer and then calling the method
+    /// `refresh_buyer_token_e8s`.
+    ///
     /// Can only be set when a buyer state record for a new buyer is
     /// created, which can only happen when the lifecycle state is
-    /// `Open`. Must be at least `init.min_participant_icp_e8s` on
-    /// initialization. Can never be more than
-    /// `init.max_participant_icp_e8s`. Will be set to zero once the
-    /// tokens have been transferred out - either to the governance
-    /// canister when the swap is committed or (back) to the buyer when
-    /// the swap is aborted.
+    /// `Open`. Must be at least `min_participant_icp_e8s`, and at most
+    /// `max_participant_icp_e8s`.
     ///
-    /// Invariant between canisters:
+    /// Invariant between canisters in the OPEN state:
     ///
     ///  ```text
-    ///  amount_icp_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
+    ///  icp.amount_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
     ///  ```
     ///
     /// where `P` is the principal ID associated with this buyer's state.
     ///
     /// ownership
-    /// * pending - a `BuyerState` cannot exists
-    /// * open - owned by the buyer, cannot be transferred out
-    /// * committed - owned by the SNS governance canister, can be transferred out
-    /// * aborted - owned by the buyer, can be transferred out
-    #[prost(uint64, tag = "1")]
-    pub amount_icp_e8s: u64,
-    /// Computed when world lifecycle changes to Committed.
-    ///
-    /// ownership:
-    /// * pending - a `BuyerState` cannot exists
-    /// * open - must be zero
-    /// * committed - owned by the buyer, can be transferred out
-    /// * aborted - must be zero
-    #[prost(uint64, tag = "2")]
-    pub amount_sns_e8s: u64,
-    /// Only used in state Committed or Aborted: ICP tokens are being
-    /// transferred either to the governance canister when the swap is
-    /// committed or to the buyer when the swap is aborted.
-    #[prost(bool, tag = "3")]
-    pub icp_disbursing: bool,
-    /// Only used in state Committed, when a transfer of
-    /// `amount_sns_e8s` is in progress.
-    #[prost(bool, tag = "4")]
-    pub sns_disbursing: bool,
+    /// * PENDING - a `BuyerState` cannot exists
+    /// * OPEN - owned by the buyer, cannot be transferred out
+    /// * COMMITTED - owned by the SNS governance canister, can be transferred out
+    /// * ABORTED - owned by the buyer, can be transferred out
+    #[prost(message, optional, tag = "5")]
+    pub icp: ::core::option::Option<TransferableAmount>,
 }
-/// Mutable state of the swap canister.
+/// Information about a direct investor.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -127,52 +351,12 @@ pub struct BuyerState {
     PartialEq,
     ::prost::Message,
 )]
-pub struct State {
-    /// The number of tokens (of `init.sns_ledger_canister_id`) that are
-    /// being offered. The tokens are held in escrow for the the Governance
-    /// canister.
-    ///
-    /// Invariant:
-    /// ```text
-    /// state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
-    /// ```
-    ///
-    /// When the swap is committed or aborted, this value is set to
-    /// zero. Any remaining balance, either due to fractions or due to an
-    /// aborted swap can be reclaimed by the Governance canister.
-    #[prost(uint64, tag = "1")]
-    pub sns_token_e8s: u64,
-    /// Invariant:
-    /// ```text
-    /// state.buyer_total_icp_e8s <= init.max_icp_e8s
-    /// ```
-    #[prost(btree_map = "string, message", tag = "2")]
-    pub buyers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, BuyerState>,
-    /// The current lifecycle state of the swap.
-    #[prost(enumeration = "Lifecycle", tag = "3")]
-    pub lifecycle: i32,
-    /// Initially, empty. Later, set by the set_open_time_window Candid method,
-    /// while the canister is in the Pending state. This eventually allows the
-    /// canister to enter the Open state.
-    #[prost(message, optional, tag = "4")]
-    pub open_time_window: ::core::option::Option<TimeWindow>,
+pub struct DirectInvestment {
+    #[prost(string, tag = "1")]
+    pub buyer_principal: ::prost::alloc::string::String,
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Copy,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct TimeWindow {
-    #[prost(uint64, tag = "1")]
-    pub start_timestamp_seconds: u64,
-    #[prost(uint64, tag = "2")]
-    pub end_timestamp_seconds: u64,
-}
-/// The complete state of the swap canister.
+/// Information about a community fund investment. The NNS Governance
+/// canister is the controller of these neurons.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -181,16 +365,72 @@ pub struct TimeWindow {
     PartialEq,
     ::prost::Message,
 )]
-pub struct Swap {
+pub struct CfInvestment {
+    #[prost(string, tag = "1")]
+    pub hotkey_principal: ::prost::alloc::string::String,
+    #[prost(fixed64, tag = "2")]
+    pub nns_neuron_id: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SnsNeuronRecipe {
     #[prost(message, optional, tag = "1")]
-    pub init: ::core::option::Option<Init>,
-    #[prost(message, optional, tag = "2")]
-    pub state: ::core::option::Option<State>,
+    pub sns: ::core::option::Option<TransferableAmount>,
+    #[prost(oneof = "sns_neuron_recipe::Investor", tags = "2, 3")]
+    pub investor: ::core::option::Option<sns_neuron_recipe::Investor>,
+}
+/// Nested message and enum types in `SnsNeuronRecipe`.
+pub mod sns_neuron_recipe {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Investor {
+        #[prost(message, tag = "2")]
+        Direct(super::DirectInvestment),
+        #[prost(message, tag = "3")]
+        CommunityFund(super::CfInvestment),
+    }
 }
 //
 // === Request/Response Messages
 //
 
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct OpenRequest {
+    /// The parameters of the swap.
+    #[prost(message, optional, tag = "1")]
+    pub params: ::core::option::Option<Params>,
+    /// Community fund participation.
+    #[prost(message, repeated, tag = "2")]
+    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct OpenResponse {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -286,54 +526,6 @@ pub struct DerivedState {
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
 }
-/// See `set_open_time_window` for details.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct SetOpenTimeWindowRequest {
-    /// Duration must be between 1 and 90 days. The TimeWindow's
-    /// end time but be greater than or equal to the TimeWindow's
-    /// start time.
-    #[prost(message, optional, tag = "1")]
-    pub open_time_window: ::core::option::Option<TimeWindow>,
-}
-/// Response if setting the open time window succeeded.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct SetOpenTimeWindowResponse {}
-/// Informs the swap canister that the swap has been funded. That is, the initial
-/// pot of tokens being offered has been transferred to the swap canister.
-///
-/// Only in lifecycle state 'pending'.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct RefreshSnsTokensRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct RefreshSnsTokensResponse {}
 /// Informs the swap canister that a buyer has sent funds to participate in the
 /// swap.
 ///
@@ -359,7 +551,12 @@ pub struct RefreshBuyerTokensRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct RefreshBuyerTokensResponse {}
+pub struct RefreshBuyerTokensResponse {
+    #[prost(uint64, tag = "1")]
+    pub icp_accepted_partipation_e8s: u64,
+    #[prost(uint64, tag = "2")]
+    pub icp_ledger_account_balance_e8s: u64,
+}
 /// Once a swap is committed or aborted, the tokens need to be
 /// distributed, and, if the swap was committed, neurons created.
 #[derive(
@@ -552,8 +749,8 @@ pub struct ErrorRefundIcpRequest {
     ::prost::Message,
 )]
 pub struct ErrorRefundIcpResponse {}
-/// Lifecycle states of the swap canister's world state. The details of
-/// their meanings is provided in the documentation of the `Swap`.
+/// Lifecycle states of the swap canister. The details of their meanings
+/// are provided in the documentation of the `Swap` message.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -570,22 +767,24 @@ pub struct ErrorRefundIcpResponse {}
 )]
 #[repr(i32)]
 pub enum Lifecycle {
-    /// Canister is incorrectly configured. Not a real lifecycle state.
+    /// The canister is incorrectly configured. Not a real lifecycle state.
     Unspecified = 0,
-    /// The canister is correctly initialized and waiting for ALL of the
-    /// following conditions to be met in order to transition to OPEN:
-    ///   1. Funded. More precisely, this means that
-    ///     a. SNS tokens have been sent to the canister, and
-    ///     b. The refresh_sns_tokens Candid method has been called
-    ///        (to notify that the funds have been sent).
-    ///   2. The current time is not before start_timestamp_seconds, which is set
-    ///      via the set_open_time_window Candid method.
+    /// In this state, the canister is correctly initialized. Once SNS
+    /// tokens have been transferred to the swap canister's account on
+    /// the SNS ledger, a call to `open` with valid parameters will start
+    /// the swap.
     Pending = 1,
-    /// Users can register for the token swap.
+    /// In this state, prospective buyers can register for the token
+    /// swap. The swap will be committed when the target (max) ICP has
+    /// been reached or the swap's due date/time occurs, whichever
+    /// happens first.
     Open = 2,
-    /// The token price has been determined and buyers can collect
-    /// their tokens.
+    /// The token price has been determined; on a call to `finalize`,
+    /// buyers receive their SNS neurons and the SNS governance canister
+    /// receives the ICP.
     Committed = 3,
-    /// The token swap has been aborted.
+    /// The token swap has been aborted, e.g., because the due date/time
+    /// occured before the minimum (reserve) amount of ICP has been
+    /// retrieved. On a call to `finalize`, participants get their ICP refunded.
     Aborted = 4,
 }
