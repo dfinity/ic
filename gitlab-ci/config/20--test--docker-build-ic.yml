@@ -6,6 +6,8 @@
   artifacts:
     reports:
       dotenv: nns.release.env
+    paths:
+      - bazel-build-log*.json*
   script:
     - |
       set -euo pipefail

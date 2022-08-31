@@ -1,5 +1,5 @@
 {
-  "checksum": "adf7c24368f3cd8b7ffcc2d3935713482c923360d0ce699fe07dd92d626003bb",
+  "checksum": "7657e0ad1593fddecc3d82d52ea77f1a8406b5cf6d17aa218a23c324ce10ff11",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -325,7 +325,7 @@
               "target": "http"
             },
             {
-              "id": "httparse 1.7.1",
+              "id": "httparse 1.8.0",
               "target": "httparse"
             },
             {
@@ -627,7 +627,7 @@
               "target": "num_cpus"
             },
             {
-              "id": "socket2 0.4.6",
+              "id": "socket2 0.4.7",
               "target": "socket2"
             },
             {
@@ -691,7 +691,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             }
           ],
@@ -894,7 +894,7 @@
               "target": "smallvec"
             },
             {
-              "id": "socket2 0.4.6",
+              "id": "socket2 0.4.7",
               "target": "socket2"
             },
             {
@@ -1465,13 +1465,13 @@
       },
       "license": "MIT"
     },
-    "anyhow 1.0.62": {
+    "anyhow 1.0.63": {
       "name": "anyhow",
-      "version": "1.0.62",
+      "version": "1.0.63",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/anyhow/1.0.62/download",
-          "sha256": "1485d4d2cc45e7b201ee3767015c96faa5904387c9d87c6efdd0fb511f12d305"
+          "url": "https://crates.io/api/v1/crates/anyhow/1.0.63/download",
+          "sha256": "a26fa4d7e3f2eebadf743988fc8aec9fa9a9e82611acafd77c1462ed6262440a"
         }
       },
       "targets": [
@@ -1512,14 +1512,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.62"
+        "version": "1.0.63"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2465,7 +2465,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -4866,7 +4866,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -5026,7 +5026,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -5437,7 +5437,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -5461,7 +5461,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-types 0.4.1",
+              "id": "ic-types 0.4.2",
               "target": "ic_types"
             },
             {
@@ -5501,7 +5501,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -5515,7 +5515,7 @@
               "target": "candid_derive"
             },
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             }
           ],
@@ -6672,13 +6672,13 @@
       },
       "license": "MIT"
     },
-    "clap 3.2.18": {
+    "clap 3.2.19": {
       "name": "clap",
-      "version": "3.2.18",
+      "version": "3.2.19",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/3.2.18/download",
-          "sha256": "b15f2ea93df33549dbe2e8eecd1ca55269d63ae0b3ba1f55db030817d1c2867f"
+          "url": "https://crates.io/api/v1/crates/clap/3.2.19/download",
+          "sha256": "68d43934757334b5c0519ff882e1ab9647ac0258b47c24c4f490d78e42697fd5"
         }
       },
       "targets": [
@@ -6772,7 +6772,7 @@
           ],
           "selects": {}
         },
-        "version": "3.2.18"
+        "version": "3.2.19"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10937,7 +10937,7 @@
               "target": "actix_web"
             },
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -11081,7 +11081,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 3.2.18",
+              "id": "clap 3.2.19",
               "target": "clap"
             },
             {
@@ -11799,7 +11799,7 @@
               "target": "tester"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -11927,7 +11927,7 @@
               "target": "wee_alloc"
             },
             {
-              "id": "which 4.2.5",
+              "id": "which 4.3.0",
               "target": "which"
             },
             {
@@ -11989,7 +11989,7 @@
               "target": "indoc"
             },
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             },
             {
@@ -12584,7 +12584,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -17070,13 +17070,13 @@
       },
       "license": "MIT"
     },
-    "httparse 1.7.1": {
+    "httparse 1.8.0": {
       "name": "httparse",
-      "version": "1.7.1",
+      "version": "1.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/httparse/1.7.1/download",
-          "sha256": "496ce29bb5a52785b44e0f7ca2847ae0bb839c9bd28f69acac9b99d461c0c04c"
+          "url": "https://crates.io/api/v1/crates/httparse/1.8.0/download",
+          "sha256": "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
         }
       },
       "targets": [
@@ -17117,14 +17117,14 @@
         "deps": {
           "common": [
             {
-              "id": "httparse 1.7.1",
+              "id": "httparse 1.8.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "1.7.1"
+        "edition": "2018",
+        "version": "1.8.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -17350,7 +17350,7 @@
               "target": "http_body"
             },
             {
-              "id": "httparse 1.7.1",
+              "id": "httparse 1.8.0",
               "target": "httparse"
             },
             {
@@ -17366,7 +17366,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.4.6",
+              "id": "socket2 0.4.7",
               "target": "socket2"
             },
             {
@@ -17530,7 +17530,7 @@
               "target": "hyper_tls"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -17765,7 +17765,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "ic-types 0.4.1",
+              "id": "ic-types 0.4.2",
               "target": "ic_types"
             },
             {
@@ -17829,7 +17829,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -18077,7 +18077,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -18154,13 +18154,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-types 0.4.1": {
+    "ic-types 0.4.2": {
       "name": "ic-types",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-types/0.4.1/download",
-          "sha256": "82e9cac29df1f2906137c327ed24dfc398460eda054abaa6107273c11afe6384"
+          "url": "https://crates.io/api/v1/crates/ic-types/0.4.2/download",
+          "sha256": "0a7d9569a4c91d5c9c202c1666f799a9761bab70a2b59464ee78c45b005e47b8"
         }
       },
       "targets": [
@@ -18214,14 +18214,14 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       "license": "Apache-2.0"
     },
@@ -18296,7 +18296,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -18310,7 +18310,7 @@
               "target": "async_trait"
             },
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             },
             {
@@ -18373,7 +18373,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -18381,11 +18381,11 @@
               "target": "candid"
             },
             {
-              "id": "clap 3.2.18",
+              "id": "clap 3.2.19",
               "target": "clap"
             },
             {
-              "id": "ic-types 0.4.1",
+              "id": "ic-types 0.4.2",
               "target": "ic_types"
             },
             {
@@ -22016,7 +22016,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -22064,7 +22064,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -23901,7 +23901,7 @@
               "target": "buf_redux"
             },
             {
-              "id": "httparse 1.7.1",
+              "id": "httparse 1.8.0",
               "target": "httparse"
             },
             {
@@ -26244,7 +26244,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -26592,7 +26592,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -26702,7 +26702,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -27402,13 +27402,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "paste 1.0.8": {
+    "paste 1.0.9": {
       "name": "paste",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/paste/1.0.8/download",
-          "sha256": "9423e2b32f7a043629287a536f21951e8c6a82482d0acb1eeebfc90bc2225b22"
+          "url": "https://crates.io/api/v1/crates/paste/1.0.9/download",
+          "sha256": "b1de2e551fb905ac83f73f7aedf2f0cb4a0da7e35efa24a202a936269f1f18e1"
         }
       },
       "targets": [
@@ -27431,7 +27431,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.0.8"
+        "version": "1.0.9"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -27836,7 +27836,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -28922,7 +28922,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -29542,13 +29542,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prettyplease 0.1.18": {
+    "prettyplease 0.1.19": {
       "name": "prettyplease",
-      "version": "0.1.18",
+      "version": "0.1.19",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.18/download",
-          "sha256": "697ae720ee02011f439e0701db107ffe2916d83f718342d65d7f8bf7b8a5fee9"
+          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.19/download",
+          "sha256": "a49e86d2c26a24059894a3afa13fd17d063419b05dfb83f06d9c3566060c3f5a"
         }
       },
       "targets": [
@@ -29585,7 +29585,7 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.18",
+              "id": "prettyplease 0.1.19",
               "target": "build_script_build"
             },
             {
@@ -29600,7 +29600,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.18"
+        "version": "0.1.19"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -29645,7 +29645,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -30225,7 +30225,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -30567,7 +30567,7 @@
               "target": "cmake"
             },
             {
-              "id": "which 4.2.5",
+              "id": "which 4.3.0",
               "target": "which"
             }
           ],
@@ -30614,7 +30614,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -32659,7 +32659,7 @@
               "target": "syscall"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -33552,6 +33552,12 @@
               "target": "cc"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source"
+          },
           "selects": {}
         },
         "links": "ring-asm"
@@ -37279,7 +37285,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             }
           ],
@@ -37370,7 +37376,7 @@
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -37420,7 +37426,7 @@
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -38223,13 +38229,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "socket2 0.4.6": {
+    "socket2 0.4.7": {
       "name": "socket2",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/socket2/0.4.6/download",
-          "sha256": "10c98bba371b9b22a71a9414e420f92ddeb2369239af08200816169d5e2dd7aa"
+          "url": "https://crates.io/api/v1/crates/socket2/0.4.7/download",
+          "sha256": "02e2d2db9033d13a1567121ddd7a095ee144db4e1ca1b1bda3419bc0da294ebd"
         }
       },
       "targets": [
@@ -38272,7 +38278,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.4.6"
+        "version": "0.4.7"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -39818,7 +39824,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -39854,7 +39860,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -40425,13 +40431,13 @@
       },
       "license": "MIT"
     },
-    "thiserror 1.0.32": {
+    "thiserror 1.0.33": {
       "name": "thiserror",
-      "version": "1.0.32",
+      "version": "1.0.33",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/thiserror/1.0.32/download",
-          "sha256": "f5f6586b7f764adc0231f4c79be7b920e766bb2f3e51b3661cdb263828f19994"
+          "url": "https://crates.io/api/v1/crates/thiserror/1.0.33/download",
+          "sha256": "3d0a539a918745651435ac7db7a18761589a94cd7e94cd56999f828bf73c8a57"
         }
       },
       "targets": [
@@ -40457,23 +40463,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 1.0.32",
+              "id": "thiserror-impl 1.0.33",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.32"
+        "version": "1.0.33"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "thiserror-impl 1.0.32": {
+    "thiserror-impl 1.0.33": {
       "name": "thiserror-impl",
-      "version": "1.0.32",
+      "version": "1.0.33",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/thiserror-impl/1.0.32/download",
-          "sha256": "12bafc5b54507e0149cdf1b145a5d80ab80a90bcd9275df43d4fff68460f6c21"
+          "url": "https://crates.io/api/v1/crates/thiserror-impl/1.0.33/download",
+          "sha256": "c251e90f708e16c49a16f4917dc2131e75222b72edfa9cb7f7c58ae56aae0c09"
         }
       },
       "targets": [
@@ -40513,7 +40519,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.32"
+        "version": "1.0.33"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -41220,7 +41226,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.4.6",
+              "id": "socket2 0.4.7",
               "target": "socket2"
             },
             {
@@ -41723,7 +41729,7 @@
               "target": "futures_util"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -42293,7 +42299,7 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.18",
+              "id": "prettyplease 0.1.19",
               "target": "prettyplease"
             },
             {
@@ -43384,7 +43390,7 @@
               "target": "http"
             },
             {
-              "id": "httparse 1.7.1",
+              "id": "httparse 1.8.0",
               "target": "httparse"
             },
             {
@@ -43400,7 +43406,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -44578,18 +44584,6 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -44604,6 +44598,18 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44718,7 +44724,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -45610,7 +45616,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -45707,7 +45713,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.8",
+              "id": "paste 1.0.9",
               "target": "paste"
             }
           ],
@@ -45753,7 +45759,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -45797,7 +45803,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -45847,7 +45853,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -45883,7 +45889,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -45937,7 +45943,7 @@
               "target": "addr2line"
             },
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -45981,7 +45987,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -46105,7 +46111,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.62",
+              "id": "anyhow 1.0.63",
               "target": "anyhow"
             },
             {
@@ -46145,7 +46151,7 @@
               "target": "region"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -46240,7 +46246,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             },
             {
@@ -46570,13 +46576,13 @@
       },
       "license": "MPL-2.0"
     },
-    "which 4.2.5": {
+    "which 4.3.0": {
       "name": "which",
-      "version": "4.2.5",
+      "version": "4.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/which/4.2.5/download",
-          "sha256": "5c4fb54e6113b6a8772ee41c3404fb0301ac79604489467e0a9ce1f3e97c24ae"
+          "url": "https://crates.io/api/v1/crates/which/4.3.0/download",
+          "sha256": "1c831fbbee9e129a8cf93e7747a82da9d95ba8e16621cae60ec2cdc849bacb7b"
         }
       },
       "targets": [
@@ -46612,14 +46618,14 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
+                "id": "once_cell 1.13.1",
+                "target": "once_cell"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "4.2.5"
+        "version": "4.3.0"
       },
       "license": "MIT"
     },
@@ -47680,7 +47686,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.32",
+              "id": "thiserror 1.0.33",
               "target": "thiserror"
             }
           ],
@@ -48164,7 +48170,7 @@
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
     "cddl 0.9.0-beta.1",
-    "clap 3.2.18",
+    "clap 3.2.19",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
