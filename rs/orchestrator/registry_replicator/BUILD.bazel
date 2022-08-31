@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,16 +16,31 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
+    "@crate_index//:clap",
     "@crate_index//:prost",
     "@crate_index//:slog",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "registry_replicator",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
     edition = "2018",
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-registry-replicator",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":registry_replicator"],
 )

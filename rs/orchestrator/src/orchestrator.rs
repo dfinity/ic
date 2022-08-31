@@ -99,7 +99,7 @@ impl Orchestrator {
         let (nns_urls, nns_pub_key) =
             registry_replicator.parse_registry_access_info_from_config(&config);
         if let Err(err) = registry_replicator
-            .fetch_and_start_polling(nns_urls, nns_pub_key)
+            .start_polling(nns_urls, nns_pub_key)
             .await
         {
             warn!(logger, "{}", err);

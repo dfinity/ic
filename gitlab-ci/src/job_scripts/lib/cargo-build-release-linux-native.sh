@@ -34,6 +34,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-p8s-service-discovery \
     --bin ic-prep \
     --bin ic-regedit \
+    --bin ic-registry-replicator \
     --bin ic-rosetta-api \
     --bin ic-starter \
     --bin ic-workload-generator \

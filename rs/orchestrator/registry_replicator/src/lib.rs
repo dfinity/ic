@@ -43,8 +43,10 @@ use std::io::{Error, ErrorKind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 use url::Url;
 
+pub mod args;
 mod internal_state;
 
 pub struct RegistryReplicator {
@@ -223,13 +225,13 @@ impl RegistryReplicator {
     }
 
     /// Calls [`Self::poll()`] asynchronously and spawns a background task that
-    /// continuously polls for updates. Returns the result of the first poll.
+    /// continuously polls for updates.
     /// The background task is stopped when the object is dropped.
-    pub async fn fetch_and_start_polling(
+    pub async fn start_polling(
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
-    ) -> Result<(), Error> {
+    ) -> Result<JoinHandle<()>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -248,15 +250,11 @@ impl RegistryReplicator {
             self.local_store.clone(),
             self.poll_delay,
         );
-        let res = internal_state
-            .poll()
-            .await
-            .map_err(|err| Error::new(ErrorKind::Other, err));
 
         let logger = self.logger.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             while !cancelled.load(Ordering::Relaxed) {
                 // The relevant I/O-operation of the poll() function is querying
                 // a node on the NNS for updates. As we set the query timeout to
@@ -272,7 +270,7 @@ impl RegistryReplicator {
                 tokio::time::sleep(poll_delay).await;
             }
         });
-        res
+        Ok(handle)
     }
 
     /// Set the local registry data to what is contained in the provided local
