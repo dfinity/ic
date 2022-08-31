@@ -166,7 +166,7 @@ pub struct PublicKeyWithPop {
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
         let instance = EncryptionKeyInstance {
-            g1_gen: G1Affine::generator(),
+            g1_gen: *G1Affine::generator(),
             public_key: self.key_value,
             associated_data: associated_data.to_vec(),
         };
@@ -233,7 +233,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
     let y = G1Affine::from(g1 * spec_x);
 
     let pop_instance = EncryptionKeyInstance {
-        g1_gen: G1Affine::generator(),
+        g1_gen: *G1Affine::generator(),
         public_key: y,
         associated_data: associated_data.to_vec(),
     };
@@ -662,7 +662,7 @@ pub fn baby_giant(tgt: &Gt, base: &Gt, lo: isize, range: isize) -> Option<isize>
 
     let mut babies = std::collections::HashMap::new();
     let mut n = 0;
-    let mut g = Gt::identity();
+    let mut g = *Gt::identity();
 
     loop {
         if n * n >= range {
@@ -762,7 +762,7 @@ pub fn dec_chunks(
 
     for i in 0..spec_m {
         let x = Gt::multipairing(&[
-            (&cj[i], &G2Prepared::generator()),
+            (&cj[i], G2Prepared::generator()),
             (&crsz.rr[i], &bneg),
             (&dk.a, &G2Prepared::from(&crsz.zz[i])),
             (&crsz.ss[i], &eneg),
@@ -774,7 +774,7 @@ pub fn dec_chunks(
     // Find discrete log of powers with baby-step-giant-step.
     let mut dlogs = Vec::new();
     for item in &powers {
-        match baby_giant(item, &Gt::generator(), 0, CHUNK_SIZE) {
+        match baby_giant(item, Gt::generator(), 0, CHUNK_SIZE) {
             // Happy path: honest DKG participants.
             Some(dlog) => dlogs.push(Scalar::from_isize(dlog)),
             // It may take hours to brute force a cheater's discrete log.
@@ -991,7 +991,7 @@ pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Sc
     let ee = 1 << CHALLENGE_BITS;
     let ss = spec_n * spec_m * (bb_constant - 1) * (ee - 1);
     let zz = (2 * NUM_ZK_REPETITIONS * ss) as isize;
-    let mut target_power = Gt::identity();
+    let mut target_power = *Gt::identity();
 
     // For each Delta in [1..E - 1] we compute target^Delta and use
     // baby-step-giant-step to find `scaled_answer` such that:
@@ -1001,7 +1001,7 @@ pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Sc
     // That is, answer = scaled_answer * invDelta.
     for delta in 1..ee {
         target_power += target;
-        match baby_giant(&target_power, &Gt::generator(), 1 - zz, 2 * zz - 1) {
+        match baby_giant(&target_power, Gt::generator(), 1 - zz, 2 * zz - 1) {
             None => {}
             Some(scaled_answer) => {
                 let mut answer = Scalar::from_usize(delta);

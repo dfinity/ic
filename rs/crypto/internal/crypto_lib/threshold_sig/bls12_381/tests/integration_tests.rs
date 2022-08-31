@@ -211,7 +211,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         /// Combine a big endian array of group elements (first chunk is the
         /// most significant) into a single group element.
         fn g1_from_big_endian_chunks(terms: &[G1Affine]) -> G1Affine {
-            let mut acc = G1Projective::identity();
+            let mut acc = *G1Projective::identity();
 
             for term in terms {
                 for _ in 0..16 {

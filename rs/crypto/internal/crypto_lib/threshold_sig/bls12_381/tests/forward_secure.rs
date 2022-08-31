@@ -221,7 +221,7 @@ fn gt_rand() -> Gt {
     let mut rng = rand::thread_rng();
     let g1 = G1Affine::hash(b"ic-crypto-test-fp12-random", &rng.gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
-    Gt::pairing(&g1, &g2)
+    Gt::pairing(&g1, g2)
 }
 
 #[test]

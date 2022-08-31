@@ -256,7 +256,7 @@ pub fn combine_signatures(
         });
     }
     if signatures.is_empty() {
-        return Ok(Signature::identity());
+        return Ok(*Signature::identity());
     }
     let signatures: Vec<(Scalar, Signature)> = signatures
         .iter()

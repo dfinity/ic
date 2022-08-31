@@ -12,7 +12,7 @@ impl PublicCoefficients {
         let mut coefficients = self.coefficients.iter().rev();
         let first = coefficients.next().map(|pk| pk.0);
         match first {
-            None => G2Projective::identity(),
+            None => *G2Projective::identity(),
             Some(ans) => {
                 let mut ans: G2Projective = ans;
                 for coeff in coefficients {
@@ -36,7 +36,7 @@ impl PublicCoefficients {
     ) -> Result<G1Projective, ThresholdError> {
         let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = G1Projective::identity();
+        let mut result = *G1Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
             result.add_assign(&sample.borrow().mul(*coefficient))
         }
@@ -55,7 +55,7 @@ impl PublicCoefficients {
     ) -> Result<G2Projective, ThresholdError> {
         let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = G2Projective::identity();
+        let mut result = *G2Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
             result.add_assign(&sample.borrow().mul(*coefficient))
         }

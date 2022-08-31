@@ -136,7 +136,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77f5f9d66a8730d0fae62c26f3424f5751e5518086628a40b7ab6fca4a705034"
 dependencies = [
  "futures-core",
- "paste 1.0.5",
+ "paste 1.0.7",
  "pin-project-lite",
 ]
 
@@ -1193,7 +1193,7 @@ dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "num_enum",
- "paste 1.0.5",
+ "paste 1.0.7",
  "pretty 0.10.0",
  "serde",
  "serde_bytes",
@@ -4877,6 +4877,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "lazy_static",
  "pairing",
+ "paste 1.0.7",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.9.9",
@@ -5096,7 +5097,7 @@ dependencies = [
  "k256",
  "lazy_static",
  "p256",
- "paste 1.0.5",
+ "paste 1.0.7",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -8476,7 +8477,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
- "paste 1.0.5",
+ "paste 1.0.7",
  "semver 1.0.10",
  "serde",
  "serde_bytes",
@@ -10487,9 +10488,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.5"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acbf547ad0c65e31259204bd90935776d1c693cec2f4ff7abb7a1bbbd40dfe58"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 
 [[package]]
 name = "paste-impl"
@@ -12606,7 +12607,7 @@ dependencies = [
  "approx",
  "num-complex",
  "num-traits",
- "paste 1.0.5",
+ "paste 1.0.7",
 ]
 
 [[package]]
@@ -14403,7 +14404,7 @@ dependencies = [
  "log",
  "object 0.28.4",
  "once_cell",
- "paste 1.0.5",
+ "paste 1.0.7",
  "psm",
  "rayon",
  "region",
