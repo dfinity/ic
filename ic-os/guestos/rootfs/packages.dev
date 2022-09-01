@@ -20,3 +20,6 @@ strace
 # useful for SELinux development
 setools
 
+# flamegraphs (scalability suite)
+linux-tools-common
+linux-tools-generic
