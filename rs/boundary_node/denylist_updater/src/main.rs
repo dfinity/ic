@@ -110,7 +110,7 @@ async fn main() -> Result<(), Error> {
     let remote_lister = WithNormalize(remote_lister);
     let remote_lister = WithMetrics(
         remote_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
     );
 
     let local_lister = LocalLister::new(cli.local_path.clone());
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Error> {
     let local_lister = WithNormalize(local_lister);
     let local_lister = WithMetrics(
         local_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
     );
 
     let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
@@ -344,7 +344,7 @@ impl Reload for Reloader {
         let pid = fs::read_to_string(self.pid_path.clone())
             .await
             .context("failed to read pid file")?;
-        let pid = pid.parse::<i32>().context("failed to parse pid")?;
+        let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
         let pid = Pid::from_raw(pid);
 
         send_signal(pid, self.signal)?;
