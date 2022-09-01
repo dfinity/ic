@@ -1,6 +1,7 @@
 use simple_asn1::{oid, ASN1Block};
 
-pub const KEY_SIZE: usize = 96;
+/// Byte size of the public key, which is a G2 element.
+pub const PUBLIC_KEY_SIZE: usize = 96;
 
 /// Converts public key bytes into its DER-encoded form.
 ///
@@ -25,7 +26,7 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
 /// # Errors
 /// * Returns a string describing the error if the given `bytes` are not valid
 ///   ASN.1, or include unexpected ASN.1 structures.
-pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; KEY_SIZE], String> {
+pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String> {
     use simple_asn1::{
         from_der,
         ASN1Block::{BitString, Sequence},
@@ -48,12 +49,12 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; KEY_SIZE], String> {
                     return Err(unexpected_struct_err(&asn1_values[0]));
                 }
 
-                if *len != KEY_SIZE * 8 {
+                if *len != PUBLIC_KEY_SIZE * 8 {
                     return Err(format!("unexpected key length: {} bits", len));
                 }
 
                 if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
-                    let mut key_bytes = [0u8; KEY_SIZE];
+                    let mut key_bytes = [0u8; PUBLIC_KEY_SIZE];
                     key_bytes.copy_from_slice(key.as_slice());
                     Ok(key_bytes)
                 } else {

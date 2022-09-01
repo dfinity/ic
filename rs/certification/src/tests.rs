@@ -9,8 +9,7 @@ use ic_certification_test_utils::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_tree_hash::{flatmap, Digest, Label, LabeledTree};
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key_from_der;
-use ic_crypto_utils_threshold_sig_der::public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_der, public_key_to_der};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::Time;
 

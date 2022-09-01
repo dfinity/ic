@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../../config" }
-ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }

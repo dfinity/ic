@@ -240,7 +240,7 @@ proptest! {
 #[test]
 fn should_use_correct_key_size_in_der_utils() {
     assert_eq!(
-        ic_crypto_internal_threshold_sig_bls12381_der::KEY_SIZE,
+        ic_crypto_internal_threshold_sig_bls12381_der::PUBLIC_KEY_SIZE,
         PublicKeyBytes::SIZE
     );
 }
