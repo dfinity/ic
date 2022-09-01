@@ -25,7 +25,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_read_msg, cannot_store_msg, install_canister_with_retries, store_message,
+    can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
 };
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
@@ -196,7 +196,7 @@ pub fn test(env: TestEnv) {
     upload_node.await_status_is_healthy().unwrap();
 
     info!(logger, "Wait for state sync to complete");
-    install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
+    can_install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(

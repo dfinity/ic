@@ -103,23 +103,29 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn can_install_canister(url: &url::Url) -> bool {
+pub(crate) fn can_install_canister(url: &url::Url) -> Result<(), String> {
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent).await.is_ok()
+        UniversalCanister::try_new(&agent).await.map(|_| ())
     })
 }
 
-pub(crate) fn install_canister_with_retries(
+pub(crate) fn can_install_canister_with_retries(
     url: &url::Url,
     logger: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
 ) {
-    block_on(async {
-        let agent = assert_create_agent(url.as_str()).await;
-        let _ = UniversalCanister::new_with_retries(&agent, logger, timeout, backoff).await;
-    });
+    retry(logger.clone(), timeout, backoff, || {
+        info!(logger, "Try to install canister...");
+        if let Err(e) = can_install_canister(url) {
+            bail!("Cannot install canister: {}", e);
+        } else {
+            info!(logger, "Installing canister is possible.");
+            Ok(())
+        }
+    })
+    .expect("Canister installation should work!");
 }
 
 pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
@@ -148,7 +154,7 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
                     .expect("Timeout while waiting for all subnets to be healthy");
                 // make sure the node is participating in a subnet
                 if install_canisters {
-                    install_canister_with_retries(
+                    can_install_canister_with_retries(
                         &node.get_public_url(),
                         &logger,
                         secs(600),
