@@ -22,7 +22,13 @@ for f in $(find $WORKSPACE_DIR/rs/$1 -name BUILD.bazel); do
     if grep -q -r -s '#[[]test[]]' $CRATE_DIR/src; then
         has_unit_tests="true"
     fi
+    if grep -q -r -s '#[[]tokio::test[]]' $CRATE_DIR/src; then
+        has_unit_tests="true"
+    fi
     if grep -q -r -s '#[[]test[]]' $CRATE_DIR/tests; then
+        has_integration_tests="true"
+    fi
+    if grep -q -r -s '#[[]tokio::test[]]' $CRATE_DIR/tests; then
         has_integration_tests="true"
     fi
 
