@@ -27,6 +27,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::CallbackId;
 use ic_types::methods::{Callback, WasmClosure};
+use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
@@ -164,6 +165,7 @@ pub struct CanisterStateBuilder {
     freeze_threshold: NumSeconds,
     call_contexts: Vec<CallContext>,
     inputs: Vec<RequestOrResponse>,
+    time_of_last_allocation_charge: Time,
 }
 
 impl CanisterStateBuilder {
@@ -234,6 +236,11 @@ impl CanisterStateBuilder {
 
     pub fn with_canister_request(mut self, request: Request) -> Self {
         self.inputs.push(request.into());
+        self
+    }
+
+    pub fn with_time_of_last_allocation_charge(mut self, time: Time) -> Self {
+        self.time_of_last_allocation_charge = time;
         self
     }
 
@@ -320,6 +327,7 @@ impl CanisterStateBuilder {
             execution_state,
             scheduler_state: SchedulerState {
                 compute_allocation: self.compute_allocation,
+                time_of_last_allocation_charge: self.time_of_last_allocation_charge,
                 ..SchedulerState::default()
             },
         }
@@ -341,6 +349,7 @@ impl Default for CanisterStateBuilder {
             freeze_threshold: DEFAULT_FREEZE_THRESHOLD,
             call_contexts: Vec::default(),
             inputs: Vec::default(),
+            time_of_last_allocation_charge: UNIX_EPOCH,
         }
     }
 }

@@ -795,25 +795,35 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let duration_since_last_charge = state
-            .metadata
-            .duration_between_batches(state.metadata.time_of_last_allocation_charge);
-
-        if state.time()
-            < state.metadata.time_of_last_allocation_charge
-                + self
-                    .cycles_account_manager
-                    .duration_between_allocation_charges()
-        {
-            return;
-        } else {
-            state.metadata.time_of_last_allocation_charge = state.time();
-        }
-
         let state_path = state.root.clone();
         let state_time = state.time();
+        let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
         for canister in state.canisters_iter_mut() {
+            // Postpone charging for resources when a canister has a paused execution
+            // to avoid modifying the balance of a canister during an unfinished operation.
+            if canister.has_paused_execution() {
+                continue;
+            }
+
+            let duration_since_last_charge = canister.duration_since_last_allocation_charge(
+                metadata_time_of_last_allocation_charge,
+                state_time,
+            );
+
+            if state_time
+                < canister.scheduler_state.time_of_last_allocation_charge
+                    + self
+                        .cycles_account_manager
+                        .duration_between_allocation_charges()
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            } else {
+                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+            }
+
             self.observe_canister_metrics(canister);
             if self
                 .cycles_account_manager

@@ -15,6 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::CanisterStatus;
 
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_test_utilities::{
     mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
@@ -628,7 +629,6 @@ fn only_charge_for_allocation_after_specified_duration() {
     // non-zero time.
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
     test.state_mut().metadata.batch_time = initial_time;
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
 
     let time_between_batches = test
         .scheduler()
@@ -653,6 +653,7 @@ fn only_charge_for_allocation_after_specified_duration() {
         ComputeAllocation::zero(),
         MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
         None,
+        Some(initial_time),
     );
 
     // Don't charge because the time since the last charge is too small.
@@ -717,6 +718,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
 // uninstalled.
 #[test]
 fn canisters_with_insufficient_cycles_are_uninstalled() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
     let mut test = SchedulerTestBuilder::new().build();
     for _ in 0..3 {
         test.create_canister_with(
@@ -724,10 +726,9 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             ComputeAllocation::zero(),
             MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
             None,
+            Some(initial_time),
         );
     }
-    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
     test.state_mut().metadata.batch_time = initial_time
         + test
             .scheduler()
@@ -753,6 +754,62 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             .num_canisters_uninstalled_out_of_cycles
             .get() as u64,
         3
+    );
+}
+
+#[test]
+fn dont_charge_allocations_for_long_running_canisters() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let initial_cycles = 10_000_000;
+
+    let canister = test.create_canister_with(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+    );
+    let paused_canister = test.create_canister_with(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+    );
+    test.canister_state_mut(paused_canister)
+        .system_state
+        .task_queue
+        .push_front(ExecutionTask::PausedExecution(PausedExecutionId(0)));
+
+    assert!(test.canister_state(paused_canister).has_paused_execution());
+    assert!(!test.canister_state(canister).has_paused_execution());
+
+    let paused_canister_balance_before =
+        test.canister_state(paused_canister).system_state.balance();
+    let canister_balance_before = test.canister_state(canister).system_state.balance();
+
+    let duration_between_allocation_charges = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+    test.state_mut().metadata.batch_time = initial_time + duration_between_allocation_charges;
+
+    test.charge_for_resource_allocations();
+    // Balance has not changed for canister that has long running execution.
+    assert_eq!(
+        test.canister_state(paused_canister).system_state.balance(),
+        paused_canister_balance_before
+    );
+    // Balance has changed for this canister.
+    assert_eq!(
+        test.canister_state(canister).system_state.balance(),
+        canister_balance_before
+            - test.scheduler().cycles_account_manager.memory_cost(
+                NumBytes::from(1 << 30),
+                duration_between_allocation_charges,
+                1
+            )
     );
 }
 
@@ -1113,6 +1170,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1142,6 +1200,7 @@ fn execute_heartbeat_before_messages() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1173,6 +1232,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
             );
             canisters.push(canister);
@@ -1262,6 +1322,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
                 None,
+                None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
             test.inject_call_to_ic00(
@@ -1303,6 +1364,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
@@ -1354,6 +1416,7 @@ fn execute_multiple_heartbeats() {
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
             Some(SystemMethod::CanisterHeartbeat),
+            None,
         );
         for _ in 0..number_of_messages_per_canister {
             test.send_ingress(canister, ingress(1));
@@ -1438,6 +1501,7 @@ fn can_record_metrics_for_a_round() {
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
             MemoryAllocation::BestEffort,
+            None,
             None,
         );
         for _ in 0..5 {
@@ -1833,12 +1897,14 @@ fn heartbeat_metrics_are_recorded() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     let canister1 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.expect_heartbeat(canister0, instructions(100));
     test.expect_heartbeat(canister1, instructions(101));
@@ -2116,6 +2182,7 @@ fn scheduler_maintains_canister_order() {
             ComputeAllocation::try_from(*ca).unwrap(),
             MemoryAllocation::BestEffort,
             None,
+            None,
         );
         // The last canister does not have any messages.
         if i != 4 {
@@ -2202,6 +2269,7 @@ fn construct_scheduler_for_prop_test(
             } else {
                 None
             },
+            None,
         );
         test.canister_state_mut(canister)
             .scheduler_state

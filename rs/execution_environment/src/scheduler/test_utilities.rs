@@ -66,6 +66,7 @@ use crate::{
 use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_types::time::UNIX_EPOCH;
 use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
@@ -163,6 +164,7 @@ impl SchedulerTest {
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
             None,
+            None,
         )
     }
 
@@ -177,11 +179,14 @@ impl SchedulerTest {
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
         system_method: Option<SystemMethod>,
+        time_of_last_allocation_charge: Option<Time>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
         let wasm_source = system_method
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
+        let time_of_last_allocation_charge =
+            time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let mut canister_state = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
@@ -190,6 +195,7 @@ impl SchedulerTest {
             .with_memory_allocation(memory_allocation.bytes())
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
+            .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
@@ -416,6 +422,11 @@ impl SchedulerTest {
             &test_registry_settings(),
             &BTreeMap::new(),
         )
+    }
+
+    pub fn charge_for_resource_allocations(&mut self) {
+        self.scheduler
+            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
