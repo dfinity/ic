@@ -71,7 +71,7 @@ impl Polynomial {
         let mut coefficients = Vec::with_capacity(num_coefficients);
 
         for _ in 0..num_coefficients {
-            coefficients.push(EccScalar::random(curve, rng)?)
+            coefficients.push(EccScalar::random(curve, rng))
         }
 
         Self::new(curve, coefficients)
@@ -96,7 +96,7 @@ impl Polynomial {
         coefficients.push(constant);
 
         for _ in 1..num_coefficients {
-            coefficients.push(EccScalar::random(curve, rng)?)
+            coefficients.push(EccScalar::random(curve, rng))
         }
 
         Self::new(curve, coefficients)

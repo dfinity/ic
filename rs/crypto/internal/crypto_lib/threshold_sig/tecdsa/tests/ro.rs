@@ -9,7 +9,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
 
-    let s1 = EccScalar::random(curve_type, &mut rng)?;
+    let s1 = EccScalar::random(curve_type, &mut rng);
     let pt1 = EccPoint::generator_g(curve_type)?.scalar_mul(&s1)?;
     ro.add_point("pt1", &pt1)?;
     assert!(ro.add_point("pt1", &pt1).is_err()); // duplicate name

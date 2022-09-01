@@ -277,10 +277,7 @@ impl EccScalar {
     }
 
     /// Generate a random scalar in [0,p)
-    pub fn random<R: CryptoRng + RngCore>(
-        curve: EccCurveType,
-        rng: &mut R,
-    ) -> ThresholdEcdsaResult<Self> {
+    pub fn random<R: CryptoRng + RngCore>(curve: EccCurveType, rng: &mut R) -> Self {
         // Use rejection sampling to avoid biasing the output
 
         let mut buf = vec![0u8; curve.scalar_bytes()];
@@ -289,12 +286,12 @@ impl EccScalar {
             rng.fill_bytes(&mut buf);
             if let Ok(scalar) = Self::deserialize(curve, &buf) {
                 buf.zeroize();
-                return Ok(scalar);
+                return scalar;
             }
         }
     }
 
-    pub fn from_seed(curve: EccCurveType, seed: Seed) -> ThresholdEcdsaResult<Self> {
+    pub fn from_seed(curve: EccCurveType, seed: Seed) -> Self {
         let mut rng = seed.into_rng();
         Self::random(curve, &mut rng)
     }

@@ -40,7 +40,7 @@ fn test_range_to_i8_is_correct() -> ThresholdEcdsaResult<()> {
     let mut rng = test_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..10)
-            .map(|_| EccScalar::random(curve_type, &mut rng).unwrap())
+            .map(|_| EccScalar::random(curve_type, &mut rng))
             .collect();
         let nafs: Vec<Naf> = scalars
             .iter()
@@ -132,7 +132,7 @@ fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)
             .map(|_| EccScalar::random(curve_type, &mut rng))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect();
         let naf: Vec<Naf> = scalars
             .iter()
             .map(|x| Naf::from_scalar_vartime(x))
