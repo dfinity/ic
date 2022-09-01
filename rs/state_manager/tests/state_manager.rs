@@ -126,11 +126,7 @@ fn rejoining_node_doesnt_accumulate_states() {
 fn temporary_directory_gets_cleaned() {
     state_manager_restart_test(|state_manager, restart_fn| {
         // write something to some file in the tmp directory
-        let test_file = state_manager
-            .state_layout()
-            .tmp()
-            .expect("failed to get tmp directory path")
-            .join("some_file");
+        let test_file = state_manager.state_layout().tmp().join("some_file");
         std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
 
         // restart the state_manager
@@ -141,7 +137,6 @@ fn temporary_directory_gets_cleaned() {
             state_manager
                 .state_layout()
                 .tmp()
-                .unwrap()
                 .read_dir()
                 .unwrap()
                 .next()

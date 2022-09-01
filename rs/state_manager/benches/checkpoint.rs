@@ -39,7 +39,7 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
                 with_test_replica_logger(|log| {
                     let tmp = Builder::new().prefix("test").tempdir().unwrap();
                     let root = tmp.path().to_path_buf();
-                    let layout = StateLayout::new(log, root);
+                    let layout = StateLayout::try_new(log, root).unwrap();
                     let subnet_type = SubnetType::Application;
 
                     const HEIGHT: Height = Height::new(42);

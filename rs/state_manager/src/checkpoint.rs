@@ -716,7 +716,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -775,7 +775,7 @@ mod tests {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -791,7 +791,6 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            std::fs::create_dir(&checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
@@ -819,7 +818,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -910,7 +909,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let own_subnet_type = SubnetType::Application;
@@ -942,7 +941,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::try_new(log, root).unwrap();
 
             const MISSING_HEIGHT: Height = Height::new(42);
             match layout
@@ -971,42 +970,14 @@ mod tests {
 
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log, root);
 
-            let own_subnet_type = SubnetType::Application;
-            const HEIGHT: Height = Height::new(42);
-            let canister_id = canister_test_id(10);
-
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
-            state.put_canister_state(new_canister_state(
-                canister_id,
-                user_test_id(24).get(),
-                INITIAL_CYCLES,
-                NumSeconds::from(100_000),
-            ));
-
-            let result = make_checkpoint(
-                &state,
-                HEIGHT,
-                &layout,
-                &log,
-                &checkpoint_metrics(),
-                &mut thread_pool(),
-            );
-
+            assert!(layout.is_err());
+            let err_msg = layout.err().unwrap().to_string();
             assert!(
-                result.is_err()
-                    && result
-                        .as_ref()
-                        .unwrap_err()
-                        .to_string()
-                        .contains("Permission denied"),
-                "Expected a permission error, got {:?}",
-                result
+                err_msg.contains("Permission denied"),
+                "Expected a permission error, got {}",
+                err_msg
             );
         });
     }
@@ -1016,7 +987,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1076,7 +1047,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1122,7 +1093,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1168,7 +1139,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1213,7 +1184,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1258,7 +1229,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1292,7 +1263,10 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let tip = StateLayout::new(log, root).tip(Height::new(42)).unwrap();
+            let tip = StateLayout::try_new(log, root)
+                .unwrap()
+                .tip(Height::new(42))
+                .unwrap();
 
             let defrag_size = 1 << 20; // 1MB
 
