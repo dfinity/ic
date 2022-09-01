@@ -1,5 +1,7 @@
-use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
+use ic_crypto_internal_threshold_sig_bls12381_der::public_key_from_der;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 
@@ -49,10 +51,17 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
 /// # Error
 /// * `std::io::Error` if the data cannot be parsed, or if the encoded key is not BLS12-381.
 pub fn parse_threshold_sig_key_from_der(der_bytes: &[u8]) -> Result<ThresholdSigPublicKey> {
-    let pubkey_bytes = bls12_381::api::public_key_from_der(der_bytes)
-        .map_err(|err| invalid_data_err(format!("failed to decode public key: {}", err)))?;
-
-    Ok(ThresholdSigPublicKey::from(pubkey_bytes))
+    let pk_bytes = match public_key_from_der(der_bytes) {
+        Ok(key_bytes) => PublicKeyBytes(key_bytes),
+        Err(internal_error) => {
+            return Err(invalid_data_err(CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::ThresBls12_381,
+                key_bytes: Some(der_bytes.to_vec()),
+                internal_error,
+            }));
+        }
+    };
+    Ok(ThresholdSigPublicKey::from(pk_bytes))
 }
 
 fn invalid_data_err(msg: impl std::string::ToString) -> Error {

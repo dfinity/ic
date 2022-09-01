@@ -9,6 +9,10 @@ rust_library(
     edition = "2018",
     deps = [
         "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:openssl",
     ],
 )
 

@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/sha",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/nns/common",
     "//rs/nns/constants",

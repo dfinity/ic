@@ -5358,20 +5358,23 @@ name = "ic-crypto-utils-threshold-sig"
 version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
- "hex",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-interfaces",
  "ic-types 0.8.0",
- "tempfile",
 ]
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig-der"
 version = "0.8.0"
 dependencies = [
+ "base64 0.11.0",
+ "hex",
  "ic-crypto-internal-threshold-sig-bls12381-der",
+ "ic-crypto-internal-types",
+ "ic-types 0.8.0",
+ "tempfile",
 ]
 
 [[package]]
@@ -5692,7 +5695,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-p2p",
@@ -6667,7 +6670,7 @@ dependencies = [
  "hyper",
  "ic-async-utils",
  "ic-config",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-metrics",
  "ic-metrics-exporter",
@@ -7062,7 +7065,7 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.14",
  "ic-config",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -7413,7 +7416,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
@@ -7495,7 +7498,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",

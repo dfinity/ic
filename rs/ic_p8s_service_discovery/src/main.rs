@@ -4,7 +4,7 @@ mod config;
 mod metrics;
 mod service_discovery;
 
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use std::path::PathBuf;
 use std::{collections::HashSet, convert::Infallible, sync::Arc};
 

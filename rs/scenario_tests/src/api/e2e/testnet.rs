@@ -1,4 +1,4 @@
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};

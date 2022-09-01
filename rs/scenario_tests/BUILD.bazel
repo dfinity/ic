@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/log_analyzer",
     "//rs/monitoring/logger",
