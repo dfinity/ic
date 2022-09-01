@@ -532,6 +532,8 @@ impl PurgerMetrics {
 #[derive(Clone)]
 pub struct EcdsaClientMetrics {
     pub on_state_change_duration: HistogramVec,
+    pub client_metrics: IntCounterVec,
+    pub client_errors: IntCounterVec,
 }
 
 impl EcdsaClientMetrics {
@@ -544,6 +546,16 @@ impl EcdsaClientMetrics {
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
                 &["sub_component"],
+            ),
+            client_metrics: metrics_registry.int_counter_vec(
+                "ecdsa_client_metrics",
+                "ECDSA client related metrics",
+                &["type"],
+            ),
+            client_errors: metrics_registry.int_counter_vec(
+                "ecdsa_client_errors",
+                "ECDSA client related errors",
+                &["type"],
             ),
         }
     }
