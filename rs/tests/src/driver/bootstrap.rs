@@ -195,7 +195,10 @@ pub fn setup_and_start_vms(
     for jh in join_handles {
         if let Err(e) = jh.join().expect("waiting for a thread failed") {
             warn!(farm.logger, "starting VM failed with: {:?}", e);
-            result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
+            result = Err(anyhow::anyhow!(
+                "failed to set up and start a VM pool: {:?}",
+                e
+            ));
         }
     }
     result
