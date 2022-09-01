@@ -1,7 +1,7 @@
+use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryInto;
-use std::sync::RwLock;
 use std::time::{Duration, UNIX_EPOCH};
 
 use candid::{candid_method, CandidType, Encode};
@@ -27,7 +27,6 @@ use ledger_canister::{
 use on_wire::{FromWire, IntoWire, NewType};
 
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use lazy_static::lazy_static;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +47,23 @@ const MAX_NOTIFY_PURGE: usize = 100_000;
 /// The maturity modulation range in basis points.
 const MIN_MATURITY_MODULATION_PERMYRIAD: i32 = -500;
 const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
+
+thread_local! {
+    static STATE: RefCell<Option<State>> = RefCell::new(None);
+}
+
+fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
+    STATE.with(|cell| f(cell.borrow().as_ref().expect("cmc state not initialized")))
+}
+
+fn with_state_mut<R>(f: impl FnOnce(&mut State) -> R) -> R {
+    STATE.with(|cell| {
+        f(cell
+            .borrow_mut()
+            .as_mut()
+            .expect("cmc state not initialized"))
+    })
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
 enum NotificationStatus {
@@ -104,32 +120,6 @@ struct State {
 }
 
 impl State {
-    fn default() -> Self {
-        let resolution = Duration::from_secs(60);
-        let max_age = Duration::from_secs(60 * 60);
-
-        Self {
-            ledger_canister_id: CanisterId::ic_00(),
-            governance_canister_id: CanisterId::ic_00(),
-            minting_account_id: None,
-            authorized_subnets: BTreeMap::new(),
-            default_subnets: vec![],
-            icp_xdr_conversion_rate: None,
-            average_icp_xdr_conversion_rate: None,
-            recent_icp_xdr_rates: Some(vec![
-                IcpXdrConversionRate::default();
-                ICP_XDR_CONVERSION_RATE_CACHE_SIZE
-            ]),
-            cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
-            limiter: limiter::Limiter::new(resolution, max_age),
-            total_cycles_minted: Cycles::zero(),
-            blocks_notified: Some(BTreeMap::new()),
-            last_purged_notification: Some(0),
-            maturity_modulation_permyriad: Some(0),
-        }
-    }
-
     fn encode(&self) -> Vec<u8> {
         candid::encode_one(&self).unwrap()
     }
@@ -166,8 +156,32 @@ impl State {
     }
 }
 
-lazy_static! {
-    static ref STATE: RwLock<State> = RwLock::new(State::default());
+impl Default for State {
+    fn default() -> Self {
+        let resolution = Duration::from_secs(60);
+        let max_age = Duration::from_secs(60 * 60);
+
+        Self {
+            ledger_canister_id: CanisterId::ic_00(),
+            governance_canister_id: CanisterId::ic_00(),
+            minting_account_id: None,
+            authorized_subnets: BTreeMap::new(),
+            default_subnets: vec![],
+            icp_xdr_conversion_rate: None,
+            average_icp_xdr_conversion_rate: None,
+            recent_icp_xdr_rates: Some(vec![
+                IcpXdrConversionRate::default();
+                ICP_XDR_CONVERSION_RATE_CACHE_SIZE
+            ]),
+            cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
+            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
+            limiter: limiter::Limiter::new(resolution, max_age),
+            total_cycles_minted: Cycles::zero(),
+            blocks_notified: Some(BTreeMap::new()),
+            last_purged_notification: Some(0),
+            maturity_modulation_permyriad: Some(0),
+        }
+    }
 }
 
 // Helper to print messages in yellow
@@ -193,12 +207,13 @@ fn init(args: CyclesCanisterInitPayload) {
             .unwrap_or_else(|| "<none>".to_string())
     ));
 
-    let mut state = STATE.write().unwrap();
-
-    state.ledger_canister_id = args.ledger_canister_id;
-    state.governance_canister_id = args.governance_canister_id;
-    state.minting_account_id = args.minting_account_id;
-    state.last_purged_notification = args.last_purged_notification;
+    STATE.with(|state| state.replace(Some(State::default())));
+    with_state_mut(|state| {
+        state.ledger_canister_id = args.ledger_canister_id;
+        state.governance_canister_id = args.governance_canister_id;
+        state.minting_account_id = args.minting_account_id;
+        state.last_purged_notification = args.last_purged_notification;
+    });
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
@@ -217,26 +232,26 @@ fn set_authorized_subnetwork_list_() {
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
 fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetId>) {
-    let mut state = STATE.write().unwrap();
+    with_state_mut(|state| {
+        let governance_canister_id = state.governance_canister_id;
 
-    let governance_canister_id = state.governance_canister_id;
-
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
-        panic!("Only the governance canister can set authorized subnetwork lists.");
-    }
-
-    if let Some(who) = who {
-        if subnets.is_empty() {
-            print(format!("[cycles] removing subnet list for {}", who));
-            state.authorized_subnets.remove(&who);
-        } else {
-            print(format!("[cycles] setting subnet list for {}", who));
-            state.authorized_subnets.insert(who, subnets);
+        if CanisterId::new(caller()) != Ok(governance_canister_id) {
+            panic!("Only the governance canister can set authorized subnetwork lists.");
         }
-    } else {
-        print("[cycles] setting default subnet list");
-        state.default_subnets = subnets;
-    }
+
+        if let Some(who) = who {
+            if subnets.is_empty() {
+                print(format!("[cycles] removing subnet list for {}", who));
+                state.authorized_subnets.remove(&who);
+            } else {
+                print(format!("[cycles] setting subnet list for {}", who));
+                state.authorized_subnets.insert(who, subnets);
+            }
+        } else {
+            print("[cycles] setting default subnet list");
+            state.default_subnets = subnets;
+        }
+    });
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -304,21 +319,22 @@ fn convert_conversion_rate_to_payload(
 
 #[candid_method(query, rename = "get_icp_xdr_conversion_rate")]
 fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
-    let state = STATE.read().unwrap();
+    with_state(|state| {
+        let witness_generator = convert_data_to_mixed_hash_tree(state);
+        let icp_xdr_conversion_rate = state
+            .icp_xdr_conversion_rate
+            .as_ref()
+            .expect("icp_xdr_conversion_rate is not set");
 
-    let witness_generator = convert_data_to_mixed_hash_tree(&state);
-    let icp_xdr_conversion_rate = state
-        .icp_xdr_conversion_rate
-        .as_ref()
-        .expect("icp_xdr_conversion_rate is not set");
+        let payload =
+            convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
 
-    let payload = convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
-
-    IcpXdrConversionRateCertifiedResponse {
-        data: icp_xdr_conversion_rate.clone(),
-        hash_tree: payload,
-        certificate: dfn_core::api::data_certificate().unwrap_or_default(),
-    }
+        IcpXdrConversionRateCertifiedResponse {
+            data: icp_xdr_conversion_rate.clone(),
+            hash_tree: payload,
+            certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+        }
+    })
 }
 
 /// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
@@ -339,72 +355,73 @@ fn set_icp_xdr_conversion_rate_() {
         "set_icp_xdr_conversion_rate"
     );
 
-    let mut state = STATE.write().unwrap();
     over(
         candid_one,
         |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
             let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
-            update_recent_icp_xdr_rates(&rate, &mut state);
-            set_icp_xdr_conversion_rate(rate, &mut state)
+            update_recent_icp_xdr_rates(&rate);
+            set_icp_xdr_conversion_rate(rate)
         },
     );
 }
 
 #[export_name = "canister_query get_average_icp_xdr_conversion_rate"]
 fn get_average_icp_xdr_conversion_rate_() {
-    let state = STATE.read().unwrap();
+    with_state(|state| {
+        let witness_generator = convert_data_to_mixed_hash_tree(state);
+        let average_icp_xdr_conversion_rate = state
+            .average_icp_xdr_conversion_rate
+            .as_ref()
+            .expect("average_icp_xdr_conversion_rate is not set");
 
-    let witness_generator = convert_data_to_mixed_hash_tree(&state);
-    let average_icp_xdr_conversion_rate = state
-        .average_icp_xdr_conversion_rate
-        .as_ref()
-        .expect("average_icp_xdr_conversion_rate is not set");
+        let payload =
+            convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
 
-    let payload =
-        convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
-
-    over(
-        candid_one,
-        |_: ()| -> IcpXdrConversionRateCertifiedResponse {
-            IcpXdrConversionRateCertifiedResponse {
-                data: average_icp_xdr_conversion_rate.clone(),
-                hash_tree: payload,
-                certificate: dfn_core::api::data_certificate().unwrap_or_default(),
-            }
-        },
-    )
+        over(
+            candid_one,
+            |_: ()| -> IcpXdrConversionRateCertifiedResponse {
+                IcpXdrConversionRateCertifiedResponse {
+                    data: average_icp_xdr_conversion_rate.clone(),
+                    hash_tree: payload,
+                    certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+                }
+            },
+        )
+    })
 }
 
 /// The function updates the vector of recent rates, which are used to compute
 /// the average rate over `NUM_ICP_XDR_RATES_FOR_AVERAGE` days.
 /// The first received rate for each day is stored, ideally with a timestamp
 /// exactly at the start of the day.
-fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate, state: &mut State) {
-    let day = new_rate.timestamp_seconds / 86_400;
-    // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
-    let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
+fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate) {
+    with_state_mut(|state| {
+        let day = new_rate.timestamp_seconds / 86_400;
+        // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
+        let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
 
-    let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
-        IcpXdrConversionRate::default(
-        );
-        ICP_XDR_CONVERSION_RATE_CACHE_SIZE
-    ]);
-    // The record is updated if it is the first entry of a new day or an earlier
-    // entry of the same day.
-    let day_at_index = recent_rates[index].timestamp_seconds / 86_400;
-    if day_at_index < day
-        || (day_at_index == day
-            && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
-    {
-        recent_rates[index] = new_rate.clone();
-        // Update the average ICP/XDR rate and the maturity modulation.
-        if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
-            state.average_icp_xdr_conversion_rate =
-                compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
-            state.maturity_modulation_permyriad =
-                Some(compute_maturity_modulation(recent_rates, time.as_secs()));
+        let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
+            IcpXdrConversionRate::default(
+            );
+            ICP_XDR_CONVERSION_RATE_CACHE_SIZE
+        ]);
+        // The record is updated if it is the first entry of a new day or an earlier
+        // entry of the same day.
+        let day_at_index = recent_rates[index].timestamp_seconds / 86_400;
+        if day_at_index < day
+            || (day_at_index == day
+                && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
+        {
+            recent_rates[index] = new_rate.clone();
+            // Update the average ICP/XDR rate and the maturity modulation.
+            if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
+                state.average_icp_xdr_conversion_rate =
+                    compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
+                state.maturity_modulation_permyriad =
+                    Some(compute_maturity_modulation(recent_rates, time.as_secs()));
+            }
         }
-    }
+    })
 }
 
 /// The function returns the average ICP/XDR price over the past
@@ -445,7 +462,6 @@ fn compute_average_icp_xdr_rate_at_time(
 /// canister's certified data
 fn set_icp_xdr_conversion_rate(
     proposed_conversion_rate: IcpXdrConversionRate,
-    state: &mut State,
 ) -> Result<(), String> {
     print(format!(
         "[cycles] conversion rate update: {:?}",
@@ -456,20 +472,25 @@ fn set_icp_xdr_conversion_rate(
         return Err("Proposed conversion rate must be greater than 0".to_string());
     }
 
-    if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref() {
-        if proposed_conversion_rate.timestamp_seconds <= current_conversion_rate.timestamp_seconds {
-            return Err(
-                "Proposed conversion rate must have greater timestamp than current one".to_string(),
-            );
+    with_state_mut(|state| {
+        if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref() {
+            if proposed_conversion_rate.timestamp_seconds
+                <= current_conversion_rate.timestamp_seconds
+            {
+                return Err(
+                    "Proposed conversion rate must have greater timestamp than current one"
+                        .to_string(),
+                );
+            }
         }
-    }
 
-    state.icp_xdr_conversion_rate = Some(proposed_conversion_rate);
+        state.icp_xdr_conversion_rate = Some(proposed_conversion_rate);
 
-    let witness_generator = convert_data_to_mixed_hash_tree(state);
-    set_certified_data(&witness_generator.hash_tree().digest().0[..]);
+        let witness_generator = convert_data_to_mixed_hash_tree(state);
+        set_certified_data(&witness_generator.hash_tree().digest().0[..]);
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[export_name = "canister_query neuron_maturity_modulation"]
@@ -479,10 +500,9 @@ fn neuron_maturity_modulation_() {
 
 /// The function returns the current maturity modulation in basis points.
 fn neuron_maturity_modulation() -> Result<i32, String> {
-    match STATE.read() {
-        Ok(state) => Ok(state.maturity_modulation_permyriad.unwrap_or(0)),
-        Err(error) => Err(error.to_string()),
-    }
+    Ok(with_state(|state| {
+        state.maturity_modulation_permyriad.unwrap_or(0)
+    }))
 }
 
 /// The function computes the maturity modulation for the current time/day, based on the given
@@ -561,12 +581,13 @@ fn remove_subnet_from_authorized_subnet_list_() {
 }
 
 fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
-    let mut state = STATE.write().unwrap();
-    state
-        .authorized_subnets
-        .values_mut()
-        .into_iter()
-        .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove));
+    with_state_mut(|state| {
+        state
+            .authorized_subnets
+            .values_mut()
+            .into_iter()
+            .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove))
+    });
 }
 
 /// Wrapper around over_async_may_reject that requires the future to
@@ -628,43 +649,51 @@ async fn notify_top_up(
     let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
 
     let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_TOP_UP_CANISTER).await?;
-    {
-        let state: &mut State = &mut STATE.write().unwrap();
+
+    let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
         if block_index <= state.last_purged_notification.unwrap() {
-            return Err(NotifyError::TransactionTooOld(
+            return Some(Err(NotifyError::TransactionTooOld(
                 state.last_purged_notification.unwrap() + 1,
-            ));
+            )));
         }
 
         match state.blocks_notified.as_mut().unwrap().entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
-                NotificationStatus::Processing => return Err(NotifyError::Processing),
-                NotificationStatus::NotifiedTopUp(result) => return result.clone(),
+                NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+                NotificationStatus::NotifiedTopUp(result) => Some(result.clone()),
                 NotificationStatus::NotifiedCreateCanister(_) => {
-                    return Err(NotifyError::InvalidTransaction(
+                    Some(Err(NotifyError::InvalidTransaction(
                         "The same payment is already processed as create canister request".into(),
-                    ));
+                    )))
                 }
             },
             Entry::Vacant(entry) => {
                 entry.insert(NotificationStatus::Processing);
+                None
             }
         }
-    }
+    });
 
-    let result = process_top_up(canister_id, from, amount).await;
+    match maybe_early_result {
+        Some(result) => result,
+        None => {
+            let result = process_top_up(canister_id, from, amount).await;
 
-    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
-    notified.as_mut().unwrap().insert(
-        block_index,
-        NotificationStatus::NotifiedTopUp(result.clone()),
-    );
-    if is_transient_error(&result) {
-        notified.as_mut().unwrap().remove(&block_index);
+            with_state_mut(|state| {
+                state.blocks_notified.as_mut().unwrap().insert(
+                    block_index,
+                    NotificationStatus::NotifiedTopUp(result.clone()),
+                );
+                if is_transient_error(&result) {
+                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                }
+            });
+
+            result
+        }
     }
-    result
 }
 
 /// Notify about create canister transaction
@@ -687,44 +716,48 @@ async fn notify_create_canister(
 
     let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
 
-    {
-        let state: &mut State = &mut STATE.write().unwrap();
+    let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
         if block_index <= state.last_purged_notification.unwrap() {
-            return Err(NotifyError::TransactionTooOld(
+            return Some(Err(NotifyError::TransactionTooOld(
                 state.last_purged_notification.unwrap() + 1,
-            ));
+            )));
         }
 
         match state.blocks_notified.as_mut().unwrap().entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
-                NotificationStatus::Processing => return Err(NotifyError::Processing),
-                NotificationStatus::NotifiedCreateCanister(resp) => return resp.clone(),
-                NotificationStatus::NotifiedTopUp(_) => {
-                    return Err(NotifyError::InvalidTransaction(
-                        "The same payment is already processed as a top up request.".into(),
-                    ))
-                }
+                NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+                NotificationStatus::NotifiedCreateCanister(resp) => Some(resp.clone()),
+                NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a top up request.".into(),
+                ))),
             },
             Entry::Vacant(entry) => {
                 entry.insert(NotificationStatus::Processing);
+                None
             }
         }
+    });
+
+    match maybe_early_result {
+        Some(result) => result,
+        None => {
+            let result = process_create_canister(controller, from, amount).await;
+
+            with_state_mut(|state| {
+                state.blocks_notified.as_mut().unwrap().insert(
+                    block_index,
+                    NotificationStatus::NotifiedCreateCanister(result.clone()),
+                );
+                if is_transient_error(&result) {
+                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                }
+            });
+
+            result
+        }
     }
-
-    let result = process_create_canister(controller, from, amount).await;
-
-    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
-    notified.as_mut().unwrap().insert(
-        block_index,
-        NotificationStatus::NotifiedCreateCanister(result.clone()),
-    );
-    if is_transient_error(&result) {
-        notified.as_mut().unwrap().remove(&block_index);
-    }
-
-    result
 }
 
 async fn query_block(
@@ -789,7 +822,7 @@ async fn fetch_transaction(
     expected_to: AccountIdentifier,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
-    let ledger_id = STATE.read().unwrap().ledger_canister_id;
+    let ledger_id = with_state(|state| state.ledger_canister_id);
 
     let block = query_block(block_height, ledger_id).await?;
 
@@ -832,7 +865,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
         tn, caller
     ));
 
-    let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
+    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
     if CanisterId::new(caller) != Ok(ledger_canister_id) {
         return Err(format!(
@@ -843,37 +876,30 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
     // the ledger can process within 24h
-    if tn.block_height <= STATE.read().unwrap().last_purged_notification.unwrap() {
-        return Err(NotifyError::TransactionTooOld(
-            STATE.read().unwrap().last_purged_notification.unwrap() + 1,
-        )
-        .to_string());
+    let last_purged_notification = with_state(|state| state.last_purged_notification.unwrap());
+
+    if tn.block_height <= last_purged_notification {
+        return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
     }
 
     let block_height = tn.block_height;
-    match STATE
-        .write()
-        .unwrap()
-        .blocks_notified
-        .as_mut()
-        .unwrap()
-        .entry(block_height)
-    {
-        Entry::Occupied(entry) => match entry.get() {
-            NotificationStatus::Processing => {
-                return Err("Another notification is in progress".into())
-            }
-            NotificationStatus::NotifiedTopUp(resp) => {
-                return Err(format!("Already notified: {:?}", resp))
-            }
-            NotificationStatus::NotifiedCreateCanister(resp) => {
-                return Err(format!("Already notified: {:?}", resp))
+    with_state_mut(
+        |state| match state.blocks_notified.as_mut().unwrap().entry(block_height) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => Err("Another notification is in progress".into()),
+                NotificationStatus::NotifiedTopUp(resp) => {
+                    Err(format!("Already notified: {:?}", resp))
+                }
+                NotificationStatus::NotifiedCreateCanister(resp) => {
+                    Err(format!("Already notified: {:?}", resp))
+                }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                Ok(())
             }
         },
-        Entry::Vacant(entry) => {
-            entry.insert(NotificationStatus::Processing);
-        }
-    }
+    )?;
 
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
@@ -935,40 +961,50 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
         (Err(err), None)
     };
 
-    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
-
-    if let Some(status) = notification_status {
-        notified.as_mut().unwrap().insert(block_height, status);
-    }
-    if is_transient_error(&cycles_response) {
-        notified.as_mut().unwrap().remove(&block_height);
-    }
+    with_state_mut(|state| {
+        if let Some(status) = notification_status {
+            state
+                .blocks_notified
+                .as_mut()
+                .unwrap()
+                .insert(block_height, status);
+        }
+        if is_transient_error(&cycles_response) {
+            state
+                .blocks_notified
+                .as_mut()
+                .unwrap()
+                .remove(&block_height);
+        }
+    });
 
     cycles_response.map_err(|e| e.to_string())
 }
 
 // If conversion fails, log and return an error
 fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
-    let state = STATE.read().unwrap();
-    let xdr_permyriad_per_icp = state
-        .icp_xdr_conversion_rate
-        .as_ref()
-        .map(|rate| rate.xdr_permyriad_per_icp);
-    match xdr_permyriad_per_icp {
-        Some(xdr_permyriad_per_icp) => Ok(TokensToCycles {
-            xdr_permyriad_per_icp,
-            cycles_per_xdr: state.cycles_per_xdr,
+    with_state(|state| {
+        let xdr_permyriad_per_icp = state
+            .icp_xdr_conversion_rate
+            .as_ref()
+            .map(|rate| rate.xdr_permyriad_per_icp);
+        match xdr_permyriad_per_icp {
+            Some(xdr_permyriad_per_icp) => Ok(TokensToCycles {
+                xdr_permyriad_per_icp,
+                cycles_per_xdr: state.cycles_per_xdr,
+            }
+            .to_cycles(amount)),
+            None => {
+                let error_message =
+                    "No conversion rate found in CMC, notification aborted".to_string();
+                print(&error_message);
+                Err(NotifyError::Other {
+                    error_code: NotifyErrorCode::Internal as u64,
+                    error_message,
+                })
+            }
         }
-        .to_cycles(amount)),
-        None => {
-            let error_message = "No conversion rate found in CMC, notification aborted".to_string();
-            print(&error_message);
-            Err(NotifyError::Other {
-                error_code: NotifyErrorCode::Internal as u64,
-                error_message,
-            })
-        }
-    }
+    })
 }
 
 async fn process_create_canister(
@@ -1040,13 +1076,13 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         "Burning of {} ICPTs from subaccount {}",
         amount, from_subaccount
     );
-    let minting_account_id = STATE.read().unwrap().minting_account_id;
+    let minting_account_id = with_state(|state| state.minting_account_id);
     if minting_account_id.is_none() {
         print(format!("{} failed: minting_account_id not set", msg));
         return;
     }
     let minting_account_id = minting_account_id.unwrap();
-    let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
+    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
     if amount < DEFAULT_TRANSFER_FEE {
         print(format!("{}: amount too small ({})", msg, amount));
@@ -1083,7 +1119,7 @@ async fn refund(
     amount: Tokens,
     extra_fee: Tokens,
 ) -> Result<Option<BlockHeight>, NotifyError> {
-    let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
+    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
     let mut refund_block_index = None;
 
     let mut burned = amount;
@@ -1204,10 +1240,10 @@ async fn create_canister(controller_id: PrincipalId, cycles: Cycles) -> Result<C
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let now = dfn_core::api::now();
 
-    {
-        let mut state = STATE.write().unwrap();
+    with_state_mut(|state| {
         state.limiter.purge_old(now);
         let count = state.limiter.get_count();
+
         if count + cycles > state.cycles_limit {
             return Err(format!(
                 "More than {} cycles have been minted in the last {} seconds, please try again later.",
@@ -1215,9 +1251,11 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
                 state.limiter.get_max_age().as_secs(),
             ));
         }
+
         state.limiter.add(now, cycles);
         state.total_cycles_minted += cycles;
-    }
+        Ok(())
+    })?;
 
     dfn_core::api::mint_cycles(
         cycles
@@ -1232,13 +1270,7 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
 #[export_name = "canister_query total_cycles_minted"]
 fn total_supply_() {
     over(protobuf, |_: ()| -> u64 {
-        STATE
-            .read()
-            .unwrap()
-            .total_cycles_minted
-            .get()
-            .try_into()
-            .unwrap()
+        with_state(|state| state.total_cycles_minted.get().try_into().unwrap())
     })
 }
 
@@ -1246,12 +1278,13 @@ fn total_supply_() {
 /// canisters
 async fn get_permuted_subnets_for(controller_id: &PrincipalId) -> Result<Vec<SubnetId>, String> {
     let mut subnets = {
-        let state = STATE.read().unwrap();
-        if let Some(subnets) = state.authorized_subnets.get(controller_id) {
-            subnets.clone()
-        } else {
-            state.default_subnets.clone()
-        }
+        with_state(|state| {
+            if let Some(subnets) = state.authorized_subnets.get(controller_id) {
+                subnets.clone()
+            } else {
+                state.default_subnets.clone()
+            }
+        })
     };
 
     let mut rng = get_rng().await?;
@@ -1282,16 +1315,12 @@ async fn get_rng() -> Result<StdRng, String> {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
-    let bytes = &STATE
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .encode();
+    let bytes = with_state(|state| state.encode());
     print(format!(
         "[cycles] serialized state prior to upgrade ({} bytes)",
         bytes.len(),
     ));
-    stable::set(bytes);
+    stable::set(&bytes);
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -1303,7 +1332,7 @@ fn post_upgrade() {
             bytes.len(),
         ));
 
-        *STATE.write().unwrap() = State::decode(&bytes).unwrap();
+        STATE.with(|state| state.replace(Some(State::decode(&bytes).unwrap())));
     })
 }
 
@@ -1313,38 +1342,39 @@ fn http_request() {
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-    let state = STATE.read().unwrap();
-    w.encode_gauge(
-        "cmc_last_purged_notification",
-        state.last_purged_notification.unwrap() as f64,
-        "Block index of the last purged notification.",
-    )?;
-    w.encode_gauge(
-        "cmc_blocks_notified_count",
-        state.blocks_notified.as_ref().unwrap().len() as f64,
-        "Number of notifications stored in the cache.",
-    )?;
-    w.encode_gauge(
-        "cmc_icp_xdr_conversion_rate",
-        state
-            .icp_xdr_conversion_rate
-            .as_ref()
-            .unwrap()
-            .xdr_permyriad_per_icp as f64
-            / 10_000f64,
-        "Amount of XDR corresponding to 1 ICP.",
-    )?;
-    w.encode_gauge(
-        "cmc_cycles_per_xdr",
-        state.cycles_per_xdr.get() as f64,
-        "Number of cycles corresponding to 1 XDR.",
-    )?;
-    w.encode_counter(
-        "cmc_cycles_minted_total",
-        state.total_cycles_minted.get() as f64,
-        "Number of cycles minted since the Genesis.",
-    )?;
-    Ok(())
+    with_state(|state| {
+        w.encode_gauge(
+            "cmc_last_purged_notification",
+            state.last_purged_notification.unwrap() as f64,
+            "Block index of the last purged notification.",
+        )?;
+        w.encode_gauge(
+            "cmc_blocks_notified_count",
+            state.blocks_notified.as_ref().unwrap().len() as f64,
+            "Number of notifications stored in the cache.",
+        )?;
+        w.encode_gauge(
+            "cmc_icp_xdr_conversion_rate",
+            state
+                .icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .xdr_permyriad_per_icp as f64
+                / 10_000f64,
+            "Amount of XDR corresponding to 1 ICP.",
+        )?;
+        w.encode_gauge(
+            "cmc_cycles_per_xdr",
+            state.cycles_per_xdr.get() as f64,
+            "Number of cycles corresponding to 1 XDR.",
+        )?;
+        w.encode_counter(
+            "cmc_cycles_minted_total",
+            state.total_cycles_minted.get() as f64,
+            "Number of cycles minted since the Genesis.",
+        )?;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -1352,20 +1382,31 @@ mod tests {
     use super::*;
     use rand::Rng;
 
+    fn init_test_state() {
+        init(CyclesCanisterInitPayload {
+            ledger_canister_id: CanisterId::ic_00(),
+            governance_canister_id: CanisterId::ic_00(),
+            minting_account_id: None,
+            last_purged_notification: Some(0),
+        })
+    }
+
     #[test]
     fn test_state_encode() {
-        let mut state = State::default();
-        state.minting_account_id = Some(AccountIdentifier::new(
-            PrincipalId::new_user_test_id(1),
-            None,
-        ));
+        let mut state = State {
+            minting_account_id: Some(AccountIdentifier::new(
+                PrincipalId::new_user_test_id(1),
+                None,
+            )),
+            default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))],
+            total_cycles_minted: Cycles::new(1234),
+            last_purged_notification: Some(33),
+            ..Default::default()
+        };
         state.authorized_subnets.insert(
             PrincipalId::new_user_test_id(2),
             vec![SubnetId::from(PrincipalId::new_subnet_test_id(3))],
         );
-        state.default_subnets = vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))];
-        state.total_cycles_minted = Cycles::new(1234);
-        state.last_purged_notification = Some(33);
         let mut blocks_notified = BTreeMap::new();
         for i in 50..60 {
             blocks_notified.insert(
@@ -1394,8 +1435,10 @@ mod tests {
         fn block_index_to_cycles(block_index: BlockHeight) -> Cycles {
             Cycles::new(block_index as u128)
         }
-        let mut state = State::default();
-        state.last_purged_notification = Some(0);
+        let mut state = State {
+            last_purged_notification: Some(0),
+            ..Default::default()
+        };
         let initial_number_of_notifications = 100;
         let mut blocks_notified = BTreeMap::new();
         for i in 0..initial_number_of_notifications {
@@ -1497,8 +1540,9 @@ mod tests {
     #[test]
     // The function tests if the average ICP/XDR price is computed correctly.
     fn test_average_icp_xdr_price_with_sample_rates() {
+        init_test_state();
+
         let timestamp = 1_632_700_800;
-        let mut state = State::default();
         let rates = get_sample_conversion_rates(timestamp);
         // The average of the rates in the sample rates that are used for the ICP/XDR price.
         let chosen_rates_sum: u64 = 1_000_000 + 1_110_000 + 1_520_000 + 880_000 + 1_090_000;
@@ -1508,9 +1552,10 @@ mod tests {
         };
         // The state is updated with all rates in reverse order (oldest to newest).
         for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate, &mut state);
+            update_recent_icp_xdr_rates(rate);
         }
-        let recent_rates = state.recent_icp_xdr_rates.unwrap_or_default();
+        let recent_rates =
+            with_state(|state| state.recent_icp_xdr_rates.clone().unwrap_or_default());
         let computed_average_rate =
             compute_average_icp_xdr_rate_at_time(&recent_rates, timestamp).unwrap();
         // Assert that the rates are identical.
@@ -1521,7 +1566,8 @@ mod tests {
     // The function tests if the average ICP/XDR price is computed correctly for
     // random input.
     fn test_random_average_icp_xdr_price() {
-        let mut state = State::default();
+        init_test_state();
+
         // Set a timestamp.
         let timestamp: u64 = 1_632_728_342;
         // Get a random number generator.
@@ -1539,29 +1585,20 @@ mod tests {
                 valid_rates_sum += valid_rate;
             }
             // Add a rate one second before midnight (this rate will be ignored).
-            update_recent_icp_xdr_rates(
-                &IcpXdrConversionRate {
-                    timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
-                    xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
-                },
-                &mut state,
-            );
+            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
+                timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
+                xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
+            });
             // Add a rate at midnight.
-            update_recent_icp_xdr_rates(
-                &IcpXdrConversionRate {
-                    timestamp_seconds: (1_632_700_800 - day * 86_400) as u64,
-                    xdr_permyriad_per_icp: valid_rate,
-                },
-                &mut state,
-            );
+            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
+                timestamp_seconds: (1_632_700_800 - day * 86_400) as u64,
+                xdr_permyriad_per_icp: valid_rate,
+            });
             // Add a rate one second after midnight (this rate will be ignored).
-            update_recent_icp_xdr_rates(
-                &IcpXdrConversionRate {
-                    timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
-                    xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
-                },
-                &mut state,
-            );
+            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
+                timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
+                xdr_permyriad_per_icp: rng.gen_range(1_000_000, 10_000_000),
+            });
         }
         // Get the average of the valid ICP/XDR rates in the last
         // `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days.
@@ -1569,7 +1606,8 @@ mod tests {
             timestamp_seconds: (timestamp / 86_400) * 86_400,
             xdr_permyriad_per_icp: valid_rates_sum / (NUM_DAYS_FOR_ICP_XDR_AVERAGE as u64),
         };
-        let recent_rates = state.recent_icp_xdr_rates.unwrap_or_default();
+        let recent_rates =
+            with_state(|state| state.recent_icp_xdr_rates.clone().unwrap_or_default());
         let computed_average_rate =
             compute_average_icp_xdr_rate_at_time(&recent_rates, timestamp).unwrap();
         // Assert that the rates are identical.
@@ -1579,14 +1617,15 @@ mod tests {
     #[test]
     // The function tests if the maturity modulation is computed correctly using sample rates.
     fn test_maturity_modulation_with_sample_rates() {
+        init_test_state();
+
         let timestamp = 1_632_700_800;
-        let mut state = State::default();
         let rates = get_sample_conversion_rates(timestamp);
         // The state is updated with all rates in reverse order (oldest to newest).
         for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate, &mut state);
+            update_recent_icp_xdr_rates(rate);
         }
-        let recent_rates = state.recent_icp_xdr_rates.unwrap();
+        let recent_rates = with_state(|state| state.recent_icp_xdr_rates.clone().unwrap());
         let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, timestamp);
         // The are only 5 rates (1_000_000 + 1_110_000 + 1_520_000 + 880_000 + 1_090_000) for the
         // average rate ending with the given timestamp, yielding an average rate of 1_120_000.
@@ -1602,6 +1641,8 @@ mod tests {
     // The function tests if the maturity modulation is computed correctly for
     // random input.
     fn test_random_maturity_modulation() {
+        init_test_state();
+
         // Create random start-of-day conversion rates.
         let mut current_rate: i32 = 100_000;
         let mut rng = rand::thread_rng();
@@ -1620,11 +1661,10 @@ mod tests {
         }
 
         // Get the maturity modulation.
-        let mut state = State::default();
         for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate, &mut state);
+            update_recent_icp_xdr_rates(rate);
         }
-        let recent_rates = state.recent_icp_xdr_rates.unwrap();
+        let recent_rates = with_state(|state| state.recent_icp_xdr_rates.clone().unwrap());
         let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, 1658102400);
 
         // Compute maturity modulation by hand.
