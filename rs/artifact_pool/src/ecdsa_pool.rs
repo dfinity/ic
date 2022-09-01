@@ -58,7 +58,7 @@ impl EcdsaObjectPool {
         assert_eq!(EcdsaMessageType::from(&message), self.object_type);
         let key = ecdsa_msg_id(&message);
         if self.objects.insert(key, message).is_none() {
-            self.metrics.observe_insert();
+            self.metrics.observe_insert(self.object_type.as_str());
         }
     }
 
@@ -68,7 +68,7 @@ impl EcdsaObjectPool {
 
     fn remove_object(&mut self, key: &EcdsaMessageId) -> bool {
         if self.objects.remove(key).is_some() {
-            self.metrics.observe_remove();
+            self.metrics.observe_remove(self.object_type.as_str());
             true
         } else {
             false
