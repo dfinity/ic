@@ -317,6 +317,9 @@ pub struct CanisterStateBits {
     /// canister.
     #[prost(message, repeated, tag = "30")]
     pub task_queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+    /// Time of last charge for resource allocations.
+    #[prost(message, optional, tag = "31")]
+    pub time_of_last_allocation_charge_nanos: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

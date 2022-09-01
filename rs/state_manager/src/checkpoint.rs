@@ -16,7 +16,8 @@ use ic_state_layout::{
     BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
     ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
-use ic_types::{Height, LongExecutionMode};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{Height, LongExecutionMode, Time};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use rand::prelude::SliceRandom;
@@ -218,6 +219,12 @@ fn serialize_canister_to_tip(
                     .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
                 install_code_debit: canister_state.scheduler_state.install_code_debit,
+                time_of_last_allocation_charge_nanos: Some(
+                    canister_state
+                        .scheduler_state
+                        .time_of_last_allocation_charge
+                        .as_nanos_since_unix_epoch(),
+                ),
                 task_queue: canister_state
                     .system_state
                     .task_queue
@@ -421,6 +428,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                 }
             }
         }
+
         canister_states
     };
 
@@ -573,6 +581,12 @@ pub fn load_canister_state<P: ReadPolicy>(
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
+            // TODO(EXC-1214): Ensure field is always set to some value.
+            time_of_last_allocation_charge: canister_state_bits
+                .time_of_last_allocation_charge_nanos
+                .map_or(UNIX_EPOCH, |time_nanos| {
+                    Time::from_nanos_since_unix_epoch(time_nanos)
+                }),
         },
     };
 

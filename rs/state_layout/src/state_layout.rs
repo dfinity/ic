@@ -123,6 +123,7 @@ pub struct CanisterStateBits {
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
     pub task_queue: Vec<ExecutionTask>,
+    pub time_of_last_allocation_charge_nanos: Option<u64>,
 }
 
 /// This struct contains bits of the `BitcoinState` that are not already
@@ -1234,6 +1235,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
+            time_of_last_allocation_charge_nanos: item.time_of_last_allocation_charge_nanos,
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
         }
     }
@@ -1306,6 +1308,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
+            time_of_last_allocation_charge_nanos: try_from_option_field(
+                value.time_of_last_allocation_charge_nanos,
+                "CanisterStateBits::time_of_last_allocation_charge_nanos",
+            )
+            .ok(),
             task_queue,
         })
     }
@@ -1661,6 +1668,7 @@ mod test {
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
             install_code_debit: NumInstructions::from(0),
+            time_of_last_allocation_charge_nanos: None,
             task_queue: vec![],
         }
     }
