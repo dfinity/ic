@@ -81,11 +81,37 @@ afterEach(() => {
   jest.spyOn(global.Math, 'random').mockRestore();
 });
 
-it('should set content-type: application/cbor and x-content-type-options: nosniff on calls to /api', async () => {
+it('should not set content-type: application/cbor and x-content-type-options: nosniff on non-ic calls to /api', async () => {
   fetch.mockResponse('test response');
 
   const response = await handleRequest(
     new Request('https://example.com/api/foo')
+  );
+
+  expect(response.headers.get('x-content-type-options')).not.toEqual('nosniff');
+  expect(response.headers.get('content-type')).not.toEqual('application/cbor');
+  expect(await response.text()).toEqual('test response');
+  expect(response.status).toEqual(200);
+});
+
+it('should set content-type: application/cbor and x-content-type-options: nosniff on ic calls to /api', async () => {
+  fetch.mockResponse('test response');
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/api/foo`)
+  );
+
+  expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
+  expect(response.headers.get('content-type')).toEqual('application/cbor');
+  expect(await response.text()).toEqual('test response');
+  expect(response.status).toEqual(200);
+});
+
+it('should set content-type: application/cbor and x-content-type-options: nosniff on hostname ic calls to /api', async () => {
+  fetch.mockResponse('test response');
+
+  const response = await handleRequest(
+    new Request(`https://dscvr.one/api/foo`)
   );
 
   expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
