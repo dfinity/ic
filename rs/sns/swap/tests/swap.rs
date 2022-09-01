@@ -24,21 +24,24 @@ use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse}
 
 use ic_sns_swap::{
     pb::v1::{
-        Lifecycle::{Aborted, Committed, Pending},
+        Lifecycle::{Committed, Open},
         *,
     },
-    swap::{
-        principal_to_subaccount, SnsGovernanceClient, SnsRootClient, TransferResult,
-        SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
-    },
+    swap::{principal_to_subaccount, SnsGovernanceClient, TransferResult, SECONDS_PER_DAY},
 };
 use ledger_canister::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     str::FromStr,
     sync::{Arc, Mutex},
 };
+
+use ic_sns_swap::swap::SnsRootClient;
+
+fn i2principal_id_string(i: u64) -> String {
+    Principal::from(PrincipalId::new_user_test_id(i)).to_text()
+}
 
 // 10 ^ 8.
 const E8: u64 = 100_000_000;
@@ -56,30 +59,72 @@ pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
 /// Returns a valid Init.
 fn init() -> Init {
     let result = Init {
-        // TODO: should fail until canister ids have been changed to something real.
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
-        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
-        max_icp_e8s: 1000000 * E8,
-        min_icp_e8s: 0,
-        min_participants: 3,
-        min_participant_icp_e8s: 100 * E8,
-        max_participant_icp_e8s: 1000000 * E8,
+        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         fallback_controller_principal_ids: vec![i2principal_id_string(1230578)],
     };
-
-    assert!(result.is_valid(), "{result:#?}");
-
+    assert!(result.validate().is_ok(), "{result:#?}");
     result
+}
+
+const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640991600;
+const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
+const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
+
+fn params() -> Params {
+    let result = Params {
+        min_participants: 3,
+        min_icp_e8s: 1,
+        max_icp_e8s: 1_000_000 * E8,
+        min_participant_icp_e8s: 100 * E8,
+        max_participant_icp_e8s: 100_000 * E8,
+        swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
+        sns_token_e8s: 1_000_000 * E8,
+    };
+    assert!(result.is_valid_at(START_TIMESTAMP_SECONDS));
+    assert!(result.validate().is_ok());
+    result
+}
+
+/// Test helper.
+fn verify_participant_balances(
+    swap: &Swap,
+    buyer_principal: &PrincipalId,
+    icp_balance_e8s: u64,
+    sns_balance_e8s: u64,
+) {
+    fn get_direct_investment<'a>(
+        ns: &'a Vec<SnsNeuronRecipe>,
+        buyer_principal: &str,
+    ) -> &'a SnsNeuronRecipe {
+        for n in ns {
+            match &n.investor {
+                Some(sns_neuron_recipe::Investor::Direct(DirectInvestment {
+                    buyer_principal: buyer,
+                })) => {
+                    if buyer == buyer_principal {
+                        return n;
+                    }
+                }
+                _ => continue,
+            }
+        }
+        panic!("Cannot find principal {}", buyer_principal);
+    }
+    let buyer = swap.buyers.get(&buyer_principal.to_string()).unwrap();
+    assert_eq!(icp_balance_e8s, buyer.amount_icp_e8s());
+    let direct = get_direct_investment(&swap.neuron_recipes, &buyer_principal.to_string());
+    assert_eq!(direct.amount_e8s(), sns_balance_e8s);
 }
 
 #[test]
 fn fallback_controller_principal_ids_must_not_be_empty() {
     let mut init = init();
     init.fallback_controller_principal_ids.clear();
-    assert!(!init.is_valid(), "{init:#?}");
+    assert!(init.validate().is_err(), "{init:#?}");
 }
 
 /// Expectation of one call on the mock Ledger.
@@ -147,111 +192,110 @@ impl Ledger for MockLedger {
     }
 }
 
-fn mock_stub(mut expect: Vec<LedgerExpect>) -> impl Fn(CanisterId) -> Box<dyn Ledger> {
+fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
     expect.reverse();
     let e = Arc::new(Mutex::new(expect));
-    move |_| Box::new(MockLedger { expect: e.clone() })
-}
-
-const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
-const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
-const OPEN_TIME_WINDOW: TimeWindow = TimeWindow {
-    start_timestamp_seconds: START_TIMESTAMP_SECONDS,
-    end_timestamp_seconds: END_TIMESTAMP_SECONDS,
-};
-
-fn new_swap(init: Init) -> Swap {
-    let nns_governance = PrincipalId::from(init.nns_governance());
-    let mut result = Swap::new(init);
-    result.set_open_time_window(
-        nns_governance,
-        START_TIMESTAMP_SECONDS,
-        &SetOpenTimeWindowRequest {
-            open_time_window: Some(OPEN_TIME_WINDOW),
-        },
-    );
-    result
-}
-
-fn open_at_start(swap: &mut Swap) -> Result<(), String> {
-    let (start, _end) = swap
-        .state()
-        .open_time_window
-        .unwrap()
-        .to_boundaries_timestamp_seconds();
-    swap.open(start)
-}
-
-#[should_panic]
-#[test]
-fn set_open_time_window_requires_authorization() {
-    let wrong_canister = PrincipalId::from(init().icp_ledger());
-    let mut swap = Swap::new(init());
-    swap.set_open_time_window(
-        wrong_canister,
-        START_TIMESTAMP_SECONDS,
-        &SetOpenTimeWindowRequest {
-            open_time_window: Some(OPEN_TIME_WINDOW),
-        },
-    );
+    MockLedger { expect: e }
 }
 
 #[test]
 fn test_init() {
     let swap = Swap::new(init());
-    assert!(swap.is_valid());
+    assert!(swap.validate().is_ok());
 }
 
 #[test]
 fn test_open() {
-    let mut swap = new_swap(init());
-    // Cannot open as the swap has not received its initial funding yet.
-    assert!(open_at_start(&mut swap).is_err());
+    let mut swap = Swap::new(init());
     let account = Account {
         owner: SWAP_CANISTER_ID.get(),
         subaccount: None,
     };
-    // Refresh yielding zero tokens...
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                account.clone(),
-                Ok(Tokens::ZERO)
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    // Can still not open...
-    assert!(open_at_start(&mut swap).is_err());
-    // Refresh giving error...
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(account.clone(), Err(13))])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_err());
-    // Can still not open...
-    assert!(open_at_start(&mut swap).is_err());
-    // Refresh giving 100k tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                account,
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
+    let params = params();
+    // Cannot open as the swap has not received its initial funding yet (zero).
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account.clone(),
+                    Ok(Tokens::ZERO),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_err());
+    }
+    // Cannot open as the swap has not received its initial funding yet (error).
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(account.clone(), Err(13))]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_err());
+    }
+    // Cannot open as the swap has not received all of its initial funding yet.
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account.clone(),
+                    Ok(Tokens::from_e8s(params.sns_token_e8s - 1)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_err());
+    }
+    // Funding is available - now we can open.
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
     // Check that state is updated.
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    // Now the swap can be opened.
-    assert!(open_at_start(&mut swap).is_ok());
+    assert_eq!(swap.sns_token_e8s(), params.sns_token_e8s);
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+}
+
+fn now_fn(is_after: bool) -> u64 {
+    if is_after {
+        END_TIMESTAMP_SECONDS + 10
+    } else {
+        END_TIMESTAMP_SECONDS + 5
+    }
 }
 
 /// Check that the behaviour is correct when the swap is due and the
@@ -259,34 +303,39 @@ fn test_open() {
 /// case.
 #[test]
 fn test_min_icp() {
-    let init = Init {
+    let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
-        ..init()
+        ..params()
     };
-    let mut swap = new_swap(init);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
     // Open swap.
-    // Refresh giving 100k SNS tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![],
                 },
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 2 ICP from one buyer.
@@ -306,11 +355,10 @@ fn test_min_icp() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         2 * E8
     );
     // Deposit 2 ICP from another buyer.
@@ -330,11 +378,10 @@ fn test_min_icp() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         2 * E8
     );
     // There are now two participants with a total of 4 ICP.
@@ -343,7 +390,7 @@ fn test_min_icp() {
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS));
     // This should now abort as the minimum hasn't been reached.
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Aborted);
+    assert_eq!(swap.lifecycle(), Lifecycle::Aborted);
     {
         let fee = 1152;
         // "Sweep" all ICP, which should go back to the buyers.
@@ -353,6 +400,7 @@ fn test_min_icp() {
             skipped,
         } = swap
             .sweep_icp(
+                now_fn,
                 Tokens::from_e8s(fee),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
@@ -390,34 +438,39 @@ fn test_min_icp() {
 /// Test going below the minimum and above the maximum ICP for a single participant.
 #[test]
 fn test_min_max_icp_per_buyer() {
-    let init = Init {
+    let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
-        ..init()
+        ..params()
     };
-    let mut swap = new_swap(init);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
     // Open swap.
-    // Refresh giving 100k SNS tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![],
                 },
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Try to deposit 0.99999999 ICP, slightly less than the minimum.
@@ -437,11 +490,7 @@ fn test_min_max_icp_per_buyer() {
             .now_or_never()
             .unwrap();
         assert!(e.is_err());
-        assert!(swap
-            .state()
-            .buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .is_none());
+        assert!(swap.buyers.get(&TEST_USER1_PRINCIPAL.to_string()).is_none());
     }
     // Try to deposit 6 ICP.
     {
@@ -462,11 +511,10 @@ fn test_min_max_icp_per_buyer() {
         assert!(e.is_ok());
         // Should only get 5 as that's the max per participant.
         assert_eq!(
-            swap.state()
-                .buyers
+            swap.buyers
                 .get(&TEST_USER1_PRINCIPAL.to_string())
                 .unwrap()
-                .amount_icp_e8s,
+                .amount_icp_e8s(),
             5 * E8
         );
         // Make sure that a second refresh of the same principal doesn't change the balance.
@@ -487,11 +535,10 @@ fn test_min_max_icp_per_buyer() {
         assert!(e.is_ok());
         // Should still only be 5 as that's the max per participant.
         assert_eq!(
-            swap.state()
-                .buyers
+            swap.buyers
                 .get(&TEST_USER1_PRINCIPAL.to_string())
                 .unwrap()
-                .amount_icp_e8s,
+                .amount_icp_e8s(),
             5 * E8
         );
     }
@@ -500,34 +547,39 @@ fn test_min_max_icp_per_buyer() {
 /// Test going over the total max ICP for the swap.
 #[test]
 fn test_max_icp() {
-    let init = Init {
+    let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
         min_participants: 2,
-        min_participant_icp_e8s: E8,
+        min_participant_icp_e8s: /* 1 */ E8,
         max_participant_icp_e8s: 6 * E8,
-        ..init()
+        ..params()
     };
-    let mut swap = new_swap(init);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
     // Open swap.
-    // Refresh giving 100k SNS tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![],
                 },
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
@@ -547,11 +599,10 @@ fn test_max_icp() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         6 * E8
     );
     // Deposit 6 ICP from another buyer.
@@ -572,69 +623,85 @@ fn test_max_icp() {
         .is_ok());
     // But only 4 ICP is "accepted".
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         4 * E8
     );
     // Can commit even if time isn't up as the max has been reached.
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS - 1));
     // This should commit...
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Committed);
-    // Check that buyer balances are correct. Total SNS balance is 100k and total ICP is 10.
-    {
-        let b1 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b1.amount_icp_e8s, 6 * E8);
-        assert_eq!(b1.amount_sns_e8s, 60000 * E8);
-    }
-    {
-        let b2 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER2_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b2.amount_icp_e8s, 4 * E8);
-        assert_eq!(b2.amount_sns_e8s, 40000 * E8);
-    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
+    // Check that buyer balances are correct. Total SNS balance is 1M
+    // and total ICP is 10, so 100k SNS tokens per ICP.
+    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 600000 * E8);
+    verify_participant_balances(&swap, &TEST_USER2_PRINCIPAL, 4 * E8, 400000 * E8);
 }
 
 /// Test the happy path of a token swap. First 200k SNS tokens are
-/// sent. Then three buyers commit 1000 ICP, 600 ICP, and 400 ICP
-/// respectively. Then the swap is committed and the tokens
-/// distributed.
+/// sent. Then three buyers commit 900 ICP, 600 ICP, and 400 ICP
+/// respectively. The community fund commits 100 ICP from two
+/// participants (one with two neurons and one with one neuron). Then
+/// the swap is committed and the tokens distributed.
 #[test]
 fn test_scenario_happy() {
-    let init = init();
-    let mut swap = new_swap(init);
-    // Refresh giving 200k tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    let params = Params {
+        sns_token_e8s: 200_000 * E8,
+        min_participants: 5, // Two from the community fund, and three direct.
+        ..params()
+    };
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
+    // Open swap.
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![
+                        CfParticipant {
+                            hotkey_principal: TEST_USER1_PRINCIPAL.to_string(),
+                            cf_neurons: vec![
+                                CfNeuron {
+                                    nns_neuron_id: 0x91,
+                                    amount_icp_e8s: 50 * E8,
+                                },
+                                CfNeuron {
+                                    nns_neuron_id: 0x92,
+                                    amount_icp_e8s: 30 * E8,
+                                },
+                            ],
+                        },
+                        CfParticipant {
+                            hotkey_principal: TEST_USER2_PRINCIPAL.to_string(),
+                            cf_neurons: vec![CfNeuron {
+                                nns_neuron_id: 0x93,
+                                amount_icp_e8s: 20 * E8,
+                            }],
+                        },
+                    ],
                 },
-                Ok(Tokens::from_e8s(200000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 200000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.sns_token_e8s(), 200_000 * E8);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
-    // Deposit 1000 ICP from one buyer.
+    // Deposit 900 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
@@ -644,19 +711,18 @@ fn test_scenario_happy() {
                     owner: SWAP_CANISTER_ID.get(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
                 },
-                Ok(Tokens::from_e8s(1000 * E8))
+                Ok(Tokens::from_e8s(900 * E8))
             )])
         )
         .now_or_never()
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
-        1000 * E8
+            .amount_icp_e8s(),
+        900 * E8
     );
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
@@ -677,18 +743,18 @@ fn test_scenario_happy() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         600 * E8
     );
-    // Now there are two participants. If the time was up, the swap could be aborted...
+    // Now there are two participants. If the time was up, the swap
+    // could be aborted...
     {
         let mut abort_swap = swap.clone();
         assert!(abort_swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-        assert_eq!(abort_swap.state().lifecycle(), Lifecycle::Aborted);
+        assert_eq!(abort_swap.lifecycle(), Lifecycle::Aborted);
     }
     // Deposit 400 ICP from a third buyer.
     assert!(swap
@@ -707,48 +773,27 @@ fn test_scenario_happy() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER3_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         400 * E8
     );
+    // We should now have a sufficient number of participants.
+    //println!("{} {} {}", swap.cf_participants.len(), swap.buyers.len(), params.min_participants);
+    assert!(swap.sufficient_participation());
     // Cannot commit if the swap is not due.
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS - 1));
     // Can commit if the swap is due.
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS));
     // This should commit...
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Committed);
-    // Check that buyer balances are correct. Total SNS balance is 200k and total ICP is 2k.
-    {
-        let b1 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b1.amount_icp_e8s, 1000 * E8);
-        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
-    }
-    {
-        let b2 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER2_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b2.amount_icp_e8s, 600 * E8);
-        assert_eq!(b2.amount_sns_e8s, 60000 * E8);
-    }
-    {
-        let b3 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER3_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b3.amount_icp_e8s, 400 * E8);
-        assert_eq!(b3.amount_sns_e8s, 40000 * E8);
-    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
+    // Check that buyer balances are correct. Total SNS balance is
+    // 200k and total ICP is 2k.
+    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 900 * E8, 90000 * E8);
+    verify_participant_balances(&swap, &TEST_USER2_PRINCIPAL, 600 * E8, 60000 * E8);
+    verify_participant_balances(&swap, &TEST_USER3_PRINCIPAL, 400 * E8, 40000 * E8);
     {
         // "Sweep" all ICP, going to the governance canister. Mock one failure.
         let SweepResult {
@@ -757,6 +802,7 @@ fn test_scenario_happy() {
             skipped,
         } = swap
             .sweep_icp(
+                now_fn,
                 Tokens::from_e8s(1),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
@@ -771,7 +817,7 @@ fn test_scenario_happy() {
                         Err(77),
                     ),
                     LedgerExpect::TransferFunds(
-                        1000 * E8 - 1,
+                        900 * E8 - 1,
                         1,
                         Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
                         Account {
@@ -805,6 +851,7 @@ fn test_scenario_happy() {
             skipped,
         } = swap
             .sweep_icp(
+                now_fn,
                 Tokens::from_e8s(2),
                 &mock_stub(vec![LedgerExpect::TransferFunds(
                     600 * E8 - 2,
@@ -830,12 +877,22 @@ fn test_scenario_happy() {
                 subaccount: Some(compute_neuron_staking_subaccount_bytes(x, 0)),
             }
         }
+        fn cf(nns_id: u64) -> Account {
+            Account {
+                owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                    NNS_GOVERNANCE_CANISTER_ID.get(),
+                    nns_id,
+                )),
+            }
+        }
         let SweepResult {
             success,
             failure,
             skipped,
         } = swap
             .sweep_sns(
+                now_fn,
                 Tokens::from_e8s(1),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
@@ -844,10 +901,10 @@ fn test_scenario_happy() {
                         None,
                         dst(*TEST_USER2_PRINCIPAL),
                         0,
-                        Ok(1068),
+                        Ok(1066),
                     ),
                     LedgerExpect::TransferFunds(
-                        100000 * E8 - 1,
+                        90000 * E8 - 1,
                         1,
                         None,
                         dst(*TEST_USER1_PRINCIPAL),
@@ -860,209 +917,180 @@ fn test_scenario_happy() {
                         None,
                         dst(*TEST_USER3_PRINCIPAL),
                         0,
-                        Ok(1066),
+                        Ok(1068),
                     ),
+                    LedgerExpect::TransferFunds(5000 * E8 - 1, 1, None, cf(0x91), 0, Ok(1069)),
+                    LedgerExpect::TransferFunds(3000 * E8 - 1, 1, None, cf(0x92), 0, Ok(1070)),
+                    LedgerExpect::TransferFunds(2000 * E8 - 1, 1, None, cf(0x93), 0, Ok(1070)),
                 ]),
             )
             .now_or_never()
             .unwrap();
         assert_eq!(skipped, 0);
         assert_eq!(failure, 0);
-        assert_eq!(success, 3);
-        assert!(swap.state().all_zeroed());
+        assert_eq!(success, 6);
     }
 }
 
-fn i2principal_id_string(i: u64) -> String {
-    Principal::from(PrincipalId::new_user_test_id(i)).to_text()
+// Expect that no SNS root calls will be made.
+#[derive(Default, Debug)]
+struct ExplodingSnsRootClient;
+#[async_trait]
+impl SnsRootClient for ExplodingSnsRootClient {
+    async fn set_dapp_controllers(
+        &mut self,
+        _request: SetDappControllersRequest,
+    ) -> Result<SetDappControllersResponse, CanisterCallError> {
+        unimplemented!();
+    }
+}
+#[derive(Default, Debug)]
+struct SpySnsRootClient {
+    observed_calls: Vec<SetDappControllersRequest>,
+}
+#[async_trait]
+impl SnsRootClient for SpySnsRootClient {
+    async fn set_dapp_controllers(
+        &mut self,
+        request: SetDappControllersRequest,
+    ) -> Result<SetDappControllersResponse, CanisterCallError> {
+        self.observed_calls.push(request);
+        Ok(SetDappControllersResponse {
+            failed_updates: vec![],
+        })
+    }
 }
 
-#[tokio::test]
-async fn test_finalize_swap_ok() {
-    // Step 0: Define helper types.
-
-    // Explodes, because in this scenario, it is expect that no SNS root calls
-    // will be made.
-    #[derive(Default, Debug)]
-    struct ExplodingSnsRootClient;
-    #[async_trait]
-    impl SnsRootClient for ExplodingSnsRootClient {
-        async fn set_dapp_controllers(
-            &mut self,
-            _request: SetDappControllersRequest,
-        ) -> Result<SetDappControllersResponse, CanisterCallError> {
-            unimplemented!();
-        }
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, PartialEq)]
+enum SnsGovernanceClientCall {
+    ManageNeuron(ManageNeuron),
+    SetMode(SetMode),
+}
+#[derive(Default, Debug)]
+struct SpySnsGovernanceClient {
+    calls: Vec<SnsGovernanceClientCall>,
+}
+#[async_trait]
+impl SnsGovernanceClient for SpySnsGovernanceClient {
+    async fn manage_neuron(
+        &mut self,
+        request: ManageNeuron,
+    ) -> Result<ManageNeuronResponse, CanisterCallError> {
+        self.calls
+            .push(SnsGovernanceClientCall::ManageNeuron(request));
+        Ok(ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                // Even an empty value can be used here, because it is not
+                // actually used in this scenario (yet).
+                ClaimOrRefreshResponse::default(),
+            )),
+        })
     }
-
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Debug, PartialEq)]
-    enum SnsGovernanceClientCall {
-        ManageNeuron(ManageNeuron),
-        SetMode(SetMode),
+    async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
+        self.calls.push(SnsGovernanceClientCall::SetMode(request));
+        Ok(SetModeResponse {})
     }
-    #[derive(Default, Debug)]
-    struct SpySnsGovernanceClient {
-        calls: Vec<SnsGovernanceClientCall>,
-    }
-    #[async_trait]
-    impl SnsGovernanceClient for SpySnsGovernanceClient {
-        async fn manage_neuron(
-            &mut self,
-            request: ManageNeuron,
-        ) -> Result<ManageNeuronResponse, CanisterCallError> {
-            self.calls
-                .push(SnsGovernanceClientCall::ManageNeuron(request));
-            Ok(ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::ClaimOrRefresh(
-                    // Even an empty value can be used here, because it is not
-                    // actually used in this scenario (yet).
-                    ClaimOrRefreshResponse::default(),
-                )),
-            })
-        }
-        async fn set_mode(
-            &mut self,
-            request: SetMode,
-        ) -> Result<SetModeResponse, CanisterCallError> {
-            self.calls.push(SnsGovernanceClientCall::SetMode(request));
-            Ok(SetModeResponse {})
-        }
-    }
+}
 
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    struct LedgerTransferCall {
-        canister_id: CanisterId,
-
+#[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Eq, Hash)]
+enum LedgerCall {
+    TransferFunds {
         amount_e8s: u64,
         fee_e8s: u64,
         from_subaccount: Option<Subaccount>,
         to: Account,
         memo: u64,
+    },
+
+    AccountBalance {
+        account_id: Account,
+    },
+}
+
+struct SpyLedger {
+    calls: Arc<Mutex<Vec<LedgerCall>>>,
+}
+impl SpyLedger {
+    fn new(calls: Arc<Mutex<Vec<LedgerCall>>>) -> Self {
+        Self { calls }
+    }
+}
+#[async_trait]
+impl Ledger for SpyLedger {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<Subaccount>,
+        to: Account,
+        memo: u64,
+    ) -> Result</* block_height: */ u64, NervousSystemError> {
+        self.calls.lock().unwrap().push(LedgerCall::TransferFunds {
+            amount_e8s,
+            fee_e8s,
+            from_subaccount,
+            to,
+            memo,
+        });
+
+        Ok(42)
     }
 
-    struct SpyLedger {
-        calls: Arc<Mutex<Vec<LedgerTransferCall>>>,
-        canister_id: CanisterId,
-    }
-    impl SpyLedger {
-        fn new(calls: Arc<Mutex<Vec<LedgerTransferCall>>>, canister_id: CanisterId) -> Self {
-            Self { calls, canister_id }
-        }
-    }
-    #[async_trait]
-    impl Ledger for SpyLedger {
-        async fn transfer_funds(
-            &self,
-            amount_e8s: u64,
-            fee_e8s: u64,
-            from_subaccount: Option<Subaccount>,
-            to: Account,
-            memo: u64,
-        ) -> Result</* block_height: */ u64, NervousSystemError> {
-            self.calls.lock().unwrap().push(LedgerTransferCall {
-                canister_id: self.canister_id,
-                amount_e8s,
-                fee_e8s,
-                from_subaccount,
-                to,
-                memo,
-            });
-
-            Ok(42)
-        }
-
-        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-            unimplemented!();
-        }
-
-        async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
-            assert_eq!(
-                account_id,
-                Account {
-                    owner: SWAP_CANISTER_ID.into(),
-                    subaccount: None,
-                }
-            );
-
-            Ok(Tokens::from_e8s(10 * E8))
-        }
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!();
     }
 
+    async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(LedgerCall::AccountBalance { account_id });
+
+        Ok(Tokens::from_e8s(10 * E8))
+    }
+}
+
+#[tokio::test]
+async fn test_finalize_swap_ok() {
     // Step 1: Prepare the world.
-    let ledger_calls = Arc::new(Mutex::new(Vec::<LedgerTransferCall>::new()));
-    let ledger_factory = |canister_id: CanisterId| -> Box<dyn Ledger> {
-        Box::new(SpyLedger::new(Arc::clone(&ledger_calls), canister_id))
-    };
+    let icp_ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
+    let icp_ledger: SpyLedger = SpyLedger::new(Arc::clone(&icp_ledger_calls));
+    let sns_ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
+    let sns_ledger: SpyLedger = SpyLedger::new(Arc::clone(&sns_ledger_calls));
 
-    #[rustfmt::skip]
-    let init = Some(Init {
+    let init = Init {
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
-            icp_ledger_canister_id:     ICP_LEDGER_CANISTER_ID.to_string(),
-
-              sns_root_canister_id:       SNS_ROOT_CANISTER_ID.to_string(),
+        icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
+        sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
-            sns_ledger_canister_id:     SNS_LEDGER_CANISTER_ID.to_string(),
-
+        sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
+        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+    };
+    let params = Params {
         max_icp_e8s: 100,
         min_icp_e8s: 0,
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: 100,
         min_participants: 1,
-        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
-    });
-    let nns_governance = PrincipalId::from(init.as_ref().unwrap().nns_governance());
-    let mut swap = Swap {
-        init,
-        state: Some(State {
-            buyers: btreemap! {
-                i2principal_id_string(1001) => BuyerState {
-                    amount_icp_e8s: 50 * E8,
-                    amount_sns_e8s: 0,
-                    icp_disbursing: false,
-                    sns_disbursing: false,
-                },
-
-                i2principal_id_string(1002) => BuyerState {
-                    amount_icp_e8s: 30 * E8,
-                    amount_sns_e8s: 0,
-                    icp_disbursing: false,
-                    sns_disbursing: false,
-                },
-
-                i2principal_id_string(1003) => BuyerState {
-                    amount_icp_e8s: 20 * E8,
-                    amount_sns_e8s: 0,
-                    icp_disbursing: false,
-                    sns_disbursing: false,
-                },
-            },
-            lifecycle: Pending as i32,
-            sns_token_e8s: 0,
-            open_time_window: None,
-        }),
+        sns_token_e8s: 10 * E8,
+        swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
     };
-    swap.set_open_time_window(
-        nns_governance,
-        START_TIMESTAMP_SECONDS,
-        &SetOpenTimeWindowRequest {
-            open_time_window: Some(OPEN_TIME_WINDOW),
+    let mut swap = Swap {
+        lifecycle: Open as i32,
+        init: Some(init),
+        params: Some(params),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState::new(50 * E8),
+            i2principal_id_string(1002) => BuyerState::new(30 * E8),
+            i2principal_id_string(1003) => BuyerState::new(20 * E8),
         },
-    );
-
-    // Quickly run through the lifecycle.
-    {
-        let r = swap
-            .refresh_sns_token_e8s(SWAP_CANISTER_ID, &ledger_factory)
-            .await;
-        assert!(r.is_ok(), "{r:#?}");
-    }
-    {
-        let r = open_at_start(&mut swap);
-        assert!(r.is_ok(), "{r:#?}");
-    }
-    assert!(swap.try_commit_or_abort(/* now_seconds: */ 1));
-    assert_eq!(swap.state().lifecycle(), Committed);
+        cf_participants: vec![],
+        neuron_recipes: vec![],
+        cf_minting: None,
+    };
+    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
+    assert_eq!(swap.lifecycle(), Committed);
 
     let mut sns_root_client = ExplodingSnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
@@ -1070,10 +1098,11 @@ async fn test_finalize_swap_ok() {
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
         .finalize(
+            now_fn,
             &mut sns_root_client,
             &mut sns_governance_client,
-            ledger_factory,
-            ledger_factory,
+            &icp_ledger,
+            &sns_ledger,
         )
         .await;
 
@@ -1152,35 +1181,35 @@ async fn test_finalize_swap_ok() {
     }
 
     // Assert that ICP and SNS tokens were sent.
-    let ledger_calls = ledger_calls
+    const FEE_E8S: u64 = 10_000;
+    let icp_ledger_calls = icp_ledger_calls
         .lock()
         .unwrap()
         .iter()
         .cloned()
-        .collect::<Vec<LedgerTransferCall>>();
-    assert_eq!(ledger_calls.len(), 6, "{ledger_calls:#?}");
-    for t in &ledger_calls {
-        let LedgerTransferCall { fee_e8s, memo, .. } = t;
-        assert_eq!(*fee_e8s, FEE_E8S, "{t:#?}");
-        assert_eq!(*memo, 0, "{t:#?}");
+        .collect::<Vec<LedgerCall>>();
+    let sns_ledger_calls = sns_ledger_calls
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .collect::<Vec<LedgerCall>>();
+    assert_eq!(icp_ledger_calls.len() + sns_ledger_calls.len(), 6);
+    for t in icp_ledger_calls.iter().chain(sns_ledger_calls.iter()) {
+        if let LedgerCall::TransferFunds { fee_e8s, memo, .. } = t {
+            assert_eq!(*fee_e8s, FEE_E8S, "{t:#?}");
+            assert_eq!(*memo, 0, "{t:#?}");
+        } else {
+            panic!("Expected transfer");
+        }
     }
 
-    const FEE_E8S: u64 = 10_000;
-
     // ICP should be sent to SNS governance (from various swap subaccounts.)
-    let observed_nns_ledger_calls = ledger_calls
-        .iter()
-        .filter(|t| t.canister_id.to_string() == ICP_LEDGER_CANISTER_ID.to_string())
-        .map(Clone::clone)
-        .collect::<HashSet<_>>();
     let expected_to = Account {
         owner: SNS_GOVERNANCE_CANISTER_ID.into(),
         subaccount: None,
     };
-    for t in &observed_nns_ledger_calls {
-        assert_eq!(t.to, expected_to, "{t:#?}");
-    }
-    let expected_nns_ledger_calls = hashset! {
+    let mut expected_icp_ledger_calls = hashset! {
         (1001, 50),
         (1002, 30),
         (1003, 20),
@@ -1191,28 +1220,21 @@ async fn test_finalize_swap_ok() {
             &PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap(),
         ));
         let amount_e8s = icp_amount * E8 - FEE_E8S;
-        (from_subaccount, amount_e8s)
+        LedgerCall::TransferFunds {
+            amount_e8s,
+            fee_e8s: FEE_E8S,
+            from_subaccount,
+            to: expected_to.clone(),
+            memo: 0,
+        }
     })
-    .collect::<HashMap<_, _>>();
-    assert_eq!(
-        observed_nns_ledger_calls
-            .iter()
-            .map(|t| (t.from_subaccount, t.amount_e8s))
-            .collect::<HashMap<_, _>>(),
-        expected_nns_ledger_calls,
-        "{observed_nns_ledger_calls:#?}",
-    );
+    .collect::<Vec<_>>();
+    expected_icp_ledger_calls.sort();
+    let mut actual_icp_ledger_calls = icp_ledger_calls;
+    actual_icp_ledger_calls.sort();
+    assert_eq!(actual_icp_ledger_calls, expected_icp_ledger_calls);
 
-    // SNS tokens should be sent to neuron (sub)accounts (i.e. SNS governance subaccounts).
-    let observed_sns_ledger_calls: HashSet<_> = ledger_calls
-        .iter()
-        .filter(|t| t.canister_id == SNS_LEDGER_CANISTER_ID)
-        .map(Clone::clone)
-        .collect();
-    for t in &observed_sns_ledger_calls {
-        assert_eq!(t.from_subaccount, None, "{t:#?}");
-    }
-    let expected_sns_ledger_calls = hashset! {
+    let mut expected_sns_ledger_calls = hashset! {
         (1001, 5),
         (1002, 3),
         (1003, 2),
@@ -1220,7 +1242,6 @@ async fn test_finalize_swap_ok() {
     .into_iter()
     .map(|(buyer, sns_amount)| {
         let buyer = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-
         let to = Account {
             owner: SNS_GOVERNANCE_CANISTER_ID.into(),
             subaccount: Some(
@@ -1228,203 +1249,64 @@ async fn test_finalize_swap_ok() {
             ),
         };
         let amount_e8s = sns_amount * E8 - FEE_E8S;
-
-        (to, amount_e8s)
+        LedgerCall::TransferFunds {
+            amount_e8s,
+            fee_e8s: FEE_E8S,
+            from_subaccount: None,
+            to,
+            memo: 0,
+        }
     })
-    .collect::<HashMap<_, _>>();
-    assert_eq!(
-        observed_sns_ledger_calls
-            .iter()
-            .map(|t| (t.to.clone(), t.amount_e8s))
-            .collect::<HashMap<_, _>>(),
-        expected_sns_ledger_calls,
-        "{observed_sns_ledger_calls:#?}",
-    );
+    .collect::<Vec<_>>();
+    expected_sns_ledger_calls.sort();
+    let mut actual_sns_ledger_calls = sns_ledger_calls;
+    actual_sns_ledger_calls.sort();
+    assert_eq!(actual_sns_ledger_calls, expected_sns_ledger_calls);
 }
 
 #[tokio::test]
 async fn test_finalize_swap_abort() {
-    // Step 0: Define helper types.
-
-    #[derive(Default, Debug)]
-    struct SpySnsRootClient {
-        observed_calls: Vec<SetDappControllersRequest>,
-    }
-    #[async_trait]
-    impl SnsRootClient for SpySnsRootClient {
-        async fn set_dapp_controllers(
-            &mut self,
-            request: SetDappControllersRequest,
-        ) -> Result<SetDappControllersResponse, CanisterCallError> {
-            self.observed_calls.push(request);
-            Ok(SetDappControllersResponse {
-                failed_updates: vec![],
-            })
-        }
-    }
-
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Debug, PartialEq)]
-    enum SnsGovernanceClientCall {
-        ManageNeuron(ManageNeuron),
-        SetMode(SetMode),
-    }
-    #[derive(Default, Debug)]
-    struct SpySnsGovernanceClient {
-        calls: Vec<SnsGovernanceClientCall>,
-    }
-    #[async_trait]
-    impl SnsGovernanceClient for SpySnsGovernanceClient {
-        async fn manage_neuron(
-            &mut self,
-            request: ManageNeuron,
-        ) -> Result<ManageNeuronResponse, CanisterCallError> {
-            self.calls
-                .push(SnsGovernanceClientCall::ManageNeuron(request));
-            Ok(ManageNeuronResponse::default())
-        }
-        async fn set_mode(
-            &mut self,
-            request: SetMode,
-        ) -> Result<SetModeResponse, CanisterCallError> {
-            self.calls.push(SnsGovernanceClientCall::SetMode(request));
-            Ok(SetModeResponse {})
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    enum LedgerCall {
-        TransferFunds {
-            canister_id: CanisterId,
-
-            amount_e8s: u64,
-            fee_e8s: u64,
-            from_subaccount: Option<Subaccount>,
-            to: Account,
-            memo: u64,
-        },
-
-        AccountBalance {
-            canister_id: CanisterId,
-
-            account_id: Account,
-        },
-    }
-
-    struct SpyLedger {
-        calls: Arc<Mutex<Vec<LedgerCall>>>,
-        canister_id: CanisterId,
-    }
-    impl SpyLedger {
-        fn new(calls: Arc<Mutex<Vec<LedgerCall>>>, canister_id: CanisterId) -> Self {
-            Self { calls, canister_id }
-        }
-    }
-    #[async_trait]
-    impl Ledger for SpyLedger {
-        async fn transfer_funds(
-            &self,
-            amount_e8s: u64,
-            fee_e8s: u64,
-            from_subaccount: Option<Subaccount>,
-            to: Account,
-            memo: u64,
-        ) -> Result</* block_height: */ u64, NervousSystemError> {
-            self.calls.lock().unwrap().push(LedgerCall::TransferFunds {
-                canister_id: self.canister_id,
-                amount_e8s,
-                fee_e8s,
-                from_subaccount,
-                to,
-                memo,
-            });
-
-            Ok(42)
-        }
-
-        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-            unimplemented!();
-        }
-
-        async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
-            self.calls.lock().unwrap().push(LedgerCall::AccountBalance {
-                canister_id: self.canister_id,
-                account_id,
-            });
-
-            Ok(Tokens::from_e8s(10 * E8))
-        }
-    }
-
     // Step 1: Prepare the world.
-    let ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
-    let ledger_factory = |canister_id: CanisterId| -> Box<dyn Ledger> {
-        Box::new(SpyLedger::new(Arc::clone(&ledger_calls), canister_id))
-    };
+    let icp_ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
+    let icp_ledger: SpyLedger = SpyLedger::new(Arc::clone(&icp_ledger_calls));
+    let sns_ledger_calls = Arc::new(Mutex::new(Vec::<LedgerCall>::new()));
+    let sns_ledger: SpyLedger = SpyLedger::new(Arc::clone(&sns_ledger_calls));
 
-    #[rustfmt::skip]
     let init = Init {
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
         icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-
         sns_root_canister_id: SNS_ROOT_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
-
+        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+    };
+    let params = Params {
         // This absurdly large number ensures that the swap reaches the Aborted state.
         max_icp_e8s: E8 * E8,
         min_icp_e8s: E8 * E8,
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: E8 * E8,
-
         // There will only be one participant; therefore, this also ensures that
         // the swap reaches the Aborted state.
         min_participants: 2,
-
-        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
+        sns_token_e8s: 10 * E8,
+        swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
     };
-    let nns_governance = PrincipalId::from(init.nns_governance());
-    let mut swap = Swap {
-        init: Some(init.clone()),
-        state: Some(State {
-            buyers: btreemap! {},
-            lifecycle: Pending as i32,
-            sns_token_e8s: 0,
-            open_time_window: None,
-        }),
-    };
-    swap.set_open_time_window(
-        nns_governance,
-        START_TIMESTAMP_SECONDS,
-        &SetOpenTimeWindowRequest {
-            open_time_window: Some(OPEN_TIME_WINDOW),
-        },
-    );
-
-    // Quickly run through the lifecycle.
-    {
-        let r = swap
-            .refresh_sns_token_e8s(SWAP_CANISTER_ID, &ledger_factory)
-            .await;
-        assert!(r.is_ok(), "{r:#?}");
-    }
-    {
-        let r = open_at_start(&mut swap);
-        assert!(r.is_ok(), "{r:#?}");
-    }
-
     let buyer_principal_id = PrincipalId::new_user_test_id(8502);
-    swap.refresh_buyer_token_e8s(buyer_principal_id, SWAP_CANISTER_ID, &ledger_factory)
-        .await
-        .unwrap();
+    let mut swap = Swap {
+        lifecycle: Open as i32,
+        init: Some(init.clone()),
+        params: Some(params),
+        cf_participants: vec![],
+        buyers: btreemap! {
+                i2principal_id_string(8502) => BuyerState::new(77 * E8),
+        },
+        neuron_recipes: vec![],
+        cf_minting: None,
+    };
 
-    let (_, end_timestamp_seconds) = swap
-        .state()
-        .open_time_window
-        .unwrap()
-        .to_boundaries_timestamp_seconds();
-    assert!(swap.try_commit_or_abort(/* now_seconds: */ end_timestamp_seconds + 1));
-    assert_eq!(swap.state().lifecycle(), Aborted);
+    assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
+    assert_eq!(swap.lifecycle(), Lifecycle::Aborted);
 
     let mut sns_root_client = SpySnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
@@ -1432,10 +1314,11 @@ async fn test_finalize_swap_abort() {
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
         .finalize(
+            now_fn,
             &mut sns_root_client,
             &mut sns_governance_client,
-            ledger_factory,
-            ledger_factory,
+            &icp_ledger,
+            &sns_ledger,
         )
         .await;
 
@@ -1470,42 +1353,13 @@ async fn test_finalize_swap_abort() {
         sns_governance_client.calls
     );
 
-    // Step 3.2: Since there were no participants, there is no ICP to
-    // refund. Also, there are no participants to give SNS tokens to (in the
-    // form of neurons); therefore, no SNS tokens should be sent either.
-    let ledger_calls = ledger_calls
-        .lock()
-        .unwrap()
-        .iter()
-        .cloned()
-        .collect::<Vec<LedgerCall>>();
+    // Step 3.2: Verify ledger calls.
     assert_eq!(
-        ledger_calls,
+        *icp_ledger_calls.lock().unwrap(),
         vec![
-            // Caused by refresh_sns_tokens.
-            LedgerCall::AccountBalance {
-                canister_id: SNS_LEDGER_CANISTER_ID,
-                account_id: Account {
-                    owner: PrincipalId::from(SWAP_CANISTER_ID),
-                    subaccount: None,
-                },
-            },
-            // Caused by refresh_icp_tokens.
-            LedgerCall::AccountBalance {
-                canister_id: ICP_LEDGER_CANISTER_ID,
-                account_id: Account {
-                    owner: SWAP_CANISTER_ID.into(),
-                    subaccount: Some(principal_to_subaccount(&buyer_principal_id))
-                },
-            },
             // Refund ICP to buyer.
             LedgerCall::TransferFunds {
-                canister_id: ICP_LEDGER_CANISTER_ID,
-
-                // 10 is the amount of ICP that the buyer put into the swap,
-                // because that's what SpyLedger always returns as someone's
-                // balance.
-                amount_e8s: 10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+                amount_e8s: 77 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
 
                 fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
                 from_subaccount: Some(principal_to_subaccount(&buyer_principal_id)),
@@ -1513,7 +1367,11 @@ async fn test_finalize_swap_abort() {
                 memo: 0,
             }
         ],
-        "{ledger_calls:#?}"
+        "{icp_ledger_calls:#?}"
+    );
+    assert_eq!(
+        *sns_ledger_calls.lock().unwrap(),
+        vec![/* Test started in Open state */]
     );
 
     // Step 3.3: SNS root was told to set dapp canister controllers.
@@ -1533,33 +1391,40 @@ async fn test_finalize_swap_abort() {
 /// Test the error refund method.
 #[test]
 fn test_error_refund() {
-    let init = Init {
+    let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
         min_participants: 1,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 6 * E8,
-        ..init()
+        sns_token_e8s: 100_000 * E8,
+        ..params()
     };
-    let mut swap = new_swap(init);
-    // Refresh giving 100k SNS tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
+    // Open swap.
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![],
                 },
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
@@ -1579,11 +1444,10 @@ fn test_error_refund() {
         .unwrap()
         .is_ok());
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         6 * E8
     );
     let fee = 1234;
@@ -1608,17 +1472,10 @@ fn test_error_refund() {
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Commit when due.
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Committed);
+    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
     // Check that buyer balance is correct. Total SNS balance is 100k and total ICP is 6.
-    {
-        let b1 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b1.amount_icp_e8s, 6 * E8);
-        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
-    }
+    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 100_000 * E8);
+
     // Now, we try to do some refunds.
 
     // Perhaps USER2 (who never participated in the swap) sent 10 ICP in error?
@@ -1693,6 +1550,7 @@ fn test_error_refund() {
         skipped,
     } = swap
         .sweep_icp(
+            now_fn,
             Tokens::from_e8s(fee),
             &mock_stub(vec![LedgerExpect::TransferFunds(
                 6 * E8 - fee,
@@ -1711,16 +1569,10 @@ fn test_error_refund() {
     assert_eq!(skipped, 0);
     assert_eq!(success, 1);
     assert_eq!(failure, 0);
-    // Check that buyer balance is correct. Total SNS balance is 100k, but ICP is zero.
-    {
-        let b1 = swap
-            .state()
-            .buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .unwrap();
-        assert_eq!(b1.amount_icp_e8s, 0);
-        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
-    }
+    // Check that buyer balance still is correct.
+
+    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 100_000 * E8);
+
     // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
     // error? We expect this to succeed now that the ICP that
     // participated in the swap have been disbursed.
@@ -1752,34 +1604,40 @@ fn test_error_refund() {
 /// Test that a single buyer states can be retrieved
 #[test]
 fn test_get_buyer_state() {
-    let init = Init {
+    let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
         min_participants: 1,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 6 * E8,
-        ..init()
+        sns_token_e8s: 100_000 * E8,
+        ..params()
     };
-    let mut swap = new_swap(init);
-
-    // Refresh giving 100k SNS tokens
-    assert!(swap
-        .refresh_sns_token_e8s(
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: None
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let mut swap = Swap::new(init());
+    // Open swap.
+    {
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params),
+                    cf_participants: vec![],
                 },
-                Ok(Tokens::from_e8s(100000 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(swap.state().sns_token_e8s, 100000 * E8);
-    assert!(open_at_start(&mut swap).is_ok());
-    assert_eq!(swap.state().lifecycle(), Lifecycle::Open);
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(r.is_ok());
+    }
+    assert_eq!(swap.lifecycle(), Lifecycle::Open);
     // Deposit 6 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -1798,11 +1656,10 @@ fn test_get_buyer_state() {
         .is_ok());
     // Assert the balance is correct
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         6 * E8
     );
 
@@ -1813,7 +1670,7 @@ fn test_get_buyer_state() {
         })
         .buyer_state
         .unwrap()
-        .amount_icp_e8s,
+        .amount_icp_e8s(),
         6 * E8
     );
 
@@ -1836,11 +1693,10 @@ fn test_get_buyer_state() {
     // But only 4 ICP is "accepted" as the swap's init.max_icp_e8s is 10 Tokens and has
     // been reached by this point.
     assert_eq!(
-        swap.state()
-            .buyers
+        swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap()
-            .amount_icp_e8s,
+            .amount_icp_e8s(),
         4 * E8
     );
 
@@ -1851,7 +1707,7 @@ fn test_get_buyer_state() {
         })
         .buyer_state
         .unwrap()
-        .amount_icp_e8s,
+        .amount_icp_e8s(),
         4 * E8
     );
 

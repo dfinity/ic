@@ -23,6 +23,7 @@ use ic_sns_wasm::pb::v1::{
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
@@ -340,6 +341,16 @@ fn get_next_sns_version() {
 #[candid_method(query, rename = "get_next_sns_version")]
 fn get_next_sns_version_(request: GetNextSnsVersionRequest) -> GetNextSnsVersionResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_next_sns_version(request))
+}
+
+#[export_name = "canister_query get_latest_sns_version_pretty"]
+fn get_latest_sns_version_pretty() {
+    over(candid_one, get_latest_sns_version_pretty_)
+}
+
+#[candid_method(query, rename = "get_latest_sns_version_pretty")]
+fn get_latest_sns_version_pretty_(_: ()) -> HashMap<String, String> {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_latest_sns_version_pretty())
 }
 
 #[export_name = "canister_update deploy_new_sns"]

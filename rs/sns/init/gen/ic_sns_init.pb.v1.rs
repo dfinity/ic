@@ -32,31 +32,6 @@ pub struct SnsInitPayload {
     /// The minimum amount a neuron needs to have staked.
     #[prost(uint64, optional, tag = "5")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
-    /// Amount targeted by the swap, if the amount is reached the swap is triggered. Must be at least
-    /// min_participants * min_participant_icp_e8.
-    #[prost(uint64, optional, tag = "7")]
-    pub max_icp_e8s: ::core::option::Option<u64>,
-    /// Minimum number of participants for the swap to take place. Must be greater than zero.
-    #[prost(uint32, optional, tag = "8")]
-    pub min_participants: ::core::option::Option<u32>,
-    /// The minimum amount of icp that each buyer must contribute to participate.
-    #[prost(uint64, optional, tag = "9")]
-    pub min_participant_icp_e8s: ::core::option::Option<u64>,
-    /// The maximum amount of ICP that each buyer can contribute. Must be
-    /// greater than or equal to `min_participant_icp_e8s` and less than
-    /// or equal to `max_icp_e8s`. Can effectively be disabled by
-    /// setting it to `max_icp_e8s`.
-    #[prost(uint64, optional, tag = "10")]
-    pub max_participant_icp_e8s: ::core::option::Option<u64>,
-    /// The total number of ICP that is required for this token swap to
-    /// take place. This number divided by the number of SNS tokens being
-    /// offered gives the seller's reserve price for the swap, i.e., the
-    /// minimum number of ICP per SNS tokens that the seller of SNS
-    /// tokens is willing to accept. If this amount is not achieved, the
-    /// swap will be aborted (instead of committed) when the due date/time
-    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
-    #[prost(uint64, optional, tag = "11")]
-    pub min_icp_e8s: ::core::option::Option<u64>,
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s). Must not be empty.

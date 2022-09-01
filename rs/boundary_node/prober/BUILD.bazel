@@ -36,12 +36,11 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_binary(
-    name = "prober",
+    name = "boundary-node-prober",
     srcs = [
         "src/main.rs",
         "src/metrics.rs",
     ],
-    crate_name = "boundary_node_prober",
     data = ["src/canister.wat"],
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,

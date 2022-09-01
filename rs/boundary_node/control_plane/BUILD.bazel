@@ -40,8 +40,8 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "control_plane",
-    srcs = glob(["src/**/*.rs"]),
+    name = "boundary-node-control-plane",
+    srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "boundary_node_control_plane",
     edition = "2021",
@@ -52,7 +52,7 @@ rust_binary(
 rust_test(
     name = "control_plane_test",
     aliases = ALIASES,
-    crate = ":control_plane",
+    crate = ":boundary-node-control-plane",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

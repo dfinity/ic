@@ -92,11 +92,6 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         token_symbol: Some("AST".to_string()),
         proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
         neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
-        min_participant_icp_e8s: Some(100_000_000),
-        max_icp_e8s: Some(1_000_000_000),
-        min_participants: Some(1),
-        min_icp_e8s: Some(100),
-        max_participant_icp_e8s: Some(1_000_000_000_000_000),
         fallback_controller_principal_ids: vec![user.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
@@ -280,11 +275,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         token_symbol: Some("AST".to_string()),
         proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
         neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
-        min_participant_icp_e8s: Some(100_000_000),
-        max_icp_e8s: Some(1_000_000_000),
-        min_participants: Some(1),
-        min_icp_e8s: Some(100),
-        max_participant_icp_e8s: Some(1_000_000_000_000_000),
         fallback_controller_principal_ids: vec![user.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {

@@ -30,6 +30,8 @@ build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
+build --@rules_rust//:source_path_prefix=/source/
+
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test"

@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nns/governance",
     "//rs/nns/handlers/root",
     "//rs/nns/init",
+    "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",

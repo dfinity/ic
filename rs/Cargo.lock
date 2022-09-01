@@ -3798,6 +3798,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
+ "ic-sns-wasm",
  "ic-types 0.8.0",
  "lazy_static",
  "on_wire",
@@ -5097,6 +5098,7 @@ dependencies = [
  "ic-types 0.8.0",
  "k256",
  "lazy_static",
+ "num-traits",
  "p256",
  "paste 1.0.7",
  "rand 0.8.5",
@@ -5358,20 +5360,23 @@ name = "ic-crypto-utils-threshold-sig"
 version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
- "hex",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-interfaces",
  "ic-types 0.8.0",
- "tempfile",
 ]
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig-der"
 version = "0.8.0"
 dependencies = [
+ "base64 0.11.0",
+ "hex",
  "ic-crypto-internal-threshold-sig-bls12381-der",
+ "ic-crypto-internal-types",
+ "ic-types 0.8.0",
+ "tempfile",
 ]
 
 [[package]]
@@ -5692,7 +5697,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-p2p",
@@ -6667,7 +6672,7 @@ dependencies = [
  "hyper",
  "ic-async-utils",
  "ic-config",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-metrics",
  "ic-metrics-exporter",
@@ -7062,7 +7067,7 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.14",
  "ic-config",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -7413,7 +7418,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
@@ -7495,7 +7500,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -7876,6 +7881,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-cdk 0.5.5",
  "ic-crypto-sha",
@@ -7905,6 +7911,7 @@ dependencies = [
  "prost",
  "registry-canister",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "walrus",
@@ -12324,9 +12331,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.82"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82c2c1fdcd807d1098552c5b9a36e425e42e9fbd7c6a37a8425f390f781f7fa7"
+checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
  "itoa 1.0.1",
  "ryu",

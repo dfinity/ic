@@ -3,8 +3,7 @@ use clap::Parser;
 use ic_sns_governance::pb::v1::{governance::SnsMetadata, NervousSystemParameters};
 use ic_sns_init::{
     pb::v1::{sns_init_payload::InitialTokenDistribution, SnsInitPayload},
-    MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_PARTICIPANT_ICP_E8S_DEFAULT,
-    MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
+    MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
 };
 use regex::Regex;
 use std::{
@@ -73,22 +72,6 @@ pub struct SnsCliInitConfig {
     /// A description of the SNS project.
     description: Option<String>,
 
-    /// Amount targeted by the swap, if the amount is reached the swap is triggered.
-    max_icp_e8s: Option<u64>,
-
-    /// The total number of ICP that is required for this token swap to
-    /// take place.
-    min_icp_e8s: Option<u64>,
-
-    /// Minimum number of participants for the swap to take place.
-    min_participants: Option<u32>,
-
-    /// The minimum amount of ICP that each buyer must contribute to participate.
-    min_participant_icp_e8s: Option<u64>,
-
-    /// The maximum amount of ICP that each buyer can contribute.
-    max_participant_icp_e8s: Option<u64>,
-
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
@@ -110,11 +93,6 @@ impl Default for SnsCliInitConfig {
             token_symbol: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
-            max_icp_e8s: None,
-            min_participants: None,
-            min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_E8S_DEFAULT),
-            max_participant_icp_e8s: None,
-            min_icp_e8s: None,
             fallback_controller_principal_ids: vec![],
             logo: None,
             url: None,
@@ -216,11 +194,6 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             token_symbol: sns_cli_init_config.token_symbol,
             proposal_reject_cost_e8s: sns_cli_init_config.proposal_reject_cost_e8s,
             neuron_minimum_stake_e8s: sns_cli_init_config.neuron_minimum_stake_e8s,
-            max_icp_e8s: sns_cli_init_config.max_icp_e8s,
-            min_participants: sns_cli_init_config.min_participants,
-            min_participant_icp_e8s: sns_cli_init_config.min_participant_icp_e8s,
-            max_participant_icp_e8s: sns_cli_init_config.max_participant_icp_e8s,
-            min_icp_e8s: sns_cli_init_config.min_icp_e8s,
             fallback_controller_principal_ids: sns_cli_init_config
                 .fallback_controller_principal_ids,
             logo: optional_logo,
@@ -394,61 +367,6 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             ),
         ),
         (
-            Regex::new(r"min_icp_e8s*").unwrap(),
-            r##"#
-# The minimum amount of ICP that must be collected for this decentralization sale to be considered
-# successful. This amount divided by the amount of SNS tokens that are sold in the initial
-# decentralization sale determines the minimum amount of ICP per SNS tokens that participants
-# will get. If this amount is not achieved, the decentralization sale will be aborted (instead of
-# committed) when the due date/time occurs.
-# This field has no default, a value must be provided by the user.
-# Must be smaller than or equal to `max_icp_e8s`.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"max_icp_e8s*").unwrap(),
-            r##"#
-#
-# SNS DECENTRALIZATION SALE
-#
-# The amount targeted by the decentralization sale. If this amount is reached, the sale is closed.
-# This field has no default, a value must be provided by the user.
-# Must be at least min_participants * min_participant_icp_e8.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"min_participant_icp_e8s*").unwrap(),
-            format!(
-                r##"#
-# The minimum amount of ICP that each decentralization sale participant must contribute for a
-# successful participation.
-# Default value = {}
-#"##,
-                MIN_PARTICIPANT_ICP_E8S_DEFAULT
-            ),
-        ),
-        (
-            Regex::new(r"min_participants*").unwrap(),
-            r##"#
-# The minimum number of participants for the decentralization sale to be considered successful.
-# This field has no default, a value must be provided by the user.
-# Must be greater than zero.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"max_participant_icp_e8s*").unwrap(),
-            r##"#
-# The maximum amount of ICP that each participant of the decentralization sale can contribute.
-# This field has no default, a value must be provided by the user.
-# Must be greater or equal than `min_participant_icp_e8s` and smaller or equal than
-# `max_icp_e8s`. Can effectively be disabled by setting it to `max_icp_e8s`.
-#"##
-            .to_string(),
-        ),
-        (
             Regex::new(r"fallback_controller_principal_ids.*").unwrap(),
             r##"#
 # If the decentralization sale fails, control of the dapp canister(s) is set to these
@@ -561,11 +479,6 @@ mod test {
                 token_symbol: Some("SNS".to_string()),
                 proposal_reject_cost_e8s: Some(2),
                 neuron_minimum_stake_e8s: Some(3),
-                max_icp_e8s: Some(4),
-                min_participants: Some(5),
-                min_participant_icp_e8s: Some(6),
-                max_participant_icp_e8s: Some(7),
-                min_icp_e8s: Some(8),
                 fallback_controller_principal_ids: vec![
                     "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
                 ],
@@ -594,7 +507,7 @@ mod test {
     fn test_read_yaml_file() {
         let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
         logo_path.push("test.png");
-        let mut file_contents = format!(
+        let file_contents = format!(
             r#"
 ---
 transaction_fee_e8s: 10000
@@ -618,11 +531,6 @@ initial_token_distribution:
         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
           stake_e8s: 500000000
 
-max_icp_e8s: 200000000
-min_participants: 2
-min_participant_icp_e8s: 100000000
-max_participant_icp_e8s: 100000000
-min_icp_e8s: 200000000
 fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
 logo: {}
 description: Launching an SNS
@@ -634,8 +542,9 @@ url: https://internetcomputer.org/
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         assert!(resulting_payload.validate().is_ok());
 
-        // We add a string repeating the field "min_participants", this should fail
-        file_contents.push_str("\nmin_participants: 21");
+        // We add a string repeating the field "name", this should fail
+        let mut file_contents = file_contents;
+        file_contents.push_str("\nname: ServiceNervousSystemTest");
         assert!(serde_yaml::from_str::<SnsCliInitConfig>(&file_contents).is_err());
     }
 
@@ -668,26 +577,6 @@ url: https://internetcomputer.org/
         assert_eq!(
             sns_cli_init_config.neuron_minimum_stake_e8s,
             sns_init_payload.neuron_minimum_stake_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.max_icp_e8s,
-            sns_init_payload.max_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.min_participants,
-            sns_init_payload.min_participants
-        );
-        assert_eq!(
-            sns_cli_init_config.min_participant_icp_e8s,
-            sns_init_payload.min_participant_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.max_participant_icp_e8s,
-            sns_init_payload.max_participant_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.min_icp_e8s,
-            sns_init_payload.min_icp_e8s
         );
         assert_eq!(
             sns_cli_init_config.fallback_controller_principal_ids,

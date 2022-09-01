@@ -33,7 +33,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_binary(
-    name = "denylist_updater",
+    name = "denylist-updater",
     srcs = glob(["src/**"]),
     crate_name = "denylist_updater",
     edition = "2021",

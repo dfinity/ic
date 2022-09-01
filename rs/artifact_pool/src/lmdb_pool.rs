@@ -1690,18 +1690,20 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
         for op in ops.ops {
             match op {
                 EcdsaPoolSectionOp::Insert(message) => {
-                    let db = self.get_message_db(EcdsaMessageType::from(&message));
+                    let message_type = EcdsaMessageType::from(&message);
+                    let db = self.get_message_db(message_type);
                     if !db.insert_txn(message, &mut tx) {
                         return;
                     }
-                    self.metrics.observe_insert();
+                    self.metrics.observe_insert(message_type.as_str());
                 }
                 EcdsaPoolSectionOp::Remove(id) => {
-                    let db = self.get_message_db(EcdsaMessageType::from(&id));
+                    let message_type = EcdsaMessageType::from(&id);
+                    let db = self.get_message_db(message_type);
                     if !db.remove_txn(&id, &mut tx) {
                         return;
                     }
-                    self.metrics.observe_remove()
+                    self.metrics.observe_remove(message_type.as_str())
                 }
             }
         }

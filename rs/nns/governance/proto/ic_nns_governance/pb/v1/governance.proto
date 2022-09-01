@@ -92,9 +92,7 @@ enum Topic {
   TOPIC_KYC = 9;
   // Topic for proposals to reward node providers.
   TOPIC_NODE_PROVIDER_REWARDS = 10;
-  // Currently, the only type of proposal in this topic is
-  // SetSnsTokenSwapOpenTimeWindow. It is not expected that more types of proposals will
-  // be added to this topic.
+  // Reserved for future use.
   TOPIC_SNS_DECENTRALIZATION_SALE = 11;
 }
 
@@ -578,21 +576,14 @@ message SetDefaultFollowees {
   map<int32, Neuron.Followees> default_followees = 1;
 }
 
-// Calls the set_open_time_window Candid method on a swap canister.
-message SetSnsTokenSwapOpenTimeWindow {
-  // The swap canister to send the request to.
-  ic_base_types.pb.v1.PrincipalId swap_canister_id = 1;
-
-  // Arguments that get sent to the swap canister when its set_open_time_window
-  // Candid method is called.
-  ic_sns_swap.pb.v1.SetOpenTimeWindowRequest request = 2;
-}
-
 // A proposal is the immutable input of a proposal submission. This contains
 // all the information from the original proposal submission.
 //
 // Making a proposal implicitly votes yes.
 message Proposal {
+  // Was 'set_sns_token_swap_open_time_window'.
+  reserved 22;
+  
   // Must be present (enforced at the application layer, not by PB).
   // A brief description of what the proposal does.
   // Size in bytes must be in the interval [5, 256].
@@ -663,8 +654,6 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
-    // Call the set_open_time_window on a swap canister.
-    SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22;
   }
 }
 

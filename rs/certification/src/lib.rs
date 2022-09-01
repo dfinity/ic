@@ -5,7 +5,8 @@ use std::fmt;
 use serde::Deserialize;
 
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_crypto_utils_threshold_sig::{parse_threshold_sig_key_from_der, verify_combined};
+use ic_crypto_utils_threshold_sig::verify_combined;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
     consensus::certification::CertificationContent,
     crypto::{

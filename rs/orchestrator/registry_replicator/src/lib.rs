@@ -30,7 +30,7 @@
 
 use crate::internal_state::InternalState;
 use ic_config::{registry_client::DataProviderConfig, Config};
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

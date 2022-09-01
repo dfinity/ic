@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/sha",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -71,6 +71,15 @@ rust_library(
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-rosetta-api",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":rosetta-api"],
 )
 
 rust_test(

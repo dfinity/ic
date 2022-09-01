@@ -50,6 +50,16 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         BinaryEncodedWasm::new(wabt::wat2wasm(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
+    let mut many_funcs = "(module".to_string();
+    for _ in 0..EmbeddersConfig::default().max_functions {
+        many_funcs.push_str("(func)");
+    }
+    many_funcs.push(')');
+    result.push((
+        "many_funcs".to_string(),
+        BinaryEncodedWasm::new(wabt::wat2wasm(many_funcs).expect("Failed to convert wat to wasm")),
+    ));
+
     // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
     let real_world_wasm =
         BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());

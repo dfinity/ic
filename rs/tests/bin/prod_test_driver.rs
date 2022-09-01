@@ -235,10 +235,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             "boundary_nodes_nginx_valid_config_test",
                             boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                         ),
-                        sys_t(
-                            "boundary_nodes_denylist_test",
-                            boundary_nodes_integration::boundary_nodes::denylist_test,
-                        ),
+                        // https://dfinity.atlassian.net/browse/BOUN-461
+                        // sys_t(
+                        //     "boundary_nodes_denylist_test",
+                        //     boundary_nodes_integration::boundary_nodes::denylist_test,
+                        // ),
                         sys_t(
                             "boundary_nodes_redirect_http_to_https_test",
                             boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
@@ -577,10 +578,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             "boundary_nodes_nginx_valid_config_test",
                             boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                         ),
-                        sys_t(
-                            "boundary_nodes_denylist_test",
-                            boundary_nodes_integration::boundary_nodes::denylist_test,
-                        ),
+                        // https://dfinity.atlassian.net/browse/BOUN-461
+                        // sys_t(
+                        //     "boundary_nodes_denylist_test",
+                        //     boundary_nodes_integration::boundary_nodes::denylist_test,
+                        // ),
                         sys_t(
                             "boundary_nodes_redirect_http_to_https_test",
                             boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,

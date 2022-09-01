@@ -18,7 +18,7 @@ rust_library(
 )
 
 rust_binary(
-    name = "guestos_vsock_agent",
+    name = "vsock_agent",
     srcs = [
         "src/agent.rs",
         "src/main.rs",

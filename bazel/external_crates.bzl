@@ -13,6 +13,15 @@ def external_crates_repository(name, annotations):
         cargo_lockfile = "//:Cargo.Bazel.toml.lock",
         lockfile = "//:Cargo.Bazel.json.lock",
         cargo_config = "//:bazel/cargo.config",
+        generator_urls = {
+            "aarch64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-aarch64-apple-darwin",
+            "x86_64-pc-windows-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-pc-windows-gnu.exe",
+            "x86_64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-pc-windows-msvc.exe",
+            "x86_64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-apple-darwin",
+            "x86_64-unknown-linux-musl": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-aarch64-unknown-linux-gnu",
+        },
         packages = {
             "actix-rt": crate.spec(
                 version = "^2.2.0",

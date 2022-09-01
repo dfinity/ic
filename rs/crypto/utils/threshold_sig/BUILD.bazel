@@ -14,8 +14,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
-    "@crate_index//:hex",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

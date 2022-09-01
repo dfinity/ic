@@ -2,6 +2,7 @@ use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use prometheus::{
     histogram_opts, labels, opts, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec,
 };
 
 pub const LABEL_POOL: &str = "pool";
@@ -95,7 +96,7 @@ impl PoolMetrics {
 /// Metrics for ECDSA pool's validated/unvalidated section.
 #[derive(Clone)]
 pub struct EcdsaPoolMetrics {
-    pool_artifacts: IntGauge,
+    pool_artifacts: IntGaugeVec,
     persistence_errors: IntCounterVec,
 }
 
@@ -103,11 +104,14 @@ impl EcdsaPoolMetrics {
     pub fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         Self {
             pool_artifacts: metrics_registry.register(
-                IntGauge::with_opts(opts!(
-                    "ecdsa_pool_artifacts",
-                    "Current number of artifacts in the given pool",
-                    labels! {LABEL_POOL => pool, LABEL_POOL_TYPE => pool_type}
-                ))
+                IntGaugeVec::new(
+                    opts!(
+                        "ecdsa_pool_artifacts",
+                        "Current number of artifacts in the given pool, by artifact type",
+                        labels! {LABEL_POOL => pool, LABEL_POOL_TYPE => pool_type}
+                    ),
+                    &["artifact_type"],
+                )
                 .unwrap(),
             ),
             persistence_errors: metrics_registry.register(
@@ -124,12 +128,16 @@ impl EcdsaPoolMetrics {
         }
     }
 
-    pub fn observe_insert(&self) {
-        self.pool_artifacts.inc();
+    pub fn observe_insert(&self, artifact_type: &str) {
+        self.pool_artifacts
+            .with_label_values(&[artifact_type])
+            .inc();
     }
 
-    pub fn observe_remove(&self) {
-        self.pool_artifacts.dec();
+    pub fn observe_remove(&self, artifact_type: &str) {
+        self.pool_artifacts
+            .with_label_values(&[artifact_type])
+            .dec();
     }
 
     pub fn persistence_error(&self, label: &str) {

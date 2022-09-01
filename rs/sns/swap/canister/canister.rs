@@ -1,18 +1,3 @@
-/*
-
-TODO - REQUIRED
-- Unit tests: WIP.
-- Canister methods for token distributions.
-
-TODO - OPTIONAL / SEMI-REQUIRED
-- Introduce Min ICP.
-- No participant can buy more than or equal to half (or X% for some config paramter X) of the tokens.
-- Refine approach to fee handling.
-- Address occurrences of TODO in the code.
-- What if ICP target is reached but there is an insufficient number of participants?
-
- */
-
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
@@ -27,7 +12,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
-use ic_sns_governance::ledger::{Ledger, LedgerCanister};
+use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 
@@ -39,8 +24,7 @@ use ic_sns_swap::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
     FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
     GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
-    Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
-    RefreshSnsTokensResponse, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, Swap,
+    OpenRequest, OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
 };
 use ic_sns_swap::swap::{SnsGovernanceClient, SnsRootClient, LOG_PREFIX};
 use prost::Message;
@@ -109,34 +93,29 @@ fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
     swap().get_buyer_state(&request)
 }
 
-/// Sets the window of time when buyers can participate.
+/// Try to open the swap.
 ///
-/// See Swap.set_open_time_window.
-#[export_name = "canister_update set_open_time_window"]
-fn set_open_time_window() {
-    over(candid_one, set_open_time_window_)
+/// See Swap.open.
+#[export_name = "canister_update open"]
+fn open() {
+    over_async(candid_one, open_)
 }
 
-/// See `set_open_time_window`.
-#[candid_method(update, rename = "set_open_time_window")]
-fn set_open_time_window_(request: SetOpenTimeWindowRequest) -> SetOpenTimeWindowResponse {
-    println!("{}set_open_time_window", LOG_PREFIX);
-    swap_mut().set_open_time_window(caller(), now_seconds(), &request)
-}
-
-/// See `Swap.refresh_sns_token_e8s`.
-#[export_name = "canister_update refresh_sns_tokens"]
-fn refresh_sns_tokens() {
-    over_async(candid_one, refresh_sns_tokens_)
-}
-
-/// See `Swap.refresh_sns_token_e8`.
-#[candid_method(update, rename = "refresh_sns_tokens")]
-async fn refresh_sns_tokens_(_: RefreshSnsTokensRequest) -> RefreshSnsTokensResponse {
-    println!("{}refresh_sns_tokens", LOG_PREFIX);
-    let ledger_factory = &create_real_icrc1_ledger;
-    match swap_mut().refresh_sns_token_e8s(id(), ledger_factory).await {
-        Ok(()) => RefreshSnsTokensResponse {},
+/// See `open`.
+#[candid_method(update, rename = "open")]
+async fn open_(req: OpenRequest) -> OpenResponse {
+    println!("{}open", LOG_PREFIX);
+    // Require authorization.
+    let allowed_canister = swap().init().nns_governance();
+    if caller() != PrincipalId::from(allowed_canister) {
+        panic!(
+            "This method can only be called by canister {}",
+            allowed_canister
+        );
+    }
+    let sns_ledger = create_real_icrc1_ledger(swap().init().sns_ledger());
+    match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
+        Ok(res) => res,
         Err(msg) => panic!("{}", msg),
     }
 }
@@ -156,12 +135,12 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
-    let ledger_factory = &create_real_icp_ledger;
+    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
     match swap_mut()
-        .refresh_buyer_token_e8s(p, id(), ledger_factory)
+        .refresh_buyer_token_e8s(p, id(), &icp_ledger)
         .await
     {
-        Ok(()) => RefreshBuyerTokensResponse {},
+        Ok(r) => r,
         Err(msg) => panic!("{}", msg),
     }
 }
@@ -240,21 +219,25 @@ fn finalize_swap() {
     over_async(candid_one, finalize_swap_)
 }
 
+fn now_fn(_: bool) -> u64 {
+    now_seconds()
+}
+
 /// See Swap.finalize.
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     // Helpers.
     let mut sns_root_client = RealSnsRootClient::new(swap().init().sns_root());
     let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
-    let icp_ledger_factory = create_real_icp_ledger;
-    let icrc1_ledger_factory = create_real_icrc1_ledger;
-
+    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
+    let sns_ledger = create_real_icrc1_ledger(swap().init().sns_ledger());
     swap_mut()
         .finalize(
+            now_fn,
             &mut sns_root_client,
             &mut sns_governance_client,
-            icp_ledger_factory,
-            icrc1_ledger_factory,
+            &icp_ledger,
+            &sns_ledger,
         )
         .await
 }
@@ -266,6 +249,7 @@ fn error_refund_icp() {
 
 #[candid_method(update, rename = "error_refund_icp")]
 async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
+    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
     swap()
         .error_refund_icp(
             caller(),
@@ -275,7 +259,7 @@ async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse
             } else {
                 DEFAULT_TRANSFER_FEE
             },
-            &create_real_icp_ledger,
+            &icp_ledger,
         )
         .await;
     ErrorRefundIcpResponse {}
@@ -344,33 +328,10 @@ async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalRes
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
 
-/// Advances the swap. I.e. tries to move it into a more advanced phase in its
-/// Lifecycle.
+/// Tries to commit or abort the swap if the parameters have been satisfied.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let now = now_seconds();
-
-    // Try to open the swap.
-    if swap_mut().state().lifecycle() == Lifecycle::Pending {
-        let result = swap_mut().open(now);
-
-        // Log result.
-        match result {
-            Ok(()) => {
-                println!("The swap has been successfully opened.");
-            }
-            Err(err) => {
-                let squelch = err.contains("start time");
-                if !squelch {
-                    println!(
-                        "{}WARNING: Tried to open automatically, but failed: {}",
-                        LOG_PREFIX, err
-                    );
-                }
-            }
-        }
-    }
-
     if swap_mut().try_commit_or_abort(now) {
         println!("{}Swap committed/aborted at timestamp {}", LOG_PREFIX, now);
     }
@@ -383,28 +344,18 @@ fn now_seconds() -> u64 {
         .as_secs()
 }
 
-/// Returns a function that (when passed the canister ID of a presumptive
-/// Ledger) returns a Ledger implementation suitable for use in
-/// production. I.e. calls out to another canister.
-///
-/// This function is a "Ledger factory" in that you call this, and a Ledger
-/// object is returned. What distinguishes this from other possible Ledger
-/// factories is that this produces objects that are suitable for use in
-/// production.
-fn create_real_icp_ledger(id: CanisterId) -> Box<dyn Ledger> {
-    Box::new(ic_nervous_system_common::ledger::LedgerCanister::new(id))
+/// Returns a real ledger stub that communicates with the specified
+/// canister, which is assumed to be the ICP production ledger or a
+/// canister that implements that same interface.
+fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::LedgerCanister {
+    ic_nervous_system_common::ledger::LedgerCanister::new(id)
 }
 
-/// Returns a function that (when passed the canister ID of a presumptive
-/// Ledger) returns a Ledger implementation suitable for use in
-/// production. I.e. calls out to another canister.
-///
-/// This function is a "Ledger factory" in that you call this, and a Ledger
-/// object is returned. What distinguishes this from other possible Ledger
-/// factories is that this produces objects that are suitable for use in
-/// production.
-fn create_real_icrc1_ledger(id: CanisterId) -> Box<dyn Ledger> {
-    Box::new(LedgerCanister::new(id))
+/// Returns a real ledger stub that communicates with the specified
+/// canister, which is assumed to be a canister that implements the
+/// ICRC1 interface.
+fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
+    LedgerCanister::new(id)
 }
 
 #[export_name = "canister_init"]

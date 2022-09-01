@@ -857,6 +857,18 @@ impl From<&EcdsaArtifactId> for EcdsaMessageType {
     }
 }
 
+impl EcdsaMessageType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dealing => "signed_dealing",
+            Self::DealingSupport => "dealing_support",
+            Self::SigShare => "sig_share",
+            Self::Complaint => "complaint",
+            Self::Opening => "opening",
+        }
+    }
+}
+
 /// The ECDSA signature share
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaSigShare {

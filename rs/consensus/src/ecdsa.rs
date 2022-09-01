@@ -177,8 +177,9 @@ use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
+use ic_interfaces::crypto::IDkgProtocol;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
@@ -188,8 +189,10 @@ use ic_types::{
     Height, NodeId, SubnetId,
 };
 
-use std::collections::BTreeSet;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
 pub(crate) mod payload_builder;
@@ -207,6 +210,9 @@ pub use stats::EcdsaStatsImpl;
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
 
+/// Frequency for clearing the inactive key transcripts.
+pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
+
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
@@ -214,7 +220,10 @@ pub struct EcdsaImpl {
     pre_signer: Box<dyn EcdsaPreSigner>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
+    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
+    last_transcript_purge_ts: RefCell<Instant>,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
 }
@@ -248,8 +257,8 @@ impl EcdsaImpl {
         ));
         let complaint_handler = Box::new(EcdsaComplaintHandlerImpl::new(
             node_id,
-            consensus_block_cache,
-            crypto,
+            consensus_block_cache.clone(),
+            crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -258,9 +267,60 @@ impl EcdsaImpl {
             pre_signer,
             signer,
             complaint_handler,
+            crypto,
+            consensus_block_cache,
             schedule: RoundRobin::default(),
+            last_transcript_purge_ts: RefCell::new(Instant::now()),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
+        }
+    }
+
+    /// Purges the transcripts that are no longer active.
+    fn purge_inactive_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
+        let mut active_transcripts = HashSet::new();
+        for transcript_ref in block_reader.active_transcripts() {
+            match block_reader.transcript(&transcript_ref) {
+                Ok(transcript) => {
+                    self.metrics
+                        .client_metrics
+                        .with_label_values(&["resolve_active_transcript_refs"])
+                        .inc();
+                    active_transcripts.insert(transcript);
+                }
+                Err(error) => {
+                    warn!(
+                        self.logger,
+                        "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
+                        {:?}",
+                        error,
+                        transcript_ref,
+                    );
+                    self.metrics
+                        .client_errors
+                        .with_label_values(&["resolve_active_transcript_refs"])
+                        .inc();
+                }
+            }
+        }
+
+        if let Err(error) =
+            IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts)
+        {
+            warn!(
+                self.logger,
+                "purge_inactive_transcripts(): retain_active_transcripts() failed: err = {:?}",
+                error,
+            );
+            self.metrics
+                .client_errors
+                .with_label_values(&["retain_active_transcripts"])
+                .inc();
+        } else {
+            self.metrics
+                .client_metrics
+                .with_label_values(&["retain_active_transcripts"])
+                .inc();
         }
     }
 }
@@ -297,7 +357,19 @@ impl Ecdsa for EcdsaImpl {
         };
 
         let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
-        self.schedule.call_next(&calls)
+        let ret = self.schedule.call_next(&calls);
+
+        if self.last_transcript_purge_ts.borrow().elapsed() >= INACTIVE_TRANSCRIPT_PURGE_SECS {
+            let block_reader =
+                EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+            timed_call(
+                "purge_inactive_transcripts",
+                || self.purge_inactive_transcripts(&block_reader),
+                &metrics.on_state_change_duration,
+            );
+            *self.last_transcript_purge_ts.borrow_mut() = Instant::now();
+        }
+        ret
     }
 }
 
