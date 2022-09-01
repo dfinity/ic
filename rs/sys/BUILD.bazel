@@ -14,7 +14,6 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:nix",
-        "@crate_index//:wait-timeout",
         "@crate_index//:wsl",
     ],
 )
