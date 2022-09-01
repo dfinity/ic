@@ -253,8 +253,21 @@ pub struct StateLayout {
 
 impl StateLayout {
     /// Needs to be pub for criterion performance regression tests.
-    pub fn new(log: ReplicaLogger, root: PathBuf) -> Self {
-        Self { root, log }
+    pub fn try_new(log: ReplicaLogger, root: PathBuf) -> Result<Self, LayoutError> {
+        let state_layout = Self { root, log };
+        state_layout.init()?;
+        Ok(state_layout)
+    }
+
+    fn init(&self) -> Result<(), LayoutError> {
+        self.cleanup_tip()?;
+        self.cleanup_tmp()?;
+        WriteOnly::check_dir(&self.backups())?;
+        WriteOnly::check_dir(&self.checkpoints())?;
+        WriteOnly::check_dir(&self.diverged_checkpoints())?;
+        WriteOnly::check_dir(&self.fs_tmp())?;
+        WriteOnly::check_dir(&self.tip_path())?;
+        WriteOnly::check_dir(&self.tmp())
     }
 
     /// Returns the the raw root path for state
@@ -264,20 +277,21 @@ impl StateLayout {
 
     /// Returns the path to the temporary directory.
     /// This directory is cleaned during restart of a node.
-    pub fn tmp(&self) -> Result<PathBuf, LayoutError> {
-        let tmp = self.root.join("tmp");
-        WriteOnly::check_dir(&tmp)?;
-        Ok(tmp)
+    pub fn tmp(&self) -> PathBuf {
+        self.root.join("tmp")
     }
 
-    /// Removes the tmp directory and all its contents
-    pub fn remove_tmp(&self) -> Result<(), LayoutError> {
-        let tmp = self.tmp()?;
-        std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
-            path: tmp,
-            message: "Unable to remove temporary directory".to_string(),
-            io_err: err,
-        })
+    /// Removes the tmp directory and all its contents.
+    fn cleanup_tmp(&self) -> Result<(), LayoutError> {
+        let tmp = self.tmp();
+        if tmp.exists() {
+            std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
+                path: tmp,
+                message: "Unable to remove temporary directory".to_string(),
+                io_err: err,
+            })?
+        }
+        Ok(())
     }
 
     /// Returns a layout object representing tip state in "tip"
@@ -297,17 +311,18 @@ impl StateLayout {
 
     /// Returns scratchpad used during statesync
     pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        let tmp = self.tmp()?;
-        Ok(tmp.join(format!("state_sync_scratchpad_{:016x}", height.get())))
+        Ok(self
+            .tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
     pub fn state_sync_cache(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        let tmp = self.tmp()?;
+        let tmp = self.tmp();
         Ok(tmp.join(format!("state_sync_cache_{:016x}", height.get())))
     }
 
-    pub fn cleanup_tip(&self) -> Result<(), LayoutError> {
+    fn cleanup_tip(&self) -> Result<(), LayoutError> {
         if self.tip_path().exists() {
             std::fs::remove_dir_all(self.tip_path()).map_err(|err| LayoutError::IoError {
                 path: self.tip_path(),
@@ -328,7 +343,6 @@ impl StateLayout {
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let height = tip.height;
         let cp_name = self.checkpoint_name(height);
-        WriteOnly::check_dir(&self.checkpoints())?;
         let new_cp = self.checkpoints().join(&cp_name);
 
         if new_cp.exists() {
@@ -353,7 +367,6 @@ impl StateLayout {
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        WriteOnly::check_dir(&self.checkpoints())?;
         let scratchpad = layout.raw_path();
         sync_and_mark_files_readonly(scratchpad).map_err(|err| LayoutError::IoError {
             path: scratchpad.to_path_buf(),
@@ -385,7 +398,7 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        let tmp_path = self.tmp()?;
+        let tmp_path = self.tmp();
         let scratchpad_dir = tempfile::Builder::new()
             .prefix(&tmp_path)
             .tempdir()
@@ -557,7 +570,6 @@ impl StateLayout {
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let diverged_checkpoints_dir = self.diverged_checkpoints();
-        WriteOnly::check_dir(&diverged_checkpoints_dir)?;
 
         let dst_path = diverged_checkpoints_dir.join(&cp_name);
 
@@ -609,7 +621,6 @@ impl StateLayout {
         }
 
         let backups_dir = self.backups();
-        WriteOnly::check_dir(&backups_dir)?;
         let dst = backups_dir.join(&cp_name);
         self.copy_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
@@ -653,7 +664,6 @@ impl StateLayout {
         }
 
         let backups_dir = self.backups();
-        WriteOnly::check_dir(&backups_dir)?;
         let dst = backups_dir.join(&cp_name);
 
         if dst.exists() {

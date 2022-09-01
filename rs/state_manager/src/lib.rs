@@ -1074,10 +1074,7 @@ fn persist_metadata_or_die(
     use std::io::Write;
 
     let started_at = Instant::now();
-    let tmp = state_layout
-        .tmp()
-        .unwrap_or_else(|err| fatal!(log, "Failed to create temporary directory: {}", err))
-        .join("tmp_states_metadata.pb");
+    let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
 
     ic_utils::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
         let mut pb_meta = pb::StatesMetadata::default();
@@ -1128,11 +1125,10 @@ impl StateManagerImpl {
             "Using path '{}' to manage local state",
             config.state_root().display()
         );
-        let state_layout = StateLayout::new(log.clone(), config.state_root());
-
-        state_layout
-            .remove_tmp()
-            .unwrap_or_else(|err| fatal!(log, "{:?}", err));
+        let starting_time = Instant::now();
+        let state_layout = StateLayout::try_new(log.clone(), config.state_root())
+            .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
         let mut states_metadata =
@@ -1206,12 +1202,6 @@ impl StateManagerImpl {
             "Determining starting height took {:?}",
             starting_time.elapsed()
         );
-
-        let starting_time = Instant::now();
-        state_layout
-            .cleanup_tip()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to cleanup old tip {:?}", err));
-        info!(log, "Cleaning up tip took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
         cleanup_diverged_states(&log, &state_layout);
