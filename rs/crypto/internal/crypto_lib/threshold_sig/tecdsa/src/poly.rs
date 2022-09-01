@@ -67,14 +67,22 @@ impl Polynomial {
         curve: EccCurveType,
         num_coefficients: usize,
         rng: &mut R,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> Self {
         let mut coefficients = Vec::with_capacity(num_coefficients);
 
         for _ in 0..num_coefficients {
             coefficients.push(EccScalar::random(curve, rng))
         }
 
-        Self::new(curve, coefficients)
+        // We avoid Self::new here since that can fail, but only in the event
+        // that the coefficients are on different curves. That cannot happen
+        // here, but to avoid an explicit unreachable! or unwrap call here we
+        // instead create the struct directly, which allows this function to
+        // be infallible.
+        Self {
+            curve,
+            coefficients,
+        }
     }
 
     /// Creates a random polynomial with the specified number of coefficients,
