@@ -5,6 +5,7 @@ use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest, HttpMethod,
 };
 use ic_logger::replica_logger::no_op_logger;
+use once_cell::sync::OnceCell;
 use std::convert::TryFrom;
 use std::env;
 use std::io::Write;
@@ -39,6 +40,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 -----END PRIVATE KEY-----
 ";
 
+// Variable that stores the directory of our cert/key files.
+// This is a oncecell because we don't want each test to call
+// `generate_certs` and generate a race on the SSL_CERT_FILE
+// environment variable and the cert/key file.
+static CERT_INIT: OnceCell<TempDir> = OnceCell::new();
+
 fn generate_certs() -> TempDir {
     let dir = tempfile::tempdir().unwrap();
     // Store self signed cert
@@ -59,7 +66,7 @@ fn generate_certs() -> TempDir {
     dir
 }
 
-fn start_server(cert_dir: TempDir) -> String {
+fn start_server(cert_dir: &TempDir) -> String {
     let basic_post = warp::post()
         .and(warp::path("post"))
         .and(warp::body::json())
@@ -117,11 +124,8 @@ async fn test_canister_http_server() {
     let server_config = Config {
         ..Default::default()
     };
-
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/get", &url),
@@ -143,10 +147,8 @@ async fn test_canister_http_http_protocol() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("http://{}/get", &url),
@@ -173,10 +175,8 @@ async fn test_canister_http_server_post() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/post", &url),
@@ -199,10 +199,8 @@ async fn test_canister_http_server_head() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/head", &url),
@@ -226,10 +224,8 @@ async fn test_response_limit_exceeded() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/size", &url),
@@ -259,10 +255,8 @@ async fn test_within_response_limit() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/size", &url),
@@ -285,10 +279,8 @@ async fn test_request_timeout() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/delay", &url),
@@ -320,8 +312,7 @@ async fn test_connect_timeout() {
         ..Default::default()
     };
 
-    let _tmp_dir = generate_certs();
-
+    let _url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
 
     // Non routable address that causes a connect timeout.
@@ -351,10 +342,8 @@ async fn test_nonascii_header() {
         ..Default::default()
     };
 
-    let tmp_dir = generate_certs();
-
+    let url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
-    let url = start_server(tmp_dir);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {
         url: format!("https://{}/invalid", &url),
@@ -375,6 +364,7 @@ async fn test_missing_protocol() {
         ..Default::default()
     };
 
+    let _url = start_server(CERT_INIT.get_or_init(generate_certs));
     let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(CanisterHttpSendRequest {

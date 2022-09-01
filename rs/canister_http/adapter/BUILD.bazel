@@ -35,6 +35,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "@crate_index//:once_cell",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
     "@crate_index//:warp",
