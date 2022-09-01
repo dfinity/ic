@@ -611,13 +611,10 @@ mod tests {
             let rt = tokio::runtime::Runtime::new().unwrap();
 
             let (connected_1, mut done_1) = channel(1);
-
-            let (event_handler_1, handle_1) = create_mock_event_handler();
-            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
+            let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_1);
 
             let (connected_2, mut done_2) = channel(1);
-            let (event_handler_2, handle_2) = create_mock_event_handler();
-            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_2, connected_2);
+            let event_handler_2 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_2);
 
             let (_control_plane_1, _control_plane_2) = start_connection_between_two_peers(
                 rt.handle().clone(),
@@ -648,8 +645,7 @@ mod tests {
             let rt = tokio::runtime::Runtime::new().unwrap();
 
             let (connected_1, _done_1) = channel(5);
-            let (event_handler_1, handle_1) = create_mock_event_handler();
-            setup_peer_up_ack_event_handler(rt.handle().clone(), handle_1, connected_1);
+            let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), connected_1);
 
             let (connected_2, mut done_2) = channel(5);
 
@@ -721,13 +717,56 @@ mod tests {
         });
     }
 
+    /*
+    Establish connection with 2 peers, A and B.  Send message from A->B and B->A and confirm both are received
+    */
+    #[test]
+    fn test_basic_message_send() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            let (peer_a_sender, mut peer_a_receiver) = channel(1);
+            let peer_a_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+            let (peer_b_sender, mut peer_b_receiver) = channel(1);
+            let peer_b_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_b_sender);
+
+            let (peer_a, peer_b) = start_connection_between_two_peers(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                1,
+                peer_a_event_handler,
+                peer_b_event_handler,
+            );
+
+            let msg_1 = TransportPayload(vec![0xa; 1000000]);
+            let msg_2 = TransportPayload(vec![0xb; 1000000]);
+            let flow_tag = FlowTag::from(FLOW_TAG);
+
+            // A sends message to B
+            let res = peer_a.send(&NODE_ID_2, flow_tag, msg_1.clone());
+            assert_eq!(res, Ok(()));
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
+
+            // B sends message to A
+            let res2 = peer_b.send(&NODE_ID_1, flow_tag, msg_2.clone());
+            assert_eq!(res2, Ok(()));
+            assert_eq!(peer_a_receiver.blocking_recv(), Some(msg_2));
+        });
+    }
+
     // helper functions
 
     fn setup_peer_up_ack_event_handler(
         rt: tokio::runtime::Handle,
-        mut handle: Handle<TransportEvent, ()>,
         connected: Sender<bool>,
-    ) {
+    ) -> TransportEventHandler {
+        let (event_handler, mut handle) = create_mock_event_handler();
+
         rt.spawn(async move {
             let (event, rsp) = handle.next_request().await.unwrap();
             if let TransportEvent::PeerUp(_) = event {
@@ -735,6 +774,29 @@ mod tests {
             }
             rsp.send_response(());
         });
+        event_handler
+    }
+
+    fn setup_message_ack_event_handler(
+        rt: tokio::runtime::Handle,
+        connected: Sender<TransportPayload>,
+    ) -> TransportEventHandler {
+        let (event_handler, mut handle) = create_mock_event_handler();
+
+        rt.spawn(async move {
+            loop {
+                let (event, rsp) = handle.next_request().await.unwrap();
+                match event {
+                    TransportEvent::Message(msg) => {
+                        connected.send(msg.payload).await.expect("Channel busy");
+                    }
+                    TransportEvent::PeerUp(_) => {}
+                    TransportEvent::PeerDown(_) => {}
+                };
+                rsp.send_response(());
+            }
+        });
+        event_handler
     }
 
     struct RegistryAndDataProvider {
