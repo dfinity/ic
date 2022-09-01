@@ -142,8 +142,9 @@ impl Default for Config {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
             rate_limiting_of_instructions: FlagStatus::Enabled,
-            // TODO(RUN-314): Increase the allocatable capacity to 50%.
-            allocatable_compute_capacity_in_percent: 0,
+            // The allocatable compute capacity is capped at 50% to ensure that
+            // best-effort canisters have sufficient compute to make progress.
+            allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Disabled,
             module_sharing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
