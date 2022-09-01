@@ -132,12 +132,6 @@ dateFromEpoch() {
     date --date="@$1"
 }
 
-boundary_nodes_exists() {
-    INVENTORY="$1"
-    GRPS=$(ansible-inventory -i "$INVENTORY" --list | jq -c -r ".nodes.children|.[]")
-    grep -Fxq "boundary" <<<$GRPS
-}
-
 starttime="$(date '+%s')"
 echo "**** Deployment start time: $(dateFromEpoch "$starttime")"
 
@@ -162,12 +156,15 @@ INVENTORY="$REPO_ROOT/testnet/env/$deployment/hosts"
 
 ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
 
-if ! boundary_nodes_exists "$INVENTORY"; then
+# Check if hosts.ini has boundary nodes
+if "$INVENTORY" --list | jq -e ".boundary.hosts | length == 0" >/dev/null; then
     USE_BOUNDARY_NODES="false"
-elif [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    ANSIBLE+=" -e bn_media_path=\"$BN_MEDIA_PATH\" -e ic_boundary_node_image=boundary"
+fi
+
+if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
+    ANSIBLE+=" -e bn_media_path=\"$BN_MEDIA_PATH\""
 else
-    ANSIBLE+=" -e ic_boundary_node_image=generic --skip-tags "boundary_node_vm""
+    ANSIBLE+=" --skip-tags boundary_node_vm"
 fi
 
 # Ensure we kill these on CTRL+C or failure
