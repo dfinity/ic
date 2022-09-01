@@ -924,10 +924,12 @@ async fn zero_total_reward_shares() {
     // Step 1.3: Craft a governance.
     let root_canister_id = [1; 29];
     let ledger_canister_id = [2; 29];
+    let swap_canister_id = [3; 29];
     let proto = GovernanceProto {
         // These won't be used, so we use garbage values.
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(NervousSystemParameters {
             voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
             ..NervousSystemParameters::with_default_values()
@@ -1123,10 +1125,12 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     // Step 1.3: Craft a governance.
     let root_canister_id = [1; 29];
     let ledger_canister_id = [2; 29];
+    let swap_canister_id = [3; 29];
     let proto = GovernanceProto {
         // These won't be used, so we use garbage values.
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(nervous_system_parameters),
         mode: governance::Mode::Normal as i32,
 

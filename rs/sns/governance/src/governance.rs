@@ -420,12 +420,12 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
             *Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
         let ledger_canister_id =
             *Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
+        let swap_canister_id =
+            *Self::validate_required_field("swap_canister_id", &base.swap_canister_id)?;
 
         Self::validate_canister_id_field("root", root_canister_id)?;
         Self::validate_canister_id_field("ledger", ledger_canister_id)?;
-        if let Some(swap_canister_id) = &base.swap_canister_id {
-            Self::validate_canister_id_field("swap", *swap_canister_id)?;
-        }
+        Self::validate_canister_id_field("swap", swap_canister_id)?;
 
         Self::valid_mode_or_err(&base)?;
         Self::validate_required_field("parameters", &base.parameters)?.validate(base.get_mode())?;
@@ -4228,6 +4228,13 @@ mod tests {
     fn test_governance_proto_must_have_ledger_canister_ids() {
         let mut proto = basic_governance_proto();
         proto.ledger_canister_id = None;
+        assert!(ValidGovernanceProto::try_from(proto).is_err());
+    }
+
+    #[test]
+    fn test_governance_proto_must_have_swap_canister_ids() {
+        let mut proto = basic_governance_proto();
+        proto.swap_canister_id = None;
         assert!(ValidGovernanceProto::try_from(proto).is_err());
     }
 

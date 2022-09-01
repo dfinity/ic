@@ -309,6 +309,7 @@ fn populate_canister_state() {
         id_to_nervous_system_functions: Default::default(),
         ledger_canister_id: Some(CanisterId::from_u64(1).get()),
         root_canister_id: Some(CanisterId::from_u64(2).get()),
+        swap_canister_id: Some(CanisterId::from_u64(3).get()),
         sns_metadata: Some(SnsMetadata {
             logo: Some("X".repeat(100)),
             name: Some("ServiceNervousSystem-Test".to_string()),
