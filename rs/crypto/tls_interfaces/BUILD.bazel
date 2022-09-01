@@ -18,7 +18,6 @@ rust_library(
         "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:tokio",
-        "@crate_index//:tokio-openssl",
         "@crate_index//:tokio-rustls",
     ],
 )

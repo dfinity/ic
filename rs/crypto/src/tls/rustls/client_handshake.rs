@@ -65,7 +65,7 @@ async fn connect(
         .map_err(|e| TlsClientHandshakeError::HandshakeError {
             internal_error: format!("{}", e),
         })
-        .map(|s| TlsStream::new_rustls(tokio_rustls::TlsStream::from(s)))
+        .map(|s| TlsStream::new(tokio_rustls::TlsStream::from(s)))
 }
 
 impl From<TlsCertFromRegistryError> for TlsClientHandshakeError {

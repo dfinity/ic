@@ -15,7 +15,6 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
@@ -282,38 +281,21 @@ impl From<PeerNotAllowedError> for TlsClientHandshakeError {
 ///
 /// [tokio-rustls' documentation]: https://docs.rs/tokio-rustls/latest/tokio_rustls/
 /// [Why do I need to call poll_flush?]: https://docs.rs/tokio-rustls/latest/tokio_rustls/#why-do-i-need-to-call-poll_flush
-pub enum TlsStream {
-    OpenSsl(tokio_openssl::SslStream<TcpStream>),
-    // The Box exists to address the `large_enum_variant` Clippy lint
-    Rustls(Box<tokio_rustls::TlsStream<TcpStream>>),
+pub struct TlsStream {
+    tls_stream: tokio_rustls::TlsStream<TcpStream>,
 }
 
 impl TlsStream {
-    pub fn new(openssl_stream: tokio_openssl::SslStream<TcpStream>) -> Self {
-        Self::OpenSsl(openssl_stream)
-    }
-
-    pub fn new_rustls(rustls_stream: tokio_rustls::TlsStream<TcpStream>) -> Self {
-        Self::Rustls(Box::new(rustls_stream))
+    pub fn new(tls_stream: tokio_rustls::TlsStream<TcpStream>) -> Self {
+        Self { tls_stream }
     }
 
     /// Use this method to split a `TlsStream`, as it returns `TlsReadHalf`
     /// and `TlsWriteHalf` that are guaranteed to be protected by TLS by the
     /// type system.
     pub fn split(self) -> (TlsReadHalf, TlsWriteHalf) {
-        match self {
-            TlsStream::OpenSsl(stream) => {
-                let (read_half, write_half) = tokio::io::split(stream);
-                (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
-            }
-            TlsStream::Rustls(stream) => {
-                let (read_half, write_half) = tokio::io::split(*stream);
-                (
-                    TlsReadHalf::new_rustls(read_half),
-                    TlsWriteHalf::new_rustls(write_half),
-                )
-            }
-        }
+        let (read_half, write_half) = tokio::io::split(self.tls_stream);
+        (TlsReadHalf::new(read_half), TlsWriteHalf::new(write_half))
     }
 }
 
@@ -323,10 +305,7 @@ impl AsyncRead for TlsStream {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<tokio::io::Result<()>> {
-        match self.deref_mut() {
-            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_read(cx, buf),
-            TlsStream::Rustls(stream) => Pin::new(stream).poll_read(cx, buf),
-        }
+        Pin::new(&mut self.tls_stream).poll_read(cx, buf)
     }
 }
 
@@ -336,43 +315,29 @@ impl AsyncWrite for TlsStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        match self.deref_mut() {
-            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_write(cx, buf),
-            TlsStream::Rustls(stream) => Pin::new(stream).poll_write(cx, buf),
-        }
+        Pin::new(&mut self.tls_stream).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        match self.deref_mut() {
-            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_flush(cx),
-            TlsStream::Rustls(stream) => Pin::new(stream).poll_flush(cx),
-        }
+        Pin::new(&mut self.tls_stream).poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        match self.deref_mut() {
-            TlsStream::OpenSsl(stream) => Pin::new(stream).poll_shutdown(cx),
-            TlsStream::Rustls(stream) => Pin::new(stream).poll_shutdown(cx),
-        }
+        Pin::new(&mut self.tls_stream).poll_shutdown(cx)
     }
 }
 
 /// The read half of a stream over a secure connection protected by TLS.
-pub enum TlsReadHalf {
-    OpenSsl(ReadHalf<tokio_openssl::SslStream<TcpStream>>),
-    Rustls(ReadHalf<tokio_rustls::TlsStream<TcpStream>>),
+pub struct TlsReadHalf {
+    read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>,
 }
 
 impl TlsReadHalf {
-    pub fn new(read_half: ReadHalf<tokio_openssl::SslStream<TcpStream>>) -> Self {
-        Self::OpenSsl(read_half)
-    }
-
-    pub fn new_rustls(read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
-        Self::Rustls(read_half)
+    pub fn new(read_half: ReadHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
+        Self { read_half }
     }
 }
 
@@ -382,10 +347,7 @@ impl AsyncRead for TlsReadHalf {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<tokio::io::Result<()>> {
-        match self.deref_mut() {
-            Self::OpenSsl(stream) => Pin::new(stream).poll_read(cx, buf),
-            Self::Rustls(stream) => Pin::new(stream).poll_read(cx, buf),
-        }
+        Pin::new(&mut self.read_half).poll_read(cx, buf)
     }
 }
 
@@ -393,18 +355,13 @@ impl AsyncRead for TlsReadHalf {
 ///
 /// See also the documentation of [`TlsStream`], especially the part on correct
 /// flushing for the Rustls variant.
-pub enum TlsWriteHalf {
-    OpenSsl(WriteHalf<tokio_openssl::SslStream<TcpStream>>),
-    Rustls(WriteHalf<tokio_rustls::TlsStream<TcpStream>>),
+pub struct TlsWriteHalf {
+    write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>,
 }
 
 impl TlsWriteHalf {
-    pub fn new(write_half: WriteHalf<tokio_openssl::SslStream<TcpStream>>) -> Self {
-        Self::OpenSsl(write_half)
-    }
-
-    pub fn new_rustls(write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
-        Self::Rustls(write_half)
+    pub fn new(write_half: WriteHalf<tokio_rustls::TlsStream<TcpStream>>) -> Self {
+        Self { write_half }
     }
 }
 
@@ -414,27 +371,18 @@ impl AsyncWrite for TlsWriteHalf {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        match self.deref_mut() {
-            Self::OpenSsl(stream) => Pin::new(stream).poll_write(cx, buf),
-            Self::Rustls(stream) => Pin::new(stream).poll_write(cx, buf),
-        }
+        Pin::new(&mut self.write_half).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        match self.deref_mut() {
-            Self::OpenSsl(stream) => Pin::new(stream).poll_flush(cx),
-            Self::Rustls(stream) => Pin::new(stream).poll_flush(cx),
-        }
+        Pin::new(&mut self.write_half).poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        match self.deref_mut() {
-            Self::OpenSsl(stream) => Pin::new(stream).poll_shutdown(cx),
-            Self::Rustls(stream) => Pin::new(stream).poll_shutdown(cx),
-        }
+        Pin::new(&mut self.write_half).poll_shutdown(cx)
     }
 }
 
