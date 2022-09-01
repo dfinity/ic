@@ -29,8 +29,7 @@ use ic_sns_governance::proposal::{
 use ic_sns_governance::types::native_action_ids;
 use pretty_bytes::converter;
 use prost::Message;
-use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::BTreeMap;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";

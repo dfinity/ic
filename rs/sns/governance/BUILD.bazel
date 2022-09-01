@@ -101,11 +101,28 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
+rust_library(
+    name = "governance_test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_governance",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
 rust_canister(
     name = "sns-governance-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
+    crate_features = ["test"],
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
