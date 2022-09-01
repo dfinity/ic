@@ -7,7 +7,7 @@ fn poly_bench(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     for degree in [8, 16, 32] {
-        let poly = Polynomial::random(curve, degree, &mut rng).unwrap();
+        let poly = Polynomial::random(curve, degree, &mut rng);
 
         let x = EccScalar::random(curve, &mut rng);
 
@@ -37,7 +37,7 @@ fn poly_bench(c: &mut Criterion) {
             },
         );
 
-        let poly_b = Polynomial::random(curve, degree, &mut rng).unwrap();
+        let poly_b = Polynomial::random(curve, degree, &mut rng);
 
         c.bench_function(
             &format!("poly simple commitment({}, degree {})", curve, degree),

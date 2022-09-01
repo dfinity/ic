@@ -92,7 +92,7 @@ fn poly_interpolate_works() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
 
             let mut samples = Vec::with_capacity(num_coefficients);
             for _i in 0..num_coefficients {
@@ -116,7 +116,7 @@ fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
 
             let mut samples = Vec::with_capacity(num_coefficients - 1);
             for _i in 0..num_coefficients - 1 {
@@ -141,7 +141,7 @@ fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
 
             let mut samples = vec![];
 
@@ -172,7 +172,7 @@ fn poly_interpolate_is_resilient_to_low_x_points() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 0..50 {
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
             assert_eq!(poly.non_zero_coefficients(), num_coefficients);
 
             let one = EccScalar::one(curve);
@@ -227,7 +227,7 @@ fn poly_simple_commitments() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
             let _commitment = SimpleCommitment::create(&poly, num_coefficients)?;
         }
     }
@@ -241,8 +241,8 @@ fn poly_pedersen_commitments() -> ThresholdEcdsaResult<()> {
 
     for curve in EccCurveType::all() {
         for num_coefficients in 1..50 {
-            let poly_a = Polynomial::random(curve, num_coefficients, &mut rng)?;
-            let poly_b = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly_a = Polynomial::random(curve, num_coefficients, &mut rng);
+            let poly_b = Polynomial::random(curve, num_coefficients, &mut rng);
             let commitment_ab = PedersenCommitment::create(&poly_a, &poly_b, num_coefficients)?;
             let commitment_ba = PedersenCommitment::create(&poly_b, &poly_a, num_coefficients)?;
 
@@ -352,7 +352,7 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
         for num_coefficients in 1..30 {
             let value = EccScalar::random(curve, &mut rng);
 
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
 
             let x = random_node_indexes(num_coefficients);
             let mut y = Vec::with_capacity(num_coefficients);
@@ -383,7 +383,7 @@ fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
         for num_coefficients in 1..30 {
             let value = EccScalar::random(curve, &mut rng);
 
-            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng);
 
             let x = random_node_indexes(num_coefficients);
             let mut y = Vec::with_capacity(num_coefficients);
@@ -501,8 +501,7 @@ fn simple_commitment_stable_representation_is_stable() {
     fn simple_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
         let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
 
-        let polynomial =
-            Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
+        let polynomial = Polynomial::random(curve, sz, &mut rng);
 
         let opening =
             SimpleCommitment::create(&polynomial, sz).expect("SimpleCommitment::create failed");
@@ -536,9 +535,8 @@ fn pedersen_commitment_stable_representation_is_stable() {
     fn pedersen_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
         let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
 
-        let polynomial =
-            Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
-        let mask = Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
+        let polynomial = Polynomial::random(curve, sz, &mut rng);
+        let mask = Polynomial::random(curve, sz, &mut rng);
 
         let opening = PedersenCommitment::create(&polynomial, &mask, sz)
             .expect("PedersenCommitment::create failed");
