@@ -197,10 +197,16 @@ RUN \
     chown prober:prober /var/log/prober && \
     chmod 755 /var/log/prober
 
+# Setup denylist-updater
 RUN \
     addgroup denylist-updater && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "denylist-updater" denylist-updater && \
     adduser denylist-updater denylist-updater
+
+RUN \
+    mkdir -p /var/opt/nginx/denylist && \
+    chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
+    chmod 644 /var/opt/nginx/denylist
 
 # Install journalbeat
 RUN chown root:root /etc/journalbeat/*.yml \
