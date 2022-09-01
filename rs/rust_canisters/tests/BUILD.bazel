@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test_suite")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,6 +30,8 @@ DEV_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:criterion",
 ]
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -63,55 +65,110 @@ sh_binary(
 )
 
 rust_canister(
-    name = "json",
+    name = "json_raw",
     srcs = ["src/json.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
+optimized_canister(
+    name = "json",
+    wasm = "json_raw",
+)
+
 rust_canister(
-    name = "inter_canister_error_handling",
+    name = "inter_canister_error_handling_raw",
     srcs = ["src/inter_canister_error_handling.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
+optimized_canister(
+    name = "inter_canister_error_handling",
+    wasm = "inter_canister_error_handling_raw",
+)
+
 rust_canister(
-    name = "nan_canonicalized",
+    name = "nan_canonicalized_raw",
     srcs = ["src/nan_canonicalized.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
+optimized_canister(
+    name = "nan_canonicalized",
+    wasm = "nan_canonicalized_raw",
+)
+
 rust_canister(
-    name = "stable",
+    name = "stable_raw",
     srcs = ["src/stable.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
+optimized_canister(
+    name = "stable",
+    wasm = "stable_raw",
+)
+
 rust_canister(
-    name = "time",
+    name = "time_raw",
     srcs = ["src/time.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "time",
+    wasm = "time_raw",
 )
 
 rust_canister(
     name = "panics",
     srcs = ["src/panics.rs"],
     aliases = ALIASES,
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tests_test",
+    srcs = glob(["test/**/*.rs"]),
+    aliases = ALIASES,
+    data = [
+        ":inter_canister_error_handling",
+        ":json",
+        ":nan_canonicalized",
+        ":panics",
+        ":stable",
+        ":time",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    edition = "2021",
+    env = {
+        "NAN_CANONICALIZED_WASM_PATH": "$(rootpath :nan_canonicalized)",
+        "STABLE_WASM_PATH": "$(rootpath :stable)",
+        "TIME_WASM_PATH": "$(rootpath :time)",
+        "PANICS_WASM_PATH": "$(rootpath :panics)",
+        "JSON_WASM_PATH": "$(rootpath :json)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests",
+        "INTER_CANISTER_ERROR_HANDLING_WASM_PATH": "$(rootpath :inter_canister_error_handling)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
