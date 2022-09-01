@@ -1052,13 +1052,29 @@ pub fn is_valid_principal(p: &str) -> bool {
 }
 
 pub fn validate_principal(p: &str) -> Result<(), String> {
-    let _ = PrincipalId::from_str(p).map_err(|x| x.to_string())?;
+    let _ = PrincipalId::from_str(p).map_err(|x| {
+        format!(
+            "Couldn't validate PrincipalId. String \"{}\" could not be converted to PrincipalId: {}",
+            p, x
+        )
+    })?;
     Ok(())
 }
 
 pub fn validate_canister_id(p: &str) -> Result<(), String> {
-    let pp = PrincipalId::from_str(p).map_err(|x| x.to_string())?;
-    let _cid = CanisterId::new(pp).map_err(|x| x.to_string())?;
+    let pp = PrincipalId::from_str(p).map_err(|x| {
+        format!(
+            "Couldn't validate CanisterId. String \"{}\" could not be converted to PrincipalId: {}",
+            p, x
+        )
+    })?;
+    let _cid = CanisterId::new(pp).map_err(|x| {
+        format!(
+            "Couldn't validate CanisterId. PrincipalId \"{}\" could not be converted to CanisterId: {}",
+            pp,
+            x
+        )
+    })?;
     Ok(())
 }
 

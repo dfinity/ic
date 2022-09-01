@@ -1,11 +1,13 @@
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
+use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
     NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
@@ -13,9 +15,9 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+    install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
+    UserInfo,
 };
-use ic_types::PrincipalId;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -509,20 +511,34 @@ fn test_install_canisters_in_any_order() {
             .await
             .expect("Couldn't create Ledger canister");
 
+        let mut swap = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Sale canister");
+
         let root_canister_id = root.canister_id();
         let governance_canister_id = governance.canister_id();
         let ledger_canister_id = ledger.canister_id();
+        let swap_canister_id = swap.canister_id();
 
         // Populate the minimal set of fields for install
         sns_init_payload.governance.ledger_canister_id = Some(ledger_canister_id.into());
         sns_init_payload.governance.root_canister_id = Some(root_canister_id.into());
+        sns_init_payload.governance.swap_canister_id = Some(swap_canister_id.into());
         sns_init_payload.root.governance_canister_id = Some(governance_canister_id.into());
         sns_init_payload.root.ledger_canister_id = Some(ledger_canister_id.into());
-        // TODO(NNS1-1526): Install swap canister.
-        sns_init_payload.root.swap_canister_id = Some(PrincipalId::new_user_test_id(999_999));
+        sns_init_payload.root.swap_canister_id = Some(swap_canister_id.into());
+
+        sns_init_payload.swap.nns_governance_canister_id = GOVERNANCE_CANISTER_ID.to_string();
+        sns_init_payload.swap.sns_governance_canister_id = governance_canister_id.to_string();
+        sns_init_payload.swap.sns_ledger_canister_id = ledger_canister_id.to_string();
+        sns_init_payload.swap.icp_ledger_canister_id = LEDGER_CANISTER_ID.to_string();
+        sns_init_payload.swap.sns_root_canister_id = root_canister_id.to_string();
+        sns_init_payload.swap.fallback_controller_principal_ids =
+            vec![CanisterId::from_u64(900).get().to_string()];
 
         // Use canister tags to generate all the permutations needed to test random order installs
-        let canister_tags = vec!["governance", "ledger", "root"];
+        let canister_tags = vec!["governance", "ledger", "root", "swap"];
 
         // Generate the permutations
         let permutation_size = canister_tags.len();
@@ -548,6 +564,7 @@ fn test_install_canisters_in_any_order() {
                         install_ledger_canister(&mut ledger, sns_init_payload.ledger.clone()).await
                     }
                     "root" => install_root_canister(&mut root, sns_init_payload.root.clone()).await,
+                    "swap" => install_swap_canister(&mut swap, sns_init_payload.swap.clone()).await,
                     _ => panic!("Unexpected canister tag"),
                 };
                 println!("Successfully installed {}", canister_tag);
@@ -558,6 +575,7 @@ fn test_install_canisters_in_any_order() {
             reset_canister_to_empty_wasm(&mut governance).await;
             reset_canister_to_empty_wasm(&mut ledger).await;
             reset_canister_to_empty_wasm(&mut root).await;
+            reset_canister_to_empty_wasm(&mut swap).await;
         }
 
         Ok(())

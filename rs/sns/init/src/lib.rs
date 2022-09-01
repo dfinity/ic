@@ -151,6 +151,7 @@ impl SnsInitPayload {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
+        governance.swap_canister_id = Some(sns_canister_ids.swap);
         governance.deployed_version = deployed_version;
 
         let parameters = governance
