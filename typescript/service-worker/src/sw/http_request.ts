@@ -223,22 +223,6 @@ export async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
   /**
-   * We forward all requests to /api/ to the replica, as is.
-   */
-  if (url.pathname.startsWith('/api/')) {
-    const response = await fetch(request);
-    // force the content-type to be cbor as /api/ is exclusively used for canister calls
-    const sanitizedHeaders = new Headers(response.headers);
-    sanitizedHeaders.set('X-Content-Type-Options', 'nosniff');
-    sanitizedHeaders.set('Content-Type', 'application/cbor');
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: sanitizedHeaders,
-    });
-  }
-
-  /**
    * We refuse any request to /_/*
    */
   if (url.pathname.startsWith('/_/')) {
@@ -254,6 +238,22 @@ export async function handleRequest(request: Request): Promise<Response> {
     isLocal
   );
   if (maybeCanisterId) {
+    /**
+     * We forward all requests to /api/ to the replica, as is.
+     */
+    if (url.pathname.startsWith('/api/')) {
+      const response = await fetch(request);
+      // force the content-type to be cbor as /api/ is exclusively used for canister calls
+      const sanitizedHeaders = new Headers(response.headers);
+      sanitizedHeaders.set('X-Content-Type-Options', 'nosniff');
+      sanitizedHeaders.set('Content-Type', 'application/cbor');
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: sanitizedHeaders,
+      });
+    }
+
     try {
       const origin = splitHostnameForCanisterId(url.hostname);
       const [agent, actor] = await createAgentAndActor(
