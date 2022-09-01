@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,4 +16,11 @@ rust_library(
     ],
 )
 
-# There is no 'rust_test' definition in this crate, as it only re-exports existing utils.
+rust_test(
+    name = "threshold_sig_der_test",
+    crate = ":threshold_sig_der",
+    deps = [
+        "@crate_index//:hex",
+        "@crate_index//:tempfile",
+    ],
+)

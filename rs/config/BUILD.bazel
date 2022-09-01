@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,9 +32,7 @@ rust_test(
     ],
 )
 
-# Doc test disabled due to bug in rules_rust.
-# https://github.com/bazelbuild/rules_rust/issues/1233
-# rust_doc_test(
-#     name = "ic_config_doc_test",
-#     crate = ":config",
-# )
+rust_doc_test(
+    name = "ic_config_doc_test",
+    crate = ":config",
+)
