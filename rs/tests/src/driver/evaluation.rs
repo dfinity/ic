@@ -324,8 +324,8 @@ pub fn collect_n_children(r: Receiver<TestResultNode>, n: usize) -> Vec<TestResu
 /// * not overload farm with repeated requests, ...
 /// * while keeping the TTL as short as possible, and
 /// * ensuring that setting the TTL is retried at least once in case of a failure.
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
-const GROUP_TTL: Duration = Duration::from_secs(50);
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(30);
+const GROUP_TTL: Duration = Duration::from_secs(90);
 
 fn keep_group_alive_task(log: Logger, farm: Farm, group_name: &str) -> (impl FnMut(), Sender<()>) {
     // A non-empty channel guarantees that a signal can be sent at least once
