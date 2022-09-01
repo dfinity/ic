@@ -277,7 +277,7 @@ impl IDkgDealingInternal {
                 // Generate secret polynomials
                 let product = left_value.mul(right_value)?;
 
-                let product_masking = EccScalar::random(curve, &mut poly_rng)?;
+                let product_masking = EccScalar::random(curve, &mut poly_rng);
 
                 let values =
                     Polynomial::random_with_constant(product, num_coefficients, &mut poly_rng)?;

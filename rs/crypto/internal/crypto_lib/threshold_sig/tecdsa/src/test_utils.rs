@@ -13,7 +13,7 @@ pub fn corrupt_dealing(
     let curve_type = dealing.commitment.curve_type();
 
     let mut rng = seed.into_rng();
-    let randomizer = EccScalar::random(curve_type, &mut rng)?;
+    let randomizer = EccScalar::random(curve_type, &mut rng);
 
     let ciphertext = match &dealing.ciphertext {
         MEGaCiphertext::Single(c) => {

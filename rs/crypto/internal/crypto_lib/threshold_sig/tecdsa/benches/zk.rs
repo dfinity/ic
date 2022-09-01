@@ -9,8 +9,8 @@ fn zk_proofs(c: &mut Criterion) {
 
     let seed = Seed::from_rng(&mut rng);
 
-    let secret = EccScalar::random(curve, &mut rng).unwrap();
-    let masking = EccScalar::random(curve, &mut rng).unwrap();
+    let secret = EccScalar::random(curve, &mut rng);
+    let masking = EccScalar::random(curve, &mut rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking).unwrap();
     let simple = EccPoint::mul_by_g(&secret).unwrap();
@@ -25,11 +25,11 @@ fn zk_proofs(c: &mut Criterion) {
         b.iter(|| proof.verify(&pedersen, &simple, &ad).unwrap())
     });
 
-    let lhs = EccScalar::random(curve, &mut rng).unwrap();
-    let rhs = EccScalar::random(curve, &mut rng).unwrap();
-    let rhs_masking = EccScalar::random(curve, &mut rng).unwrap();
+    let lhs = EccScalar::random(curve, &mut rng);
+    let rhs = EccScalar::random(curve, &mut rng);
+    let rhs_masking = EccScalar::random(curve, &mut rng);
     let product = lhs.mul(&rhs).unwrap();
-    let product_masking = EccScalar::random(curve, &mut rng).unwrap();
+    let product_masking = EccScalar::random(curve, &mut rng);
 
     c.bench_function("ProofOfProduct::create", |b| {
         b.iter(|| {
