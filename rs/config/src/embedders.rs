@@ -10,7 +10,7 @@ use ic_base_types::NumBytes;
 // written (current max number of globals on the Alpha network is 7).
 pub(crate) const MAX_GLOBALS: usize = 300;
 // The maximum number of functions allowed in a Wasm module.
-pub(crate) const MAX_FUNCTIONS: usize = 10000;
+pub(crate) const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
 pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The total size of the exported custom sections in bytes.
