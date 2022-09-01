@@ -286,6 +286,22 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(
         suite(
+            "boundary_nodes_sev_snp_pre_master",
+            vec![pot_with_setup(
+                "boundary_nodes_sev_snp_pot",
+                boundary_nodes_snp_tests::boundary_nodes_snp::config,
+                par(vec![sys_t(
+                    "boundary_nodes_sev_snp_kernel_test",
+                    boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                )]),
+            )
+            .with_alert(ENG_NODE_CHANNEL)],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
+
+    m.add_suite(
+        suite(
             "tecdsa_pre_master",
             vec![
                 pot_with_setup(

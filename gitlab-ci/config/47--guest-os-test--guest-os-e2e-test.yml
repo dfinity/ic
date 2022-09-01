@@ -190,6 +190,16 @@ boundary-nodes-pre-master:
   variables:
     SUITE_NAME: "boundary_nodes_pre_master"
 
+boundary-nodes-sev-snp-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "boundary_nodes_sev_snp_pre_master"
+  # TODO: at the moment we have a single farm host which supports AmdSevSnp.
+  # It's a bit risky to have a pre-master job that could fail because of this.
+  # So we allow failures for now until we have more hosts supporting AmdSevSnp.
+  # See: https://dfinity.atlassian.net/browse/VER-1863
+  allow_failure: true
+
 tecdsa-pre-master:
   extends: .system-tests
   variables:

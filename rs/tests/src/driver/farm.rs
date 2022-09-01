@@ -322,7 +322,7 @@ pub struct CreateVmRequest {
     #[serde(skip)]
     name: String,
     #[serde(rename = "type")]
-    pub _type: String,
+    pub vm_type: VmType,
     #[serde(rename = "vCPUs")]
     pub vcpus: NrOfVCPUs,
     #[serde(rename = "memoryKiB")]
@@ -344,6 +344,7 @@ pub struct CreateVmRequest {
 impl CreateVmRequest {
     pub fn new(
         name: String,
+        vm_type: VmType,
         vcpus: NrOfVCPUs,
         memory_kibibytes: AmountOfMemoryKiB,
         qemu_cli_args: Vec<String>,
@@ -355,6 +356,7 @@ impl CreateVmRequest {
     ) -> Self {
         Self {
             name,
+            vm_type,
             vcpus,
             memory_kibibytes,
             qemu_cli_args,
@@ -363,9 +365,16 @@ impl CreateVmRequest {
             has_ipv4,
             vm_allocation,
             required_host_features,
-            _type: "production".to_string(),
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum VmType {
+    Production,
+    Test,
+    Sev,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

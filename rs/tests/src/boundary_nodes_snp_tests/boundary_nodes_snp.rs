@@ -6,7 +6,7 @@ use crate::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     // TODO: Uncomment this once spm41 is fixed for virsh
     //farm::HostFeature,
-    ic::{InternetComputer, Subnet},
+    ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
     pot_dsl::get_ic_handle_and_ctx,
     test_env::{HasIcPrepDir, TestEnv},
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, SshSession, ADMIN},
@@ -42,8 +42,12 @@ pub fn config(env: TestEnv) {
     BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))
         .with_nns_urls(nns_urls)
         .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
-        // TODO: Enable this once spm41 is fixed for virsh
-        //.with_required_host_features(vec![HostFeature::AmdSevSnp])
+        .with_vm_resources(VmResources {
+            vcpus: None,
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(4194304)),
+            boot_image_minimal_size_gibibytes: None,
+        })
+        .enable_sev()
         .with_snp_boot_img(&env)
         .start(&env)
         .expect("failed to setup universal VM");

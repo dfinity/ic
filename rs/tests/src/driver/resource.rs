@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
 
-use super::farm::Farm;
 use super::farm::FarmResult;
 use super::farm::ImageLocation;
 use super::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use super::farm::{CreateVmRequest, HostFeature};
+use super::farm::{Farm, VmType};
 use super::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_setup::PotSetup;
@@ -212,6 +212,7 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
         let name = vm_config.name.clone();
         let create_vm_request = CreateVmRequest::new(
             name.clone(),
+            VmType::Production,
             vm_config.vcpus,
             vm_config.memory_kibibytes,
             vec![],
