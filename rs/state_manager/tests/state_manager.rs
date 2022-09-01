@@ -129,6 +129,10 @@ fn temporary_directory_gets_cleaned() {
         let test_file = state_manager.state_layout().tmp().join("some_file");
         std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
 
+        // same for fs_tmp
+        let test_file = state_manager.state_layout().fs_tmp().join("some_file");
+        std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
+
         // restart the state_manager
         let state_manager = restart_fn(state_manager, None);
 
@@ -137,6 +141,17 @@ fn temporary_directory_gets_cleaned() {
             state_manager
                 .state_layout()
                 .tmp()
+                .read_dir()
+                .unwrap()
+                .next()
+                .is_none(),
+            "tmp directory is not empty"
+        );
+        // check the fs_tmp directory is empty
+        assert!(
+            state_manager
+                .state_layout()
+                .fs_tmp()
                 .read_dir()
                 .unwrap()
                 .next()

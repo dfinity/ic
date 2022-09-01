@@ -282,6 +282,12 @@ impl StateLayout {
         self.root.join("tmp")
     }
 
+    /// Returns the path to the temporary directory for checkpoint operations,
+    /// aka fs_tmp. This directory is cleaned during restart of a node.
+    pub fn fs_tmp(&self) -> PathBuf {
+        self.root.join("fs_tmp")
+    }
+
     /// Removes the tmp directory and all its contents.
     fn cleanup_tmp(&self) -> Result<(), LayoutError> {
         let tmp = self.tmp();
@@ -289,6 +295,14 @@ impl StateLayout {
             std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
                 path: tmp,
                 message: "Unable to remove temporary directory".to_string(),
+                io_err: err,
+            })?
+        }
+        let fs_tmp = self.fs_tmp();
+        if fs_tmp.exists() {
+            std::fs::remove_dir_all(&fs_tmp).map_err(|err| LayoutError::IoError {
+                path: fs_tmp,
+                message: "Unable to remove fs_tmp directory".to_string(),
                 io_err: err,
             })?
         }
@@ -690,12 +704,6 @@ impl StateLayout {
             message: "Failed to sync checkpoints".to_string(),
             io_err: err,
         })
-    }
-
-    // Returns the path to the temporary directory for checkpoint operations,
-    // aka fs_tmp.
-    fn fs_tmp(&self) -> PathBuf {
-        self.root.join("fs_tmp")
     }
 
     fn checkpoint_name(&self, height: Height) -> String {
