@@ -375,6 +375,21 @@ pub struct CfInvestment {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    Copy,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TimeWindow {
+    #[prost(uint64, tag = "1")]
+    pub start_timestamp_seconds: u64,
+    #[prost(uint64, tag = "2")]
+    pub end_timestamp_seconds: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -526,6 +541,31 @@ pub struct DerivedState {
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetOpenTimeWindowRequest {
+    /// Duration must be between 1 and 90 days. The TimeWindow's
+    /// end time but be greater than or equal to the TimeWindow's
+    /// start time.
+    #[prost(message, optional, tag = "1")]
+    pub open_time_window: ::core::option::Option<TimeWindow>,
+}
+/// Response if setting the open time window succeeded.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetOpenTimeWindowResponse {}
 /// Informs the swap canister that a buyer has sent funds to participate in the
 /// swap.
 ///

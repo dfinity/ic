@@ -4,11 +4,13 @@
 //! tests are run.
 
 use assert_matches::assert_matches;
+use async_trait::async_trait;
 use candid::Encode;
 #[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -17,87 +19,66 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(feature = "test")]
-use ic_nns_governance::governance::governance_minting_account;
-#[cfg(feature = "test")]
-use ic_nns_governance::pb::v1::{
-    governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange, proposal::ActionDesc,
-    BallotChange, BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange,
-    ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+use ic_nns_governance::{
+    governance::governance_minting_account,
+    pb::v1::{
+        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
+        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
+        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+    },
 };
 use ic_nns_governance::{
     governance::{
         subaccount_from_slice, validate_proposal_title, Environment, Governance,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_DAY_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
+        governance::GovernanceCachedMetrics,
         governance_error::ErrorType::{
-            self, External, InsufficientFunds, InvalidCommand, NotAuthorized, PreconditionFailed,
+            self, External, InsufficientFunds, InvalidCommand, NotAuthorized, NotFound,
+            PreconditionFailed, ResourceExhausted,
         },
         manage_neuron,
-        manage_neuron::claim_or_refresh::{By, MemoAndController},
-        manage_neuron::configure::Operation,
-        manage_neuron::disburse::Amount,
-        manage_neuron::ClaimOrRefresh,
-        manage_neuron::Command,
-        manage_neuron::Configure,
-        manage_neuron::Disburse,
-        manage_neuron::DisburseToNeuron,
-        manage_neuron::Follow,
-        manage_neuron::IncreaseDissolveDelay,
-        manage_neuron::JoinCommunityFund,
-        manage_neuron::LeaveCommunityFund,
-        manage_neuron::Merge,
-        manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron::SetDissolveTimestamp,
-        manage_neuron::Spawn,
-        manage_neuron::Split,
-        manage_neuron::StartDissolving,
-        manage_neuron_response,
-        manage_neuron_response::Command as CommandResponse,
-        neuron,
-        neuron::DissolveState,
-        neuron::Followees,
-        proposal,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            disburse::Amount,
+            ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, Follow,
+            IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, Merge, MergeMaturity,
+            NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split, StartDissolving,
+        },
+        manage_neuron_response::{self, Command as CommandResponse, MergeMaturityResponse},
+        neuron::{self, DissolveState, Followees},
+        proposal::{self, Action},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        ProposalRewardStatus,
+        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
+        ProposalStatus,
+        ProposalStatus::Rejected,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
+        UpdateNodeProvider, Vote,
     },
 };
-use ledger_canister::{AccountIdentifier, Memo, Tokens};
+use ic_sns_swap::pb::v1 as sns_swap_pb;
+use ledger_canister::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::iter;
-use std::iter::once;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::iter::{self, once};
 use std::path::PathBuf;
-
-use dfn_protobuf::ToProto;
-use ic_nns_governance::governance::{
-    MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
-};
-use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
-use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
-use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
-use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
-use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ProposalRewardStatus, RewardNodeProviders, UpdateNodeProvider};
-use ledger_canister::Subaccount;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -10412,6 +10393,244 @@ fn test_known_neurons() {
         .cloned()
         .collect();
     assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
+}
+
+#[test]
+fn test_open_sns_token_swap_proposal() {
+    // Step 0: Define helper(s)
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    struct ExpectedCallCanisterMethodCallArguments<'a> {
+        target: CanisterId,
+        method_name: &'a str,
+        request: Vec<u8>,
+    }
+
+    #[allow(clippy::type_complexity)]
+    struct MockEnvironment<'a> {
+        expected_call_canister_method_calls: VecDeque<(
+            ExpectedCallCanisterMethodCallArguments<'a>,
+            Result<Vec<u8>, (Option<i32>, String)>,
+        )>,
+    }
+
+    #[async_trait]
+    impl Environment for MockEnvironment<'_> {
+        async fn call_canister_method(
+            &mut self,
+            target: CanisterId,
+            method_name: &str,
+            request: Vec<u8>,
+        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+            let (expected_arguments, result) = self
+                .expected_call_canister_method_calls
+                .pop_front()
+                .unwrap();
+
+            assert_eq!(
+                ExpectedCallCanisterMethodCallArguments {
+                    target,
+                    method_name,
+                    request
+                },
+                expected_arguments,
+            );
+
+            result
+        }
+
+        // Other methods don't do anything interesting. We implement them mostly
+        // to fulfill the trait requirements.
+
+        fn now(&self) -> u64 {
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS
+        }
+
+        fn random_u64(&mut self) -> u64 {
+            panic!("Unexpected call to Environment::random_u64");
+        }
+
+        fn random_byte_array(&mut self) -> [u8; 32] {
+            panic!("Unexpected call to Environment::random_byte_array");
+        }
+
+        fn execute_nns_function(
+            &self,
+            _proposal_id: u64,
+            _update: &ExecuteNnsFunction,
+        ) -> Result<(), GovernanceError> {
+            panic!("Unexpected call to Environment::execute_nns_function");
+        }
+
+        fn heap_growth_potential(&self) -> HeapGrowthPotential {
+            HeapGrowthPotential::NoIssue
+        }
+    }
+
+    // Require that all expected calls were made.
+    impl Drop for MockEnvironment<'_> {
+        fn drop(&mut self) {
+            assert!(
+                self.expected_call_canister_method_calls.is_empty(),
+                "{:#?}",
+                self.expected_call_canister_method_calls,
+            );
+        }
+    }
+
+    // Step 1: Prepare the world.
+
+    // Parameters which will later be used to construct the swap proposal.
+    let target_swap_canister_id = PrincipalId::new_user_test_id(1);
+    let params = sns_swap_pb::Params {
+        sns_token_e8s: 1_000_000,
+        min_icp_e8s: 1,
+        max_icp_e8s: 42_000,
+        min_participant_icp_e8s: 1,
+        max_participant_icp_e8s: 42_000,
+        min_participants: 1,
+        swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
+    };
+
+    let neuron_base = Neuron {
+        cached_neuron_stake_e8s: 100_000_000,
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+            MAX_DISSOLVE_DELAY_SECONDS,
+        )),
+        ..Default::default()
+    };
+
+    // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.
+    // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
+    // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
+    let neurons = hashmap! {
+        1 => Neuron {
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(principal(1)),
+            maturity_e8s_equivalent: 60,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+        2 => Neuron {
+            id: Some(NeuronId { id: 2 }),
+            controller: Some(principal(1)),
+            maturity_e8s_equivalent: 10,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+        3 => Neuron {
+            id: Some(NeuronId { id: 3 }),
+            controller: Some(principal(2)),
+            maturity_e8s_equivalent: 30,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+
+        // Unlike the foregoing neurons, this one is NOT a CF neuron.
+        4 => Neuron {
+            id: Some(NeuronId { id: 4 }),
+            controller: Some(principal(1)),
+            maturity_e8s_equivalent: 1_000_000,
+            ..neuron_base
+        },
+    };
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons,
+        ..Default::default()
+    };
+
+    let mut cf_participants = vec![
+        sns_swap_pb::CfParticipant {
+            hotkey_principal: principal(1).to_string(),
+            cf_neurons: vec![
+                sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 1,
+                    amount_icp_e8s: 42 * 60 / 100,
+                },
+                sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 42 * 10 / 100,
+                },
+            ],
+        },
+        sns_swap_pb::CfParticipant {
+            hotkey_principal: principal(2).to_string(),
+            cf_neurons: vec![sns_swap_pb::CfNeuron {
+                nns_neuron_id: 3,
+                amount_icp_e8s: 42 * 30 / 100,
+            }],
+        },
+    ];
+    cf_participants.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
+    let expected_call_canister_method_calls = [(
+        ExpectedCallCanisterMethodCallArguments {
+            target: CanisterId::try_from(target_swap_canister_id).unwrap(),
+            method_name: "open",
+            request: Encode!(&sns_swap_pb::OpenRequest {
+                params: Some(params.clone()),
+                cf_participants,
+            })
+            .unwrap(),
+        },
+        Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
+    )]
+    .iter()
+    .cloned()
+    .collect();
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        governance_proto,
+        // This is where the main expectation is set. To wit, we expect that
+        // execution of the proposal will cause governance to call out to the
+        // swap canister.
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls,
+        }),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test. This is done indirectly via proposal.
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &principal(1),
+        &Proposal {
+            title: Some("Open SNS Token Swap".to_string()),
+            summary: "".to_string(),
+            action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+                target_swap_canister_id: Some(target_swap_canister_id),
+                params: Some(params),
+                community_fund_investment_e8s: Some(42),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Make sure expected canister call(s) take place.
+
+    // Step 3.2: Inspect the proposal. In particular, look at its execution status.
+    assert_eq!(gov.proto.proposals.len(), 1, "{:#?}", gov.proto.proposals);
+    let mut proposals: Vec<(_, _)> = gov.proto.proposals.iter().collect();
+    let (_id, proposal) = proposals.pop().unwrap();
+    assert_eq!(
+        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
+        "Open SNS Token Swap",
+        "{:#?}",
+        proposal.proposal.as_ref().unwrap()
+    );
+    assert_eq!(
+        proposal.executed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+        "{:#?}",
+        proposal
+    );
+    assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
 }
 
 #[tokio::test]

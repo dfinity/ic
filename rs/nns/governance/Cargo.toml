@@ -72,6 +72,7 @@ futures = "0.3.13"
 ic-config = { path = "../../config" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+lazy_static = "1.4.0"
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"

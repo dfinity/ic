@@ -30,6 +30,7 @@ ic-nns-constants = { path = "../../nns/constants/" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 maplit = "1.0.2"
+num-traits = "0.2.14"
 pretty-bytes = "0.2.2"
 prost = "0.10.0"
 rand = "0.8.4"

@@ -40,9 +40,6 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
-/// SNS parameters default values
-pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 100_000_000;
-
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {

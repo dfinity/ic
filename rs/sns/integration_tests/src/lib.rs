@@ -28,9 +28,8 @@ mod proposals;
 #[cfg(test)]
 mod root;
 
-// TODO(NNS1-1663): Uncomment.
-// #[cfg(test)]
-// mod swap;
+#[cfg(test)]
+mod swap;
 
 #[cfg(test)]
 mod upgrade_canister;
