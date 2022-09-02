@@ -27,6 +27,7 @@ rust_library(
     crate_name = "ic_crypto_internal_seed",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

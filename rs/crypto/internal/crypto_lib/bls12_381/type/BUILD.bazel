@@ -32,6 +32,7 @@ rust_library(
     crate_name = "ic_crypto_internal_bls12_381_type",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

@@ -42,6 +42,7 @@ rust_library(
     crate_name = "ic_crypto_tls_cert_validation",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
