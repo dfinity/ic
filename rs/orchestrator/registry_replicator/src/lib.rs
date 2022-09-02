@@ -29,25 +29,32 @@
 //! switch-over is handled in this component.
 
 use crate::internal_state::InternalState;
+use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_config::{registry_client::DataProviderConfig, Config};
+use ic_crypto::CryptoComponentFatClient;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion};
+use metrics::RegistryreplicatorMetrics;
 use std::io::{Error, ErrorKind};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use url::Url;
 
 pub mod args;
 mod internal_state;
+pub mod metrics;
 
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
@@ -57,6 +64,7 @@ pub struct RegistryReplicator {
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     poll_delay: Duration,
+    metrics: Arc<RegistryreplicatorMetrics>,
 }
 
 impl RegistryReplicator {
@@ -83,6 +91,8 @@ impl RegistryReplicator {
         // updates
         let registry_client = Self::initialize_registry_client(local_store.clone());
 
+        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::global()));
+
         Self {
             logger,
             node_id,
@@ -91,7 +101,35 @@ impl RegistryReplicator {
             started: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             poll_delay,
+            metrics,
         }
+    }
+
+    pub fn new_with_metrics_runtime(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        config: &Config,
+        metrics_addr: SocketAddr,
+    ) -> (Self, (MetricsRuntimeImpl, TempDir)) {
+        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
+        let (crypto, _, _crypto_dir) = CryptoComponentFatClient::new_temp_with_all_keys(
+            replicator.get_registry_client(),
+            logger.clone(),
+        );
+
+        let metrics_config = MetricsConfig {
+            exporter: Exporter::Http(metrics_addr),
+        };
+        let _runtime = MetricsRuntimeImpl::new(
+            tokio::runtime::Handle::current(),
+            metrics_config,
+            MetricsRegistry::global(),
+            replicator.get_registry_client(),
+            Arc::new(crypto),
+            &logger.inner_logger.root,
+        );
+
+        (replicator, (_runtime, _crypto_dir))
     }
 
     /// initialize a new registry client and start polling the given data
@@ -252,10 +290,13 @@ impl RegistryReplicator {
         );
 
         let logger = self.logger.clone();
+        let metrics = self.metrics.clone();
+        let registry_client = self.registry_client.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
         let handle = tokio::spawn(async move {
             while !cancelled.load(Ordering::Relaxed) {
+                let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
                 // a node on the NNS for updates. As we set the query timeout to
                 // `poll_delay` when constructing the underlying
@@ -263,10 +304,15 @@ impl RegistryReplicator {
                 // `poll()` returns after a maximal duration of `poll_delay`.
                 if let Err(msg) = internal_state.poll().await {
                     warn!(logger, "Polling the NNS registry failed: {}", msg);
+                    metrics.poll_count.with_label_values(&["error"]).inc();
                 } else {
                     debug!(logger, "Polling the NNS succeeded.");
+                    metrics.poll_count.with_label_values(&["success"]).inc();
                 }
-
+                timer.observe_duration();
+                metrics
+                    .registry_version
+                    .set(registry_client.get_latest_version().get() as i64);
                 tokio::time::sleep(poll_delay).await;
             }
         });
