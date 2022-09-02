@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # ██╗███╗   ██╗███████╗██████╗  █████╗     ███████╗███╗   ███╗ ██████╗ ██╗  ██╗███████╗    ████████╗███████╗███████╗████████╗
 # ██║████╗  ██║██╔════╝██╔══██╗██╔══██╗    ██╔════╝████╗ ████║██╔═══██╗██║ ██╔╝██╔════╝    ╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝
 # ██║██╔██╗ ██║█████╗  ██████╔╝███████║    ███████╗██╔████╔██║██║   ██║█████╔╝ █████╗         ██║   █████╗  ███████╗   ██║
@@ -43,14 +44,15 @@ import traceback
 from contextlib import contextmanager
 from copy import deepcopy
 from io import TextIOWrapper
+from pathlib import Path
 from typing import Callable
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import paramiko
 import requests
-from tqdm import tqdm
 
 
 UNIVERSAL_VM_IMG_SHA256 = "f1880ad66ead02031264cb6da004f07468b0e6f07ba22bf44c42239eb6819fa5"
@@ -67,10 +69,14 @@ VM_BOOT_READINESS_TIMEOUT_SEC = 150  # max polling time for checking that VM is 
 FILE_DOWNLOAD_TIMEOUT_SEC = 15  # used for downloading (CURLing) files between VMs
 STDERR_NBYTES = 1024 * 1024
 # Defines CI or local run.
-CI_JOB_URL = os.getenv("CI_JOB_URL", default="")
+CI_JOB_URL = os.getenv("CI_JOB_URL", default=None)
+CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="master")
+file_full_path = os.path.realpath(__file__)
+root_index = file_full_path.find("/rs/")
+GITLAB_LINK = f"https://gitlab.com/dfinity-lab/public/ic/-/blob/{CI_COMMIT_SHA}{file_full_path[root_index:]}"
 TMP_DIR_PREFIX = "smoke_test_artifacts_"
 SLACK_ALERTS_FILE = "slack_alerts.json"
-PFOPS_SLACK_CHANNEL = "https://hooks.slack.com/services/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"
+PFOPS_SLACK_CHANNEL = "#pfops-test-alerts"
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
@@ -157,9 +163,11 @@ class HttpWithRetriesException(Exception):
         )
 
 
-def send_slack_alert(channel: str, message: str) -> requests.Response:
+def send_slack_alert(webhook_url: str, channel: str, message: str) -> requests.Response:
     response = requests.post(
-        url=channel, json={"text": f"{message}", "channel": "f{channel}"}, headers={"content-type": "application/json"}
+        url=webhook_url,
+        json={"text": message, "channel": channel},
+        headers={"content-type": "application/json"},
     )
     if response.status_code == 200:
         logger.debug(f"Successfully sent slack message to channel={channel}.")
@@ -170,18 +178,16 @@ def send_slack_alert(channel: str, message: str) -> requests.Response:
     return response
 
 
-def send_slack_alerts_from_file(filename: str):
+def send_slack_alerts_from_file(webhook_url: str, filename: str):
     with open(filename) as json_file:
         data = json.load(json_file)
     for channel in data["channels"]:
-        send_slack_alert(channel=channel, message=data["message"])
+        send_slack_alert(webhook_url=webhook_url, channel=channel, message=data["message"])
 
 
 def save_slack_error_to_file(filename: str, exception: Exception, slack_channels: List[str]):
-    job_log_info = f". <{CI_JOB_URL}|log>" if CI_JOB_URL else " during *manual* run"
-    message = (
-        f"`Infra smoke test` *failed*{job_log_info}.\nException: ```{exception.__class__.__name__}('{exception}')```"
-    )
+    job_log_info = f". <{CI_JOB_URL}|log>" if CI_JOB_URL is not None else " during *manual* run"
+    message = f":smoking_pipe-1959: <{GITLAB_LINK}|*Infra smoke test*> *failed* :x:{job_log_info}.\nException: ```{exception.__class__.__name__}('{exception}')```"
     json_string = {"channels": slack_channels, "message": message}
     with open(filename, "w") as outfile:
         json.dump(json_string, outfile)
@@ -203,9 +209,9 @@ def farm_group():
 
 
 @contextmanager
-def artifacts_directory(keep_artifacts_dir: bool):
+def artifacts_directory(keep_artifacts_dir: bool, output_dir: Optional[str]):
     # Create a tmp artifacts directory with a prefixed name.
-    dir = tempfile.mkdtemp(prefix=TMP_DIR_PREFIX)
+    dir = tempfile.mkdtemp(prefix=TMP_DIR_PREFIX, dir=output_dir)
     try:
         yield dir
     finally:
@@ -253,19 +259,29 @@ def http_with_retries(
     return response
 
 
-def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM]) -> str:
+def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM], is_colored: bool) -> str:
     def to_colored_digit(x: int):
         return f"{BOLD + GREEN}{x}{NC}" if x == 1 else f"{BOLD + RED}{x}{NC}"
 
     abbreviations = [vm.hostname[:3] for vm in vms]
     matrix_copy = deepcopy(matrix)
-    table = [f"{NC}", matrix_name, "   " + " ".join(abbreviations)]
+    table = []
+    if is_colored:
+        table.append(f"{NC}")
+    table.extend([matrix_name, "   " + " ".join(abbreviations)])
     for i, x in enumerate(matrix_copy):
-        table.extend([abbreviations[i] + " " + "   ".join([to_colored_digit(y) for y in x])])
+        if is_colored:
+            table.extend([abbreviations[i] + " " + "   ".join([to_colored_digit(y) for y in x])])
+        else:
+            table.extend([abbreviations[i] + " " + "   ".join([str(y) for y in x])])
     for i in range(len(vms)):
         table.extend([f"{abbreviations[i]}: {vms[i].hostname}, {vms[i].ipv6}"])
-    table.extend([f"{GREEN}1{NC} - success"])
-    table.extend([f"{RED}0{NC} - failure"])
+    if is_colored:
+        table.extend([f"{GREEN}1{NC} - success"])
+        table.extend([f"{RED}0{NC} - failure"])
+    else:
+        table.extend(["1 - success"])
+        table.extend(["0 - failure"])
     return "\n".join(table)
 
 
@@ -416,22 +432,23 @@ def generate_connectivity_matrices(VMs: List[VM], key_filename: str) -> List[Lis
     N = len(VMs)
     # 1: success, 0: failure.
     file_download_matrix = [[0 for _ in range(N)] for _ in range(N)]
-    for row in tqdm(range(N)):
+    for row in range(N):
+        logger.debug(f"Running iteration {row+1} of {N} ...")
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(VMs[row].ipv6, username="admin", key_filename=key_filename)
-        for col in tqdm(range(N), leave=False):
+        for col in range(N):
             # Get 1M file download result.
             channel = client.get_transport().open_session()
             channel.exec_command(
-                f"curl --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
-                f"curl --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
+                f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
+                f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
                 f"sha256sum -c SHA256SUMS"
             )
             exit_status = channel.recv_exit_status()
             if exit_status != 0:
-                logger.debug(
-                    f"Failure: curl from {VMs[row].ipv6} to {VMs[col].ipv6} (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES)}"
+                logger.error(
+                    f"Failure: curl from {VMs[row].ipv6} ({VMs[row].hostname[:3]}) to {VMs[col].ipv6} ({VMs[col].hostname[:3]}) (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES).decode('utf-8')}"
                 )
             file_download_matrix[row][col] = int(exit_status == 0)
         client.close()
@@ -439,10 +456,11 @@ def generate_connectivity_matrices(VMs: List[VM], key_filename: str) -> List[Lis
 
 
 def exception_handler(func):
-    def test(keep_artifacts_dir: bool, **kwargs):
+    def test(keep_artifacts_dir: bool, output_dir: Optional[str], **kwargs):
         test_exit_code = 1  # initially set to failed.
         # Use context for cleanup: optionally remove artifacts_dir after execution.
-        with artifacts_directory(keep_artifacts_dir) as artifacts_dir:
+        with artifacts_directory(keep_artifacts_dir, output_dir) as artifacts_dir:
+            logger.debug(f"Test output artifacts will be stored in {artifacts_dir}")
             # Log file is stored in the artifacts_dir.
             add_file_logger(artifacts_dir)
             try:
@@ -455,7 +473,9 @@ def exception_handler(func):
                     filename=f"{artifacts_dir}/{SLACK_ALERTS_FILE}", exception=exc, slack_channels=[PFOPS_SLACK_CHANNEL]
                 )
                 if kwargs["with_slack_alerts"]:
-                    send_slack_alerts_from_file(f"{artifacts_dir}/{SLACK_ALERTS_FILE}")
+                    send_slack_alerts_from_file(
+                        webhook_url=kwargs["slack_webhook_url"], filename=f"{artifacts_dir}/{SLACK_ALERTS_FILE}"
+                    )
         return test_exit_code
 
     return test
@@ -533,10 +553,11 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
     with step_span("generating inter-vms networking matrices", step_idx) as step_idx:
         # Check VMs can download 1M file from each other.
         file_download_matrix = generate_connectivity_matrices(VMs, f"{ssh_dir}/admin")
-        logger.debug(pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs))
+        logger.debug(pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs, True))
         all_vms_file_download_success = all(all(x) for x in file_download_matrix)
         if not all_vms_file_download_success:
-            raise NetworkingException("Not all VMs can download files from each other.")
+            slack_matrix = pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs, False)
+            raise NetworkingException(f"Not all VMs can download files from each other.\n{slack_matrix}")
         logger.info("All VMs can download files from each other.")
     return 0
 
@@ -556,6 +577,11 @@ def smoke_test(artifacts_dir: str) -> int:
 
 
 if __name__ == "__main__":
+    # Set path to the current script path (in case script is launched from non-parent dir).
+    current_path = Path(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(current_path.absolute())
+    # Get slack token from the env variable.
+    slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL", None)
     # Parse command line arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -564,16 +590,27 @@ if __name__ == "__main__":
         help="Keep dir containing: log file/s, ssh keys, alert messages, etc.",
     )
     parser.add_argument("--with_slack_alerts", action="store_true", help="Send slack alerts in case of test failure.")
+    parser.add_argument("--output_dir", type=str, help="Artifacts output directory.")
     args = parser.parse_args()
+    output_dir = os.getenv("TMPDIR", None)
+    if args.output_dir:
+        output_dir = args.output_dir
     if not args.with_slack_alerts:
         logger.warning("Slack alerts are turned off. Use --with_slack_alerts flag to send alerts.")
+    elif slack_webhook_url is None:
+        raise Exception("No slack webhook url defined, alerts can't be sent.")
     if not args.keep_artifacts_dir:
         logger.warning(
             "All test artifacts will be deleted after test execution. Use --keep_artifacts_dir to keep them."
         )
     # Start the test.
     start = datetime.datetime.now()
-    test_exit_code = smoke_test(keep_artifacts_dir=args.keep_artifacts_dir, with_slack_alerts=args.with_slack_alerts)
+    test_exit_code = smoke_test(
+        output_dir=output_dir,
+        keep_artifacts_dir=args.keep_artifacts_dir,
+        with_slack_alerts=args.with_slack_alerts,
+        slack_webhook_url=slack_webhook_url,
+    )
     test_duration = datetime.datetime.now() - start
     if test_exit_code == 0:
         logger.info(f"Smoke test succeeded after {str(test_duration)}.")
