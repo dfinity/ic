@@ -15,7 +15,6 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_crypto_internal_csp",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
         "@crate_index//:strum_macros",

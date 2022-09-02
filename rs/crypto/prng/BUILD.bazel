@@ -21,7 +21,6 @@ rust_library(
     name = "prng",
     srcs = ["src/lib.rs"],
     crate_name = "ic_crypto_prng",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
@@ -33,13 +32,11 @@ rust_test(
     name = "prng_unit_tests",
     srcs = ["src/tests.rs"],
     crate = ":prng",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
-    edition = "2018",
     deps = [":prng"] + DEPENDENCIES,
 )

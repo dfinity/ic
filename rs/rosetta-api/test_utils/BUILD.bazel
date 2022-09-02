@@ -39,7 +39,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_rosetta_test_utils",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
@@ -49,7 +48,6 @@ rust_test(
     name = "test_utils_test",
     aliases = ALIASES,
     crate = ":test_utils",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

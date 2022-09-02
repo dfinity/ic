@@ -21,7 +21,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_extended_bip32",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
@@ -31,7 +30,6 @@ rust_test(
     name = "extended_bip32_test",
     aliases = ALIASES,
     crate = ":extended_bip32",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -40,7 +38,6 @@ rust_test_suite(
     name = "extended_bip32_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":extended_bip32"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -55,7 +55,6 @@ rust_library(
     name = "types",
     srcs = glob(["src/**"]),
     crate_name = "ic_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:derive_more",
         "@crate_index//:strum_macros",
@@ -70,7 +69,6 @@ rust_library(
 rust_test(
     name = "types_test",
     crate = ":types",
-    edition = "2018",
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

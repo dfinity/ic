@@ -76,7 +76,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replica_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -85,7 +84,6 @@ rust_test(
     name = "canister_lifecycle_test",
     srcs = ["tests/canister_lifecycle.rs"],
     data = DEV_DATA,
-    edition = "2018",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
@@ -95,7 +93,6 @@ rust_test(
     name = "funds_test",
     srcs = ["tests/funds.rs"],
     data = DEV_DATA,
-    edition = "2018",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [":replica_tests"],
@@ -105,7 +102,6 @@ rust_test(
     name = "tests_test",
     srcs = ["tests/tests.rs"],
     data = DEV_DATA,
-    edition = "2018",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [

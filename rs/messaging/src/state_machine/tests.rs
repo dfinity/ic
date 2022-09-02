@@ -143,6 +143,7 @@ fn state_machine_populates_network_topology() {
     let fixture = test_fixture(&provided_batch);
 
     with_test_replica_logger(|log| {
+        let _ = &fixture;
         let state_machine = Box::new(StateMachineImpl::new(
             fixture.scheduler,
             fixture.demux,
@@ -174,6 +175,7 @@ fn test_delivered_batch(provided_batch: Batch) {
     let fixture = test_fixture(&provided_batch);
 
     with_test_replica_logger(|log| {
+        let _ = &fixture;
         let state_machine = Box::new(StateMachineImpl::new(
             fixture.scheduler,
             fixture.demux,

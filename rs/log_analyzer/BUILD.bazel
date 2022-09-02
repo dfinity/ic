@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "log_analyzer",
     srcs = glob(["src/**"]),
-    edition = "2018",
     deps = [
         "@crate_index//:chrono",
         "@crate_index//:regex",
@@ -25,7 +24,6 @@ rust_test(
 rust_test_suite(
     name = "tests",
     srcs = glob(["tests/**"]),
-    edition = "2018",
     deps = [
         ":log_analyzer",
         "@crate_index//:chrono",
@@ -37,7 +35,6 @@ rust_test_suite(
 rust_binary(
     name = "log_analyzer_bench",
     srcs = ["benches/speed.rs"],
-    edition = "2018",
     deps = [
         ":log_analyzer",
         "@crate_index//:criterion",
@@ -47,7 +44,6 @@ rust_binary(
 rust_binary(
     name = "logscan",
     srcs = ["examples/logscan.rs"],
-    edition = "2018",
     deps = [
         ":log_analyzer",
         "@crate_index//:chrono",
@@ -59,7 +55,6 @@ rust_binary(
 rust_binary(
     name = "ltl-grep",
     srcs = ["examples/ltl-grep.rs"],
-    edition = "2018",
     deps = [
         ":log_analyzer",
         "@crate_index//:chrono",

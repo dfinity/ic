@@ -13,7 +13,6 @@ def generated_files_check(name, srcs, deps, data, manifest_dir):
             "@com_google_protobuf//:protoc",
             "@com_google_protobuf//:well_known_protos",
         ],
-        edition = "2018",
         env = {
             "PROTOC": "$(rootpath @com_google_protobuf//:protoc)",
             "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
@@ -29,7 +28,6 @@ def protobuf_generator(name, srcs, manifest_dir, deps = [], data = []):
         name = binary_name,
         srcs = srcs,
         data = data,
-        edition = "2018",
         deps = deps,
     )
 

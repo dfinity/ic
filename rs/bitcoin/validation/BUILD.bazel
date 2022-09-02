@@ -6,7 +6,6 @@ rust_library(
     name = "validation",
     srcs = glob(["src/**"]),
     crate_name = "ic_btc_validation",
-    edition = "2018",
     deps = [
         "@crate_index//:bitcoin",
     ],
@@ -17,7 +16,6 @@ rust_test(
     srcs = glob(["**/*.rs"]),
     crate = ":validation",
     data = ["tests/data/headers.csv"],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/validation",
     },

@@ -6,5 +6,4 @@ rust_library(
     name = "constants",
     srcs = glob(["src/**"]),
     crate_name = "ic_constants",
-    edition = "2018",
 )

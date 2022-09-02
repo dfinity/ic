@@ -33,7 +33,6 @@ TEST_DEPENDENCIES = [
 rust_binary(
     name = "ledger_canister_blocks_synchronizer",
     srcs = ["src/main.rs"],
-    edition = "2018",
     proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     deps = [
         "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
@@ -51,7 +50,6 @@ rust_library(
     name = "ledger_canister_blocks_synchronizer_lib",
     srcs = glob(["src/**"]),
     crate_name = "ic_ledger_canister_blocks_synchronizer",
-    edition = "2018",
     proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
@@ -60,13 +58,11 @@ rust_library(
 rust_test(
     name = "ledger_canister_blocks_synchronizer_test",
     crate = ":ledger_canister_blocks_synchronizer_lib",
-    edition = "2018",
     deps = TEST_DEPENDENCIES,
 )
 
 rust_test_suite(
     name = "ledger_canister_blocks_synchronizer_test_suite",
     srcs = glob(["tests/**"]),
-    edition = "2018",
     deps = [":ledger_canister_blocks_synchronizer_lib"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

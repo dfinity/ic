@@ -4,7 +4,6 @@ rust_library(
     name = "types",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],

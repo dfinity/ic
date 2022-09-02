@@ -37,7 +37,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_artifact_manager",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -46,7 +45,6 @@ rust_test(
     name = "artifact_manager_test",
     aliases = ALIASES,
     crate = ":artifact_manager",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -56,7 +54,6 @@ rust_test(
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     crate_root = "tests/clients.rs",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":artifact_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

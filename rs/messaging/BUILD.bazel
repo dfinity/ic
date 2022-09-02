@@ -6,7 +6,6 @@ rust_library(
     name = "messaging",
     srcs = glob(["src/**"]),
     crate_name = "ic_messaging",
-    edition = "2018",
     deps = [
         "//rs/canonical_state/certification_version",
         "//rs/config",

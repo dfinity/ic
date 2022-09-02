@@ -20,7 +20,10 @@ load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_regi
 
 rules_rust_dependencies()
 
-rust_register_toolchains(version = "1.60.0")
+rust_register_toolchains(
+    edition = "2021",
+    version = "1.60.0",
+)
 
 git_repository(
     name = "rules_foreign_cc",

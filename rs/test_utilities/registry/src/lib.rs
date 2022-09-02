@@ -113,7 +113,6 @@ pub fn insert_initial_dkg_transcript(
     record: &SubnetRecord,
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
 ) {
-    use std::convert::TryFrom;
     let committee = record
         .membership
         .iter()

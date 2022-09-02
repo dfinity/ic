@@ -6,7 +6,7 @@
 [package]
 name = "lifeline"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [build-dependencies]
 ic-nns-constants = { path = "../../constants" }

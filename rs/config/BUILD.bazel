@@ -6,7 +6,6 @@ rust_library(
     name = "config",
     srcs = glob(["src/**"]),
     crate_name = "ic_config",
-    edition = "2018",
     deps = [
         "//rs/protobuf",
         "//rs/registry/subnet_type",

@@ -4,7 +4,6 @@ rust_library(
     name = "ed25519",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_basic_sig_ed25519",
-    edition = "2018",
     version = "0.8.0",
     visibility = ["//rs/crypto:__subpackages__"],
     deps = [

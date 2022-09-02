@@ -1315,6 +1315,7 @@ impl FuzzDriver for LocalNnsFuzzDriver {
         let economics = self.params.network_economics.clone();
         self.sender_thread = Some(thread::spawn(move || {
             local_test_on_nns_subnet(move |runtime| async move {
+                let _ = &state;
                 println!("Initializing the NNS.");
                 let mut governance = GovernanceCanisterInitPayloadBuilder::new().proto;
 

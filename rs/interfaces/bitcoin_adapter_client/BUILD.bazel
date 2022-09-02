@@ -6,7 +6,6 @@ rust_library(
     name = "bitcoin_adapter_client",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_bitcoin_adapter_client",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],

@@ -8,7 +8,6 @@ rust_library(
         "src/lib.rs",
     ],
     crate_name = "ic_crypto_tls_interfaces",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],

@@ -10,7 +10,6 @@ rust_library(
     name = "stable_reader",
     srcs = glob(["src/**"]),
     crate_name = "stable_reader",
-    edition = "2018",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )

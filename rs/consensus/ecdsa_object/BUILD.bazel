@@ -6,7 +6,6 @@ rust_library(
     name = "ecdsa_object",
     srcs = glob(["src/**"]),
     crate_name = "ic_ecdsa_object",
-    edition = "2018",
     deps = [
         "//rs/crypto/hash",
         "//rs/interfaces",

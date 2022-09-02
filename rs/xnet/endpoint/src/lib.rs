@@ -207,6 +207,7 @@ impl<'a> XNetEndpoint {
                             let ctx = ctx.clone();
 
                             async move {
+                                let _ = &ctx;
                                 let (response_sender, response_receiver) = oneshot::channel();
                                 let task = WorkerMessage::HandleRequest {
                                     request,

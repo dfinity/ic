@@ -6,7 +6,6 @@ rust_library(
     name = "hyper",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_hyper",
-    edition = "2018",
     deps = [
         "//rs/crypto/tls_interfaces",
         "//rs/interfaces",

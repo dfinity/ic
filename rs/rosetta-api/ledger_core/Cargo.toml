@@ -2,7 +2,7 @@
 name = "ic-ledger-core"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-trait = "0.1.53"

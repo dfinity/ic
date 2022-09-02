@@ -41,7 +41,6 @@ rust_library(
     name = "nns_data_provider",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_nns_data_provider",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 

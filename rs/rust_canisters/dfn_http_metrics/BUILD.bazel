@@ -14,7 +14,6 @@ rust_library(
     name = "dfn_http_metrics",
     srcs = glob(["src/**"]),
     crate_name = "dfn_http_metrics",
-    edition = "2018",
     version = "0.8.0",
     deps = DEPENDENCIES,
 )

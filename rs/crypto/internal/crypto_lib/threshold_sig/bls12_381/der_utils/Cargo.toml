@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 description = "Internal utils for serializing threshold signatures to DER with minimal dependencies"
 
 [dependencies]

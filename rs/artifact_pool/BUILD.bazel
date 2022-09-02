@@ -62,7 +62,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_artifact_pool",
-    edition = "2018",
     features = select({
         "@platforms//os:osx": ["rocksdb_backend"],
         "//conditions:default": [],
@@ -75,7 +74,6 @@ rust_binary(
     name = "ic-consensus-pool-util",
     srcs = ["src/bin/consensus_pool_util.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":artifact_pool"],
 )
@@ -90,7 +88,6 @@ rust_binary(
     name = "load_blocks_bench",
     srcs = ["benches/load_blocks.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":artifact_pool"],
 )

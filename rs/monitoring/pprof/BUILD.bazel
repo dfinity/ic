@@ -6,7 +6,6 @@ rust_library(
     name = "pprof",
     srcs = glob(["src/**"]),
     crate_name = "ic_pprof",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "@crate_index//:lazy_static",

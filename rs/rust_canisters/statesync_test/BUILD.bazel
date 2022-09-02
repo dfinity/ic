@@ -27,7 +27,6 @@ rust_binary(
     name = "statesync_test",
     srcs = glob(["src/**"]),
     crate_name = "statesync_test",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
@@ -36,7 +35,6 @@ rust_binary(
 rust_canister(
     name = "statesync_test_canister",
     srcs = ["src/main.rs"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -44,7 +42,6 @@ rust_canister(
 rust_test(
     name = "statesync_test_test",
     crate = ":statesync_test",
-    edition = "2018",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -56,7 +53,6 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/statesync_test",
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync_test_canister)",

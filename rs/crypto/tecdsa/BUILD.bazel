@@ -11,7 +11,6 @@ rust_library(
     name = "tecdsa",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tecdsa",
-    edition = "2018",
     version = "0.1.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",

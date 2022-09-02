@@ -2,7 +2,7 @@
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ed25519-dalek = "1.0.1"

@@ -6,7 +6,6 @@ rust_library(
     name = "p2p",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_p2p",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "//rs/types/types",

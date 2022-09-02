@@ -2,7 +2,7 @@
 name = "pmap"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 # add dependencies that only canister uses here

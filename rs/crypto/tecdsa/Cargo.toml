@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-tecdsa"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../internal/crypto_lib/threshold_sig/tecdsa" }

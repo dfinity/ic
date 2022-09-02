@@ -7,7 +7,6 @@ rust_library(
     name = "state_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_manager",
-    edition = "2018",
     deps = [
         "//rs/canonical_state",
         "//rs/config",
@@ -69,7 +68,6 @@ rust_test(
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
-    edition = "2018",
     deps = [
         ":state_manager",
         "//rs/config",
@@ -98,7 +96,6 @@ rust_test(
 rust_bench(
     name = "checkpoint_bench",
     srcs = ["benches/checkpoint.rs"],
-    edition = "2018",
     deps = [
         ":state_manager",
         "//rs/monitoring/metrics",
@@ -117,7 +114,6 @@ rust_bench(
 rust_bench(
     name = "traversal_bench",
     srcs = ["benches/bench_traversal.rs"],
-    edition = "2018",
     deps = [
         ":state_manager",
         "//rs/canonical_state",

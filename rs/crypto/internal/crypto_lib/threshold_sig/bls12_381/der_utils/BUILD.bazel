@@ -4,7 +4,6 @@ rust_library(
     name = "der_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_threshold_sig_bls12381_der",
-    edition = "2018",
     version = "0.8.0",
     visibility = ["//rs/crypto:__subpackages__"],
     deps = [

@@ -44,7 +44,6 @@ rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_threshold_sig_bls12381",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
@@ -61,7 +60,6 @@ rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     compile_data = glob(["tests/data/*"]),
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

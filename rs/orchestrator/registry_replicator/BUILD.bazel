@@ -35,7 +35,6 @@ rust_library(
     name = "registry_replicator",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
@@ -43,7 +42,6 @@ rust_binary(
     name = "ic-registry-replicator",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":registry_replicator"],
 )

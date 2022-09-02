@@ -1,7 +1,7 @@
 [package]
 name = "ic-canister-sandbox-common"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "ic_canister_sandbox_common"

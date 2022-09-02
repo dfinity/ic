@@ -6,7 +6,6 @@ rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_multi_sig_bls12381",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/bls12_381/type",

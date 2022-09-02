@@ -39,7 +39,6 @@ rust_library(
     name = "canister",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_btc_canister",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
@@ -57,7 +56,6 @@ cargo_build_script(
         "@com_google_protobuf//:protoc",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
-    edition = "2018",
     visibility = ["//visibility:private"],
     deps = [
         "@crate_index//:prost-build",
@@ -67,14 +65,12 @@ cargo_build_script(
 rust_binary(
     name = "build-utxo-set",
     srcs = ["src/examples/build_utxo_set.rs"],
-    edition = "2018",
     deps = DEV_DEPENDENCIES,
 )
 
 rust_binary(
     name = "explore-set",
     srcs = ["src/examples/explore_utxos.rs"],
-    edition = "2018",
     deps = DEV_DEPENDENCIES,
 )
 

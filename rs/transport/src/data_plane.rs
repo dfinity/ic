@@ -128,6 +128,7 @@ fn spawn_write_task(
 ) -> JoinHandle<()> {
     let flow_tag_str = flow_tag.to_string();
     rt_handle.spawn(async move  {
+            let _ = &data_plane_metrics;
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
             loop {
                 let loop_start_time = Instant::now();
@@ -225,6 +226,7 @@ fn spawn_read_task(
     let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
     let flow_tag_str = flow_tag.to_string();
     rt_handle.spawn(async move {
+            let _ = &data_plane_metrics;
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
             loop {
                 // If the TransportImpl has been deleted, abort.

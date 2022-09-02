@@ -2,7 +2,7 @@
 name = "hardware_wallet_tests"
 version = "0.1.0"
 authors = ["Luc Mercier <luc.mercier@dfinity.org>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
