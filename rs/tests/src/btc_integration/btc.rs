@@ -57,7 +57,7 @@ docker run  --name=bitcoind-node -d \
   -p 8332:8332 \
   -p 18444:18444 \
   -v /tmp:/bitcoin/.bitcoin \
-  kylemanna/bitcoind
+  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind
 "#;
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
