@@ -99,6 +99,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [
         ":build_script",
         "//rs/sns/swap",
@@ -115,6 +116,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [
         ":build_script",
         "//rs/sns/swap:swap_test_feature",

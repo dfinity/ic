@@ -17,6 +17,7 @@ rust_library(
     crate_name = "ic_registry_transport",
     proc_macro_deps = [
     ],
+    version = "0.8.0",
     deps = [
         "//rs/protobuf",
         "@crate_index//:bytes",

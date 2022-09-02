@@ -20,6 +20,7 @@ rust_library(
     name = "local_registry",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_registry",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

@@ -6,6 +6,7 @@ rust_library(
     name = "fake",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_client_fake",
+    version = "0.8.0",
     deps = [
         "//rs/interfaces",
         "//rs/types/types",

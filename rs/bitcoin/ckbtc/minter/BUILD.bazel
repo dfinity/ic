@@ -36,6 +36,7 @@ rust_library(
     ),
     crate_name = "ic_ckbtc_minter",
     proc_macro_deps = LIB_PROC_MACRO_DEPS,
+    version = "0.1.0",
     deps = LIB_DEPS,
 )
 

@@ -12,6 +12,7 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     crate_name = "ic_sns_wasm_proto_generator",
+    version = "0.8.0",
     deps = [
         "//rs/utils/rustfmt",
         "@crate_index//:prost-build",

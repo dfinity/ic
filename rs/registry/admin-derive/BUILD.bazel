@@ -11,5 +11,6 @@ rust_proc_macro(
     name = "admin-derive",
     srcs = glob(["src/**"]),
     crate_name = "ic_admin_derive",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
