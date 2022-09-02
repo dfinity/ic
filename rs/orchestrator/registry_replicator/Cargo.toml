@@ -6,10 +6,12 @@ edition = "2018"
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../../config" }
+ic-crypto = { path = "../../crypto" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-metrics-exporter = { path = "../../monitoring/metrics_exporter" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -18,6 +20,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-types = { path = "../../types/types" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.10.4"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tempfile = "3.1.0"

@@ -4,10 +4,12 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
+    "//rs/crypto",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/monitoring/metrics_exporter",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -17,6 +19,7 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/types/types",
     "@crate_index//:clap",
+    "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:slog",
     "@crate_index//:tempfile",

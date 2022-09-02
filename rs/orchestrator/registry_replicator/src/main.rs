@@ -9,7 +9,12 @@ async fn main() {
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
-    let registry_replicator = RegistryReplicator::new_from_config(logger.clone(), None, &config);
+    let (registry_replicator, _tmp) = RegistryReplicator::new_with_metrics_runtime(
+        logger.clone(),
+        None,
+        &config,
+        args.get_metrics_addr(),
+    );
 
     let (nns_urls, nns_pub_key) =
         registry_replicator.parse_registry_access_info_from_config(&config);
