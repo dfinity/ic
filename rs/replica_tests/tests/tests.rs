@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{self as ic00, EmptyBlob, Method};
+use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reply;
 use ic_replicated_state::{PageIndex, PageMap};
@@ -2077,7 +2077,7 @@ fn raw_rand_response_is_encoded() {
         .update(wasm().call_simple(
             ic00::IC_00,
             Method::RawRand,
-            call_args().other_side(EmptyBlob::encode()),
+            call_args().other_side(EmptyBlob.encode()),
         ))
         .unwrap();
 
@@ -2097,7 +2097,7 @@ fn consecutive_raw_rand_calls_from_a_canister_return_different_values() {
         .update(wasm().call_simple(
             ic00::IC_00,
             Method::RawRand,
-            call_args().other_side(EmptyBlob::encode()),
+            call_args().other_side(EmptyBlob.encode()),
         ))
         .unwrap();
 
@@ -2105,7 +2105,7 @@ fn consecutive_raw_rand_calls_from_a_canister_return_different_values() {
         .update(wasm().call_simple(
             ic00::IC_00,
             Method::RawRand,
-            call_args().other_side(EmptyBlob::encode()),
+            call_args().other_side(EmptyBlob.encode()),
         ))
         .unwrap();
 

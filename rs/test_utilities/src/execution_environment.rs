@@ -472,7 +472,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -493,7 +493,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -513,7 +513,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -533,7 +533,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 

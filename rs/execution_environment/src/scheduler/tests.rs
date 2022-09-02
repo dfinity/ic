@@ -2597,11 +2597,11 @@ fn rate_limiting_of_install_code() {
     let responses = test.get_responses_to_injected_calls();
     assert_eq!(
         &responses[0].response_payload,
-        &Payload::Data(EmptyBlob::encode())
+        &Payload::Data(EmptyBlob.encode())
     );
     assert_eq!(
         &responses[1].response_payload,
-        &Payload::Data(EmptyBlob::encode())
+        &Payload::Data(EmptyBlob.encode())
     );
 
     // Try upgrading the canister. It should fail because the canister is rate
@@ -2637,10 +2637,7 @@ fn rate_limiting_of_install_code() {
     test.inject_install_code_call_to_ic00(canister, upgrade);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let response = test.get_responses_to_injected_calls().pop().unwrap();
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(EmptyBlob::encode())
-    );
+    assert_eq!(response.response_payload, Payload::Data(EmptyBlob.encode()));
 }
 
 #[test]

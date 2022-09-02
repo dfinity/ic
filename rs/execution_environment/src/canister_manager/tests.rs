@@ -4113,7 +4113,7 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
     for _ in 0..1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
-            EmptyBlob::encode(),
+            EmptyBlob.encode(),
             test.canister_creation_fee(),
         );
         test.execute_all();

@@ -36,7 +36,9 @@ use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
 use ic_fondue::ic_manager::IcHandle;
-use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob};
+use ic_ic00_types::{
+    CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob, Payload,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
@@ -1093,7 +1095,7 @@ fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload
 
 /// Sending no field
 pub fn create_canister_with_no_settings_field(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let payload = EmptyBlob::encode();
+    let payload = EmptyBlob.encode();
     create_canister_test(handle, ctx, payload);
 }
 

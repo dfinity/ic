@@ -177,7 +177,7 @@ pub fn send_transaction(
                         format!("{} failed: {}", Ic00Method::BitcoinSendTransaction, err),
                     )
                 })
-                .map(|()| EmptyBlob::encode())
+                .map(|()| EmptyBlob.encode())
         },
     )
 }

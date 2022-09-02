@@ -1,7 +1,7 @@
 use crate::types::Response;
 use ic_base_types::SubnetId;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterStatusType, EmptyBlob, IC_00};
+use ic_ic00_types::{CanisterStatusType, EmptyBlob, Payload as Ic00Payload, IC_00};
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{CanisterStatus, ReplicatedState};
@@ -80,7 +80,7 @@ pub fn process_stopping_canisters(
                                 user_id: sender,
                                 time,
                                 state: IngressState::Completed(WasmResult::Reply(
-                                    EmptyBlob::encode(),
+                                    EmptyBlob.encode(),
                                 )),
                             },
                         )
@@ -97,7 +97,7 @@ pub fn process_stopping_canisters(
                             respondent: subnet_id_as_canister_id,
                             originator_reply_callback: reply_callback,
                             refund: cycles,
-                            response_payload: Payload::Data(EmptyBlob::encode()),
+                            response_payload: Payload::Data(EmptyBlob.encode()),
                         };
                         state.push_subnet_output_response(response.into());
                     }
