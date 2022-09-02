@@ -248,22 +248,40 @@ impl CanisterState {
         }
     }
 
-    /// Returns `true` if the canister has a pending long execution.
-    pub fn has_long_execution(&self) -> bool {
-        match self.next_execution() {
-            NextExecution::None | NextExecution::StartNew | NextExecution::ContinueInstallCode => {
-                false
-            }
-            NextExecution::ContinueLong => true,
+    /// Returns true if the canister has an aborted execution.
+    pub fn has_aborted_execution(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedInstallCode(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
         }
     }
 
     /// Returns true if the canister has a paused execution.
     pub fn has_paused_execution(&self) -> bool {
-        matches!(
-            self.system_state.task_queue.front(),
-            Some(ExecutionTask::PausedExecution(..)) | Some(ExecutionTask::PausedInstallCode(..))
-        )
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::PausedExecution(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedInstallCode(..))
+            | Some(ExecutionTask::AbortedExecution(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+        }
+    }
+
+    /// Returns true if the canister has a paused install code.
+    pub fn has_paused_install_code(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::PausedInstallCode(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::AbortedExecution(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+        }
     }
 
     /// Returns true if there is at least one message in the canister's output

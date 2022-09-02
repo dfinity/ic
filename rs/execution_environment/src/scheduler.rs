@@ -138,8 +138,9 @@ impl SchedulerImpl {
                 canister.scheduler_state.priority_credit = 0.into();
             }
 
-            let has_long_execution = canister.has_long_execution();
-            if !has_long_execution {
+            let has_aborted_or_paused_execution =
+                canister.has_aborted_execution() || canister.has_paused_execution();
+            if !has_aborted_or_paused_execution {
                 canister.scheduler_state.long_execution_mode = LongExecutionMode::Opportunistic;
             }
 
@@ -150,7 +151,7 @@ impl SchedulerImpl {
                 accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
                 compute_allocation,
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
-                has_long_execution,
+                has_aborted_or_paused_execution,
             });
 
             total_compute_allocation += compute_allocation;
@@ -173,7 +174,7 @@ impl SchedulerImpl {
             // DTS Scheduler: round priority = accumulated priority + ACi
             rs.accumulated_priority += factual;
             canister.scheduler_state.accumulated_priority = rs.accumulated_priority.into();
-            if rs.has_long_execution {
+            if rs.has_aborted_or_paused_execution {
                 long_executions_compute_allocation += factual;
                 total_long_executions += 1;
             }
@@ -186,7 +187,7 @@ impl SchedulerImpl {
         round_states.sort_by_key(|rs| {
             (
                 Reverse(rs.long_execution_mode),
-                Reverse(rs.has_long_execution),
+                Reverse(rs.has_aborted_or_paused_execution),
                 Reverse(rs.accumulated_priority),
                 rs.canister_id,
             )
@@ -802,7 +803,7 @@ impl SchedulerImpl {
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
-            if canister.has_paused_execution() {
+            if canister.has_paused_execution() || canister.has_paused_install_code() {
                 continue;
             }
 

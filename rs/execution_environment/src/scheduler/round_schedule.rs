@@ -16,8 +16,9 @@ pub(super) struct CanisterRoundState {
     pub(super) compute_allocation: i64,
     /// Copy of Canister SchedulerState::long_execution_mode
     pub(super) long_execution_mode: LongExecutionMode,
-    /// True when there is a pending long execution
-    pub(super) has_long_execution: bool,
+    /// True when there is an aborted or paused long update execution.
+    /// Note: this doesn't include paused or aborted install codes.
+    pub(super) has_aborted_or_paused_execution: bool,
 }
 
 /// Represents three ordered active Canister ID groups to schedule.
