@@ -383,6 +383,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
              */
             pot_with_setup(
+                "canister_http",
+                canister_http::lib::config,
+                par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
+            ),
+            pot_with_setup(
                 "firewall_priority_pot",
                 networking::firewall_priority::config,
                 par(vec![
@@ -790,6 +795,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "create_subnet",
                     nns_tests::create_subnet::hourly_config(),
                     par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+                ),
+                pot_with_setup(
+                    "canister_http_correctness",
+                    canister_http::lib::config,
+                    par(vec![sys_t(
+                        "http_correctness",
+                        canister_http::http_correctness::test,
+                    )]),
                 ),
                 pot(
                     "rejoin",
