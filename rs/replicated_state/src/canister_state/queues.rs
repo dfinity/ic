@@ -729,7 +729,7 @@ impl CanisterQueues {
         self.input_queues_stats.cycles
     }
 
-    /// Returns the number of slots used in output queues.
+    /// Returns the number of actual messages in output queues.
     pub fn output_queues_message_count(&self) -> usize {
         self.output_queues_stats.message_count
     }
@@ -1077,7 +1077,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 /// Running stats across output queues.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputQueuesStats {
-    /// Number of slots used in output queues.
+    /// Number of actual messages in output queues.
     message_count: usize,
 
     /// Total amount of cycles contained in the output queues.
