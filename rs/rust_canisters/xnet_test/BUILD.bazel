@@ -16,7 +16,6 @@ rust_library(
     name = "xnet_test",
     srcs = glob(["src/**"]),
     crate_name = "xnet_test",
-    edition = "2018",
     version = "0.8.0",
     deps = DEPENDENCIES,
 )

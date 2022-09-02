@@ -89,7 +89,6 @@ impl From<Time> for Duration {
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::{TimeZone, Utc};
-        use std::convert::TryInto;
 
         match self.0.try_into() {
             Ok(signed) => write!(f, "{}", Utc.timestamp_nanos(signed)),

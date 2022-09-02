@@ -22,7 +22,6 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_registry_common_proto",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 

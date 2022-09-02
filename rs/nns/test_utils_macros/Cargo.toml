@@ -1,7 +1,7 @@
 [package]
 name = "ic-nns-test-utils-macros"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 proc-macro = true

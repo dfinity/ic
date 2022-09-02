@@ -20,7 +20,6 @@ rust_library(
     name = "cdk",
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_client_cdk",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,

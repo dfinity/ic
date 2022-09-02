@@ -187,7 +187,5 @@ fn signable_with_random_32_bytes() -> SignableMock {
 }
 
 fn as_u64(usize: usize) -> u64 {
-    use std::convert::TryFrom;
-
     u64::try_from(usize).expect("failed to convert usize to u64")
 }

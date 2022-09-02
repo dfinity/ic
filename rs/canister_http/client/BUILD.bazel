@@ -6,7 +6,6 @@ rust_library(
     name = "client",
     srcs = glob(["src/**"]),
     crate_name = "ic_canister_http_adapter_client",
-    edition = "2018",
     deps = [
         "//rs/async_utils",
         "//rs/canister_http/service",

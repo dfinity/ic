@@ -7,7 +7,6 @@ rust_library(
     name = "adapter_metrics_service",
     srcs = glob(["src/**"]),
     crate_name = "ic_adapter_metrics_service",
-    edition = "2021",
     version = "0.1.0",
     deps = [
         ":build_script",
@@ -30,7 +29,6 @@ cargo_build_script(
         "@com_google_protobuf//:well_known_protos",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
-    edition = "2021",
     deps = [
         "@crate_index//:prost-build",
         "@crate_index//:tonic-build",

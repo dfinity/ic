@@ -86,7 +86,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -99,7 +98,6 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":build_script",
@@ -116,7 +114,6 @@ rust_library(
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":build_script",
@@ -129,7 +126,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":governance",
@@ -148,7 +144,6 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     crate_features = ["test"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":governance-test",
@@ -184,7 +179,6 @@ rust_test(
     name = "governance_test",
     aliases = ALIASES,
     crate = ":governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -205,7 +199,6 @@ rust_test_suite_with_extra_srcs(
     aliases = ALIASES,
     crate_features = ["test"],
     data = ["tests/neurons.csv"],
-    edition = "2018",
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
     },

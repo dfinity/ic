@@ -22,7 +22,6 @@ rust_binary(
     srcs = glob(["src/**"]),
     aliases = {},
     crate_name = "ic_nns_inspector",
-    edition = "2018",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )

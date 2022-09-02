@@ -319,7 +319,6 @@ pub fn get_replica_transport_config(
         .as_ref()
         .expect("p2p flow endpoint not present in node record.")
         .port;
-    use std::convert::TryFrom;
     let port = u16::try_from(port).expect("Could not convert u32 to u16");
 
     TransportConfig {

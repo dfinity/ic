@@ -6,7 +6,6 @@ rust_library(
     name = "internal",
     srcs = glob(["src/**"]),
     crate_name = "ic_btc_types_internal",
-    edition = "2018",
     deps = [
         "//rs/protobuf",
         "@crate_index//:serde",

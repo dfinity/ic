@@ -10,13 +10,11 @@ rust_library(
     name = "depcheck",
     srcs = glob(["src/**"]),
     crate_name = "depcheck",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "debcheck_bin",
     srcs = ["src/main.rs"],
-    edition = "2018",
     deps = [":depcheck"] + DEPENDENCIES,
 )

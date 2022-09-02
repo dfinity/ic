@@ -1,7 +1,7 @@
 [package]
 name = "ic-identity"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 description = "A tool to generate necessary crypto keys for IC admins and users."
 
 [dependencies]

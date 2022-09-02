@@ -1,7 +1,7 @@
 [package]
 name = "ic-interfaces-bitcoin-adapter-client"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }

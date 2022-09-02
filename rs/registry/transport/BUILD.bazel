@@ -15,7 +15,6 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_registry_transport",
-    edition = "2018",
     proc_macro_deps = [
     ],
     deps = [

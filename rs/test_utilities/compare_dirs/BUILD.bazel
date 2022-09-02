@@ -6,6 +6,5 @@ rust_library(
     name = "compare_dirs",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_compare_dirs",
-    edition = "2018",
     version = "0.8.0",
 )

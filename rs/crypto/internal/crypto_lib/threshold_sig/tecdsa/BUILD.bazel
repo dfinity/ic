@@ -43,7 +43,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_threshold_sig_ecdsa",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
@@ -53,7 +52,6 @@ rust_test(
     name = "tecdsa_test",
     aliases = ALIASES,
     crate = ":tecdsa",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -66,7 +64,6 @@ rust_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     compile_data = glob(["tests/data/*"]),
-    edition = "2021",
     extra_srcs = glob(["tests/**/test_*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":tecdsa"] + DEPENDENCIES + DEV_DEPENDENCIES,

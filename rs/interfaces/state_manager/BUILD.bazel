@@ -6,7 +6,6 @@ rust_library(
     name = "state_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_state_manager",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "//rs/crypto/tree_hash",

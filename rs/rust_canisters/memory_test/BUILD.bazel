@@ -21,7 +21,6 @@ rust_library(
     name = "memory_test",
     srcs = glob(["src/**"]),
     crate_name = "memory_test",
-    edition = "2018",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
@@ -29,14 +28,12 @@ rust_library(
 rust_canister(
     name = "memory_test_canister",
     srcs = ["src/main.rs"],
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "memory_test_test",
     crate = ":memory_test",
-    edition = "2018",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -48,7 +45,6 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/memory_test",
         "MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath :memory_test_canister)",

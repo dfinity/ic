@@ -6,7 +6,6 @@ rust_library(
     name = "http_counter",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "http_counter",
-    edition = "2018",
     proc_macro_deps = select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [
             "@crate_index//:ic-cdk-macros",

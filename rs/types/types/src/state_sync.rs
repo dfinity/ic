@@ -226,7 +226,6 @@ pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
 /// Deserializes the manifest from a byte array.
 pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
     use prost::Message;
-    use std::convert::TryInto;
 
     let pb_manifest = pb::Manifest::decode(bytes)
         .map_err(|err| format!("failed to decode Manifest proto {}", err))?;

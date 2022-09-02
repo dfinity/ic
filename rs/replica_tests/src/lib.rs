@@ -57,6 +57,7 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// Note: To ensure that this function does not block forever (in case of bugs),
 /// this function will panic if the process is not finished in some amount of
 /// time.
+#[allow(clippy::await_holding_lock)]
 fn process_ingress(
     ingress_sender_mu: &Mutex<Option<IngressIngestionService>>,
     ingress_hist_reader: &dyn IngressHistoryReader,

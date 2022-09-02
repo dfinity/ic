@@ -4,7 +4,6 @@ rust_library(
     name = "logmon",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_logmon",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],

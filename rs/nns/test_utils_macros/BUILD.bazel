@@ -11,6 +11,5 @@ rust_proc_macro(
     name = "test_utils_macros",
     srcs = glob(["src/**"]),
     crate_name = "ic_nns_test_utils_macros",
-    edition = "2018",
     deps = DEPENDENCIES,
 )

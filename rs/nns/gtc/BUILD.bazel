@@ -68,7 +68,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -81,7 +80,6 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":build_script"],
 )
@@ -90,7 +88,6 @@ rust_canister(
     name = "genesis-token-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":gtc"] + [":build_script"],
 )
@@ -104,7 +101,6 @@ rust_test(
     name = "gtc_test",
     aliases = ALIASES,
     crate = ":gtc",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
@@ -121,7 +117,6 @@ rust_test_suite(
         "//rs/canister_sandbox/sandbox_launcher",
         "//rs/nns/gtc:genesis-token-canister",
     ],
-    edition = "2018",
     env = {
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",

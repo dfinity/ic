@@ -2,7 +2,7 @@
 name = "cycles-minting-canister"
 version = "0.8.0"
 description = "Canister for cycles administration"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!

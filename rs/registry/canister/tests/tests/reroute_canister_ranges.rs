@@ -20,7 +20,6 @@ use registry_canister::{
 };
 
 pub(crate) async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
-    use std::convert::TryFrom;
     let pb_routing_table: pb::RoutingTable = get_value_or_panic(canister, b"routing_table").await;
     RoutingTable::try_from(pb_routing_table).expect("failed to decode routing table")
 }

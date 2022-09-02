@@ -6,7 +6,6 @@ rust_proc_macro(
     name = "fe-derive",
     srcs = glob(["src/**"]),
     crate_name = "fe_derive",
-    edition = "2018",
     version = "0.1.0",
     deps = [
         "@crate_index//:hex",

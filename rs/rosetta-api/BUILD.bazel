@@ -68,7 +68,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_rosetta_api",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.6.1",
     deps = DEPENDENCIES,
@@ -78,7 +77,6 @@ rust_binary(
     name = "ic-rosetta-api",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":rosetta-api"],
 )
@@ -87,7 +85,6 @@ rust_test(
     name = "rosetta-api_test",
     aliases = ALIASES,
     crate = ":rosetta-api",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

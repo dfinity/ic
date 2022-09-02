@@ -18,7 +18,6 @@ rust_binary(
     name = "fe",
     srcs = ["fuzz_targets/fe.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -27,7 +26,6 @@ rust_binary(
     name = "scalar",
     srcs = ["fuzz_targets/scalar.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -36,7 +34,6 @@ rust_binary(
     name = "sqrt_ratio",
     srcs = ["fuzz_targets/sqrt_ratio.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

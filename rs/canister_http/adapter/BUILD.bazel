@@ -50,7 +50,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_canister_http_adapter",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -59,7 +58,6 @@ rust_binary(
     name = "ic-canister-http-adapter",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":adapter"],
 )
@@ -68,7 +66,6 @@ rust_test(
     name = "adapter_test",
     aliases = ALIASES,
     crate = ":adapter",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -77,7 +74,6 @@ rust_test_suite(
     name = "adapter_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

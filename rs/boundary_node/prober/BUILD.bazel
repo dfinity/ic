@@ -42,7 +42,6 @@ rust_binary(
         "src/metrics.rs",
     ],
     data = ["src/canister.wat"],
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

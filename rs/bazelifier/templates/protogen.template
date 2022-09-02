@@ -12,7 +12,6 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     crate_name = "{{ crate_name }}",
-    edition = "2018",
     deps = [
         "//rs/utils/rustfmt",
         "@crate_index//:prost-build",

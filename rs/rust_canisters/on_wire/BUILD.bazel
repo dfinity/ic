@@ -6,6 +6,5 @@ rust_library(
     name = "on_wire",
     srcs = glob(["src/**"]),
     crate_name = "on_wire",
-    edition = "2018",
     version = "0.8.0",
 )

@@ -77,6 +77,7 @@ fn do_nothing() {
 
 // This checks that call with cleanup actually releases the lock after panic
 #[export_name = "canister_update dirty_call"]
+#[allow(clippy::await_holding_lock)]
 fn dirty_call_() {
     async fn dirty_call() {
         let l = match DIRTY_LOCK.try_write() {
@@ -94,6 +95,7 @@ fn dirty_call_() {
 
 // This checks that call with cleanup actually releases the lock after panic
 #[export_name = "canister_update clean_call"]
+#[allow(clippy::await_holding_lock)]
 fn clean_call_() {
     async fn clean_call() {
         let l = match CLEAN_LOCK.try_write() {

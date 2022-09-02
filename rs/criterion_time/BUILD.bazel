@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "criterion_time",
     srcs = glob(["src/**"]),
-    edition = "2018",
     deps = [
         "@crate_index//:criterion",
         "@crate_index//:libc",

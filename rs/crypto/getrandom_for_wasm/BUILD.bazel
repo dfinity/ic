@@ -6,7 +6,6 @@ rust_library(
     name = "getrandom_for_wasm",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_getrandom_for_wasm",
-    edition = "2021",
     version = "0.1.0",
     deps = [
         "@crate_index//:getrandom",

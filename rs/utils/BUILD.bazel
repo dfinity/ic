@@ -6,7 +6,6 @@ rust_library(
     name = "utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_utils",
-    edition = "2018",
     deps = [
         "@crate_index//:bitflags",
         "@crate_index//:features",

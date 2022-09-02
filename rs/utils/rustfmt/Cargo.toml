@@ -3,4 +3,4 @@ name = "ic-utils-rustfmt"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Run rustfmt from rust code."
-edition = "2018"
+edition = "2021"

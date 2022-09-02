@@ -613,7 +613,7 @@ pub mod tests {
         /// node ID.
         fn get_node_flow_count(map: &ItemCountCollector, node_id: NodeId) -> usize {
             let map_i = &mut map.lock().unwrap();
-            *map_i.get(&node_id).or(Some(&0)).unwrap()
+            *map_i.get(&node_id).unwrap_or(&0)
         }
     }
 

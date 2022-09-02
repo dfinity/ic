@@ -1,7 +1,7 @@
 [package]
 name = "ic-state-manager"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bit-vec = "0.6.3"

@@ -1,7 +1,7 @@
 [package]
 name = "ic-nervous-system-common-test-keys"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ed25519-dalek = "1.0.1"

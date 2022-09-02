@@ -52,7 +52,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -62,7 +61,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "cycles_minting_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":build_script"],
 )
@@ -71,7 +69,6 @@ rust_canister(
     name = "cycles-minting-canister-raw",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":cmc",
@@ -90,7 +87,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "src/main.rs",
     data = ["cmc.did"],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },

@@ -42,7 +42,6 @@ rust_library(
     name = "endpoint",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_endpoint",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 

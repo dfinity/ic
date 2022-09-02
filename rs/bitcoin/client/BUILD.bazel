@@ -6,7 +6,6 @@ rust_library(
     name = "client",
     srcs = glob(["src/**"]),
     crate_name = "ic_btc_adapter_client",
-    edition = "2018",
     deps = [
         "//rs/async_utils",
         "//rs/bitcoin/service",

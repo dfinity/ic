@@ -48,7 +48,6 @@ rust_binary(
     name = "sns",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -59,7 +58,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "src/main.rs",
     data = ["test.png"],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },

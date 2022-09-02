@@ -6,7 +6,6 @@ rust_library(
     name = "load_wasm",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_load_wasm",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "@crate_index//:cargo_metadata",

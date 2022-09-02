@@ -6,7 +6,6 @@ rust_library(
     name = "csp_test_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_csp_test_utils",
-    edition = "2018",
     version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/types",

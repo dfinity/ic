@@ -476,6 +476,7 @@ fn create_main_service(
         ServiceBuilder::new()
             // Attach a timer as soon as we see a request.
             .map_request(move |request| {
+                let _ = &metrics_for_map_request;
                 // Start recording request duration.
                 let request_timer = HistogramVecTimer::start_timer(
                     metrics_for_map_request.requests.clone(),

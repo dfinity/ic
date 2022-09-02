@@ -6,7 +6,6 @@ rust_library(
     name = "sys",
     srcs = glob(["src/**"]),
     crate_name = "ic_sys",
-    edition = "2018",
     deps = [
         "//rs/crypto/sha",
         "//rs/phantom_newtype",

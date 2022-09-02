@@ -73,7 +73,6 @@ rust_library(
     ),
     aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
@@ -82,7 +81,6 @@ rust_library(
 rust_canister(
     name = "sns-test-dapp-canister-raw",
     srcs = ["test_canisters/test_dapp_canister.rs"],
-    edition = "2018",
     deps = [
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
@@ -97,7 +95,6 @@ optimized_canister(
 rust_canister(
     name = "sns-governance-mem-test-canister-raw",
     srcs = ["test_canisters/sns_governance_mem_test_canister.rs"],
-    edition = "2018",
     deps = [
         "//rs/nervous_system/common",
         "//rs/rosetta-api/icrc1",
@@ -149,7 +146,6 @@ rust_test_suite_with_extra_srcs(
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/integration_tests",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",

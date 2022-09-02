@@ -57,7 +57,6 @@ rust_library(
     data = [
         "wasm/ledger-archive-node-canister-bazel.wasm",
     ],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         # Circular dependency between ledger-canister-wasm and ledger_canister.
@@ -71,7 +70,6 @@ rust_library(
 rust_binary(
     name = "test_notified",
     srcs = ["test/notified.rs"],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -83,7 +81,6 @@ rust_canister(
     data = [
         "ledger.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -101,7 +98,6 @@ rust_canister(
     data = [
         "ledger.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -118,7 +114,6 @@ rust_canister(
     data = [
         "ledger_archive.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,

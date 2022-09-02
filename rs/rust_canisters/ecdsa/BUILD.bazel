@@ -26,7 +26,6 @@ rust_canister(
     name = "ecdsa-canister",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -36,7 +35,6 @@ rust_test(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     data = ["ecdsa.did"],
-    edition = "2018",
     env = {
         "ECDSA_DID_PATH": "rs/rust_canisters/ecdsa/ecdsa.did",
     },
