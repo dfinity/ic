@@ -7,6 +7,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_logger",
     edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/monitoring/logger",
         "@crate_index//:slog",
