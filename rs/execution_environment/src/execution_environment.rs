@@ -444,7 +444,7 @@ impl ExecutionEnvironment {
                     Ok(args) => self
                         .canister_manager
                         .uninstall_code(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -519,7 +519,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                         )
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -560,7 +560,7 @@ impl ExecutionEnvironment {
                         let result = self
                             .canister_manager
                             .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
-                            .map(|()| EmptyBlob::encode())
+                            .map(|()| EmptyBlob.encode())
                             .map_err(|err| err.into());
 
                         info!(
@@ -579,7 +579,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::RawRand) => {
                 let res = match EmptyBlob::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
-                    Ok(()) => {
+                    Ok(EmptyBlob) => {
                         let mut buffer = vec![0u8; 32];
                         rng.fill_bytes(&mut buffer);
                         Ok(Encode!(&buffer).unwrap())
@@ -1106,7 +1106,7 @@ impl ExecutionEnvironment {
                 compute_allocation_used,
                 round_limits,
             )
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1124,7 +1124,7 @@ impl ExecutionEnvironment {
             Ok(stop_contexts) => {
                 // Reject outstanding stop messages (if any).
                 self.reject_stop_requests(canister_id, stop_contexts, state);
-                Ok(EmptyBlob::encode())
+                Ok(EmptyBlob.encode())
             }
             Err(err) => Err(err.into()),
         }
@@ -1148,7 +1148,7 @@ impl ExecutionEnvironment {
             Some(canister_state) => {
                 self.cycles_account_manager
                     .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
-                (Ok(EmptyBlob::encode()), Cycles::zero())
+                (Ok(EmptyBlob.encode()), Cycles::zero())
             }
         }
     }
@@ -1185,7 +1185,7 @@ impl ExecutionEnvironment {
                 cycles_to_return,
             } => Some((Err(error.into()), cycles_to_return)),
             StopCanisterResult::AlreadyStopped { cycles_to_return } => {
-                Some((Ok(EmptyBlob::encode()), cycles_to_return))
+                Some((Ok(EmptyBlob.encode()), cycles_to_return))
             }
         }
     }
@@ -1201,7 +1201,7 @@ impl ExecutionEnvironment {
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .add_cycles(sender, cycles, canister, provisional_whitelist)
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1808,7 +1808,7 @@ impl ExecutionEnvironment {
                             result.old_wasm_hash,
                             result.new_wasm_hash);
 
-                        Ok(EmptyBlob::encode())
+                        Ok(EmptyBlob.encode())
                     }
                     Err(err) => {
                         info!(

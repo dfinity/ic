@@ -591,7 +591,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
             receiver: ic00::IC_00.get(),
             user_id: test.user_id(),
             time: test.time(),
-            state: IngressState::Completed(WasmResult::Reply(EmptyBlob::encode())),
+            state: IngressState::Completed(WasmResult::Reply(EmptyBlob.encode())),
         }
     );
     let ingress_id = test.stop_canister(canister_id);
@@ -603,7 +603,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
             receiver: ic00::IC_00.get(),
             user_id: test.user_id(),
             time: test.time(),
-            state: IngressState::Completed(WasmResult::Reply(EmptyBlob::encode())),
+            state: IngressState::Completed(WasmResult::Reply(EmptyBlob.encode())),
         }
     );
 }
@@ -825,7 +825,7 @@ fn start_canister_from_another_canister() {
     test.stop_canister(canister);
     test.set_controller(canister, controller.get()).unwrap();
     let result = test.ingress(controller, "update", start).unwrap();
-    assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+    assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
     assert_eq!(
         CanisterStatusType::Running,
         test.canister_state(canister).status(),
@@ -865,7 +865,7 @@ fn stop_canister_from_another_canister() {
     test.execute_all();
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+    assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
 }
 
 #[test]
@@ -895,7 +895,7 @@ fn starting_a_stopping_canister_succeeds() {
 fn subnet_ingress_message_unknown_method() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test
-        .subnet_message("unknown", EmptyBlob::encode())
+        .subnet_message("unknown", EmptyBlob.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
@@ -913,7 +913,7 @@ fn subnet_canister_request_unknown_method() {
             ic00::IC_00,
             "unknown",
             call_args()
-                .other_side(EmptyBlob::encode())
+                .other_side(EmptyBlob.encode())
                 .on_reject(wasm().reject_message().reject()),
         )
         .build();
@@ -930,7 +930,7 @@ fn subnet_canister_request_unknown_method() {
 fn subnet_ingress_message_on_create_canister_fails() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test
-        .subnet_message(Method::CreateCanister, EmptyBlob::encode())
+        .subnet_message(Method::CreateCanister, EmptyBlob.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
@@ -965,7 +965,7 @@ fn create_canister_xnet_to_nns_called_from_non_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -991,7 +991,7 @@ fn create_canister_xnet_called_from_non_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -1017,7 +1017,7 @@ fn create_canister_xnet_called_from_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -1141,11 +1141,10 @@ fn metrics_are_observed_for_subnet_messages() {
     ];
 
     for method in methods.iter() {
-        test.subnet_message(method, EmptyBlob::encode())
-            .unwrap_err();
+        test.subnet_message(method, EmptyBlob.encode()).unwrap_err();
     }
 
-    test.subnet_message("nonexisting", EmptyBlob::encode())
+    test.subnet_message("nonexisting", EmptyBlob.encode())
         .unwrap_err();
 
     assert_eq!(
@@ -2329,7 +2328,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
 
     let result = test.ingress(canister_1, "update", top_up_canister).unwrap();
 
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_balance_equals(
         initial_cycles_balance_1,
         test.canister_state(canister_1).system_state.balance(),

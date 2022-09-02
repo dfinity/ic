@@ -4203,7 +4203,7 @@ fn dts_resume_works_in_install_code() {
     );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
@@ -4252,7 +4252,7 @@ fn dts_abort_works_in_install_code() {
 
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]

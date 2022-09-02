@@ -869,7 +869,7 @@ fn send_transaction_succeeds() {
             .encode(),
             payment,
             Cycles::zero(),
-            Payload::Data(EmptyBlob::encode()),
+            Payload::Data(EmptyBlob.encode()),
         );
     }
 }

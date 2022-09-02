@@ -10,7 +10,7 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
-use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
+use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -873,7 +873,7 @@ pub(crate) async fn create_canister_via_canister_with_cycles(
         .forward_with_cycles_to(
             &Principal::management_canister(),
             "create_canister",
-            EmptyBlob::encode(),
+            EmptyBlob.encode(),
             cycles,
         )
         .await
