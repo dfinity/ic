@@ -1,3 +1,6 @@
+COMMENT(msg:string)
+EXPECTED(fail_or_success:string)
+
 log(internal_host_id:string, node_id:string, subnet_id:string, component:string, level:string, message:string)
 log1(node:string, val:float)
 
