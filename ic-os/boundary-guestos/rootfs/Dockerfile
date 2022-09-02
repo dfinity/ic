@@ -39,6 +39,17 @@ RUN \
    curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
    echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
+# Download Nginx NJS Plugins
+ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
+ARG NGINX_NJS_PLUGINS_REF_NAME=v1.0.0
+ARG NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN=glpat-2s2iXys15ZmVpgdxok58
+
+RUN \
+    curl -sL -o njs-plugin-is-bot.js \
+        -H "Private-Token: ${NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN}" \
+        https://gitlab.com/api/v4/projects/${NGINX_NJS_PLUGINS_PROJECT_ID}/jobs/artifacts/${NGINX_NJS_PLUGINS_REF_NAME}/raw/dist/njs-plugin-is-bot.js?job=build-plugins && \
+    echo "4cd35a7356469d5bf9d69cbce356c2135854a2e8e8dc45c2c855cd0e848861c77ea19ee80d530326fab8cf5abc684bd6e9b16678a7e2049f9a4aec5dd9ecb496  njs-plugin-is-bot.js" | shasum -c
+
 #
 # Second build stage:
 # - Construct the actual target image (IC-OS root filesystem)
@@ -61,7 +72,12 @@ RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
 RUN mkdir -p /boot/config \
              /boot/efi \
              /boot/grub
+
 COPY etc /etc
+
+# Install Nginx NJS Plugins
+COPY --from=download \
+    /tmp/njs-plugin-is-bot.js /etc/nginx/njs/
 
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \

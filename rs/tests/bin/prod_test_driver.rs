@@ -268,6 +268,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             "boundary_nodes_direct_to_replica_rosetta_test",
                             boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
                         ),
+                        sys_t(
+                            "boundary_nodes_seo_test",
+                            boundary_nodes_integration::boundary_nodes::seo_test,
+                        ),
                     ]),
                 ),
                 pot_with_setup(
@@ -626,6 +630,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         sys_t(
                             "boundary_nodes_direct_to_replica_rosetta_test",
                             boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_seo_test",
+                            boundary_nodes_integration::boundary_nodes::seo_test,
                         ),
                     ]),
                 ),
