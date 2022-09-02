@@ -29,5 +29,6 @@ rust_library(
     crate_name = "ic_ledger_canister_blocks_synchronizer_test_utils",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )

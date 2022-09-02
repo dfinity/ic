@@ -27,5 +27,6 @@ rust_binary(
     crate_name = "canister_sandbox",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )

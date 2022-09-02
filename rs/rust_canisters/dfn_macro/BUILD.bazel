@@ -8,6 +8,7 @@ rust_proc_macro(
     srcs = glob(["src/**"]),
     crate_name = "dfn_macro",
     edition = "2018",
+    version = "0.8.0",
     deps = [
         ":build_script",
         "@crate_index//:proc-macro2",
