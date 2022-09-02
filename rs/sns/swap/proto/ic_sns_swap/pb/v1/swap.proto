@@ -332,6 +332,11 @@ message CfInvestment {
   fixed64 nns_neuron_id = 2;
 }
 
+message TimeWindow {
+  uint64 start_timestamp_seconds = 1;
+  uint64 end_timestamp_seconds = 2;
+}
+
 message SnsNeuronRecipe {
   TransferableAmount sns = 1;
   oneof investor {
@@ -386,6 +391,15 @@ message DerivedState {
   // Current approximate rate SNS tokens per ICP.
   float sns_tokens_per_icp = 2;
 }
+
+message SetOpenTimeWindowRequest {
+  // Duration must be between 1 and 90 days. The TimeWindow's
+  // end time but be greater than or equal to the TimeWindow's
+  // start time.
+  TimeWindow open_time_window = 1;
+}
+// Response if setting the open time window succeeded.
+message SetOpenTimeWindowResponse {}
 
 // Informs the swap canister that a buyer has sent funds to participate in the
 // swap.

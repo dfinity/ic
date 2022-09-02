@@ -13,20 +13,22 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-# TODO foobar
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
     "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/rosetta-api/ledger_canister",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -35,9 +37,6 @@ DEPENDENCIES = [
     "@crate_index//:rand_core",
     "@crate_index//:serde",
     "@crate_index//:strum",
-    "//rs/types/base_types",
-    "//rs/nns/common",
-    "//rs/rosetta-api/ledger_canister",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -59,15 +58,16 @@ BUILD_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/config",
     "//rs/nns/governance/protobuf_generator:lib",
+    "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:criterion",
     "@crate_index//:futures",
+    "@crate_index//:lazy_static",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tokio-test",
-    "//rs/sns/swap/protobuf_generator:lib",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -93,8 +93,8 @@ cargo_build_script(
 rust_library(
     name = "governance",
     srcs = glob([
-        "src/**",
-        "gen/**",
+        "src/**/*.rs",
+        "gen/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
@@ -108,8 +108,8 @@ rust_library(
 rust_library(
     name = "governance-test",
     srcs = glob([
-        "src/**",
-        "gen/**",
+        "src/**/*.rs",
+        "gen/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_features = ["test"],
@@ -159,7 +159,7 @@ optimized_canister(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["gen/**/*.rs"]) + [
         ":protos",
         "//rs/types/base_types:protos",
         "//rs/nns/common:protos",

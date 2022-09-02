@@ -99,7 +99,7 @@ impl Swap {
     /// Requires that `init` is valid; otherwise it panics.
     pub fn new(init: Init) -> Self {
         if let Err(e) = init.validate() {
-            panic!("{}", e);
+            panic!("Invalid init arg: {:#?}\nReason: {}", init, e);
         }
         Self {
             lifecycle: Lifecycle::Pending as i32,

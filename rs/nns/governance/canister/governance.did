@@ -4,6 +4,8 @@ type Action = variant {
   ManageNeuron : ManageNeuron;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
+  OpenSnsTokenSwap : OpenSnsTokenSwap;
+  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
   SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
@@ -232,6 +234,11 @@ type NodeProvider = record {
   id : opt principal;
   reward_account : opt AccountIdentifier;
 };
+type OpenSnsTokenSwap = record {
+  community_fund_investment_e8s : opt nat64;
+  target_swap_canister_id : opt principal;
+  params : opt Params;
+};
 type Operation = variant {
   RemoveHotKey : RemoveHotKey;
   AddHotKey : AddHotKey;
@@ -241,6 +248,15 @@ type Operation = variant {
   JoinCommunityFund : record {};
   LeaveCommunityFund : record {};
   SetDissolveTimestamp : SetDissolveTimestamp;
+};
+type Params = record {
+  min_participant_icp_e8s : nat64;
+  max_icp_e8s : nat64;
+  swap_due_timestamp_seconds : nat64;
+  min_participants : nat32;
+  sns_token_e8s : nat64;
+  max_participant_icp_e8s : nat64;
+  min_icp_e8s : nat64;
 };
 type Proposal = record {
   url : text;
@@ -262,6 +278,7 @@ type ProposalData = record {
   proposer : opt NeuronId;
   wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
+  original_total_community_fund_maturity_e8s_equivalent : opt nat64;
 };
 type ProposalInfo = record {
   id : opt NeuronId;
@@ -314,6 +331,11 @@ type SetDefaultFollowees = record {
   default_followees : vec record { int32; Followees };
 };
 type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
+type SetOpenTimeWindowRequest = record { open_time_window : opt TimeWindow };
+type SetSnsTokenSwapOpenTimeWindow = record {
+  request : opt SetOpenTimeWindowRequest;
+  swap_canister_id : opt principal;
+};
 type Spawn = record {
   percentage_to_spawn : opt nat32;
   new_controller : opt principal;
@@ -326,6 +348,10 @@ type Tally = record {
   yes : nat64;
   total : nat64;
   timestamp_seconds : nat64;
+};
+type TimeWindow = record {
+  start_timestamp_seconds : nat64;
+  end_timestamp_seconds : nat64;
 };
 type UpdateNodeProvider = record { reward_account : opt AccountIdentifier };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };

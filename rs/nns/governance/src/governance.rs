@@ -24,14 +24,14 @@ use crate::pb::v1::{
     Ballot, BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
     KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
     ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NeuronState,
-    NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus,
-    ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders, Tally, Topic,
-    UpdateNodeProvider, Vote,
+    MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
+    NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
+    ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+    SetSnsTokenSwapOpenTimeWindow, Tally, Topic, UpdateNodeProvider, Vote,
 };
 
 use async_trait::async_trait;
-use candid::Decode;
+use candid::{Decode, Encode};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -41,6 +41,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
+use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
@@ -1143,6 +1144,14 @@ impl Proposal {
                 | proposal::Action::RewardNodeProviders(_) => Topic::NodeProviderRewards,
                 proposal::Action::SetDefaultFollowees(_)
                 | proposal::Action::RegisterKnownNeuron(_) => Topic::Governance,
+                proposal::Action::SetSnsTokenSwapOpenTimeWindow(action) => {
+                    println!(
+                        "{}ERROR: Obsolete proposal type used: {:?}",
+                        LOG_PREFIX, action
+                    );
+                    Topic::SnsDecentralizationSale
+                }
+                proposal::Action::OpenSnsTokenSwap(_) => Topic::SnsDecentralizationSale,
             }
         } else {
             Topic::Unspecified
@@ -4171,9 +4180,15 @@ impl Governance {
                             }
                         }
                     }
+                    let original_total_community_fund_maturity_e8s_equivalent =
+                        p.original_total_community_fund_maturity_e8s_equivalent;
                     if let Some(action) = p.proposal.as_ref().and_then(|x| x.action.clone()) {
                         // A yes decision as been made, execute the proposal!
-                        self.start_proposal_execution(pid, &action);
+                        self.start_proposal_execution(
+                            pid,
+                            &action,
+                            original_total_community_fund_maturity_e8s_equivalent,
+                        );
                     } else {
                         self.set_proposal_execution_status(
                             pid,
@@ -4221,7 +4236,12 @@ impl Governance {
     }
 
     /// Starts execution of the given proposal in the background.
-    fn start_proposal_execution(&mut self, pid: u64, action: &proposal::Action) {
+    fn start_proposal_execution(
+        &mut self,
+        pid: u64,
+        action: &proposal::Action,
+        original_total_community_fund_maturity_e8s_equivalent: Option<u64>,
+    ) {
         // `perform_action` is an async method of &mut self.
         //
         // Starting it and letting it run in the background requires knowing that
@@ -4236,7 +4256,11 @@ impl Governance {
         // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(pid, action.clone()));
+        spawn(governance.perform_action(
+            pid,
+            action.clone(),
+            original_total_community_fund_maturity_e8s_equivalent,
+        ));
     }
 
     /// Mints node provider rewards to a neuron or to a ledger account.
@@ -4452,7 +4476,12 @@ impl Governance {
         self.proto.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
-    async fn perform_action(&mut self, pid: u64, action: proposal::Action) {
+    async fn perform_action(
+        &mut self,
+        pid: u64,
+        action: proposal::Action,
+        original_total_community_fund_maturity_e8s_equivalent: Option<u64>,
+    ) {
         match action {
             proposal::Action::ManageNeuron(mgmt) => {
                 // An adopted neuron management command is executed
@@ -4660,7 +4689,97 @@ impl Governance {
                 let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
+            proposal::Action::SetSnsTokenSwapOpenTimeWindow(
+                ref set_sns_token_swap_open_time_window,
+            ) => self.set_sns_token_swap_open_time_window(pid, set_sns_token_swap_open_time_window),
+            proposal::Action::OpenSnsTokenSwap(ref open_sns_token_swap) => {
+                self.open_sns_token_swap(
+                    pid,
+                    open_sns_token_swap,
+                    original_total_community_fund_maturity_e8s_equivalent
+                        .expect("Missing original_total_community_fund_maturity_e8s_equivalent."),
+                )
+                .await;
+            }
         }
+    }
+
+    /// Fails immediately, because this type of proposal is obsolete.
+    fn set_sns_token_swap_open_time_window(
+        &mut self,
+        proposal_id: u64,
+        set_sns_token_swap_open_time_window: &SetSnsTokenSwapOpenTimeWindow,
+    ) {
+        self.set_proposal_execution_status(
+            proposal_id,
+            Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "The SetSnsTokenSwapOpenTimeWindow proposal action is obsolete: {:?}",
+                    set_sns_token_swap_open_time_window,
+                ),
+            )),
+        );
+    }
+
+    async fn open_sns_token_swap(
+        &mut self,
+        proposal_id: u64,
+        open_sns_token_swap: &OpenSnsTokenSwap,
+        original_total_community_fund_maturity_e8s_equivalent: u64,
+    ) {
+        let params = open_sns_token_swap
+            .params
+            .as_ref()
+            .expect("OpenSnsTokenSwap proposal lacks params.")
+            .clone();
+
+        let cf_participants = draw_funds_from_the_community_fund(
+            &mut self.proto.neurons,
+            original_total_community_fund_maturity_e8s_equivalent,
+            open_sns_token_swap
+                .community_fund_investment_e8s
+                .unwrap_or_default(),
+            &params,
+        );
+
+        let request = sns_swap_pb::OpenRequest {
+            params: Some(params),
+            cf_participants,
+        };
+
+        let target_swap_canister_id = open_sns_token_swap
+            .target_swap_canister_id
+            .expect("No value in the target_swap_canister_id field.")
+            .try_into()
+            .expect("Unable to convert target_swap_canister_id into a CanisterId.");
+
+        let result = self
+            .env
+            .call_canister_method(
+                target_swap_canister_id,
+                "open",
+                Encode!(&request).expect("Unable to encode OpenRequest."),
+            )
+            .await;
+
+        // Convert result into Result<(), GovernanceError>.
+        let result = result.map(|_resposne_bytes| ()).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Call to the open method of swap canister {} failed: {:?}. Request was {:#?}",
+                    target_swap_canister_id, err, request,
+                ),
+            )
+        });
+
+        // TODO(NNS1-1669): We should probably restore maturity if the open call
+        // failed. Not sure though, because that could result in
+        // non-conservation of maturity, depending on what kind of failure we
+        // are dealing with...
+
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     /// Mark all Neurons controlled by the given principals as having passed
@@ -4897,11 +5016,15 @@ impl Governance {
     }
 
     fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
-        if proposal.topic() == Topic::Unspecified {
-            return Err(GovernanceError::new_with_message(
+        let invalid_proposal = |message| {
+            Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "Topic not specified",
-            ));
+                message,
+            ))
+        };
+
+        if proposal.topic() == Topic::Unspecified {
+            return invalid_proposal("Topic not specified".to_string());
         }
 
         validate_proposal_title(&proposal.title)?;
@@ -4910,20 +5033,60 @@ impl Governance {
             self.check_heap_can_grow()?;
         }
 
-        let error_str = if proposal.summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
-            format!(
+        if proposal.summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
+            return invalid_proposal(format!(
                 "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
                 PROPOSAL_SUMMARY_BYTES_MAX,
                 proposal.summary.len(),
-            )
+            ));
         } else if proposal.url.chars().count() > PROPOSAL_URL_CHAR_MAX {
-            format!(
+            return invalid_proposal(format!(
                 "The maximum proposal url size is {} characters, this proposal has: {} characters",
                 PROPOSAL_URL_CHAR_MAX,
                 proposal.url.chars().count()
+            ));
+        }
+
+        // Require that oneof action is populated.
+        let action = proposal.action.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Proposal lacks an action: {:?}", proposal,),
             )
-        } else if let Some(proposal::Action::ExecuteNnsFunction(update)) = &proposal.action {
-            // If the NNS function is not a canister upgrade
+        })?;
+
+        // Finally, perform Action-specific validation.
+        match action {
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                self.validate_execute_nns_function(execute_nns_function)
+            }
+
+            Action::Motion(motion) => validate_motion(motion),
+
+            Action::SetSnsTokenSwapOpenTimeWindow(set_sns_token_swap_open_time_window) => {
+                validate_set_sns_token_swap_open_time_window(set_sns_token_swap_open_time_window)
+            }
+
+            Action::OpenSnsTokenSwap(open_sns_token_swap) => {
+                self.validate_open_sns_token_swap(open_sns_token_swap)
+            }
+
+            Action::ManageNeuron(_)
+            | Action::ManageNetworkEconomics(_)
+            | Action::ApproveGenesisKyc(_)
+            | Action::AddOrRemoveNodeProvider(_)
+            | Action::RewardNodeProvider(_)
+            | Action::SetDefaultFollowees(_)
+            | Action::RewardNodeProviders(_)
+            | Action::RegisterKnownNeuron(_) => Ok(()),
+        }
+    }
+
+    fn validate_execute_nns_function(
+        &self,
+        update: &ExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
+        let error_str = {
             if update.nns_function != NnsFunction::NnsCanisterUpgrade as i32
                 && update.nns_function != NnsFunction::NnsCanisterInstall as i32
                 && update.nns_function != NnsFunction::NnsRootUpgrade as i32
@@ -4933,7 +5096,8 @@ impl Governance {
                 format!(
                     "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
                     PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
-                    update.payload.len())
+                    update.payload.len(),
+                )
             } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
                 match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
                     Ok(payload) => {
@@ -4942,10 +5106,7 @@ impl Governance {
                                 .proto
                                 .economics
                                 .as_ref()
-                                .ok_or_else(||
-                            // The Governance struct is misconfigured, missing
-                            // `economics`.
-                            GovernanceError::new(ErrorType::Unavailable))?
+                                .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
                                 .minimum_icp_xdr_rate
                         {
                             format!(
@@ -5003,26 +5164,48 @@ impl Governance {
             } else {
                 return Ok(());
             }
-        } else if let Some(proposal::Action::Motion(motion)) = &proposal.action {
-            if motion.motion_text.len() > PROPOSAL_MOTION_TEXT_BYTES_MAX {
-                format!(
-                    "The maximum motion text size in a proposal action is {} bytes, this motion text is: {} bytes",
-                    PROPOSAL_MOTION_TEXT_BYTES_MAX,
-                    motion.motion_text.len()
-                )
-            } else {
-                return Ok(());
-            }
-        } else if proposal.topic() == Topic::Unspecified {
-            "The topic of the proposal is unspecified.".to_string()
-        } else {
-            return Ok(());
         };
 
         Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             &error_str,
         ))
+    }
+
+    /// There can be at most one OpenSnsTokenSwap proposal at a time.
+    /// Of course, such proposals must be valid on their own as well.
+    fn validate_open_sns_token_swap(
+        &mut self,
+        open_sns_token_swap: &OpenSnsTokenSwap,
+    ) -> Result<(), GovernanceError> {
+        // Inspect open_sns_token_swap on its own.
+        validate_open_sns_token_swap(open_sns_token_swap)?;
+
+        // Enforce that it would be unique.
+        for proposal_data in self.proto.proposals.values() {
+            if proposal_data.status() != ProposalStatus::Open {
+                continue;
+            }
+
+            match &proposal_data.proposal {
+                Some(Proposal {
+                    action: Some(Action::OpenSnsTokenSwap(_)),
+                    ..
+                }) => {}
+                _ => continue,
+            }
+
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "{}ERROR: there can only be at most one open OpenSnsTokenSwap proposal \
+                     at a time, but there is already one: {:#?}",
+                    LOG_PREFIX, proposal_data,
+                ),
+            ));
+        }
+
+        Ok(())
     }
 
     pub fn make_proposal(
@@ -5087,7 +5270,10 @@ impl Governance {
         if proposer.stake_e8s() < reject_cost_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "Neuron doesn't have enough stake to submit proposal.",
+                format!(
+                    "Neuron doesn't have enough stake to submit proposal: {:#?}",
+                    proposer,
+                ),
             ));
         }
         // Check that there are not too many proposals.  What matters
@@ -5172,6 +5358,14 @@ impl Governance {
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
+        let original_total_community_fund_maturity_e8s_equivalent =
+            if let Some(Action::OpenSnsTokenSwap(_)) = proposal.action {
+                Some(total_community_fund_maturity_e8s_equivalent(
+                    &self.proto.neurons,
+                ))
+            } else {
+                None
+            };
         // Create the proposal.
         let mut info = ProposalData {
             id: Some(proposal_id),
@@ -5180,6 +5374,7 @@ impl Governance {
             proposal: Some(proposal.clone()),
             proposal_timestamp_seconds: now_seconds,
             ballots: electoral_roll,
+            original_total_community_fund_maturity_e8s_equivalent,
             ..Default::default()
         };
 
@@ -6593,6 +6788,247 @@ pub fn validate_proposal_title(title: &Option<String>) -> Result<(), GovernanceE
     Ok(())
 }
 
+/// Returns the amount of maturity held by all Community Fund neurons
+/// (i.e. neurons with joined_community_fund_timestamp_seconds > 0).
+fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &HashMap<u64, Neuron>) -> u64 {
+    id_to_neuron
+        .values()
+        .filter(|neuron| {
+            neuron
+                .joined_community_fund_timestamp_seconds
+                .unwrap_or_default()
+                > 0
+        })
+        .map(|neuron| neuron.maturity_e8s_equivalent)
+        .sum()
+}
+
+/// Decrements maturity from Community Fund neurons (i.e. those with a nonzero
+/// value in their joined_community_fund_timestamp_seconds field).
+///
+/// Each neuron whose maturity is taken has a corresponding entry in the return
+/// value, which can be used as part of an OpenRequest sent to a SNS token
+/// swap/sale canister.
+fn draw_funds_from_the_community_fund(
+    id_to_neuron: &mut HashMap<u64, Neuron>,
+    original_total_community_fund_maturity_e8s_equivalent: u64,
+    mut withdrawal_amount_e8s: u64,
+    limits: &sns_swap_pb::Params,
+) -> Vec<sns_swap_pb::CfParticipant> {
+    let total_cf_maturity_e8s = total_community_fund_maturity_e8s_equivalent(id_to_neuron);
+    if total_cf_maturity_e8s < original_total_community_fund_maturity_e8s_equivalent {
+        // Scale down withdrawal amount, so that we do not use more maturity
+        // than how it appeared when the proposal was first made.
+        let scaled_down = (withdrawal_amount_e8s as u128) * (total_cf_maturity_e8s as u128)
+            / (original_total_community_fund_maturity_e8s_equivalent as u128);
+        assert!(
+            scaled_down <= u64::MAX as u128,
+            "scaled_down ({}) > u64::MAX",
+            scaled_down
+        );
+        withdrawal_amount_e8s = scaled_down as u64;
+    }
+
+    // Cap the withdrawal amount.
+    let original_withdrawal_amount_e8s = withdrawal_amount_e8s;
+    let withdrawal_amount_e8s = withdrawal_amount_e8s
+        .min(total_cf_maturity_e8s)
+        // This is extra defensive programming, because OpenSnsTokenSwap
+        // validation is supposed to ensure that withdrawal_amount_e8s <=
+        // limits.max_icp_e8s.
+        //
+        // TODO: Maybe the withdrawal_amount_e8s should be (meaningfully) less
+        // than max_icp_e8s, because otherwise, nobody else would be able to
+        // participate.
+        .min(limits.max_icp_e8s);
+
+    // The amount that each CF neuron invests is proportional to its
+    // maturity. Because we round down, there will almost certainly be some
+    // short changing going on here. We could try to "fully top up", but it
+    // doesn't seem worth the extra complexity, at least not for the time being.
+    let mut principal_id_to_cf_neurons = HashMap::<PrincipalId, Vec<sns_swap_pb::CfNeuron>>::new();
+    let mut captured_withdrawal_amount_e8s = 0;
+    for neuron in id_to_neuron.values_mut() {
+        let not_cf = neuron
+            .joined_community_fund_timestamp_seconds
+            .unwrap_or_default()
+            == 0;
+        if not_cf {
+            continue;
+        }
+
+        // Make the current neuron's contribution proportional to its maturity.
+        let neuron_contribution_e8s = (withdrawal_amount_e8s as u128)
+            * (neuron.maturity_e8s_equivalent as u128)
+            / (total_cf_maturity_e8s as u128);
+        assert!(
+            neuron_contribution_e8s < (u64::MAX as u128),
+            "{}",
+            neuron_contribution_e8s
+        );
+        let mut neuron_contribution_e8s = neuron_contribution_e8s as u64;
+
+        // Skip neurons that are too small. This can cause significant short
+        // changing, much more so than rounding down.
+        if neuron_contribution_e8s < limits.min_participant_icp_e8s {
+            println!(
+                "{}WARNING: Neuron {:?} is does not have enough maturity to participate \
+                 in the current Community Fund investment.",
+                LOG_PREFIX, &neuron.id,
+            );
+            continue;
+        }
+
+        // On the other extreme, don't let big CF neurons contribute too much
+        // (by capping instead of skipping).
+        if neuron_contribution_e8s > limits.max_participant_icp_e8s {
+            let diff = neuron_contribution_e8s - limits.max_participant_icp_e8s;
+            println!(
+                "{}WARNING: Neuron {:?} has too much maturity to fully participate \
+                 in the current SNS token swap. Therefore, its participation is \
+                 being capped from {} to {} (a difference of {} or {}%).",
+                LOG_PREFIX,
+                &neuron.id,
+                neuron_contribution_e8s,
+                limits.max_participant_icp_e8s,
+                diff,
+                (diff as f64) / (neuron_contribution_e8s as f64),
+            );
+            neuron_contribution_e8s = limits.max_participant_icp_e8s;
+        }
+
+        // Create a record of this contribution.
+        principal_id_to_cf_neurons
+            .entry(neuron.controller.expect("Neuron has no controller."))
+            .or_insert_with(|| vec![])
+            .push(sns_swap_pb::CfNeuron {
+                nns_neuron_id: neuron.id.as_ref().expect("Neuron lacks an id.").id,
+                amount_icp_e8s: neuron_contribution_e8s,
+            });
+
+        // Deduct contribution from manturity.
+        neuron.maturity_e8s_equivalent -= neuron_contribution_e8s;
+
+        // Update running total.
+        captured_withdrawal_amount_e8s += neuron_contribution_e8s;
+    }
+
+    // Convert principal_id_to_cf_neurons to the return type.
+    let mut result = principal_id_to_cf_neurons
+        .into_iter()
+        .map(|(principal_id, cf_neurons)| sns_swap_pb::CfParticipant {
+            hotkey_principal: principal_id.to_string(),
+            cf_neurons,
+        })
+        .collect::<Vec<_>>();
+
+    // Sort for predictable result. This just makes it easier to test.
+    // Other than that, order doesn't matter.
+    result.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
+    // More predictability.
+    for cf_participant in result.iter_mut() {
+        cf_participant
+            .cf_neurons
+            .sort_by(|n1, n2| n1.nns_neuron_id.cmp(&n2.nns_neuron_id));
+    }
+
+    // Log the difference between the amount requested vs. actually captured.
+    let diff_e8s =
+        (original_withdrawal_amount_e8s as i128) - (captured_withdrawal_amount_e8s as i128);
+    println!(
+        "{}INFO: requested vs. captured Community Fund investment amount: {} - {} = {} ({} %)",
+        LOG_PREFIX,
+        original_withdrawal_amount_e8s,
+        captured_withdrawal_amount_e8s,
+        diff_e8s,
+        100.0 * (diff_e8s as f64) / (original_withdrawal_amount_e8s as f64)
+    );
+
+    result
+}
+
+fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
+    if motion.motion_text.len() > PROPOSAL_MOTION_TEXT_BYTES_MAX {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "The maximum motion text size in a proposal action is {} bytes, this motion text is: {} bytes",
+                PROPOSAL_MOTION_TEXT_BYTES_MAX,
+                motion.motion_text.len()
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Always fails, because this type of proposal is obsolete.
+fn validate_set_sns_token_swap_open_time_window(
+    action: &SetSnsTokenSwapOpenTimeWindow,
+) -> Result<(), GovernanceError> {
+    return Err(GovernanceError::new_with_message(
+        ErrorType::InvalidProposal,
+        format!(
+            "The SetSnsTokenSwapOpenTimeWindow proposal action is obsolete: {:?}",
+            action,
+        ),
+    ));
+}
+
+fn validate_open_sns_token_swap(
+    open_sns_token_swap: &OpenSnsTokenSwap,
+) -> Result<(), GovernanceError> {
+    let mut defects = vec![];
+
+    // Inspect target_swap_canister_id.
+    match &open_sns_token_swap.target_swap_canister_id {
+        None => defects.push(
+            "OpenSnsTokenSwap lacks a value in its target_swap_canister_id field.".to_string(),
+        ),
+
+        Some(target_swap_canister_id) => {
+            if let Err(err) = CanisterId::try_from(*target_swap_canister_id) {
+                defects.push(format!(
+                    "OpenSnsTokenSwap.target_swap_canister_id is not a valid canister ID: {:?}",
+                    err
+                ))
+            }
+        }
+    }
+
+    // Inspect params.
+    match &open_sns_token_swap.params {
+        None => defects.push("OpenSnsTokenSwap lacks a value in its params field.".to_string()),
+
+        Some(params) => {
+            if let Err(err) = params.validate() {
+                defects.push(format!("OpenSnsTokenSwap.params is invalid: {:?}.", err));
+            }
+        }
+    }
+
+    // community_fund_investment_e8s must be less than max_icp_e8s.
+    if let Some(community_fund_investment_e8s) = open_sns_token_swap.community_fund_investment_e8s {
+        if let Some(params) = &open_sns_token_swap.params {
+            if community_fund_investment_e8s > params.max_icp_e8s {
+                defects.push(format!(
+                    "community_fund_investment_e8s ({}) > params.max_icp_e8s ({}).",
+                    community_fund_investment_e8s, params.max_icp_e8s,
+                ));
+            }
+        }
+    }
+
+    // Construct final result.
+    if !defects.is_empty() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            defects.join("\n"),
+        ));
+    }
+    Ok(())
+}
+
 /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
 async fn get_node_providers_monthly_xdr_rewards(
 ) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
@@ -6709,6 +7145,8 @@ impl TimeWarp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lazy_static::lazy_static;
+    use maplit::hashmap;
 
     #[test]
     fn test_time_warp() {
@@ -6720,5 +7158,395 @@ mod tests {
 
         let w = TimeWarp { delta_s: -42_i64 };
         assert_eq!(w.apply(100_u64), 58);
+    }
+
+    const PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
+        max_icp_e8s: 1000,
+        min_icp_e8s: 10,
+        min_participant_icp_e8s: 5,
+        max_participant_icp_e8s: 1000,
+
+        // Not used, but just for realism.
+        min_participants: 2,
+        sns_token_e8s: 1000,
+        swap_due_timestamp_seconds: 2524629600, // midnight, Jan 1, 2050
+    };
+
+    lazy_static! {
+        static ref PRINCIPAL_ID_1: PrincipalId = PrincipalId::new_user_test_id(1);
+        static ref PRINCIPAL_ID_2: PrincipalId = PrincipalId::new_user_test_id(2);
+        static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
+            target_swap_canister_id: Some(PrincipalId::new_user_test_id(43)),
+            params: Some(PARAMS.clone()),
+            community_fund_investment_e8s: Some(500),
+        };
+    }
+
+    #[test]
+    fn validate_open_sns_token_swap_ok() {
+        let result = validate_open_sns_token_swap(&*OPEN_SNS_TOKEN_SWAP);
+        assert!(result.is_ok(), "{:#?}", result);
+    }
+
+    #[test]
+    fn validate_open_sns_token_swap_target_swap_canister_id() {
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            target_swap_canister_id: None,
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+    }
+
+    #[test]
+    fn validate_open_sns_token_swap_params() {
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            params: None,
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            params: Some(sns_swap_pb::Params {
+                max_icp_e8s: 1, // Too small.
+                ..PARAMS.clone()
+            }),
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+    }
+
+    #[test]
+    fn validate_open_sns_token_swap_community_fund_investment_e8s() {
+        let result = validate_open_sns_token_swap(&OpenSnsTokenSwap {
+            community_fund_investment_e8s: Some(1001), // Too big.
+            ..OPEN_SNS_TOKEN_SWAP.clone()
+        });
+        assert!(result.is_err(), "{:#?}", result);
+    }
+
+    lazy_static! {
+        static ref ID_TO_NEURON: HashMap<u64, Neuron> = craft_id_to_neuron(&[
+            // (maturity, conroller, joined cf at)
+
+            // CF neurons.
+            (100, *PRINCIPAL_ID_1, Some(1)),
+            (200, *PRINCIPAL_ID_2, Some(1)),
+            (300, *PRINCIPAL_ID_1, Some(1)),
+
+            // non-CF neurons.
+            (400, *PRINCIPAL_ID_1, None),
+            (500, *PRINCIPAL_ID_2, None),
+        ]);
+
+        static ref ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT: u64 = {
+            let result = total_community_fund_maturity_e8s_equivalent(&*ID_TO_NEURON);
+            assert_eq!(result, 600);
+            result
+        };
+    }
+
+    fn craft_id_to_neuron(
+        values: &[(
+            /* maturity: */ u64,
+            /* controller: */ PrincipalId,
+            /* joined cf at: */ Option<u64>,
+        )],
+    ) -> HashMap<u64, Neuron> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let i = i as u64;
+                let (maturity_e8s_equivalent, controller, joined_community_fund_timestamp_seconds) =
+                    *arg;
+
+                let id = i + 1;
+                let neuron = Neuron {
+                    id: Some(NeuronId { id }),
+                    controller: Some(controller),
+                    maturity_e8s_equivalent,
+                    joined_community_fund_timestamp_seconds,
+                    ..Default::default()
+                };
+
+                (id, neuron)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_typical() {
+        let mut id_to_neuron = ID_TO_NEURON.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 60,
+            &PARAMS,
+        );
+
+        // Inspect results.
+
+        let mut expected_cf_neurons = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_1.to_string(),
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: 10,
+                    },
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 3,
+                        amount_icp_e8s: 30,
+                    },
+                ],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_2.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 20,
+                }],
+            },
+        ];
+        expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
+        assert_eq!(observed_cf_neurons, expected_cf_neurons);
+
+        assert_eq!(
+            id_to_neuron,
+            craft_id_to_neuron(&[
+                // CF neurons less 10% of their maturity.
+                (90, *PRINCIPAL_ID_1, Some(1)),
+                (180, *PRINCIPAL_ID_2, Some(1)),
+                (270, *PRINCIPAL_ID_1, Some(1)),
+                // non-CF neurons remain untouched.
+                (400, *PRINCIPAL_ID_1, None),
+                (500, *PRINCIPAL_ID_2, None),
+            ]),
+        );
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
+        let mut id_to_neuron = ID_TO_NEURON.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            2 * *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 60,
+            &PARAMS,
+        );
+
+        // Inspect results.
+
+        let mut expected_cf_neurons = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_1.to_string(),
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: 5,
+                    },
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 3,
+                        amount_icp_e8s: 15,
+                    },
+                ],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_2.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 10,
+                }],
+            },
+        ];
+        expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
+        assert_eq!(observed_cf_neurons, expected_cf_neurons);
+
+        assert_eq!(
+            id_to_neuron,
+            craft_id_to_neuron(&[
+                // CF neurons less 10% of their maturity.
+                (95, *PRINCIPAL_ID_1, Some(1)),
+                (190, *PRINCIPAL_ID_2, Some(1)),
+                (285, *PRINCIPAL_ID_1, Some(1)),
+                // non-CF neurons remain untouched.
+                (400, *PRINCIPAL_ID_1, None),
+                (500, *PRINCIPAL_ID_2, None),
+            ]),
+        );
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
+        let mut id_to_neuron = ID_TO_NEURON.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT / 2,
+            /* withdrawal_amount_e8s = */ 60,
+            &PARAMS,
+        );
+
+        // Inspect results. Same as typical (copy n' pasted).
+
+        let mut expected_cf_neurons = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_1.to_string(),
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: 10,
+                    },
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 3,
+                        amount_icp_e8s: 30,
+                    },
+                ],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_2.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 20,
+                }],
+            },
+        ];
+        expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
+        assert_eq!(observed_cf_neurons, expected_cf_neurons);
+
+        assert_eq!(
+            id_to_neuron,
+            craft_id_to_neuron(&[
+                // CF neurons less 10% of their maturity.
+                (90, *PRINCIPAL_ID_1, Some(1)),
+                (180, *PRINCIPAL_ID_2, Some(1)),
+                (270, *PRINCIPAL_ID_1, Some(1)),
+                // non-CF neurons remain untouched.
+                (400, *PRINCIPAL_ID_1, None),
+                (500, *PRINCIPAL_ID_2, None),
+            ]),
+        );
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_trivial() {
+        let mut id_to_neuron = hashmap! {};
+        let original_total_community_fund_maturity_e8s_equivalent = 0;
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            original_total_community_fund_maturity_e8s_equivalent,
+            /* withdrawal_amount_e8s = */ 60,
+            &PARAMS,
+        );
+
+        // Inspect results.
+        assert_eq!(observed_cf_neurons, vec![]);
+        assert_eq!(id_to_neuron, hashmap! {});
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_cf_not_large_enough() {
+        let mut id_to_neuron = ID_TO_NEURON.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 1000,
+            &PARAMS,
+        );
+
+        // Inspect results.
+
+        let mut expected_cf_neurons = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_1.to_string(),
+                cf_neurons: vec![
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: 100,
+                    },
+                    sns_swap_pb::CfNeuron {
+                        nns_neuron_id: 3,
+                        amount_icp_e8s: 300,
+                    },
+                ],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_2.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 200,
+                }],
+            },
+        ];
+        expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
+        assert_eq!(observed_cf_neurons, expected_cf_neurons);
+
+        assert_eq!(
+            id_to_neuron,
+            craft_id_to_neuron(&[
+                // CF neurons have been completely depleted.
+                (0, *PRINCIPAL_ID_1, Some(1)),
+                (0, *PRINCIPAL_ID_2, Some(1)),
+                (0, *PRINCIPAL_ID_1, Some(1)),
+                // non-CF neurons remain untouched.
+                (400, *PRINCIPAL_ID_1, None),
+                (500, *PRINCIPAL_ID_2, None),
+            ]),
+        );
+    }
+
+    #[test]
+    fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
+        let params = sns_swap_pb::Params {
+            min_participant_icp_e8s: 150,
+            max_participant_icp_e8s: 225,
+            ..PARAMS.clone()
+        };
+        let mut id_to_neuron = ID_TO_NEURON.clone();
+
+        let observed_cf_neurons = draw_funds_from_the_community_fund(
+            &mut id_to_neuron,
+            *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
+            /* withdrawal_amount_e8s = */ 600,
+            &params,
+        );
+
+        // Inspect results.
+
+        let mut expected_cf_neurons = vec![
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_1.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 3,
+                    amount_icp_e8s: 225,
+                }],
+            },
+            sns_swap_pb::CfParticipant {
+                hotkey_principal: PRINCIPAL_ID_2.to_string(),
+                cf_neurons: vec![sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 200,
+                }],
+            },
+        ];
+        expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
+        assert_eq!(observed_cf_neurons, expected_cf_neurons);
+
+        assert_eq!(
+            id_to_neuron,
+            craft_id_to_neuron(&[
+                // CF neurons.
+                (100, *PRINCIPAL_ID_1, Some(1)), // Does not participate, because too small.
+                (0, *PRINCIPAL_ID_2, Some(1)),   // Fully participates.
+                (75, *PRINCIPAL_ID_1, Some(1)),  // Participates up to the allowed participant max.
+                // non-CF neurons remain untouched.
+                (400, *PRINCIPAL_ID_1, None),
+                (500, *PRINCIPAL_ID_2, None),
+            ]),
+        );
     }
 }
