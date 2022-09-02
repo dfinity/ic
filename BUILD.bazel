@@ -75,6 +75,7 @@ BINARIES = {
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
     "ic-prep": "//rs/prep:ic-prep",
     "ic-recovery": "//rs/recovery:ic-recovery",
+    "ic-replay": "//rs/replay:ic-replay",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:registry_replicator",
     "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
