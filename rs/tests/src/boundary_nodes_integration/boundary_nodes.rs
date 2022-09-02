@@ -574,13 +574,13 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("ic0.app", vm_ip.into())
-        .resolve("raw.ic0.app", vm_ip.into())
+        .resolve("ic0.app", vm_addr.into())
+        .resolve("raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -669,13 +669,13 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("ic0.app", vm_ip.into())
-        .resolve("raw.ic0.app", vm_ip.into())
+        .resolve("ic0.app", vm_addr.into())
+        .resolve("raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -764,12 +764,12 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("raw.ic0.app", vm_ip.into())
+        .resolve("raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -912,12 +912,12 @@ pub fn sw_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("CID.ic0.app", vm_ip.into())
+        .resolve("cid.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -931,7 +931,7 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.ic0.app/").send().await?;
+            let res = client.get("https://cid.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -957,7 +957,7 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.ic0.app/a/b/c").send().await?;
+            let res = client.get("https://cid.ic0.app/a/b/c").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -983,7 +983,7 @@ pub fn sw_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.ic0.app/sw.js").send().await?;
+            let res = client.get("https://cid.ic0.app/sw.js").send().await?;
 
             if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
@@ -1017,7 +1017,7 @@ pub fn sw_test(env: TestEnv) {
 
         async move {
             let res = client
-                .get("https://CID.ic0.app/anything.js")
+                .get("https://cid.ic0.app/anything.js")
                 .header("Service-Worker", "script")
                 .send()
                 .await?;
@@ -1086,13 +1086,13 @@ pub fn icx_proxy_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("CID.ic0.app", vm_ip.into())
-        .resolve("CID.raw.ic0.app", vm_ip.into())
+        .resolve("cid.ic0.app", vm_addr.into())
+        .resolve("CID.raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -1106,7 +1106,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.ic0.app/_/raw/").send().await?;
+            let res = client.get("https://cid.ic0.app/_/raw/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
                 bail!("{name} failed: {}", res.status())
@@ -1185,12 +1185,12 @@ pub fn direct_to_replica_test(env: TestEnv) {
         .get_snapshot()
         .expect("failed to get BN snapshot");
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("ic0.app", vm_ip.into())
+        .resolve("ic0.app", vm_addr.into())
         .build()
         .expect("failed to build http client");
 
@@ -1363,12 +1363,12 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         .get_snapshot()
         .expect("failed to get BN snapshot");
 
-    let vm_ip = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
 
     let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
-        .resolve("rosetta.dfinity.network", vm_ip.into())
+        .resolve("rosetta.dfinity.network", vm_addr.into())
         .build()
         .expect("failed to build http client");
 
@@ -1504,6 +1504,87 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
                     out,
                     &[1, 0, 0, 0],
                 )
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn seo_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("cid.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let name = "get sent to icx-proxy if you're a bot";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get("https://cid.ic0.app/")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+                )
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Could not find a canister id to forward to") {
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
