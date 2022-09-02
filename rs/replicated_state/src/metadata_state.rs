@@ -23,11 +23,12 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{nominal_cycles::NominalCycles, Cycles};
 use ic_types::{
     crypto::CryptoHash,
+    Cycles,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, RequestOrResponse},
+    nominal_cycles::NominalCycles,
     node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
     subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
@@ -820,7 +821,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             .iter()
             .map(|i| StreamIndex::new(*i))
             .collect();
-        
+
         let sum_cycles_inc = Cycles::zero();
         let sum_cycles_out = Cycles::zero();
 
