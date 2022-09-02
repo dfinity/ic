@@ -64,6 +64,7 @@ rust_library(
         # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister-bazel.wasm",
     },
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

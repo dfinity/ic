@@ -70,6 +70,7 @@ rust_library(
     crate_name = "ic_rosetta_api",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.6.1",
     deps = DEPENDENCIES,
 )
 

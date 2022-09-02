@@ -20,6 +20,7 @@ rust_library(
     rustc_env = {
         "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/archive:archive_canister.wasm)",
     },
+    version = "0.8.0",
     deps = [
         "//rs/crypto/tree_hash",
         "//rs/rosetta-api/icrc1",
