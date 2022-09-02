@@ -23,5 +23,6 @@ rust_binary(
     aliases = {},
     crate_name = "ic_nns_inspector",
     proc_macro_deps = [],
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )

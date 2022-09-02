@@ -7,6 +7,7 @@ rust_library(
     name = "service",
     srcs = glob(["src/**"]),
     crate_name = "ic_btc_service",
+    version = "0.1.0",
     deps = [
         ":build_script",
         "@crate_index//:prost",

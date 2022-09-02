@@ -43,6 +43,7 @@ rust_library(
         "gen/**/*.rs",
     ]),
     crate_name = "ic_nns_common",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -54,6 +55,7 @@ rust_library(
     ]),
     crate_features = ["test"],
     crate_name = "ic_nns_common",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

@@ -6,6 +6,7 @@ rust_library(
     name = "local_store",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_store",
+    version = "0.8.0",
     deps = [
         "//rs/interfaces",
         "//rs/registry/proto",

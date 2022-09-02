@@ -26,6 +26,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_registry_proto_data_provider",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
