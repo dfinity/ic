@@ -75,6 +75,7 @@ rust_library(
     crate_name = "ic_sns_integration_tests",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
