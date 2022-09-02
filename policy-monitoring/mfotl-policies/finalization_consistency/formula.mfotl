@@ -6,6 +6,20 @@
   - finalized(node_id:string, subnet_id:string, height:int, hash:string, replica_version:string)
 *)
 
-(PREVIOUS ONCE finalized(node1, subnet, height, hash1, replica_version))
+LET in_ic(node_id, node_addr) =
+  ((*
+      The node was originally in the IC, and it has not been removed.
+    *)
+    (ONCE originally_in_ic(node_id, node_addr)) AND NOT ONCE registry__node_removed_from_ic(node_id, node_addr)
+  ) OR (
+    (*
+      The node was possibly not originally in the IC, but it has been added to it.
+    *)
+    ((NOT registry__node_removed_from_ic(node_id, node_addr)) SINCE registry__node_added_to_ic(node_id, node_addr))
+  )
+IN
+(ONCE finalized(node1, subnet, height, hash1, replica_version))
 AND finalized(node2, subnet, height, hash2, replica_version)
 AND NOT hash1 = hash2
+AND in_ic(node1, _)
+AND in_ic(node2, _)
