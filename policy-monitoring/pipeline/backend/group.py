@@ -30,8 +30,9 @@ class Group:
         return f"<Group name={self.name} {' '.join(optional_fields)}>"
 
     def infer_global_infra(self) -> None:
-        eprint(f"Inferring global infra for {str(self)}...")
-        self.global_infra = GlobalInfra.fromLogs(logs=self.logs)
+        eprint(f"Inferring global infra for {str(self)}... (Log stream will be fully loaded into memory)")
+        self.logs = list(self.logs)
+        self.global_infra = GlobalInfra.fromLogs(self.logs)
         eprint(f"Done inferring global infra for {str(self)}.")
 
     def pot_name(self) -> str:
