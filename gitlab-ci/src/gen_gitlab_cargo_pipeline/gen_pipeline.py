@@ -30,7 +30,6 @@ import toml
 import yaml
 
 import git_changes
-import gitlab_config.utils
 import notify_slack
 from gen_gitlab_cargo_pipeline.farm_rate_limit import FARM_RATE_LIMIT
 
@@ -238,7 +237,6 @@ def generate_gitlab_yaml(
     fout,
     force_pipeline=False,
     gitlab_ci_config_changes=False,
-    prod_generic_test_job=None,
     disable_caching=False,
 ):
     """
@@ -251,7 +249,6 @@ def generate_gitlab_yaml(
         fout: Output file for the GitLab YAML file.
         force_pipeline: Generate a pipeline even if no crates have been changed.
         gitlab_ci_config_changes: Whether the gitlab ci configurations have been altered.
-        prod_generic_test_job: Config for the generic prod test, if it should be added to the output.
         disable_caching: Whether the generated pipeline should disable capsule caching.
 
     """
@@ -309,17 +306,12 @@ def generate_gitlab_yaml(
                     fout.write('    CARGO_TEST_FLAGS_EXTRA: "--release"\n')
                 if crate in crates_allowed_to_fail:
                     fout.write("  allow_failure: true\n")
-        if prod_generic_test_job:
-            fout.write(yaml.dump(prod_generic_test_job, indent=2))
     else:
-        if prod_generic_test_job:
-            fout.write(yaml.dump(prod_generic_test_job, indent=2))
-        else:
-            fout.write(
-                """include:
+        fout.write(
+            """include:
   - local: /gitlab-ci/config/00--child-pipeline-noop-root.yml
 """
-            )
+        )
 
 
 def _generate_tests_may_raise_exception(
@@ -332,7 +324,6 @@ def _generate_tests_may_raise_exception(
 ):
     git_repo = git.Repo(rust_workspace, search_parent_directories=True)
     git_root = git_repo.git.rev_parse("--show-toplevel")
-    prod_generic_test_job = get_prod_generic_test_job(git_root)
 
     """Generate a Gitlab YAML pipeline config (internal function). May raise exceptions."""
     if git_changes.is_protected():
@@ -341,7 +332,6 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=True,
         )
         return
@@ -357,7 +347,6 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=disable_caching,
         )
         return
@@ -373,7 +362,6 @@ def _generate_tests_may_raise_exception(
                 workspace_crates,
                 gitlab_ci_config,
                 out,
-                prod_generic_test_job=prod_generic_test_job,
                 disable_caching=disable_caching,
             )
             return
@@ -388,7 +376,6 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=disable_caching,
         )
         return
@@ -427,7 +414,6 @@ def _generate_tests_may_raise_exception(
                 workspace_crates,
                 gitlab_ci_config,
                 out,
-                prod_generic_test_job=prod_generic_test_job,
                 disable_caching=disable_caching,
             )
             return
@@ -478,7 +464,6 @@ def _generate_tests_may_raise_exception(
             gitlab_ci_config,
             out,
             gitlab_ci_config_changes=True,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=disable_caching,
         )
     else:
@@ -490,30 +475,13 @@ def _generate_tests_may_raise_exception(
             ignored_files=["BUILD.bazel"],
         )
 
-        if not force_pipeline:
-            prod_generic_test_job = None
-
         generate_gitlab_yaml(
             cargo_test_sample_crates.union(set(wmarked_crates_to_dep.keys())),
             gitlab_ci_config,
             out,
             force_pipeline,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=disable_caching,
         )
-
-
-def get_prod_generic_test_job(git_root: str):
-    gl_cfg = gitlab_config.DfinityGitLabConfig(git_root)
-    gl_cfg_file = f"{git_root}/.gitlab-ci.yml"
-    if os.path.exists(gl_cfg_file):
-        gl_cfg.ci_cfg_load_from_file(open(gl_cfg_file))
-        job_file = f"{git_root}/gitlab-ci/config/00--child-pipeline-prod-generic-test.yml"
-        gl_cfg.ci_cfg_load_from_file(open(job_file))
-        job = gl_cfg.ci_cfg["prod-generic-test"]
-        job["stage"] = "prod-tests"
-        result = {"prod-generic-test": job}
-        return result
 
 
 def generate_tests(
@@ -576,13 +544,10 @@ def generate_tests(
                 channel="#precious-bots",
             )
         logging.info("crate dependency analysis failed, testing all crates")
-        git_root = git_repo.git.rev_parse("--show-toplevel")
-        prod_generic_test_job = get_prod_generic_test_job(git_root)
         generate_gitlab_yaml(
             workspace_crates,
             gitlab_ci_config,
             out,
-            prod_generic_test_job=prod_generic_test_job,
             disable_caching=True,
         )
 
