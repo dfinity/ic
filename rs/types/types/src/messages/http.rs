@@ -541,23 +541,6 @@ pub enum RawHttpRequestVal {
     Array(Vec<RawHttpRequestVal>),
 }
 
-/// The status of an update call.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "status")]
-pub enum HttpResponseStatus {
-    Unknown,
-    Received,
-    Processing,
-    Replied {
-        reply: HttpReply,
-    },
-    Rejected {
-        reject_code: u64,
-        reject_message: String,
-    },
-}
-
 /// The reply to an update call.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
@@ -695,71 +678,6 @@ mod test {
                 text("status") => text("rejected"),
                 text("reject_code") => int(1),
                 text("reject_message") => text("system error"),
-            }),
-        );
-    }
-
-    #[test]
-    fn encoding_read_request_status_response_received() {
-        assert_cbor_ser_equal(
-            &HttpResponseStatus::Received,
-            Value::Map(btreemap! {
-                text("status") => text("received"),
-            }),
-        );
-    }
-
-    #[test]
-    fn encoding_read_request_status_response_processing() {
-        assert_cbor_ser_equal(
-            &HttpResponseStatus::Processing,
-            Value::Map(btreemap! {
-                text("status") => text("processing"),
-            }),
-        );
-    }
-
-    #[test]
-    fn encoding_read_request_status_response_replied() {
-        assert_cbor_ser_equal(
-            &HttpResponseStatus::Replied {
-                reply: HttpReply::CodeCall {
-                    arg: Blob(vec![0, 0, 0, 0]),
-                },
-            },
-            Value::Map(btreemap! {
-                text("status") => text("replied"),
-                text("reply") => Value::Map(btreemap! {
-                    text("arg") => bytes(&[0,0,0,0])
-                }),
-            }),
-        );
-    }
-
-    #[test]
-    fn encoding_read_request_status_response_replied_empty() {
-        assert_cbor_ser_equal(
-            &HttpResponseStatus::Replied {
-                reply: HttpReply::Empty {},
-            },
-            Value::Map(btreemap! {
-                text("status") => text("replied"),
-                text("reply") => Value::Map(btreemap! {}),
-            }),
-        );
-    }
-
-    #[test]
-    fn encoding_read_request_status_response_rejected() {
-        assert_cbor_ser_equal(
-            &HttpResponseStatus::Rejected {
-                reject_code: 42,
-                reject_message: "foo bar".to_string(),
-            },
-            Value::Map(btreemap! {
-                text("status") => text("rejected"),
-                text("reject_code") => int(42),
-                text("reject_message") => text("foo bar"),
             }),
         );
     }
