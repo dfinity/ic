@@ -20,6 +20,7 @@ rust_library(
         "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     deps = [
         "//rs/config",
         "//rs/crypto/internal/crypto_lib/basic_sig/cose",
