@@ -14,14 +14,13 @@ rust_library(
     name = "dfn_http",
     srcs = glob(["src/**"]),
     crate_name = "dfn_http",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "http_wasm_bin",
     srcs = ["test/wasm.rs"],
-    edition = "2018",
     deps = [":dfn_http"],
 )
 

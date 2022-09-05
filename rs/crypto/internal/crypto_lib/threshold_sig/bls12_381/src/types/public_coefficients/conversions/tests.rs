@@ -30,7 +30,7 @@ fn public_coefficients_size_should_be_correct() {
             NumberOfNodes::try_from(&public_coefficients).expect("Invalid size"),
             NumberOfNodes::from(size)
         );
-        public_keys.push(G2Projective::generator());
+        public_keys.push(*G2Projective::generator());
     }
 }
 
@@ -70,7 +70,7 @@ fn public_key_for_public_coefficients_should_be_correct() {
         PublicCoefficients {
             coefficients: Vec::new(),
         },
-        G2Projective::identity(),
+        *G2Projective::identity(),
     )];
     let mut rng = ChaChaRng::from_seed([1u8; 32]);
     for _ in 0..3 {
@@ -91,7 +91,7 @@ fn public_key_for_empty_public_coefficients_should_be_zero() {
         coefficients: Vec::new(),
     };
     let public_key = PublicKey::from(&public_coefficients);
-    assert_eq!(G2Projective::identity(), public_key.0);
+    assert_eq!(G2Projective::identity(), &public_key.0);
 }
 
 /// Verifies that the public key for non-empty public coefficients is the first
@@ -131,7 +131,7 @@ fn public_key_from_empty_public_coefficients_bytes_should_be_zero() {
     };
     assert_eq!(
         PublicKey::try_from(&public_coefficients_bytes),
-        Ok(PublicKey(G2Projective::identity()))
+        Ok(PublicKey(*G2Projective::identity()))
     );
 }
 

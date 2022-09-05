@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
@@ -42,7 +41,6 @@ rust_binary(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_transport_test_client",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -51,8 +49,11 @@ rust_test(
     name = "transport_test_client_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    args = [
+        "--test-threads",
+        "1",
+    ],
     crate_root = "src/main.rs",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

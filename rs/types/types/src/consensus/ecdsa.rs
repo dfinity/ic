@@ -857,6 +857,18 @@ impl From<&EcdsaArtifactId> for EcdsaMessageType {
     }
 }
 
+impl EcdsaMessageType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dealing => "signed_dealing",
+            Self::DealingSupport => "dealing_support",
+            Self::SigShare => "sig_share",
+            Self::Complaint => "complaint",
+            Self::Opening => "opening",
+        }
+    }
+}
+
 /// The ECDSA signature share
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaSigShare {
@@ -990,6 +1002,18 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
             EcdsaMessage::EcdsaOpening(opening) => {
                 EcdsaMessageAttribute::EcdsaOpening(opening.content.idkg_opening.transcript_id)
             }
+        }
+    }
+}
+
+impl EcdsaMessageAttribute {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::EcdsaSignedDealing(_) => "signed_dealing",
+            Self::EcdsaDealingSupport(_) => "dealing_support",
+            Self::EcdsaSigShare(_) => "sig_share",
+            Self::EcdsaComplaint(_) => "complaint",
+            Self::EcdsaOpening(_) => "opening",
         }
     }
 }

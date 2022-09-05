@@ -17,17 +17,16 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::governance::SnsMetadata;
+use ic_sns_governance::pb::v1::governance::{SnsMetadata, Version};
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_swap::pb::v1::Init;
+use ic_sns_swap::pb::v1::Init as SwapInit;
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap, hashset};
-use std::collections::HashSet;
-use std::collections::{BTreeMap, HashMap};
+use maplit::{btreemap, hashset};
+use std::collections::{BTreeMap, HashSet};
 
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
@@ -40,9 +39,6 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
-
-/// SNS parameters default values
-pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 100_000_000;
 
 // Token Symbols that can not be used.
 lazy_static! {
@@ -73,7 +69,7 @@ pub struct SnsCanisterInitPayloads {
     pub governance: Governance,
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
-    pub swap: Init,
+    pub swap: SwapInit,
 }
 
 impl SnsInitPayload {
@@ -89,11 +85,6 @@ impl SnsInitPayload {
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
             initial_token_distribution: None,
-            max_icp_e8s: None,
-            min_participants: None,
-            min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_E8S_DEFAULT),
-            min_icp_e8s: None,
-            max_participant_icp_e8s: None,
             fallback_controller_principal_ids: vec![],
             logo: None,
             url: None,
@@ -116,18 +107,14 @@ impl SnsInitPayload {
                     total_e8s: 500_000_000,
                 }),
                 swap_distribution: Some(SwapDistribution {
-                    total_e8s: 1_000_000_000,
-                    initial_swap_amount_e8s: 1_000_000_000,
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
                 }),
                 airdrop_distribution: Some(AirdropDistribution {
                     airdrop_neurons: Default::default(),
                 }),
             })),
-            max_icp_e8s: Some(1_000_000_000),
-            min_participants: Some(1),
-            min_icp_e8s: Some(100),
-            max_participant_icp_e8s: Some(1_000_000_000),
-            fallback_controller_principal_ids: vec!["aa-aaaa".to_string()],
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5822).to_string()],
             logo: Some("X".repeat(100)),
             name: Some("ServiceNervousSystemTest".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
@@ -136,15 +123,16 @@ impl SnsInitPayload {
         }
     }
 
-    /// Build all the SNS canister's init payloads given the state of the SnsInitPayload and the
-    /// provided SnsCanisterIds.
+    /// Build all the SNS canister's init payloads given the state of the SnsInitPayload, the
+    /// provided SnsCanisterIds, and the version being deployed.  
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
+        deployed_version: Option<Version>,
     ) -> anyhow::Result<SnsCanisterInitPayloads> {
         self.validate()?;
         Ok(SnsCanisterInitPayloads {
-            governance: self.governance_init_args(sns_canister_ids)?,
+            governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids),
             swap: self.swap_init_args(sns_canister_ids),
@@ -155,10 +143,13 @@ impl SnsInitPayload {
     fn governance_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
+        deployed_version: Option<Version>,
     ) -> anyhow::Result<Governance> {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
+        governance.swap_canister_id = Some(sns_canister_ids.swap);
+        governance.deployed_version = deployed_version;
 
         let parameters = governance
             .parameters
@@ -254,8 +245,8 @@ impl SnsInitPayload {
     /// Construct the parameters used to initialize a SNS Swap canister.
     ///
     /// Precondition: self must be valid (see fn validate).
-    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Init {
-        Init {
+    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> SwapInit {
+        SwapInit {
             sns_root_canister_id: sns_canister_ids.root.to_string(),
             sns_governance_canister_id: sns_canister_ids.governance.to_string(),
             sns_ledger_canister_id: sns_canister_ids.ledger.to_string(),
@@ -263,17 +254,6 @@ impl SnsInitPayload {
             nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
             icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
 
-            max_icp_e8s: self.max_icp_e8s.expect("Field max_icp_e8 cannot be None"),
-            min_participants: self
-                .min_participants
-                .expect("Field min_participants cannot be None"),
-            min_participant_icp_e8s: self
-                .min_participant_icp_e8s
-                .expect("Field min_participants_icp_e8s cannot be None"),
-            max_participant_icp_e8s: self
-                .max_participant_icp_e8s
-                .expect("Field max_participants_icp_e8s cannot be None"),
-            min_icp_e8s: self.min_icp_e8s.expect("Field min_icp_e8s cannot be None"),
             fallback_controller_principal_ids: self.fallback_controller_principal_ids.clone(),
         }
     }
@@ -283,9 +263,9 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<Account, Tokens>> {
+    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
         match &self.initial_token_distribution {
-            None => Ok(hashmap! {}),
+            None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => {
                 f.get_account_ids_and_tokens(sns_canister_ids)
             }
@@ -312,14 +292,9 @@ impl SnsInitPayload {
             self.validate_token_symbol(),
             self.validate_token_name(),
             self.validate_token_distribution(),
-            self.validate_min_participants(),
-            self.validate_icp_parameters(),
-            self.validate_min_participant_icp_e8s(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_proposal_reject_cost_e8s(),
             self.validate_transaction_fee_e8s(),
-            self.validate_min_icp_e8s(),
-            self.validate_max_participant_icp_e8s(),
             self.validate_fallback_controller_principal_ids(),
             self.validate_url(),
             self.validate_logo(),
@@ -520,104 +495,6 @@ impl SnsInitPayload {
         Ok(())
     }
 
-    fn validate_icp_parameters(&self) -> Result<(), String> {
-        let max_icp_e8s = self
-            .max_icp_e8s
-            .ok_or("Error: max_icp_e8s must be specified.")?;
-        let min_participants = self.min_participants.ok_or(
-            "Error: cannot validate max_icp_e8s because of field min_participants missing.",
-        )?;
-        let min_participant_icp_e8s = self.min_participant_icp_e8s.ok_or(
-            "Error: cannot validate max_icp_e8s because of field min_participant_icp_e8s missing.",
-        )?;
-
-        if max_icp_e8s < (min_participants as u64) * min_participant_icp_e8s {
-            Err(
-                "Target max_icp_e8s must be larger than min_participants * min_participant_icp_e8s"
-                    .to_string(),
-            )
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Must exist and be greater than 0.
-    fn validate_min_participants(&self) -> Result<(), String> {
-        let min_participants = self
-            .min_participants
-            .ok_or_else(|| "Error: min_participants must be specified".to_string())?;
-
-        if min_participants < 1 {
-            Err("Error: min_participants must be larger than 0".to_string())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn validate_min_participant_icp_e8s(&self) -> Result<(), String> {
-        let max_icp_e8s = self
-            .max_icp_e8s
-            .ok_or_else(|| "Error: max_icp_e8s must be specified.".to_string())?;
-        let min_participant_icp_e8s = self
-            .min_participant_icp_e8s
-            .ok_or_else(|| "Error: min_participant_icp_e8s must be specified.".to_string())?;
-        let initial_token_distribution = self
-            .initial_token_distribution
-            .as_ref()
-            .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
-        let sale_tokens = match initial_token_distribution {
-            FractionalDeveloperVotingPower(fractional_developer_voting_power) => {
-                let swap_distribution = fractional_developer_voting_power
-                    .swap_distribution
-                    .as_ref()
-                    .ok_or_else(|| "Error: swap_distribution must be specified".to_string())?;
-                swap_distribution.initial_swap_amount_e8s
-            }
-        };
-        let neuron_minimum_stake_e8s = self
-            .neuron_minimum_stake_e8s
-            .ok_or_else(|| "Error: neuron_minimum_stake_e8s must be specified.".to_string())?;
-        let min_participant_token = min_participant_icp_e8s * sale_tokens / max_icp_e8s;
-        if min_participant_token < neuron_minimum_stake_e8s {
-            Err("Error: min_participant_icp_e8s is too small. If max_icp are obtained, a contribution \
-of min_participant_icp would result in a neuron with a stake smaller than \
-neuron_minimum_stake".to_string())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn validate_min_icp_e8s(&self) -> Result<(), String> {
-        let min_icp_e8s = self
-            .min_icp_e8s
-            .ok_or("Error: min_icp_e8s must be specified.")?;
-        let max_icp_e8s = self
-            .max_icp_e8s
-            .ok_or("Error: max_icp_e8s must be specified to validate min_icp_e8s.")?;
-        if min_icp_e8s > max_icp_e8s {
-            Err("Error: min_icp_e8s cannot be larger than max_icp_e8s".to_string())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn validate_max_participant_icp_e8s(&self) -> Result<(), String> {
-        let min_participant_icp_e8s = self.min_participant_icp_e8s.ok_or({
-            "Error: min_participant_icp_e8s must be specified to validate max_participant_icp_e8s."
-        })?;
-        let max_participant_icp_e8s = self
-            .max_icp_e8s
-            .ok_or("Error: max_icp_e8s must be specified.")?;
-        if max_participant_icp_e8s < min_participant_icp_e8s {
-            Err(
-                "Error: max_participant_icp_e8s can not be smaller than min_participant_e8s"
-                    .to_string(),
-            )
-        } else {
-            Ok(())
-        }
-    }
-
     fn validate_fallback_controller_principal_ids(&self) -> Result<(), String> {
         if self.fallback_controller_principal_ids.is_empty() {
             return Err(
@@ -631,13 +508,10 @@ neuron_minimum_stake".to_string())
     }
 
     fn validate_logo(&self) -> Result<(), String> {
-        let logo = self
-            .logo
-            .as_ref()
-            .ok_or_else(|| "Error: logo must be specified".to_string())?;
-
-        if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
-            return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
+        if let Some(logo) = &self.logo {
+            if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
+                return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
+            }
         }
 
         Ok(())
@@ -728,8 +602,8 @@ mod test {
                 total_e8s: 500_000_000,
             }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 1_000_000_000,
-                initial_swap_amount_e8s: 1_000_000_000,
+                total_e8s: 10_000_000_000,
+                initial_swap_amount_e8s: 10_000_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
                 airdrop_neurons: Default::default(),
@@ -744,11 +618,7 @@ mod test {
             token_symbol: Some("SNS".to_string()),
             proposal_reject_cost_e8s: Some(100_000_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            max_icp_e8s: Some(1_000_000_000),
-            min_participants: Some(10),
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
-            min_icp_e8s: Some(100),
-            max_participant_icp_e8s: Some(1_000_000_000),
             fallback_controller_principal_ids: vec![Principal::from(
                 PrincipalId::new_user_test_id(1_552_301),
             )
@@ -757,7 +627,6 @@ mod test {
             name: Some("ServiceNervousSystem".to_string()),
             description: Some("A project that decentralizes a dapp".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
-            min_participant_icp_e8s: Some(100_000_000),
         }
     }
 
@@ -805,20 +674,6 @@ mod test {
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 
-        sns_init_payload.min_participants = Some(0);
-        assert!(sns_init_payload.validate().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.max_icp_e8s = Some(
-            (sns_init_payload
-                .min_participants
-                .expect("Expected min participants to be Some.") as u64)
-                * (sns_init_payload
-                    .min_participant_icp_e8s
-                    .expect("Expected min_participant_icp_e8s to be Some"))
-                - 1,
-        );
-
         sns_init_payload.description = None;
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
@@ -855,15 +710,7 @@ mod test {
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 
-        sns_init_payload.logo = None;
-        assert!(sns_init_payload.validate().is_err());
-        sns_init_payload = get_sns_init_payload();
-
         sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
-        assert!(sns_init_payload.validate().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.neuron_minimum_stake_e8s = Some(1_000_000_000);
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 
@@ -884,7 +731,7 @@ mod test {
         let sns_canister_ids = create_canister_ids();
 
         // Build all SNS canister's initialization payloads and verify the payload was.
-        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids);
+        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None);
         let sns_canisters_init_payloads = match build_result {
             Ok(payloads) => payloads,
             Err(e) => panic!("Could not build canister init payloads: {}", e),
@@ -945,7 +792,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -965,7 +812,6 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        sns_init_payload.validate().expect("");
         assert!(sns_init_payload.validate().is_ok());
 
         // Create valid CanisterIds
@@ -973,7 +819,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Root
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let root = canister_payloads.root;
@@ -1001,13 +847,13 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Swap
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let swap = canister_payloads.swap;
 
         // Assert that the swap canister would accept this payload.
-        assert!(swap.is_valid());
+        assert!(swap.validate().is_ok());
     }
 
     #[test]
@@ -1033,7 +879,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Ledger
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids)
+            .build_canister_payloads(&sns_canister_ids, None)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let ledger = canister_payloads.ledger;

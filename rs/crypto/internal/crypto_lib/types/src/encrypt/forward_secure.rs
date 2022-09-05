@@ -216,13 +216,13 @@ pub mod groth20_bls12_381 {
     // Note: the spec currently has: Vec<(r,s,z)>; this could be represented more
     // strongly as [(G1,G1,G2);NUM_CHUNKS], which is equivalent to the below.
     #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
-    pub struct FsEncryptionCiphertext {
+    pub struct FsEncryptionCiphertextBytes {
         pub rand_r: [G1Bytes; NUM_CHUNKS],
         pub rand_s: [G1Bytes; NUM_CHUNKS],
         pub rand_z: [G2Bytes; NUM_CHUNKS],
         pub ciphertext_chunks: Vec<[G1Bytes; NUM_CHUNKS]>,
     }
-    impl FsEncryptionCiphertext {
+    impl FsEncryptionCiphertextBytes {
         //! Accessors by NodeIndex:
         pub fn len(&self) -> usize {
             self.ciphertext_chunks.len()

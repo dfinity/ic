@@ -1,3 +1,4 @@
+# job can run only in docker
 .e2e-test-base:
   extends:
     # Use untrusted builders for e2e tests.
@@ -13,11 +14,29 @@
     # This var is needed as some shell scripts depend on it.
     E2E_TEST_TIMEOUT: 480
 
+# job can run in docker or in k8s
+.e2e-test-base-k8s:
+  extends:
+    # Use untrusted builders for e2e tests.
+    # The trusted builders don't work with IPv6 right now.
+    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .rules-parent-pipeline
+  stage: guest-os-test
+  retry: 2
+  # The e2e tests are flaky and impacting developer merges
+  # https://dfinity.slack.com/archives/C012RDFNK7U/p1618233620112900
+  variables:
+    GUEST_OS_TEST_TIMEOUT: 2400
+    # This var is needed as some shell scripts depend on it.
+    E2E_TEST_TIMEOUT: 480
+
 e2e-workload-test:
   extends:
     - .e2e-test-base
   needs:
     - job: guest-os-diskimg
+      artifacts: false
+    - job: guest-os-updateimg-build
       artifacts: false
   artifacts:
     paths:
@@ -122,7 +141,7 @@ e2e-workload-test:
 
 .system-tests:
   extends:
-    - .e2e-test-base
+    - .e2e-test-base-k8s
   needs:
     - job: guest-os-diskimg
       artifacts: false
@@ -171,11 +190,21 @@ boundary-nodes-pre-master:
   variables:
     SUITE_NAME: "boundary_nodes_pre_master"
 
+boundary-nodes-sev-snp-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "boundary_nodes_sev_snp_pre_master"
+  # TODO: at the moment we have a single farm host which supports AmdSevSnp.
+  # It's a bit risky to have a pre-master job that could fail because of this.
+  # So we allow failures for now until we have more hosts supporting AmdSevSnp.
+  # See: https://dfinity.atlassian.net/browse/VER-1863
+  allow_failure: true
+
 tecdsa-pre-master:
   extends: .system-tests
   variables:
     SUITE_NAME: "tecdsa_pre_master"
-    
+
 test-prod-test-driver-e2e:
  extends:
   - .system-tests
@@ -234,6 +263,10 @@ upgrade-compatibility-pre-master:
       artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
+    - job: guest-os-updateimg-build-dev
+      artifacts: false
+    - job: boundary-os-diskimg-dev
+      artifacts: false
   artifacts:
     paths:
     - "working_dir/"
@@ -278,17 +311,24 @@ spec-compliance-pre-master:
       "
 
 .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
-  docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+  # build monpoly_pipeline container image
+  docker build --build-arg MONPOLY_PIPELINE_GIT_REVISION="${CI_COMMIT_SHA}" -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+
   TEST_DRIVER_ARTIFACTS="${CI_PROJECT_DIR}/working_dir"
   echo "=== Listing contents of ${TEST_DRIVER_ARTIFACTS} ==="
   find "${TEST_DRIVER_ARTIFACTS}" -type d -printf '%d\t%P\n' | sort -nk1 | cut -f2-
-  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
-  trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
-  docker cp "${TEST_DRIVER_ARTIFACTS}" "${MONPOLY_PIPELINE_INSTANCE}":/work/system_tests_working_dir
-  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
-  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
-  docker exec "${MONPOLY_PIPELINE_INSTANCE}" ls -alh /work
-  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 main.py --fail --system_tests_working_dir /work/system_tests_working_dir --mode universal_policy pre_processor_test
+
+  # run monpoly_pipeline docker container with timeout 360 seconds
+  MONPOLY_DID=$(docker run -d -it --rm monpoly_pipeline:"${CI_COMMIT_SHA}" "sleep 360")
+  docker cp "${TEST_DRIVER_ARTIFACTS}" "${MONPOLY_DID}":/work/system_tests_working_dir
+  docker exec "${MONPOLY_DID}" python3 -m tests.monpoly_io
+  docker exec "${MONPOLY_DID}" python3 -m tests.mfotl_sanity
+  docker exec "${MONPOLY_DID}" ls -alh /work
+  docker exec "${MONPOLY_DID}" python3 main.py --fail \
+    --system_tests_working_dir /work/system_tests_working_dir --mode universal_policy pre_processor_test
+
+  # clean the container
+  docker rm -f "${MONPOLY_DID}"
 
 test-monpoly-docker:
   extends:

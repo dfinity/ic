@@ -34,7 +34,7 @@ use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
     state_manager::Config as StateManagerConfig,
-    transport::{TransportConfig, TransportFlowConfig},
+    transport::TransportConfig,
     ConfigOptional as ReplicaConfig,
 };
 use ic_ic00_types::EcdsaKeyId;
@@ -108,6 +108,7 @@ fn main() -> Result<()> {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![(&key_id).into()],
             max_queue_size: 64,
+            signature_request_timeout_ns: None,
         });
 
         let mut topology_config = TopologyConfig::default();
@@ -154,8 +155,7 @@ fn main() -> Result<()> {
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
-        let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(async { ic_config.initialize().await })?;
+        ic_config.initialize()?;
     }
 
     let (mut base_cmd, use_cargo) = match config.replica_path {
@@ -691,11 +691,9 @@ impl ValidatedConfig {
 
         let transport = Some(TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            p2p_flows: vec![TransportFlowConfig {
-                flow_tag: 1234,
-                server_port: 0,
-                queue_size: 1024,
-            }],
+            legacy_flow_tag: 1234,
+            listening_port: 0,
+            send_queue_size: 1024,
         });
 
         let hypervisor_config = HypervisorConfig {

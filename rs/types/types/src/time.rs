@@ -2,12 +2,11 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! Defines the [`Time`] type used by the Internet Computer.
 
-use chrono::{TimeZone, Utc};
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
 
@@ -86,12 +85,22 @@ impl From<Time> for Duration {
     }
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use chrono::{TimeZone, Utc};
+
         match self.0.try_into() {
             Ok(signed) => write!(f, "{}", Utc.timestamp_nanos(signed)),
             Err(_) => write!(f, "{}ns", self.0),
         }
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+impl fmt::Display for Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}ns", self.0)
     }
 }
 

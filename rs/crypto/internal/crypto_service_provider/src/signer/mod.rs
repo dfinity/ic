@@ -1,15 +1,19 @@
-use super::api::CspSigner;
+use super::api::{CspSigVerifier, CspSigner};
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
+use ed25519::types::PublicKeyBytes;
+use ed25519::types::SignatureBytes;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
+use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyId};
 use openssl::sha::sha256;
+use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -185,5 +189,85 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
                 reason: "Not a multi-signature algorithm".to_string(),
             }),
         }
+    }
+}
+
+impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspSigVerifier
+    for Csp<R, S, C>
+{
+    fn verify_batch_vartime(
+        &self,
+        key_signature_pairs: &[(CspPublicKey, CspSignature)],
+        msg: &[u8],
+        algorithm_id: AlgorithmId,
+    ) -> CryptoResult<()> {
+        // check that the public keys' `AlgorithmId` field is consistent with `algorithm_id`
+        for (pk, _sig) in key_signature_pairs {
+            if pk.algorithm_id() != algorithm_id {
+                return Err(CryptoError::SignatureVerification {
+                    algorithm: pk.algorithm_id(),
+                    public_key_bytes: Vec::<u8>::new(),
+                    sig_bytes: Vec::<u8>::new(),
+                    internal_error: format!(
+                        "Invalid public key type: expected {} but found {}",
+                        algorithm_id,
+                        pk.algorithm_id(),
+                    ),
+                });
+            };
+        }
+
+        match algorithm_id {
+            // use more efficient batch verification for Ed25519
+            AlgorithmId::Ed25519 => {
+                // generate a random seed from `OsRng` to use in batched sig verification
+                let mut rng = OsRng::default();
+                let seed = Seed::from_rng(&mut rng);
+                // define a closure to convert a public key and a `CspSignature::Ed25519` to bytes
+                // or return an error if the input is not using Ed25519
+                let pk_and_sig_to_bytes =
+                    |pk: &CspPublicKey,
+                     sig: &CspSignature|
+                     -> CryptoResult<(PublicKeyBytes, SignatureBytes)> {
+                        let sig_bytes = match sig {
+                            CspSignature::Ed25519(bytes) => bytes.0.to_owned(),
+                            sig => {
+                                return Err(CryptoError::SignatureVerification {
+                                    algorithm: sig.algorithm(),
+                                    public_key_bytes: Vec::<u8>::new(),
+                                    sig_bytes: Vec::<u8>::new(),
+                                    internal_error: format!(
+                                        "Invalid signature type: expected {} but found {}",
+                                        algorithm_id,
+                                        sig.algorithm(),
+                                    ),
+                                });
+                            }
+                        };
+                        let mut pk_bytes = [0u8; 32];
+                        pk_bytes.copy_from_slice(pk.pk_bytes());
+
+                        Ok((PublicKeyBytes(pk_bytes), SignatureBytes(sig_bytes)))
+                    };
+
+                let key_sig_bytes_pairs: Vec<(PublicKeyBytes, SignatureBytes)> =
+                    key_signature_pairs
+                        .iter()
+                        .map(|(pk, sig)| pk_and_sig_to_bytes(pk, sig))
+                        .collect::<Result<Vec<_>, _>>()?;
+                let pairs_of_refs: Vec<_> = key_sig_bytes_pairs
+                    .iter()
+                    .map(|(pk_bytes, sig_bytes)| (pk_bytes, sig_bytes))
+                    .collect();
+                ed25519::api::verify_batch_vartime(&pairs_of_refs[..], msg, seed)?;
+            }
+            // use iterative verification for other `AlgorithmId`s
+            _ => {
+                for (pk, sig) in key_signature_pairs {
+                    self.verify(sig, msg, algorithm_id, pk.to_owned())?;
+                }
+            }
+        }
+        Ok(())
     }
 }

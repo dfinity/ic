@@ -21,6 +21,7 @@ Coverage::
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint};
@@ -49,22 +50,13 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let log = &env.logger();
     let topo_snapshot = env.topology_snapshot();
-    topo_snapshot.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-
-    let nns_node = get_nns_node(&topo_snapshot);
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(log, "NNS canisters installed");
 
     // Take all nns nodes
     let mut nodes = topo_snapshot.root_subnet().nodes();

@@ -1,31 +1,41 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:leb128",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "icrc1",
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -34,3 +44,10 @@ rust_library(
 #     name = "icrc1_doc_test",
 #     crate = ":icrc1",
 # )
+
+rust_test(
+    name = "icrc1_test",
+    crate = ":icrc1",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)

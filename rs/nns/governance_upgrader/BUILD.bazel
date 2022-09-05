@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/nns/constants",
+    "//rs/nns/init",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:garcon",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-identity-hsm",
+    "@crate_index//:ic-utils",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "governance_upgrader",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

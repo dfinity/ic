@@ -1,0 +1,57 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/utils/basic_sig",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/nns_data_provider",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:bytes",
+    "@crate_index//:clap",
+    "@crate_index//:dashmap",
+    "@crate_index//:futures",
+    "@crate_index//:mockall",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:prometheus",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "boundary-node-control-plane",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "boundary_node_control_plane",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "control_plane_test",
+    aliases = ALIASES,
+    crate = ":boundary-node-control-plane",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

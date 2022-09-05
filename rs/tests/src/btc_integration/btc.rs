@@ -21,17 +21,17 @@ use std::net::{IpAddr, SocketAddr};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    retry, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession, ADMIN, RETRY_BACKOFF,
-    RETRY_TIMEOUT,
+    retry, retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession, ADMIN,
+    RETRY_BACKOFF, RETRY_TIMEOUT,
 };
-use crate::driver::universal_vm::{DeployedUniversalVm, UniversalVms};
-
+use crate::driver::universal_vm::UniversalVms;
 use crate::nns::NnsExt;
 use crate::util::{self, *};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
 };
+use anyhow::bail;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
 use ic_btc_types::Network;
@@ -46,15 +46,19 @@ use std::{
 };
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
-const MAX_RETRIES: usize = 10;
 
 pub fn config(env: TestEnv) {
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
     let activate_script = r#"#!/bin/sh
-        nix-env -iA nixos.bitcoind
-    "#;
+cp /config/bitcoin.conf /tmp/bitcoin.conf
+docker run  --name=bitcoind-node -d \
+  -p 8332:8332 \
+  -p 18444:18444 \
+  -v /tmp:/bitcoin/.bitcoin \
+  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind
+"#;
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();
@@ -71,13 +75,6 @@ pub fn config(env: TestEnv) {
     rpcuser=btc-dev-preview
     rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
     rpcauth=btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb
-    
-    [regtest]
-    rpcport=8332
-    rpcbind=[::]:8332 
-    rpcallowip=0.0.0.0/0
-    rpcallowip=::/0
-    bind=[::]:18444    
     "#
     .as_bytes()).unwrap();
     bitcoin_conf.sync_all().unwrap();
@@ -89,10 +86,8 @@ pub fn config(env: TestEnv) {
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
-
-    start_bitcoind(deployed_universal_vm);
-
     let btc_node_ipv6 = universal_vm.ipv6;
+
     InternetComputer::new()
         .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), 18444))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -111,11 +106,6 @@ pub fn config(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-fn start_bitcoind(vm: DeployedUniversalVm) {
-    vm.block_on_bash_script(ADMIN, "bitcoind -conf=/config/bitcoin.conf -daemon")
-        .unwrap();
-}
-
 fn get_bitcoind_log(env: &TestEnv) {
     let f = || -> Result<(), anyhow::Error> {
         let r = {
@@ -124,13 +114,12 @@ fn get_bitcoind_log(env: &TestEnv) {
             // Give log file user permisison to copy it from the host.
             universal_vm.block_on_bash_script(
                 ADMIN,
-                "sudo chown -R $(id -u):$(id -g) /home/admin/.bitcoin/regtest/debug.log",
+                "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
             )?;
 
             // log file is mapped from docker contrainer to tmp directory
             let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
-            let (mut remote_file, _) =
-                session.scp_recv(Path::new("/home/admin/.bitcoin/regtest/debug.log"))?;
+            let (mut remote_file, _) = session.scp_recv(Path::new("/tmp/regtest/debug.log"))?;
 
             let mut buf = String::new();
             remote_file.read_to_string(&mut buf)?;
@@ -194,42 +183,37 @@ pub fn get_balance(env: TestEnv) {
 
     let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
     rt.block_on(app_endpoint.assert_ready(&ctx));
+
     info!(&logger, "App endpoint reachable over http.");
 
-    rt.block_on({
-        async move {
-            let agent = assert_create_agent(app_endpoint.url.as_str()).await;
+    let res = rt.block_on(async {
+        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
+        let canister = UniversalCanister::new(&agent).await;
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = canister
+                .update(wasm().call(management::bitcoin_get_balance(
+                    btc_address.to_string(),
+                    None,
+                )))
+                .await
+                .map(|res| Decode!(res.as_slice(), u64))
+                .unwrap()
+                .unwrap();
 
-            let canister = UniversalCanister::new(&agent).await;
-
-            let mut iterations = 0;
-            loop {
-                let res = canister
-                    .update(wasm().call(management::bitcoin_get_balance(
-                        btc_address.to_string(),
-                        None,
-                    )))
-                    .await
-                    .map(|res| Decode!(res.as_slice(), u64))
-                    .unwrap()
-                    .unwrap();
-
-                if res == expected_balance_in_satoshis {
-                    get_bitcoind_log(&env);
-                    break;
-                }
-
-                if iterations > MAX_RETRIES {
-                    get_bitcoind_log(&env);
-                    panic!(
-                        "IC balance {:?} does not match bitcoind balance {}",
-                        res, expected_balance_in_satoshis
-                    );
-                }
-
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                iterations += 1;
+            if res != expected_balance_in_satoshis {
+                bail!(
+                    "IC balance {:?} does not match bitcoind balance {}",
+                    res,
+                    expected_balance_in_satoshis
+                );
             }
-        }
-    })
+
+            Ok(res)
+        })
+        .await
+    });
+    // blocks
+    get_bitcoind_log(&env);
+    // We only exit retry loop successfully if we got the expected satoshi balance
+    res.expect("Failed to get btc balance");
 }

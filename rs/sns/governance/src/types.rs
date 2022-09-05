@@ -266,13 +266,13 @@ impl NervousSystemParameters {
     /// it may cause degradation in the governance canister or the subnet hosting the SNS.
     pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING: u64 = 700;
 
-    /// This is an upper bound for `initial_voting_period`. Exceeding it may cause
+    /// This is an upper bound for `initial_voting_period_seconds`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
-    pub const INITIAL_VOTING_PERIOD_CEILING: u64 = 30 * ONE_DAY_SECONDS;
+    pub const INITIAL_VOTING_PERIOD_SECONDS_CEILING: u64 = 30 * ONE_DAY_SECONDS;
 
-    /// This is a lower bound for `initial_voting_period`. Exceeding it may cause
+    /// This is a lower bound for `initial_voting_period_seconds`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
-    pub const INITIAL_VOTING_PERIOD_FLOOR: u64 = ONE_DAY_SECONDS;
+    pub const INITIAL_VOTING_PERIOD_SECONDS_FLOOR: u64 = ONE_DAY_SECONDS;
 
     /// This is an upper bound for `wait_for_quiet_deadline_increase_seconds`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
@@ -297,7 +297,7 @@ impl NervousSystemParameters {
             neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 governance token
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             max_proposals_to_keep_per_action: Some(100),
-            initial_voting_period: Some(4 * ONE_DAY_SECONDS), // 4d
+            initial_voting_period_seconds: Some(4 * ONE_DAY_SECONDS), // 4d
             wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS), // 1d
             default_followees: Some(DefaultFollowees::default()),
             max_number_of_neurons: Some(200_000),
@@ -325,8 +325,9 @@ impl NervousSystemParameters {
         new_params.max_proposals_to_keep_per_action = self
             .max_proposals_to_keep_per_action
             .or(base.max_proposals_to_keep_per_action);
-        new_params.initial_voting_period =
-            self.initial_voting_period.or(base.initial_voting_period);
+        new_params.initial_voting_period_seconds = self
+            .initial_voting_period_seconds
+            .or(base.initial_voting_period_seconds);
         new_params.wait_for_quiet_deadline_increase_seconds = self
             .wait_for_quiet_deadline_increase_seconds
             .or(base.wait_for_quiet_deadline_increase_seconds);
@@ -374,7 +375,7 @@ impl NervousSystemParameters {
         self.validate_neuron_minimum_stake_e8s()?;
         self.validate_transaction_fee_e8s()?;
         self.validate_max_proposals_to_keep_per_action()?;
-        self.validate_initial_voting_period()?;
+        self.validate_initial_voting_period_seconds()?;
         self.validate_wait_for_quiet_deadline_increase_seconds()?;
         self.validate_default_followees()?;
         self.validate_max_number_of_neurons()?;
@@ -449,21 +450,22 @@ impl NervousSystemParameters {
         }
     }
 
-    /// Validates that the nervous system parameter initial_voting_period is well-formed.
-    fn validate_initial_voting_period(&self) -> Result<(), String> {
-        let initial_voting_period = self.initial_voting_period.ok_or_else(|| {
-            "NervousSystemParameters.initial_voting_period must be set".to_string()
-        })?;
+    /// Validates that the nervous system parameter initial_voting_period_seconds is well-formed.
+    fn validate_initial_voting_period_seconds(&self) -> Result<(), String> {
+        let initial_voting_period_seconds =
+            self.initial_voting_period_seconds.ok_or_else(|| {
+                "NervousSystemParameters.initial_voting_period_seconds must be set".to_string()
+            })?;
 
-        if initial_voting_period < Self::INITIAL_VOTING_PERIOD_FLOOR {
+        if initial_voting_period_seconds < Self::INITIAL_VOTING_PERIOD_SECONDS_FLOOR {
             Err(format!(
-                "NervousSystemParameters.initial_voting_period must be greater than {}",
-                Self::INITIAL_VOTING_PERIOD_FLOOR
+                "NervousSystemParameters.initial_voting_period_seconds must be greater than {}",
+                Self::INITIAL_VOTING_PERIOD_SECONDS_FLOOR
             ))
-        } else if initial_voting_period > Self::INITIAL_VOTING_PERIOD_CEILING {
+        } else if initial_voting_period_seconds > Self::INITIAL_VOTING_PERIOD_SECONDS_CEILING {
             Err(format!(
-                "NervousSystemParameters.initial_voting_period must be less than {}",
-                Self::INITIAL_VOTING_PERIOD_CEILING
+                "NervousSystemParameters.initial_voting_period_seconds must be less than {}",
+                Self::INITIAL_VOTING_PERIOD_SECONDS_CEILING
             ))
         } else {
             Ok(())
@@ -472,9 +474,10 @@ impl NervousSystemParameters {
 
     /// Validates that the nervous system parameter wait_for_quiet_deadline_increase_seconds is well-formed.
     fn validate_wait_for_quiet_deadline_increase_seconds(&self) -> Result<(), String> {
-        let initial_voting_period = self.initial_voting_period.ok_or_else(|| {
-            "NervousSystemParameters.initial_voting_period must be set".to_string()
-        })?;
+        let initial_voting_period_seconds =
+            self.initial_voting_period_seconds.ok_or_else(|| {
+                "NervousSystemParameters.initial_voting_period_seconds must be set".to_string()
+            })?;
         let wait_for_quiet_deadline_increase_seconds = self
             .wait_for_quiet_deadline_increase_seconds
             .ok_or_else(|| {
@@ -496,13 +499,13 @@ impl NervousSystemParameters {
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds must be less than or equal to {}",
                 Self::WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS_CEILING
             ))
-        // If `wait_for_quiet_deadline_increase_seconds > initial_voting_period / 2`, any flip (including an initial `yes` vote)
+        // If `wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2`, any flip (including an initial `yes` vote)
         // will always cause the deadline to be increased. That seems like unreasonable behavior, so we prevent that from being
         // the case.
-        } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period / 2 {
+        } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2 {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds is {}, but must be less than or equal to half the initial voting period, {}",
-                initial_voting_period, initial_voting_period / 2
+                initial_voting_period_seconds, initial_voting_period_seconds / 2
             ))
         } else {
             Ok(())
@@ -949,7 +952,7 @@ impl SnsMetadata {
     pub const MAX_NAME_LENGTH: usize = 255;
 
     /// The minimum number of characters allowed for a SNS name.
-    pub const MIN_NAME_LENGTH: usize = 10;
+    pub const MIN_NAME_LENGTH: usize = 4;
 
     /// The maximum number of characters allowed for a SNS description.
     pub const MAX_DESCRIPTION_LENGTH: usize = 2000;
@@ -957,7 +960,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS description.
     pub const MIN_DESCRIPTION_LENGTH: usize = 10;
 
-    // TODO NNS1-1599 : Finalize validation with NNS-Dapp
     /// Validate the SnsMetadata values
     pub fn validate(&self) -> Result<(), String> {
         let url = self.url.as_ref().ok_or("SnsMetadata.url must be set")?;
@@ -973,12 +975,13 @@ impl SnsMetadata {
             ));
         }
 
-        let logo = self.logo.as_ref().ok_or("SnsMetadata.logo must be set")?;
-        if logo.len() > Self::MAX_LOGO_LENGTH {
-            return Err(format!(
-                "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
-            ));
+        if let Some(logo) = &self.logo {
+            if logo.len() > Self::MAX_LOGO_LENGTH {
+                return Err(format!(
+                    "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
+                    Self::MAX_LOGO_LENGTH
+                ));
+            }
         }
 
         let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
@@ -1279,6 +1282,9 @@ pub mod test_helpers {
         /// See `impl Drop for NativeEnvironment`
         #[allow(clippy::type_complexity)]
         pub required_canister_call_invocations: Arc<RwLock<Vec<(CanisterId, String, Vec<u8>)>>>,
+
+        /// The value to be returned by now().
+        pub now: u64,
     }
 
     /// NativeEnvironment is "empty" by default. I.e. the canister_id method
@@ -1290,6 +1296,11 @@ pub mod test_helpers {
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
+                // This needs to be non-zero
+                now: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
             }
         }
     }
@@ -1314,6 +1325,10 @@ pub mod test_helpers {
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
+                now: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
             }
         }
 
@@ -1351,24 +1366,43 @@ pub mod test_helpers {
                 self.set_call_canister_response(canister_id, method_name, arg, res);
             }
         }
+
+        /// Get a function that allows you to assert required calls were made
+        /// To avoid Drop impl, you may need to keep governance in scope longer.
+        pub fn get_assert_required_calls_fn(&self) -> Box<dyn FnOnce()> {
+            let required_calls = Arc::clone(&self.required_canister_call_invocations);
+            Box::new(move || {
+                let invocations = required_calls.try_read().unwrap().clone();
+                // Empty these so we don't panic again during Drop
+                required_calls.try_write().unwrap().clear();
+                assert!(
+                    invocations.is_empty(),
+                    "Not all required calls were executed: {:?}",
+                    invocations
+                );
+            })
+        }
     }
 
-    /// Used to assert that any post-conditions are true.  This is needed because NativeEnvironment
-    /// is owned by Governance in tests, so we cannot make assertions against its contents.
+    /// Used to assert that any post-conditions are true.
+    /// A better way is using `get_assert_required_calls_fn` to get a function to make this assert
+    /// inside of the test body, as it gives better debug information.  This functions as a fallback
+    /// so that tests cannot accidentally pass if that line is removed.
     impl Drop for NativeEnvironment {
         fn drop(&mut self) {
             let invocations = self.required_canister_call_invocations.try_read().unwrap();
-            assert!(invocations.is_empty());
+            assert!(
+                invocations.is_empty(),
+                "Not all required calls were executed: {:?}",
+                invocations
+            );
         }
     }
 
     #[async_trait]
     impl Environment for NativeEnvironment {
         fn now(&self) -> u64 {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
+            self.now
         }
 
         fn random_u64(&mut self) -> u64 {
@@ -1488,18 +1522,18 @@ pub(crate) mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                initial_voting_period: None,
+                initial_voting_period_seconds: None,
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                initial_voting_period: Some(
-                    NervousSystemParameters::INITIAL_VOTING_PERIOD_FLOOR - 1,
+                initial_voting_period_seconds: Some(
+                    NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR - 1,
                 ),
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                initial_voting_period: Some(
-                    NervousSystemParameters::INITIAL_VOTING_PERIOD_CEILING + 1,
+                initial_voting_period_seconds: Some(
+                    NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING + 1,
                 ),
                 ..NervousSystemParameters::with_default_values()
             },
@@ -2019,10 +2053,6 @@ pub(crate) mod tests {
         let invalid_sns_metadata = vec![
             SnsMetadata {
                 url: None,
-                ..default.clone()
-            },
-            SnsMetadata {
-                logo: None,
                 ..default.clone()
             },
             SnsMetadata {

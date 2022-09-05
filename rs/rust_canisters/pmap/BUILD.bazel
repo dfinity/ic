@@ -18,7 +18,6 @@ rust_binary(
     name = "pmap",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -27,7 +26,6 @@ rust_canister(
     name = "pmap_canister",
     srcs = ["canister/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

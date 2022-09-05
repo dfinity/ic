@@ -1,0 +1,49 @@
+load("@build_bazel_rules_nodejs//:index.bzl", "pkg_npm")
+load("@sw_npm//webpack-cli:index.bzl", webpack = "webpack_cli")
+load(":jest.bzl", "jest_test")
+
+pkg_npm(
+    name = "service-worker",
+    package_name = "@dfinity/service-worker",
+    srcs = ["package.json"],
+    deps = [":bundle"],
+)
+
+webpack(
+    name = "bundle",
+    outs = [
+        "index.html",
+        "install-script.js",
+        "install-script.js.map",
+        "sw.js",
+        "sw.js.LICENSE.txt",
+        "sw.js.map",
+    ],
+    args = [
+        "--config",
+        "webpack.config.js",
+        "-o",
+        "../../$(RULEDIR)",
+    ],
+    chdir = "typescript/service-worker",
+    data = glob(["src/**"]) + [
+        "webpack.config.js",
+        "@sw_npm//:node_modules",
+        "package.json",
+        "tsconfig.json",
+    ],
+)
+
+jest_test(
+    name = "test",
+    srcs = glob(["**/*.test.ts"]),
+    jest_config = "jest.config.ts",
+    deps = glob(
+        ["src/**"],
+        exclude = ["**/*.test.ts"],
+    ) + [
+        "test-setup.ts",
+        "@sw_npm//:node_modules",
+        "tsconfig.json",
+    ],
+)

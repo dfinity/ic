@@ -132,6 +132,7 @@ pub fn execute_call(
             &mut canister.system_state,
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.message(),
+            subnet_size,
         );
         return early_error_to_result(user_error, canister, req, time);
     }
@@ -144,6 +145,7 @@ pub fn execute_call(
             execution_parameters,
             round,
             round_limits,
+            subnet_size,
         )
     } else {
         execute_update_method(
@@ -153,6 +155,7 @@ pub fn execute_call(
             execution_parameters,
             round,
             round_limits,
+            subnet_size,
         )
     }
 }
@@ -167,6 +170,7 @@ fn execute_update_method(
     execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
     let method = WasmMethod::Update(req.method_name().to_string());
@@ -204,7 +208,7 @@ fn execute_update_method(
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: req,
     };
-    process_update_result(canister, result, original, round, round_limits)
+    process_update_result(canister, result, original, round, round_limits, subnet_size)
 }
 
 fn process_update_result(
@@ -213,6 +217,7 @@ fn process_update_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -249,7 +254,7 @@ fn process_update_result(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(original.call_context_id, output.wasm_result);
+                .on_canister_result(original.call_context_id, None, output.wasm_result);
 
             let response = action_to_response(
                 &canister,
@@ -262,6 +267,7 @@ fn process_update_result(
                 &mut canister.system_state,
                 output.num_instructions_left,
                 original.message_instruction_limit,
+                subnet_size,
             );
             ExecuteMessageResult::Finished {
                 canister,
@@ -295,10 +301,18 @@ impl PausedExecution for PausedCallExecution {
         canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.as_ref().unwrap();
         let result = self.paused_wasm_execution.resume(execution_state);
-        process_update_result(canister, result, self.original, round, round_limits)
+        process_update_result(
+            canister,
+            result,
+            self.original,
+            round,
+            round_limits,
+            subnet_size,
+        )
     }
 
     fn abort(self: Box<Self>) -> CanisterInputMessage {
@@ -320,6 +334,7 @@ fn execute_query_method(
     execution_parameters: ExecutionParameters,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    subnet_size: usize,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
 
@@ -356,6 +371,7 @@ fn execute_query_method(
         &mut canister.system_state,
         output.num_instructions_left,
         execution_parameters.instruction_limits.message(),
+        subnet_size,
     );
 
     ExecuteMessageResult::Finished {

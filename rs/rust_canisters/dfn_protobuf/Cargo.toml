@@ -1,7 +1,7 @@
 [package]
 name = "dfn_protobuf"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 on_wire = { path = "../on_wire" }

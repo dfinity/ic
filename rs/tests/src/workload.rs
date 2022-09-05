@@ -123,7 +123,7 @@ impl Metrics {
         self.requests_duration_buckets = Some(
             request_duration_thresholds
                 .into_iter()
-                .map(|threshold| RequestDurationBucket::new(threshold))
+                .map(RequestDurationBucket::new)
                 .collect(),
         );
     }

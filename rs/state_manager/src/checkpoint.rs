@@ -1,6 +1,5 @@
 use crate::{
-    BitcoinPageMap, CheckpointError, CheckpointMetrics, PageMapType, PersistenceError,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
@@ -17,11 +16,12 @@ use ic_state_layout::{
     BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
     ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
-use ic_types::Height;
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{Height, LongExecutionMode, Time};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use rand::prelude::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeMap;
 use std::os::unix::prelude::MetadataExt;
@@ -32,6 +32,7 @@ use std::{
 };
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
+const DEFRAG_SAMPLE: usize = 100;
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -66,7 +67,13 @@ pub fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["defrag_tip"])
             .start_timer();
-        defrag_tip(&tip, DEFRAG_SIZE, height.get())?;
+        defrag_tip(
+            &tip,
+            &PageMapType::list_all(state),
+            DEFRAG_SIZE,
+            DEFRAG_SAMPLE,
+            height.get(),
+        )?;
     }
 
     let cp = {
@@ -171,13 +178,8 @@ fn serialize_canister_to_tip(
         }
         None => None,
     };
-    // As the long executions get aborted at the checkpoint, the `priority_credit`
-    // and the `long_execution_progress` must be zeros.
-    assert_eq!(canister_state.scheduler_state.priority_credit, 0.into());
-    assert_eq!(
-        canister_state.scheduler_state.long_execution_progress,
-        0.into()
-    );
+    // Priority credit must be zero at this point
+    assert_eq!(canister_state.scheduler_state.priority_credit.value(), 0);
     canister_layout
         .canister()
         .serialize(
@@ -217,6 +219,12 @@ fn serialize_canister_to_tip(
                     .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
                 install_code_debit: canister_state.scheduler_state.install_code_debit,
+                time_of_last_allocation_charge_nanos: Some(
+                    canister_state
+                        .scheduler_state
+                        .time_of_last_allocation_charge
+                        .as_nanos_since_unix_epoch(),
+                ),
                 task_queue: canister_state
                     .system_state
                     .task_queue
@@ -283,18 +291,23 @@ fn serialize_bitcoin_state_to_tip(
 /// now, only the bitcoin PageMap files are being considered.
 fn defrag_tip(
     tip: &CheckpointLayout<RwPolicy>,
+    page_maps: &[PageMapType],
     max_size: u64,
+    max_files: usize,
     seed: u64,
 ) -> Result<(), CheckpointError> {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
-    // We only defrag bitcoin files for now
-    let bitcoin_files = vec![
-        PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
-        PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
-        PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
-    ];
-    let path_with_sizes: Vec<(PathBuf, u64)> = bitcoin_files
+    // We sample the set of page maps down in order to avoid reading
+    // the metadata of each file. This is a compromise between
+    // weighting the probabilities by size and picking a uniformly
+    // random file.  The former (without subsampling) would be
+    // unnecessarily expensive, the latter would perform poorly in a
+    // situation with many empty files and a few large ones, doing
+    // no-ops on empty files with high probability.
+    let page_map_subset = page_maps.iter().choose_multiple(&mut rng, max_files);
+
+    let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
         .iter()
         .filter_map(|entry| {
             let path = entry.path(tip).ok()?;
@@ -415,6 +428,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                 }
             }
         }
+
         canister_states
     };
 
@@ -486,14 +500,14 @@ pub fn load_canister_state<P: ReadPolicy>(
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
             let wasm_memory = Memory::new(
-                PageMap::open(&canister_layout.vmemory_0(), Some(height))?,
+                PageMap::open(&canister_layout.vmemory_0(), height)?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
             let stable_memory = Memory::new(
-                PageMap::open(&canister_layout.stable_memory_blob(), Some(height))?,
+                PageMap::open(&canister_layout.stable_memory_blob(), height)?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -562,11 +576,17 @@ pub fn load_canister_state<P: ReadPolicy>(
             compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
             // Longs executions get aborted at the checkpoint,
-            // so both the credit and the execution progress below are zeros.
+            // so both the credit and the execution mode below are set to their defaults.
             priority_credit: 0.into(),
-            long_execution_progress: 0.into(),
+            long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
+            // TODO(EXC-1214): Ensure field is always set to some value.
+            time_of_last_allocation_charge: canister_state_bits
+                .time_of_last_allocation_charge_nanos
+                .map_or(UNIX_EPOCH, |time_nanos| {
+                    Time::from_nanos_since_unix_epoch(time_nanos)
+                }),
         },
     };
 
@@ -602,9 +622,9 @@ fn load_bitcoin_state<P: ReadPolicy>(
         BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
             .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
 
-    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), Some(height))?;
-    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), Some(height))?;
-    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), Some(height))?;
+    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), height)?;
+    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), height)?;
+    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), height)?;
 
     Ok(BitcoinState {
         adapter_queues: bitcoin_state_bits.adapter_queues,
@@ -621,10 +641,7 @@ fn load_bitcoin_state<P: ReadPolicy>(
     })
 }
 
-fn load_or_create_pagemap(
-    path: &Path,
-    height: Option<Height>,
-) -> Result<PageMap, PersistenceError> {
+fn load_or_create_pagemap(path: &Path, height: Height) -> Result<PageMap, PersistenceError> {
     if path.exists() {
         PageMap::open(path, height)
     } else {
@@ -635,7 +652,7 @@ fn load_or_create_pagemap(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::NUMBER_OF_CHECKPOINT_THREADS;
+    use crate::{BitcoinPageMap, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
     use ic_registry_subnet_type::SubnetType;
@@ -713,7 +730,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -772,7 +789,7 @@ mod tests {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -788,7 +805,6 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            std::fs::create_dir(&checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
@@ -816,7 +832,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -907,7 +923,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let own_subnet_type = SubnetType::Application;
@@ -939,7 +955,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::try_new(log, root).unwrap();
 
             const MISSING_HEIGHT: Height = Height::new(42);
             match layout
@@ -968,42 +984,14 @@ mod tests {
 
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log, root);
 
-            let own_subnet_type = SubnetType::Application;
-            const HEIGHT: Height = Height::new(42);
-            let canister_id = canister_test_id(10);
-
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
-            state.put_canister_state(new_canister_state(
-                canister_id,
-                user_test_id(24).get(),
-                INITIAL_CYCLES,
-                NumSeconds::from(100_000),
-            ));
-
-            let result = make_checkpoint(
-                &state,
-                HEIGHT,
-                &layout,
-                &log,
-                &checkpoint_metrics(),
-                &mut thread_pool(),
-            );
-
+            assert!(layout.is_err());
+            let err_msg = layout.err().unwrap().to_string();
             assert!(
-                result.is_err()
-                    && result
-                        .as_ref()
-                        .unwrap_err()
-                        .to_string()
-                        .contains("Permission denied"),
-                "Expected a permission error, got {:?}",
-                result
+                err_msg.contains("Permission denied"),
+                "Expected a permission error, got {}",
+                err_msg
             );
         });
     }
@@ -1013,7 +1001,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1073,7 +1061,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1119,7 +1107,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1165,7 +1153,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1210,7 +1198,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1255,7 +1243,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1289,24 +1277,31 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let tip = StateLayout::new(log, root).tip(Height::new(42)).unwrap();
+            let tip = StateLayout::try_new(log, root)
+                .unwrap()
+                .tip(Height::new(42))
+                .unwrap();
 
             let defrag_size = 1 << 20; // 1MB
 
-            let paths: Vec<PathBuf> = vec![
-                BitcoinPageMap::AddressOutpoints,
-                BitcoinPageMap::UtxosSmall,
-                BitcoinPageMap::UtxosMedium,
-            ]
-            .drain(..)
-            .map(|inner| PageMapType::Bitcoin(inner).path(&tip).unwrap())
-            .collect();
+            let page_maps: Vec<PageMapType> = vec![
+                PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
+                PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
+                PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
+                PageMapType::StableMemory(canister_test_id(100)),
+                PageMapType::WasmMemory(canister_test_id(100)),
+            ];
+
+            let paths: Vec<PathBuf> = page_maps
+                .iter()
+                .map(|page_map_type| page_map_type.path(&tip).unwrap())
+                .collect();
 
             for path in &paths {
                 assert!(!path.exists());
             }
 
-            defrag_tip(&tip, defrag_size, 0).unwrap();
+            defrag_tip(&tip, &page_maps, defrag_size, 100, 0).unwrap();
 
             for path in &paths {
                 assert!(!path.exists());
@@ -1332,7 +1327,7 @@ mod tests {
                 check_files();
 
                 for i in 0..100 {
-                    defrag_tip(&tip, defrag_size, i).unwrap();
+                    defrag_tip(&tip, &page_maps, defrag_size, i as usize, i).unwrap();
                     check_files();
                 }
             }

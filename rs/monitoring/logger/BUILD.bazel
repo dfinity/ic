@@ -6,7 +6,7 @@ rust_library(
     name = "logger",
     srcs = glob(["src/**"]),
     crate_name = "ic_logger",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/config",
         "//rs/monitoring/context_logger",

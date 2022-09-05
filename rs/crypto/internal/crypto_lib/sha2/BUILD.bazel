@@ -1,46 +1,42 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:sha2"],
+    "//conditions:default": ["@crate_index//:openssl"],
+})
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "sha2",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_sha2",
-    edition = "2018",
-    visibility = [
-        "//rs/crypto/internal:__subpackages__",
-        "//rs/crypto/sha:__pkg__",
-    ],
-    deps = select({
-        "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:sha2"],
-        "//conditions:default": ["@crate_index//:openssl"],
-    }),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "sha224_test",
-    srcs = ["tests/sha224.rs"],
-    edition = "2018",
-    deps = [
-        ":sha2",
-        "@crate_index//:openssl",
-    ],
+    name = "sha2_test",
+    aliases = ALIASES,
+    crate = ":sha2",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
-    name = "sha256_test",
-    srcs = ["tests/sha256.rs"],
-    edition = "2018",
-    deps = [
-        ":sha2",
-        "@crate_index//:openssl",
-    ],
-)
-
-rust_test(
-    name = "sha512_test",
-    srcs = ["tests/sha512.rs"],
-    edition = "2018",
-    deps = [
-        ":sha2",
-        "@crate_index//:openssl",
-    ],
+rust_test_suite(
+    name = "sha2_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":sha2"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

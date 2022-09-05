@@ -171,11 +171,8 @@ fn test_rosetta1_92() {
         let archive_canister_id = result.unwrap()[0];
         let mut archive_canister = Canister::new(runtime, archive_canister_id);
 
-        let archive_canister_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rosetta-api/ledger_canister",
-            "ledger-archive-node-canister",
-            &[],
-        );
+        let archive_canister_wasm =
+            Project::cargo_bin_maybe_from_env("ledger-archive-node-canister", &[]);
 
         archive_canister.set_wasm(archive_canister_wasm.bytes());
         // Now upgrade the archive to self, it should stop taking blocks from the ledger

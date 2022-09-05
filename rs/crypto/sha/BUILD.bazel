@@ -6,7 +6,7 @@ rust_library(
     name = "sha",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_sha",
-    edition = "2018",
+    version = "0.8.0",
     deps = ["//rs/crypto/internal/crypto_lib/sha2"],
 )
 
@@ -18,7 +18,6 @@ rust_doc_test(
 rust_test(
     name = "sha224_test",
     srcs = ["tests/sha224.rs"],
-    edition = "2018",
     deps = [
         ":sha",
         "@crate_index//:openssl",
@@ -28,7 +27,6 @@ rust_test(
 rust_test(
     name = "sha256_test",
     srcs = ["tests/sha256.rs"],
-    edition = "2018",
     deps = [
         ":sha",
         "@crate_index//:openssl",

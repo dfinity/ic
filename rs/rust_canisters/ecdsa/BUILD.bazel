@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/types/ic00_types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:ic-cdk-macros",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_canister(
+    name = "ecdsa-canister",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ecdsa_test",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    data = ["ecdsa.did"],
+    env = {
+        "ECDSA_DID_PATH": "rs/rust_canisters/ecdsa/ecdsa.did",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -66,6 +66,12 @@ pub mod bls12_381 {
         }
     }
 
+    impl AsRef<[u8]> for PublicKeyBytes {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
+    }
+
     /// These conversions are used for the CLI only
     mod conversions_for_cli {
         use super::*;

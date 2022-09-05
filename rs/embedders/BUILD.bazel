@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,25 +23,93 @@ DEPENDENCIES = [
     "@crate_index//:nix",
     "@crate_index//:parity-wasm",
     "@crate_index//:prometheus",
+    "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
+    "@crate_index//:slog-term",
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",
     "@crate_index//:wasmtime-runtime",
-    "@crate_index//:rayon",
 ]
 
 MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/registry/routing_table",
+    "//rs/test_utilities",
+    "@crate_index//:assert_matches",
+    "@crate_index//:criterion",
+    "@crate_index//:insta",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:proptest",
+    "@wabt_rs//:wabt",
+]
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
 rust_library(
     name = "embedders",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_embedders",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "instrument-wasm",
+    srcs = ["src/wasm_utils/instrument_wasm.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":embedders"],
+)
+
+rust_test(
+    name = "embedders_test",
+    aliases = ALIASES,
+    crate = ":embedders",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "instrumentation",
+    srcs = ["tests/instrumentation.rs"],
+    aliases = ALIASES,
+    crate_root = "tests/instrumentation.rs",
+    data = glob(["tests/instrumentation-test-data/*"]) + glob(["tests/snapshots/*"]),
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/embedders",
+        "INSTA_WORKSPACE_ROOT": ".",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "embedders_integration_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = [
+            "tests/wasmtime_simple.rs",
+            "tests/instrumentation.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    compile_data = glob(["tests/instrumentation-test-data/*"]),
+    data = glob(["tests/compressed/*"]),
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/embedders",
+    },
+    extra_srcs = [
+        "tests/wasmtime_simple.rs",
+        "tests/instrumentation.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

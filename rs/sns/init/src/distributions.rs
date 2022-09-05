@@ -11,10 +11,12 @@ use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
     compute_neuron_staking_subaccount_bytes,
 };
-use ic_sns_governance::pb::v1::neuron::DissolveState;
-use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronId, NeuronPermission};
+use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
+use ic_sns_governance::pb::v1::{
+    neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+};
 use maplit::btreemap;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
 pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
@@ -31,8 +33,8 @@ impl FractionalDeveloperVotingPower {
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<Account, Tokens>> {
-        let mut accounts = HashMap::new();
+    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
+        let mut accounts = BTreeMap::new();
 
         self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
         self.insert_treasury_accounts(sns_canister_ids, &mut accounts)?;
@@ -53,49 +55,34 @@ impl FractionalDeveloperVotingPower {
         let airdrop_neurons = &self.airdrop_distribution()?.airdrop_neurons;
 
         let swap = self.swap_distribution()?;
-        // TODO NNS1-1465: Add the voting_power_multiplier as a field to neuron
-        let _voting_power_multiplier = swap.initial_swap_amount_e8s as f64 / swap.total_e8s as f64;
+
+        // Multiplying this way will give the developer_voting_power_percentage_multiplier
+        // as a percentage while also allowing use of checked_div.
+        let developer_voting_power_percentage_multiplier = ((swap.initial_swap_amount_e8s as u128)
+            * 100)
+            .checked_div(swap.total_e8s as u128)
+            .expect(
+                "Underflow detected when calculating developer voting power percentage multiplier",
+            ) as u64;
 
         let mut initial_neurons = btreemap! {};
 
-        for neuron_distribution in developer_neurons.iter().chain(airdrop_neurons.iter()) {
-            let principal_id = neuron_distribution.controller()?;
-            let stake_e8s = neuron_distribution.stake_e8s;
+        for developer_neuron_distribution in developer_neurons {
+            let neuron = self.create_neuron(
+                developer_neuron_distribution,
+                developer_voting_power_percentage_multiplier,
+                parameters,
+            )?;
 
-            let subaccount =
-                compute_neuron_staking_subaccount(principal_id, DEFAULT_NEURON_STAKING_NONCE);
+            initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
+        }
 
-            let permission = NeuronPermission {
-                principal: Some(principal_id),
-                permission_type: parameters
-                    .neuron_claimer_permissions
-                    .as_ref()
-                    .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
-                    .permissions
-                    .clone(),
-            };
-
-            let default_followees = parameters
-                .default_followees
-                .as_ref()
-                .expect("NervousSystemParameters.default_followees must be present")
-                .followees
-                .clone();
-
-            let dissolve_delay_seconds = parameters
-                .neuron_minimum_dissolve_delay_to_vote_seconds
-                .expect("NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be present");
-
-            let neuron = Neuron {
-                id: Some(NeuronId {
-                    id: subaccount.to_vec(),
-                }),
-                permissions: vec![permission],
-                cached_neuron_stake_e8s: stake_e8s,
-                followees: default_followees,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                ..Default::default()
-            };
+        for airdrop_neuron_distribution in airdrop_neurons {
+            let neuron = self.create_neuron(
+                airdrop_neuron_distribution,
+                DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+                parameters,
+            )?;
 
             initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
         }
@@ -151,6 +138,55 @@ impl FractionalDeveloperVotingPower {
         }
 
         Ok(())
+    }
+
+    /// Create a neuron available at genesis
+    fn create_neuron(
+        &self,
+        neuron_distribution: &NeuronDistribution,
+        voting_power_percentage_multiplier: u64,
+        parameters: &NervousSystemParameters,
+    ) -> anyhow::Result<Neuron> {
+        let principal_id = neuron_distribution.controller()?;
+        let stake_e8s = neuron_distribution.stake_e8s;
+
+        let subaccount =
+            compute_neuron_staking_subaccount(principal_id, DEFAULT_NEURON_STAKING_NONCE);
+
+        let permission = NeuronPermission {
+            principal: Some(principal_id),
+            permission_type: parameters
+                .neuron_claimer_permissions
+                .as_ref()
+                .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
+                .permissions
+                .clone(),
+        };
+
+        let default_followees = parameters
+            .default_followees
+            .as_ref()
+            .expect("NervousSystemParameters.default_followees must be present")
+            .followees
+            .clone();
+
+        let dissolve_delay_seconds = parameters
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .expect(
+            "NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be present",
+        );
+
+        Ok(Neuron {
+            id: Some(NeuronId {
+                id: subaccount.to_vec(),
+            }),
+            permissions: vec![permission],
+            cached_neuron_stake_e8s: stake_e8s,
+            followees: default_followees,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+            voting_power_percentage_multiplier,
+            ..Default::default()
+        })
     }
 
     /// Validate the NeuronDistributions in the Developer and Airdrop bucket
@@ -242,7 +278,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_developer_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.developer_distribution()?.developer_neurons {
             let principal_id = neuron_distribution.controller()?;
@@ -261,7 +297,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_treasury_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let treasury = self.treasury_distribution()?;
 
@@ -283,7 +319,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_swap_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         let swap = self.swap_distribution()?;
 
@@ -310,7 +346,7 @@ impl FractionalDeveloperVotingPower {
     fn insert_airdrop_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut HashMap<Account, Tokens>,
+        accounts: &mut BTreeMap<Account, Tokens>,
     ) -> anyhow::Result<()> {
         for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
             let principal_id = neuron_distribution.controller()?;
@@ -430,6 +466,7 @@ mod test {
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
+    use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
     use std::str::FromStr;
@@ -698,6 +735,24 @@ mod test {
             Some(expected_dissolve_delay.clone())
         );
         assert_eq!(neuron_3.dissolve_state, Some(expected_dissolve_delay));
+
+        // That they have the correct voting_power_percentage_multiplier. The developer neurons
+        // (neuron_1, neuron_2) should have the voting_power_percentage_multiplier, and the airdrop
+        // neuron (neuron_3) should have the default set.
+        let swap_ratio = swap_initial_round as f32 / swap_total as f32;
+        let voting_power_percentage_multiplier = (swap_ratio * 100_f32) as u64;
+        assert_eq!(
+            neuron_1.voting_power_percentage_multiplier,
+            voting_power_percentage_multiplier
+        );
+        assert_eq!(
+            neuron_2.voting_power_percentage_multiplier,
+            voting_power_percentage_multiplier
+        );
+        assert_eq!(
+            neuron_3.voting_power_percentage_multiplier,
+            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
+        );
     }
 
     #[test]

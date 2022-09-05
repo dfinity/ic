@@ -1,7 +1,7 @@
 [package]
 name = "ic-consensus"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }
@@ -10,6 +10,7 @@ ic-consensus-message = { path = "./message" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-hash = { path = "../crypto/hash" }
+ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -30,6 +31,7 @@ hex = "0.4.2"
 num-integer = "0.1.41"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
+proptest = { version = "1.0.0", optional = true }
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1.5.1"
@@ -57,7 +59,6 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 mockall = "0.7.2"
-proptest = "0.9.4"
 slog-async = "2.5.0"
 slog-envlogger = "2.2.0"
 slog-term = "2.6.0"

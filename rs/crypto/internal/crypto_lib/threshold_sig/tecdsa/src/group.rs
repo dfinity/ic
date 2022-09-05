@@ -11,6 +11,9 @@ use zeroize::Zeroize;
 mod secp256k1;
 mod secp256r1;
 
+#[cfg(test)]
+mod tests;
+
 /// Elliptic curve type enum
 ///
 /// Enumerates the curves supported by this library, currently K256 (aka
@@ -274,10 +277,7 @@ impl EccScalar {
     }
 
     /// Generate a random scalar in [0,p)
-    pub fn random<R: CryptoRng + RngCore>(
-        curve: EccCurveType,
-        rng: &mut R,
-    ) -> ThresholdEcdsaResult<Self> {
+    pub fn random<R: CryptoRng + RngCore>(curve: EccCurveType, rng: &mut R) -> Self {
         // Use rejection sampling to avoid biasing the output
 
         let mut buf = vec![0u8; curve.scalar_bytes()];
@@ -286,12 +286,12 @@ impl EccScalar {
             rng.fill_bytes(&mut buf);
             if let Ok(scalar) = Self::deserialize(curve, &buf) {
                 buf.zeroize();
-                return Ok(scalar);
+                return scalar;
             }
         }
     }
 
-    pub fn from_seed(curve: EccCurveType, seed: Seed) -> ThresholdEcdsaResult<Self> {
+    pub fn from_seed(curve: EccCurveType, seed: Seed) -> Self {
         let mut rng = seed.into_rng();
         Self::random(curve, &mut rng)
     }
@@ -545,7 +545,7 @@ impl EccPoint {
     }
 
     /// Perform point doubling
-    fn double(&self) -> Self {
+    pub fn double(&self) -> Self {
         match self {
             Self::K256(pt) => Self::K256(pt.double()),
             Self::P256(pt) => Self::P256(pt.double()),
@@ -589,7 +589,7 @@ impl EccPoint {
     }
 
     /// Return pt1 * scalar1 + pt2 * scalar2
-    pub fn mul_points(
+    pub fn mul_2_points(
         pt1: &EccPoint,
         scalar1: &EccScalar,
         pt2: &EccPoint,
@@ -612,7 +612,7 @@ impl EccPoint {
         let curve_type = scalar1.curve_type();
         let g = Self::generator_g(curve_type)?;
         let h = Self::generator_h(curve_type)?;
-        Self::mul_points(&g, scalar1, &h, scalar2)
+        Self::mul_2_points(&g, scalar1, &h, scalar2)
     }
 
     pub fn mul_by_g(scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
@@ -762,5 +762,465 @@ impl<'de> Deserialize<'de> for EccPoint {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccPoint::deserialize_tagged(&helper.0)
             .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+    }
+}
+
+/// Non-adjacent format (NAF)
+///
+/// Maps a 2-value representation (binary) to a 3-value (-1, 0, 1) representation,
+/// where in NAF no *2* non-zero values can be adjacent, which reduces the Hamming weight.
+///
+/// Warning: NAF may require l + 1 bits for representing an l-bit number!
+/// Because of that, the result *always* contains an additional byte -> (l / 8) + 1 bytes in total.
+struct Naf {
+    pub positive_bits: Vec<u8>,
+    pub negative_bits: Vec<u8>,
+}
+
+impl Naf {
+    /// Returns the bit length of the NAF representation.
+    pub fn bit_len(&self) -> usize {
+        self.positive_bits.len() * 8
+    }
+
+    /// Converts `scalar` to its NAF representation.
+    pub fn from_scalar_vartime(scalar: &EccScalar) -> Self {
+        let bytes = scalar.serialize();
+        Naf::from_be_bytes_vartime(&bytes[..])
+    }
+
+    /// Converts big endian encoded `bytes` to its NAF representation.
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+        if bytes.is_empty() {
+            return Self {
+                positive_bits: vec![],
+                negative_bits: vec![],
+            };
+        }
+
+        // parse the input scalar
+        // source: https://oeis.org/A184616
+        //
+        // Input:   scalar
+        // Output:  p_bits, n_bits
+        // 1) shifted = scalar >> 1;
+        // 2) sum = scalar + shifted;
+        // 3) c = shifted ^ sum;
+        // 4) p_bits = sum & c;
+        // 5) n_bits = shifted & c;
+
+        // 1) shifted = scalar >> 1;
+        let mut shifted = Vec::with_capacity(bytes.len());
+        for i in (0..(bytes.len() - 1)).rev() {
+            shifted.push((bytes[i + 1] >> 1) ^ (bytes[i] << 7));
+        }
+        shifted.push(bytes[0] >> 1);
+
+        // 2) sum = scalar + shifted;
+        let mut sum = Vec::with_capacity(bytes.len() + 1);
+        let mut overflow = 0u8;
+
+        for i in 0..bytes.len() {
+            let result = bytes[bytes.len() - i - 1] as u16 + shifted[i] as u16 + overflow as u16;
+            overflow = (result >> 8) as u8;
+            sum.push((result & 0x00FFu16) as u8);
+        }
+        // the sum of the last bytes may overflow and we then need to add 1 more byte
+        sum.push((overflow != 0) as u8);
+        shifted.push(0u8);
+
+        // 3) c = shifted ^ sum;
+        let c: Vec<u8> = shifted
+            .iter()
+            .zip(sum.iter())
+            .map(|(&x, &y)| x ^ y)
+            .collect();
+
+        // 4) p_bits = sum & c;
+        let p_bits: Vec<u8> = sum.iter().zip(c.iter()).map(|(&x, &y)| x & y).collect();
+
+        // 5) n_bits = shifted & c;
+        let n_bits: Vec<u8> = shifted.iter().zip(c.iter()).map(|(&x, &y)| x & y).collect();
+        Self {
+            positive_bits: p_bits,
+            negative_bits: n_bits,
+        }
+    }
+
+    /// Internal function that converts a range of NAF digits to `i8` from their bit representation.
+    /// The chosen range is interpreted as a new (smaller) NAF, e.g., if the complete representation is
+    /// 2^(l - 1) * n_(l - 1) + ... + 2^1 * n_1 + 2^0 * n_0 where l == `self.bit_len()` and n_l is the NAF digit at position l,
+    /// then `range_as_i8` interprets the range n_(`pos` + `bit_len`) ... n_(`pos`) as
+    /// 2^(`bit_len` - 1) * n_(`pos` + `bit_len` - 1) + ... + 2^0 * n_(`pos`).
+    ///
+    /// # Warnings
+    /// * The callee is responsible to guarantee that the invariant holds.
+    /// * `bit_len` MUST be greater than 0 and less than 8.
+    /// * Input arguments MUST be in bounds, i.e.
+    /// `(pos + bit_len) <= self.bit_len()` must hold.
+    ///
+    /// # Panics
+    /// * If the invariant doesn't hold.
+    fn range_as_i8(&self, pos: usize, bit_len: usize) -> i8 {
+        assert!(bit_len > 0 && bit_len < 8);
+        assert!((pos + bit_len) <= self.bit_len());
+        let byte_offset = pos / 8;
+        let spans_two_bytes = ((pos % 8) + bit_len) > 8;
+        let mask = 0xFFu8 >> (8 - bit_len);
+        if spans_two_bytes {
+            let extract = |byte_0, byte_1| {
+                let shifted_0: u8 = byte_0 >> (pos % 8);
+                let shifted_1: u8 = byte_1 << (8 - (pos % 8));
+                (shifted_0 | shifted_1) & mask
+            };
+            let negative_byte = extract(
+                self.negative_bits[byte_offset],
+                self.negative_bits[byte_offset + 1],
+            );
+            let positive_byte = extract(
+                self.positive_bits[byte_offset],
+                self.positive_bits[byte_offset + 1],
+            );
+            positive_byte as i8 - negative_byte as i8
+        } else {
+            // spans one byte
+            let extract = |byte| {
+                let shifted: u8 = byte >> (pos % 8);
+                shifted & mask
+            };
+            let negative_byte = extract(self.negative_bits[byte_offset]);
+            let positive_byte = extract(self.positive_bits[byte_offset]);
+            positive_byte as i8 - negative_byte as i8
+        }
+    }
+}
+
+/// `EccPoint` with a look-up table (LUT) for faster multiplication.
+/// A LUT contains a precomputed mutliplication of `point` with particular small scalars.
+/// Using the LUT, the multiplication is performed window-wise and not bit-wise.
+pub struct EccPointWithLut {
+    point: EccPoint,
+    lut: NafLut,
+}
+
+impl EccPointWithLut {
+    pub const MIN_WINDOW_SIZE: usize = NafLut::MIN_WINDOW_SIZE;
+    pub const MAX_WINDOW_SIZE: usize = NafLut::MAX_WINDOW_SIZE;
+
+    pub fn curve_type(&self) -> EccCurveType {
+        self.point.curve_type()
+    }
+
+    /// Creates a new `Self` object and computes a look-up table (LUT) with multiplication
+    /// with small scalars for `point`, which will be used for faster vartime (batch) multiplication.
+    /// Multiplications stored in the LUT are for scalars represented in
+    /// [`Naf`](https://en.wikipedia.org/wiki/Non-adjacent_form)
+    /// of length `window_size` with the leading digit being non-zero.
+    /// The supported values of `window_size` are in `3..=7`.
+    ///
+    /// # Errors
+    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
+    pub fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
+        let data = NafLut::new(point, window_size)?;
+        Ok(Self {
+            point: *point,
+            lut: data,
+        })
+    }
+
+    /// Takes in an NAF state for a scalar and an accumulator point,
+    /// which must be initialized with the identity in the first call,
+    /// and performs one step for the scalar-point multiplication.
+    /// This function must be called as many times as the length of
+    /// the NAF representation of the scalar.
+    ///     
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    fn scalar_mul_step_vartime(
+        &self,
+        scalar_naf_state: &mut SlidingWindowMulState,
+        accum: &mut EccPoint,
+    ) -> ThresholdEcdsaResult<()> {
+        let next = scalar_naf_state.next();
+        match next {
+            SlidingWindowStep::Continue => {}
+            SlidingWindowStep::Window(window) => match window {
+                1i8 => {
+                    let sum = accum.add_points(&self.point)?;
+                    *accum = sum;
+                }
+                -1i8 => {
+                    let sum = accum.sub_points(&self.point)?;
+                    *accum = sum;
+                }
+                w => {
+                    let p = self.lut.get(w);
+                    let sum = accum.add_points(p)?;
+                    *accum = sum;
+                }
+            },
+            SlidingWindowStep::Break => {}
+        }
+        Ok(())
+    }
+
+    /// Multiples `self.point` by `scalar` utilizing a precomputed LUT
+    /// for efficiency.
+    ///     
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    pub fn scalar_mul_vartime(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        let mut scalar_naf_state = SlidingWindowMulState::new(scalar, self.lut.window_size);
+        let mut result = EccPoint::identity(self.point.curve_type());
+        for _ in 0..(scalar_naf_state.naf.bit_len() - 1) {
+            self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
+            result = result.double();
+        }
+        self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
+        Ok(result)
+    }
+
+    /// Multiplies and adds together `point_scalar_pairs` as
+    /// `ps[0].0 * ps[0].1 + ... + ps[ps.len() - 1].0 * ps[ps.len() - 1].1`,
+    /// where `ps` is `point_scalar_pairs`.
+    /// The use of `EccPointWithLut` objects with different `window_size`s is supported.
+    ///
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    pub fn mul_n_points_vartime_naf(
+        point_scalar_pairs: &[(&EccPointWithLut, &EccScalar)],
+    ) -> ThresholdEcdsaResult<EccPoint> {
+        if point_scalar_pairs.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                "Trying to compute the sum of products with 0 inputs",
+            )));
+        }
+
+        let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
+            .iter()
+            .map(|&(p, s)| (SlidingWindowMulState::new(s, p.lut.window_size)))
+            .collect();
+
+        let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
+
+        // for each digit in the NAF representation
+        for _ in 0..(mul_states[0].naf.bit_len() - 1) {
+            // iterate over all pairs and add all emitted LUT windows to the accumulator
+            for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
+                p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
+            }
+            // shift the accumulator by 1 bit to the left
+            accum = accum.double();
+        }
+        // perform the last iteration without the shift
+        for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
+            p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
+        }
+        Ok(accum)
+    }
+}
+
+/// Represents the action to be taken in the
+/// [sliding window method](https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Sliding-window_method)
+/// step.
+enum SlidingWindowStep {
+    /// The index as `usize` of the precomputed window as `EccPoint`
+    /// that is added to an accumulator point
+    Window(i8),
+    /// The algorithm skips the current iteration
+    Continue,
+    /// The algorithm has finished
+    Break,
+}
+
+/// Represents the state of a scalar-point multiplication using the [sliding window
+/// method](https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Sliding-window_method).
+struct SlidingWindowMulState {
+    /// NAF representation of `scalar`.
+    naf: Naf,
+    /// Size of the NAF window.
+    window_size: usize,
+    /// Position in `scalar`.
+    position: i64,
+    /// Backward counter for multiplication of a precomputed value.
+    continue_counter: usize,
+    /// `EccPoint` from the LUT corresponding to `window` will be
+    /// added to the accumulator after `continue_counter` reaches 0.
+    window: i8,
+}
+
+impl SlidingWindowMulState {
+    fn new(scalar: &EccScalar, window_size: usize) -> Self {
+        let naf = Naf::from_scalar_vartime(scalar);
+        let bit_length = naf.bit_len() as i64;
+        Self {
+            naf,
+            window_size,
+            position: bit_length - 1,
+            continue_counter: 0,
+            window: 0,
+        }
+    }
+
+    /// Returns the next action to be taken in the [sliding window
+    /// method](https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Sliding-window_method).
+    fn next(&mut self) -> SlidingWindowStep {
+        if self.continue_counter == 0 && self.position == -1 {
+            return SlidingWindowStep::Break;
+        }
+
+        if self.continue_counter > 0 {
+            self.continue_counter -= 1;
+            if self.continue_counter == 0 {
+                let mut window = 0;
+                std::mem::swap(&mut window, &mut self.window);
+                return SlidingWindowStep::Window(window);
+            } else {
+                return SlidingWindowStep::Continue;
+            }
+        }
+
+        let old_position = self.position as usize;
+
+        let get_bit = |x: &[u8], i: usize| -> u8 {
+            let target_byte = x[i / 8];
+            (target_byte >> (i % 8)) & 1
+        };
+
+        let is_zero = |naf: &Naf, pos| {
+            (get_bit(&naf.positive_bits[..], pos) == 0)
+                && (get_bit(&naf.negative_bits[..], pos) == 0)
+        };
+
+        if is_zero(&self.naf, old_position) {
+            self.position -= 1;
+            SlidingWindowStep::Continue
+        } else {
+            let substring_bitlen = std::cmp::min(self.window_size, old_position + 1);
+            if substring_bitlen == self.window_size {
+                self.position -= substring_bitlen as i64;
+                self.window = self
+                    .naf
+                    .range_as_i8((old_position + 1) - substring_bitlen, substring_bitlen);
+                self.continue_counter = substring_bitlen - 1;
+                SlidingWindowStep::Continue
+            } else {
+                self.position -= 1;
+                // extract 1 digit
+                SlidingWindowStep::Window(self.naf.range_as_i8(old_position, 1))
+            }
+        }
+    }
+}
+
+/// Look-up table (LUT) that can be used to improve the efficiency of
+/// multiplication of the input `EccPoint` by an `EccScalar`.
+struct NafLut {
+    multiplications: Vec<EccPoint>,
+    window_size: usize,
+}
+
+impl NafLut {
+    /// Inclusive bounds of the LUT.
+    /// Manually the bounds can be computed as an "all-one" NAF value, e.g.,
+    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjecent non-zero values)
+    const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
+    const MIN_WINDOW_SIZE: usize = 3;
+    const MAX_WINDOW_SIZE: usize = 7;
+
+    /// Generates a LUT with the values `BOUND[window_size - 1] + 1..=BOUND[window_size]` and their negations.
+    /// The values are stored in the ascending order, e.g., for `window_size == 5` it stores
+    /// "-1 0 -1 0 -1"..="-1 0 1 0 1","1 0 -1 0 -1"..="1 0 1 0 1" or as integers -21..=-11,11..=21
+    ///
+    /// # Errors
+    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
+    pub fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
+        if !(Self::MIN_WINDOW_SIZE..=Self::MAX_WINDOW_SIZE).contains(&window_size) {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "NAF LUT window sizes are only allowed in range {}..={} but got {}",
+                Self::MIN_WINDOW_SIZE,
+                Self::MAX_WINDOW_SIZE,
+                window_size
+            )));
+        }
+
+        Ok(Self {
+            multiplications: Self::compute_table(point, window_size)?,
+            window_size,
+        })
+    }
+
+    /// Checks that the scalar index is in bounds, i.e., the multiplication with `i` has been
+    /// computed and stored in `self.multiplications`.
+    pub fn is_in_bounds(window_size: usize, i: i8) -> bool {
+        (i.abs() as usize) > Self::BOUND[window_size - 1]
+            && (i.abs() as usize) < (Self::BOUND[window_size] + 1)
+    }
+
+    /// Computes the LUT for NAF values of length of exactly `window_size`.
+    ///
+    /// # Errors
+    /// * CurveMismatch in case of inconsistent points. However, this should generally not happen
+    /// because the curve type of all computed points is derived from `point`.
+    fn compute_table(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Vec<EccPoint>> {
+        let lower_bound = Self::BOUND[window_size - 1];
+        let upper_bound = Self::BOUND[window_size] + 1;
+        // Offset is equal to the number of negative values
+        let num_negatives: usize = Self::BOUND[window_size] - Self::BOUND[window_size - 1];
+
+        let id = EccPoint::identity(point.curve_type());
+        let mut result = vec![id; 2 * num_negatives];
+
+        let mut point_in_bounds = *point;
+        let mut index_in_bounds: i8 = 1;
+        while index_in_bounds as usize <= lower_bound {
+            point_in_bounds = point_in_bounds.double();
+            index_in_bounds *= 2;
+        }
+
+        let to_array_index = |real_index: i8| -> usize {
+            if real_index.is_negative() {
+                num_negatives - (real_index.abs() as usize - lower_bound)
+            } else {
+                // is positive
+                real_index as usize - lower_bound + num_negatives - 1
+            }
+        };
+
+        // compute the point that we can get by doubling
+        result[to_array_index(index_in_bounds)] = point_in_bounds;
+
+        // compute positive points
+        for i in (lower_bound + 1..index_in_bounds as usize).rev() {
+            result[to_array_index(i as i8)] =
+                result[to_array_index((i + 1) as i8)].sub_points(point)?;
+        }
+        for i in index_in_bounds as usize..upper_bound {
+            result[to_array_index(i as i8)] =
+                result[to_array_index((i - 1) as i8)].add_points(point)?;
+        }
+
+        // compute negative points
+        for i in 0..=num_negatives {
+            result[i] = result[result.len() - 1 - i].negate();
+        }
+
+        Ok(result)
+    }
+
+    /// Obtains a point multiplied by `i` from the precomputed LUT.
+    ///
+    /// # Panics
+    /// * if `i` is out of bounds, i.e., if it has not been precomputed.
+    pub fn get(&self, i: i8) -> &EccPoint {
+        assert!(Self::is_in_bounds(self.window_size, i));
+        let lower_bound = Self::BOUND[self.window_size - 1];
+        let num_negatives = self.multiplications.len() / 2;
+        let array_index: usize = if i.is_negative() {
+            num_negatives - (i + (lower_bound as i8)).abs() as usize
+        } else {
+            num_negatives + (i.abs() as usize) - lower_bound - 1
+        };
+        &self.multiplications[array_index]
     }
 }

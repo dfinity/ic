@@ -121,6 +121,8 @@ in
         # Needed by gitlab-ci/src/test_results/summary.py
         pkgs.python3Packages.termcolor
         pkgs.python3Packages.requests
+        pkgs.python3Packages.paramiko
+        pkgs.python3Packages.tqdm
       ];
 
       RUST_SRC_PATH = pkgs.rustPlatform.rustcSrc;
@@ -142,7 +144,10 @@ in
           if [ "$?" == 0 ]; then
             source "$checkout_root/dshell/load"
           fi
-          ulimit -n 8192
+
+          if (( $(ulimit -n) < 8192 )); then
+            ulimit -n 8192
+          fi
 
           if ! hash rustup 2>/dev/null; then
             echo >&2 "Warning: The IC nix-shell no longer provides rustc. Please install rustup using the instructions at https://rustup.rs/."

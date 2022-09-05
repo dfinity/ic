@@ -25,7 +25,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
-        ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake && \
+        ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
+        grub-efi-amd64-bin && \
     gem install asciidoctor-diagram rouge
 
 # Add the `${USER}` user, and the required folders
@@ -102,7 +103,7 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=5.2.0 bazel version
+RUN USE_BAZEL_VERSION=5.3.0 bazel version
 
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
 RUN mkdir --mode=0700 /home/${USER}/.ssh && \

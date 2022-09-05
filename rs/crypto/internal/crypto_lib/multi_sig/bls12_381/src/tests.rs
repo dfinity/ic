@@ -152,7 +152,7 @@ mod advanced_functionality {
     #[test]
     fn zero_signatures_yields_signature_zero() {
         assert_eq!(
-            multi_crypto::combine_signatures(&[]),
+            &multi_crypto::combine_signatures(&[]),
             multi_types::CombinedSignature::identity()
         );
     }

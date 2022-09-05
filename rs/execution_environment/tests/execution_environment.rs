@@ -7,7 +7,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    IC_00,
+    TransformType, IC_00,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 
@@ -206,19 +206,20 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
+    let min_canister_memory = 65793;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
-        .with_subnet_total_memory(13)
+        .with_subnet_total_memory(min_canister_memory + 13 + 13)
         .with_subnet_message_memory(13)
         .with_manual_execution()
         .build();
-    let min_canister_memory = 65793;
+
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     test.install_canister_with_allocation(
         canister_id,
         wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap(),
         None,
-        Some(min_canister_memory + 13),
+        Some(min_canister_memory as u64 + 13),
     )
     .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
@@ -233,7 +234,6 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
 #[test]
 fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
-    let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let min_canister_memory = 65793;
     test.install_canister_with_allocation(
@@ -243,6 +243,7 @@ fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
         Some(min_canister_memory + 13),
     )
     .unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     assert_eq!(
@@ -259,8 +260,9 @@ fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
 
 #[test]
 fn output_requests_on_application_subnets_respect_subnet_total_memory() {
+    let min_canister_memory = 65793;
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(13)
+        .with_subnet_total_memory(min_canister_memory + 13)
         .with_subnet_message_memory(1 << 30)
         .with_manual_execution()
         .build();
@@ -281,9 +283,17 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+    let available_memory_after_create = test.subnet_available_memory().get_total_memory();
+    assert_eq!(
+        available_memory_after_create,
+        (1 << 30) - test.state().total_memory_taken().get() as i64
+    );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
-    assert_eq!(1 << 30, test.subnet_available_memory().get_total_memory());
+    assert_eq!(
+        available_memory_after_create,
+        test.subnet_available_memory().get_total_memory()
+    );
     assert_eq!(13, test.subnet_available_memory().get_message_memory());
     let system_state = &test.canister_state(canister_id).system_state;
     assert!(!system_state.queues().has_output());
@@ -297,6 +307,11 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+    let available_memory_after_create = test.subnet_available_memory().get_total_memory();
+    assert_eq!(
+        available_memory_after_create,
+        (1 << 30) - test.state().total_memory_taken().get() as i64
+    );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     let subnet_total_memory = test.subnet_available_memory().get_total_memory();
@@ -306,7 +321,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     assert_eq!(1, system_state.queues().reserved_slots());
     // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(
-        (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+        available_memory_after_create - MAX_RESPONSE_COUNT_BYTES as i64,
         subnet_total_memory
     );
     assert_eq!(
@@ -576,7 +591,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
             receiver: ic00::IC_00.get(),
             user_id: test.user_id(),
             time: test.time(),
-            state: IngressState::Completed(WasmResult::Reply(EmptyBlob::encode())),
+            state: IngressState::Completed(WasmResult::Reply(EmptyBlob.encode())),
         }
     );
     let ingress_id = test.stop_canister(canister_id);
@@ -588,7 +603,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
             receiver: ic00::IC_00.get(),
             user_id: test.user_id(),
             time: test.time(),
-            state: IngressState::Completed(WasmResult::Reply(EmptyBlob::encode())),
+            state: IngressState::Completed(WasmResult::Reply(EmptyBlob.encode())),
         }
     );
 }
@@ -810,7 +825,7 @@ fn start_canister_from_another_canister() {
     test.stop_canister(canister);
     test.set_controller(canister, controller.get()).unwrap();
     let result = test.ingress(controller, "update", start).unwrap();
-    assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+    assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
     assert_eq!(
         CanisterStatusType::Running,
         test.canister_state(canister).status(),
@@ -850,7 +865,7 @@ fn stop_canister_from_another_canister() {
     test.execute_all();
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+    assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
 }
 
 #[test]
@@ -880,7 +895,7 @@ fn starting_a_stopping_canister_succeeds() {
 fn subnet_ingress_message_unknown_method() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test
-        .subnet_message("unknown", EmptyBlob::encode())
+        .subnet_message("unknown", EmptyBlob.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
@@ -898,41 +913,24 @@ fn subnet_canister_request_unknown_method() {
             ic00::IC_00,
             "unknown",
             call_args()
-                .other_side(EmptyBlob::encode())
+                .other_side(EmptyBlob.encode())
                 .on_reject(wasm().reject_message().reject()),
         )
         .build();
-    let (_, ingress_status) = test.ingress_raw(canister, "update", run);
-
-    // The routing::resolve_destination() returns an error for unknown methods
-    // of the IC management canisters. This means that `IC_00` is not replaced
-    // with the destination subnet id and the request is treated as a cross-
-    // subnet request.
     assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: canister.get(),
-            user_id: test.user_id(),
-            time: test.time(),
-            state: IngressState::Processing,
-        }
+        test.ingress(canister, "update", run).unwrap(),
+        WasmResult::Reject(
+            "Unable to route management canister request unknown: MethodNotFound(\"unknown\")"
+                .to_string()
+        )
     );
-    let xnet_messages = test.xnet_messages();
-    assert_eq!(1, xnet_messages.len());
-    match &xnet_messages[0] {
-        RequestOrResponse::Request(request) => {
-            assert_eq!(request.receiver, ic00::IC_00);
-            assert_eq!(request.sender, canister);
-        }
-        RequestOrResponse::Response(_) => unreachable!("Expected request, but got a response"),
-    }
 }
 
 #[test]
 fn subnet_ingress_message_on_create_canister_fails() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test
-        .subnet_message(Method::CreateCanister, EmptyBlob::encode())
+        .subnet_message(Method::CreateCanister, EmptyBlob.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
@@ -967,7 +965,7 @@ fn create_canister_xnet_to_nns_called_from_non_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -993,7 +991,7 @@ fn create_canister_xnet_called_from_non_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -1019,7 +1017,7 @@ fn create_canister_xnet_called_from_nns() {
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
-        EmptyBlob::encode(),
+        EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
     test.execute_all();
@@ -1143,11 +1141,10 @@ fn metrics_are_observed_for_subnet_messages() {
     ];
 
     for method in methods.iter() {
-        test.subnet_message(method, EmptyBlob::encode())
-            .unwrap_err();
+        test.subnet_message(method, EmptyBlob.encode()).unwrap_err();
     }
 
-    test.subnet_message("nonexisting", EmptyBlob::encode())
+    test.subnet_message("nonexisting", EmptyBlob.encode())
         .unwrap_err();
 
     assert_eq!(
@@ -1410,10 +1407,15 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .with_subnet_message_memory(1 << 30)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
+    let memory_after_create = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        (1 << 30) - memory_after_create
+    );
     let err = test.ingress(id, "test_with_trap", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
-    assert_eq!(1 << 30, memory.get_total_memory());
+    assert_eq!((1 << 30) - memory_after_create, memory.get_total_memory());
     assert_eq!(1 << 30, memory.get_message_memory());
 }
 
@@ -1424,12 +1426,20 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .with_subnet_message_memory(1 << 30)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
+    let memory_after_create = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        (1 << 30) - memory_after_create
+    );
     let result = test.ingress(id, "test_without_trap", vec![]);
     assert_empty_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();
-    assert_eq!(1 << 30, memory.get_total_memory() + new_memory_allocated);
+    assert_eq!(
+        1 << 30,
+        memory.get_total_memory() + new_memory_allocated + memory_after_create
+    );
     assert_eq!(1 << 30, memory.get_message_memory());
 }
 
@@ -1445,15 +1455,18 @@ fn execute_canister_http_request() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name: transform_method_name.clone(),
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: transform_method_name.clone(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1476,7 +1489,7 @@ fn execute_canister_http_request() {
     assert_eq!(http_request_context.url, url);
     assert_eq!(
         http_request_context.transform_method_name,
-        transform_method_name
+        Some(transform_method_name)
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
@@ -1502,14 +1515,16 @@ fn execute_canister_http_request_disabled() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let transform_method_name = Some("transform".to_string());
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: None,
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethod::GET,
-        transform_method_name,
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(candid::Func {
+            principal: caller_canister.get().0,
+            method: "transform".to_string(),
+        })),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1557,7 +1572,7 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("secp256k1"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
@@ -1587,7 +1602,7 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("secp256k1"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
@@ -1622,7 +1637,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
         make_key("foo"),
-        None,
+        own_subnet,
         node_ids,
         RegistryVersion::from(100),
     );
@@ -1657,7 +1672,7 @@ fn ecdsa_signature_fee_charged() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -1706,7 +1721,7 @@ fn ecdsa_signature_rejected_without_fee() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -1732,6 +1747,78 @@ fn ecdsa_signature_rejected_without_fee() {
 }
 
 #[test]
+fn ecdsa_signature_with_unknown_key_rejected() {
+    let correct_key = make_key("correct_key");
+    let wrong_key = make_key("wrong_key");
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(subnet_test_id(1))
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_ecdsa_key(correct_key.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let esda_args = ic00::SignWithECDSAArgs {
+        message_hash: [1; 32],
+        derivation_path: vec![],
+        key_id: wrong_key.clone(),
+    };
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::SignWithECDSA,
+            call_args()
+                .other_side(esda_args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            (0, 1_000_000_000),
+        )
+        .build();
+
+    let result = test.ingress(canister_id, "update", run).unwrap();
+    assert_eq!(
+        WasmResult::Reject(
+            format!("Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys with signing enabled: [{}]\")", wrong_key, correct_key
+        )),
+        result
+    );
+}
+
+#[test]
+fn ecdsa_public_key_req_with_unknown_key_rejected() {
+    let correct_key = make_key("correct_key");
+    let wrong_key = make_key("wrong_key");
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(subnet_test_id(1))
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_ecdsa_key(correct_key.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let esda_args = ic00::ECDSAPublicKeyArgs {
+        canister_id: None,
+        derivation_path: vec![],
+        key_id: wrong_key.clone(),
+    };
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::ECDSAPublicKey,
+            call_args()
+                .other_side(esda_args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            (0, 1_000_000_000),
+        )
+        .build();
+
+    let result = test.ingress(canister_id, "update", run).unwrap();
+    assert_eq!(
+        WasmResult::Reject(
+            format!("Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys: [{}]\")", wrong_key, correct_key
+        )),
+        result
+    );
+}
+
+#[test]
 fn ecdsa_signature_fee_ignored_for_nns() {
     let ecdsa_key = make_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
@@ -1743,7 +1830,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -2110,7 +2197,7 @@ fn ecdsa_signature_queue_fills_up() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
-        message_hash: [1; 32].to_vec(),
+        message_hash: [1; 32],
         derivation_path: vec![],
         key_id: ecdsa_key,
     };
@@ -2241,7 +2328,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
 
     let result = test.ingress(canister_1, "update", top_up_canister).unwrap();
 
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_balance_equals(
         initial_cycles_balance_1,
         test.canister_state(canister_1).system_state.balance(),

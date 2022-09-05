@@ -15,11 +15,11 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_crypto_internal_csp",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     deps = [
         "//rs/config",
         "//rs/crypto/internal/crypto_lib/basic_sig/cose",
@@ -29,8 +29,6 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
         "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-        "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
-        "//rs/crypto/internal/crypto_lib/fs_ni_dkg",
         "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
         "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",

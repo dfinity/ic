@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -58,7 +58,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -71,19 +70,23 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "registry_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_canister(
-    name = "registry-canister",
+    name = "registry-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":canister"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "registry-canister",
+    wasm = ":registry-canister-raw",
 )
 
 generated_files_check(

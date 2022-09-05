@@ -580,8 +580,21 @@ impl fmt::Display for CryptoError {
 pub type CryptoResult<T> = std::result::Result<T, CryptoError>;
 
 /// A basic signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct BasicSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+impl fmt::Display for BasicSig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for BasicSig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BasicSig: 0x{}", hex::encode(&self.0))
+    }
+}
+
 /// A basic signature for content of type `T`
 pub type BasicSigOf<T> = Id<T, BasicSig>; // Use newtype instead? E.g., `pub struct BasicSigOf<T>(Id<T, BasicSig>);`
 
@@ -598,7 +611,7 @@ impl<T: CountBytes> CountBytes for BasicSigOf<T> {
 }
 
 /// An individual multi-signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct IndividualMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// An individual multi-signature for content of type `T`
 pub type IndividualMultiSigOf<T> = Id<T, IndividualMultiSig>; // Use newtype instead?
@@ -615,8 +628,20 @@ impl<T: CountBytes> CountBytes for IndividualMultiSigOf<T> {
     }
 }
 
+impl fmt::Display for IndividualMultiSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for IndividualMultiSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "IndividualMultiSig: 0x{}", hex::encode(&self.0))
+    }
+}
+
 /// A combined multi-signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct CombinedMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A combined multi-signature for content of type `T`
 pub type CombinedMultiSigOf<T> = Id<T, CombinedMultiSig>; // Use newtype instead?
@@ -633,20 +658,68 @@ impl<T: CountBytes> CountBytes for CombinedMultiSigOf<T> {
     }
 }
 
+impl fmt::Display for CombinedMultiSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for CombinedMultiSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "CombinedMultiSig: 0x{}", hex::encode(&self.0))
+    }
+}
+
 /// A threshold signature share.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ThresholdSigShare(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A threshold signature share for content of type `T`
 pub type ThresholdSigShareOf<T> = Id<T, ThresholdSigShare>; // Use newtype instead?
 
+impl fmt::Display for ThresholdSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for ThresholdSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "ThresholdSigShare: 0x{}", hex::encode(&self.0))
+    }
+}
+
 /// A combined threshold signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CombinedThresholdSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A combined threshold signature for content of type `T`
 pub type CombinedThresholdSigOf<T> = Id<T, CombinedThresholdSig>; // Use newtype instead?
 
+impl fmt::Display for CombinedThresholdSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for CombinedThresholdSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "CombinedThresholdSig: 0x{}", hex::encode(&self.0))
+    }
+}
+
 /// A canister signature (ICCSA).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A canister signature for content of type `T`
 pub type CanisterSigOf<T> = Id<T, CanisterSig>;
+
+impl fmt::Display for CanisterSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for CanisterSig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "CanisterSig: 0x{}", hex::encode(&self.0))
+    }
+}

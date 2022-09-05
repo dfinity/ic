@@ -26,4 +26,5 @@ tonic = "0.7.2"
 tower = { version = "0.4.8", features = ["util"] }
 
 [dev-dependencies]
+tower-test = "0.4.0"
 ic-test-utilities = { path = "../../test_utilities" }

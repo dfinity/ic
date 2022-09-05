@@ -368,7 +368,8 @@ impl ThresholdEcdsaCombinedSigInternal {
         let u1 = msg.mul(&s_inv)?;
         let u2 = self.r.mul(&s_inv)?;
 
-        let rp = EccPoint::mul_points(&EccPoint::generator_g(curve_type)?, &u1, &public_key, &u2)?;
+        let rp =
+            EccPoint::mul_2_points(&EccPoint::generator_g(curve_type)?, &u1, &public_key, &u2)?;
 
         if rp.is_infinity()? {
             return Err(ThresholdEcdsaError::InvalidSignature);

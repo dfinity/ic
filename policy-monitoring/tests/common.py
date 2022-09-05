@@ -71,7 +71,7 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         log_gen_file = str(join(test_dir, "input.py"))
         assert isfile(log_gen_file), f"cannot find input.log nor input.py in {str(test_dir)}"
 
-        print(" Generating input.log using input.py ...", end=None, flush=True)
+        print(" Generating input.log using input.py ...", end="", flush=True)
 
         module_name = log_gen_file.replace(".py", "").replace("/", ".")
         spec = spec_from_file_location(module_name, log_gen_file)

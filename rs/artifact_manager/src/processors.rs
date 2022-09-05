@@ -155,7 +155,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
         let pending_artifacts_cl = pending_artifacts.clone();
         let shutdown_cl = shutdown.clone();
         let handle = ThreadBuilder::new()
-            .name("ArtifactProcessorThread".to_string())
+            .name(format!("{}_Processor", Artifact::TAG))
             .spawn(move || {
                 Self::process_messages(
                     pending_artifacts_cl,
@@ -736,6 +736,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
 pub struct EcdsaProcessor<PoolEcdsa> {
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     client: Box<dyn Ecdsa>,
+    ecdsa_pool_update_duration: Histogram,
     log: ReplicaLogger,
 }
 
@@ -757,10 +758,23 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         clients::EcdsaClient<PoolEcdsa>,
         ArtifactProcessorManager<EcdsaArtifact>,
     ) {
+        let ecdsa_pool_update_duration = metrics_registry.register(
+            Histogram::with_opts(histogram_opts!(
+                "ecdsa_pool_update_duration_seconds",
+                "Time to apply changes to ECDSA artifact pool, in seconds",
+                vec![
+                    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
+                    10.0, 15.0, 20.0, 50.0,
+                ]
+            ))
+            .unwrap(),
+        );
+
         let (ecdsa, ecdsa_gossip) = setup();
         let client = Self {
             ecdsa_pool: ecdsa_pool.clone(),
             client: Box::new(ecdsa),
+            ecdsa_pool_update_duration,
             log,
         };
         let manager = ArtifactProcessorManager::new(
@@ -826,6 +840,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
             ProcessingResult::StateUnchanged
         };
 
+        let _timer = self.ecdsa_pool_update_duration.start_timer();
         self.ecdsa_pool.write().unwrap().apply_changes(change_set);
         (adverts, changed)
     }

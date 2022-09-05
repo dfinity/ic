@@ -1,7 +1,6 @@
 use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
     common::{BlockHeight, MINIMUM_VERSION_NUMBER},
-    config::Config,
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
@@ -9,11 +8,16 @@ use bitcoin::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    Block, BlockHash, BlockHeader, Network,
+    Block, BlockHash, BlockHeader,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::Arc,
+    time::Instant,
+};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -145,7 +149,15 @@ pub struct BlockchainManager {
     /// the corresponding "Block" response is received.
     getdata_request_info: LinkedHashMap<BlockHash, GetDataRequestInfo>,
 
+    /// Records outstanding getHeader requests. Used for:
+    /// - Check if a header response is solicited.
+    /// - Check if peer is not responding to GetHeader reuqest. In that case remove peer after timeout.
     getheaders_requests: HashMap<SocketAddr, GetHeadersRequest>,
+
+    /// A flag that is set for each peer when we receive a `inv` message while we have an outstanding `getheaders` request to the same peer.  
+    /// It signals that we potentially missed some information from the peer. On tick we will send a catchup `getheaders` request to that
+    /// peer and request headers till the end of the chain.
+    catchup_headers: HashSet<SocketAddr>,
 
     /// This queue stores the set of block hashes belonging to blocks that have yet to be synced by the BlockChainManager
     /// and stored into the block cache.
@@ -157,9 +169,6 @@ pub struct BlockchainManager {
     /// A block hash is removed when it is determined a peer can receive another `getdata` message.
     block_sync_queue: LinkedHashSet<BlockHash>,
 
-    /// Bitcoin network.
-    network: Network,
-
     /// This field contains a logger for the blockchain manager's use.
     logger: ReplicaLogger,
 }
@@ -168,11 +177,7 @@ impl BlockchainManager {
     /// This function instantiates a BlockChainManager struct. A node is provided
     /// in order to get its client so the manager can send messages to the
     /// BTC network.
-    pub fn new(
-        config: &Config,
-        blockchain: Arc<Mutex<BlockchainState>>,
-        logger: ReplicaLogger,
-    ) -> Self {
+    pub fn new(blockchain: Arc<Mutex<BlockchainState>>, logger: ReplicaLogger) -> Self {
         let peer_info = HashMap::new();
         let getdata_request_info = LinkedHashMap::new();
 
@@ -181,8 +186,8 @@ impl BlockchainManager {
             peer_info,
             getdata_request_info,
             getheaders_requests: HashMap::new(),
+            catchup_headers: HashSet::new(),
             block_sync_queue: LinkedHashSet::new(),
-            network: config.network,
             logger,
         }
     }
@@ -241,15 +246,6 @@ impl BlockchainManager {
             return Err(ReceivedInvMessageError::TooMuchInventory);
         }
 
-        // The adapter is already syncing with the BTC node. Ignore the `inv` message.
-        // This prevents the adapter from sending too many header requests to a peer, which
-        // could lead to a ban. For Regtest this is ignored because when generating blocks
-        // we receive many inv msgs and we need to send a getheaders request for each
-        // to keep track of the current tip.
-        if self.getheaders_requests.contains_key(addr) && self.network != Network::Regtest {
-            return Ok(());
-        }
-
         // If the inv message is received from a peer that is not connected, then reject it.
         trace!(
             self.logger,
@@ -282,8 +278,14 @@ impl BlockchainManager {
         };
 
         if let Some(locators) = maybe_locators {
-            // Send `getheaders` request to fetch the headers corresponding to inv message.
-            self.send_getheaders(channel, addr, locators);
+            // An entry in `getheaders_requets` indicates that we have an outstanding request. If this is
+            // the case we set the catch-up flag to indicate that we need missed some `inv` from this peer.
+            if self.getheaders_requests.contains_key(addr) {
+                self.catchup_headers.insert(*addr);
+            } else {
+                // No in-flight `getheaders` request so fetch the headers corresponding to inv message.
+                self.send_getheaders(channel, addr, locators);
+            }
         }
 
         Ok(())
@@ -319,7 +321,11 @@ impl BlockchainManager {
         // Grab the last header's block hash. If not found, no headers to add so exit early.
         let last_block_hash = match headers.last() {
             Some(header) => header.block_hash(),
-            None => return Ok(()),
+            None => {
+                // Got header response. No more in-flight GetHeader requests
+                self.getheaders_requests.remove(addr);
+                return Ok(());
+            }
         };
 
         let maybe_locators = {
@@ -486,6 +492,8 @@ impl BlockchainManager {
 
         // Remove getheaders request sent to peer.
         self.getheaders_requests.remove(addr);
+        // Unset catch-up flag
+        self.catchup_headers.remove(addr);
     }
 
     /// Cleans up `getheaders` requests that have timed out and disconnects from the
@@ -674,6 +682,17 @@ impl BlockchainManager {
             if !self.peer_info.contains_key(&addr) {
                 self.add_peer(channel, &addr).await;
             }
+
+            // If we have no outstanding `getheaders` request to pair and the catch-up flag is set we issue a `getheaders`
+            // request to fetch the newest information from a peer.
+            if !self.getheaders_requests.contains_key(&addr) && self.catchup_headers.contains(&addr)
+            {
+                let blockchain = self.blockchain.lock().await;
+                let locators = blockchain.locator_hashes();
+                drop(blockchain);
+                self.send_getheaders(channel, &addr, (locators, BlockHash::default()));
+                self.catchup_headers.remove(&addr);
+            }
         }
 
         self.sync_blocks(channel).await;
@@ -780,11 +799,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         blockchain_manager.add_peer(&mut channel, &addr).await;
 
@@ -839,11 +855,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
         let chain = generate_headers(genesis_hash, genesis.header.time, 16, &[]);
@@ -939,11 +952,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
         let chain = generate_headers(genesis_hash, genesis.header.time, 16, &[]);
@@ -1034,11 +1044,8 @@ pub mod test {
         let mut channel = TestChannel::new(sockets.clone());
         let config = ConfigBuilder::new().build();
         let blockchain_state = BlockchainState::new(&config);
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         // Mainnet block 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
@@ -1129,11 +1136,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         let test_state = TestState::setup();
 
@@ -1173,11 +1177,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let test_state = TestState::setup();
         let block_1_hash = test_state.block_1.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
         blockchain_manager.add_peer(&mut channel, &addr).await;
 
         // Ensure that the request info will be timed out.
@@ -1234,11 +1235,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let test_state = TestState::setup();
         let block_1_hash = test_state.block_1.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
         blockchain_manager.add_peer(&mut channel, &addr).await;
 
         // Ensure that the request info will be timed out.
@@ -1298,11 +1296,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
 
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
         blockchain_manager.add_peer(&mut channel, &addr).await;
 
         let mut large_blockchain =
@@ -1384,11 +1379,8 @@ pub mod test {
         let mut channel = TestChannel::new(sockets.clone());
         let config = ConfigBuilder::new().build();
         let blockchain_state = BlockchainState::new(&config);
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         // Mainnet block 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
@@ -1441,11 +1433,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         let next_headers = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
         let next_hashes = next_headers
@@ -1477,11 +1466,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         let next_headers = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
         let next_hashes = next_headers
@@ -1534,11 +1520,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let mut channel = TestChannel::new(vec![addr]);
 
@@ -1602,11 +1585,8 @@ pub mod test {
         let blockchain_state = BlockchainState::new(&config);
         let genesis = blockchain_state.genesis().clone();
         let genesis_hash = genesis.header.block_hash();
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let mut channel = TestChannel::new(vec![addr]);
 
@@ -1756,11 +1736,8 @@ pub mod test {
         let mut channel = TestChannel::new(vec![addr, addr2]);
         let config = ConfigBuilder::new().build();
         let blockchain_state = BlockchainState::new(&config);
-        let mut blockchain_manager = BlockchainManager::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            no_op_logger(),
-        );
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
 
         blockchain_manager.add_peer(&mut channel, &addr).await;
         blockchain_manager.add_peer(&mut channel, &addr2).await;

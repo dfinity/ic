@@ -1,21 +1,18 @@
 //! Implementations of ThresholdEcdsaSigner
 use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaDerivePublicKeyError,
-    ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
+use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare,
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex};
 use serde::{Deserialize, Serialize};
@@ -228,27 +225,6 @@ pub fn get_tecdsa_master_public_key(
         }
         Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
     }
-}
-
-/// Derives the ECDSA public key from the specified `master_public_key` for
-/// the given `extended_derivation_path`.
-#[allow(dead_code)]
-pub fn derive_tecdsa_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
-    extended_derivation_path: &ExtendedDerivationPath,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-    ic_crypto_internal_threshold_sig_ecdsa::derive_public_key(
-        master_public_key,
-        &extended_derivation_path.into(),
-    )
-    .map_err(|e| match e {
-        ThresholdEcdsaDerivePublicKeyError::InvalidArgument(s) => {
-            ThresholdEcdsaGetPublicKeyError::InvalidArgument(s)
-        }
-        ThresholdEcdsaDerivePublicKeyError::InternalError(e) => {
-            ThresholdEcdsaGetPublicKeyError::InternalError(format!("{:?}", e))
-        }
-    })
 }
 
 fn ensure_self_was_receiver(

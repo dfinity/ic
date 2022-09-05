@@ -40,7 +40,7 @@ impl ReplicaProcess {
 
     /// Returns the `Pid` if the currently running replica; or `None` if no
     /// replica is running.
-    fn get_pid(&self) -> Option<Pid> {
+    pub fn get_pid(&self) -> Option<Pid> {
         *self.pid_cell.lock().unwrap()
     }
 
@@ -72,24 +72,11 @@ impl ReplicaProcess {
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
-    ///
-    /// WARNING: We treat the sandbox processes as ACTIVELY
-    /// MALICIOUS. That is we can not depend on any signal
-    /// handling. Furthermore, this approach works because we send an
-    /// unmaskable Signal (SIGKILL). If we start sending SIGTERM at
-    /// **ANY** point we need to handle waiting for the whole process
-    /// group, and that includes the grandchildren. This would work
-    /// differently on OS X and linux. N.B. in OS X our only path
-    /// would be via kqueue and on linux we can not depend on child
-    /// subreaper via prctl(2) (PR_SET_CHILD_SUBREAPER), as we are
-    /// dealing with malicious processes and secondly this feature is
-    /// thread specific, i.e. the thread not the process does the
-    /// subreaping.
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.kill()
     }
 
-    pub(crate) fn kill(&mut self) -> Result<()> {
+    pub fn kill(&mut self) -> Result<()> {
         let pid = self.pid_cell.lock().unwrap();
         if let Some(pid) = *pid {
             let mut gpid = pid;
@@ -99,13 +86,10 @@ impl ReplicaProcess {
                 let t_gpid = -t_gpid;
                 gpid = Pid::from_raw(t_gpid);
             }
-            return signal::kill(gpid, Signal::SIGKILL)
+            return signal::kill(gpid, Signal::SIGTERM)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)));
         }
-        info!(
-            self.log,
-            "🚀 Unable to terminate replica process - it's probably already down."
-        );
+        info!(self.log, "no replica process running");
         Ok(())
     }
 
@@ -140,22 +124,12 @@ impl ReplicaProcess {
         // If there is a currently running process, kill it. Instead of starting the new
         // command (`msg`) immediately, wait for the current process to exit
         // which will cause it to be restarted.
-        //
-        // It is critical that we signal and terminate the whole
-        // process group of which the replica should be the
-        // leader. The Replica spawns multiple other sandboxed
-        // processes under the same process group. For correctness
-        // -- the processes may access state file paths and
-        // handles -- it is important we signal the sandbox
-        // processes too. This is possible because we shall
-        // restrict setgpid() in production -- by default disabled
-        // by SELinux type enforcement.
         if self.get_pid().is_some() {
             self.kill()?;
         } else {
             info!(
                 self.log,
-                "🚀 Sarting process manager for replica with command: {:?} {:?} {:?}",
+                "Starting replica with command: {:?} {:?} {:?}",
                 &replica_binary,
                 &replica_version,
                 &args
@@ -163,7 +137,7 @@ impl ReplicaProcess {
             let child = std::process::Command::new(replica_binary)
                 .args(&args)
                 .spawn()?;
-            debug!(self.log, "🚀 Process started. Pid: {}", child.id());
+            debug!(self.log, "Process started. Pid: {}", child.id());
             self.set_pid(Pid::from_raw(child.id() as i32));
 
             self.join_handle = Some(std::thread::spawn(wait_on_exit(

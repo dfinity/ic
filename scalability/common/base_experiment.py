@@ -158,38 +158,7 @@ class BaseExperiment:
         self.__store_hardware_info()
 
     def __load_artifacts(self):
-        """
-        Load artifacts.
-
-        If previously downloaded, reuse, otherwise download.
-        When downloading, store the GIT commit hash that has been used in a text file.
-        """
-        f_artifacts_hash = os.path.join(self.artifacts_path, "githash")
-        if subprocess.run(["stat", f_artifacts_hash], stdout=subprocess.DEVNULL).returncode != 0:
-            print("Could not find artifacts, downloading .. ")
-            # Delete old artifacts directory, if it exists
-            subprocess.run(["rm", "-rf", self.artifacts_path], check=True)
-            # Download new artifacts.
-            artifacts_env = os.environ.copy()
-            artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8")
-            artifacts_env["GET_GUEST_OS"] = "0"
-            output = subprocess.check_output(
-                ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
-            )
-            match = re.findall(r"Downloading artifacts for revision ([a-f0-9]*)", output)[0]
-            with open(f_artifacts_hash, "wt", encoding="utf-8") as f:
-                f.write(match)
-        else:
-            print(
-                (
-                    "⚠️  Re-using artifacts. While this is faster, there is a risk of inconsistencies."
-                    f'Call "rm -rf {self.artifacts_path}" in case something doesn\'t work.'
-                )
-            )
-        self.artifacts_hash = open(f_artifacts_hash, "r").read()
-
-        print(f"Artifacts hash is {self.artifacts_hash}")
-        print(f"Found artifacts at {self.artifacts_path}")
+        self.artifacts_hash = misc.load_artifacts(self.artifacts_path)
         self.__set_workload_generator_path()
 
     def __set_workload_generator_path(self):
@@ -551,19 +520,32 @@ class BaseExperiment:
             if for_subnet_idx == curr_subnet_idx:
                 return sorted([self.get_node_ip_address(member, nns_url) for member in members])
 
-    def get_app_subnet_hostnames(self, nns_url=None):
-        """Return hostnames of all machines in given testnet that are part of an application subnet from the given registry."""
+    def get_app_subnet_hostnames(self, nns_url=None, idx=-1):
+        """
+        Return hostnames of application subnetworks.
+
+        If no subnet index is given as idx, all machines in given
+        testnet that are part of an application subnet from the given
+        registry will be returned.
+
+        Otherwise, all machines from the given subnet are going to be
+        returned.
+        """
         ips = []
         topology = self.__get_topology(nns_url)
         for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
-            if subnet_type != "system":
+            if (subnet_type != "system" and idx < 0) or (idx >= 0 and curr_subnet_idx == idx):
                 ips += [self.get_node_ip_address(member, nns_url) for member in members]
         return sorted(ips)
 
-    def __build_summary_file(self):
-        """Build dictionary to be used to build the summary file."""
+    def _build_summary_file(self):
+        """
+        Build dictionary to be used to build the summary file.
+
+        This is overriden by workload experiment, so visibility needs to be _ not __.
+        """
         return {}
 
     def write_summary_file(
@@ -575,7 +557,7 @@ class BaseExperiment:
         The idea is that we write one after each iteration, so that we can
         generate reports from intermediate versions.
         """
-        d = self.__build_summary_file()
+        d = self._build_summary_file()
         d.update(
             {
                 "xlabels": xlabels,

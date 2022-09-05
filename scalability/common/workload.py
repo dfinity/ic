@@ -118,6 +118,12 @@ class Workload(threading.Thread):
         if self.workload.call_method is not None:
             cmd += ' --call-method "{}"'.format(self.workload.call_method)
 
+        # Sanity check the number of requests per machine
+        # Later, we might have multiple workloads per iteration, so we should then probably also
+        # check the sum of all requests from all workloads, but this should be good enough for now.
+        for _rps in rps_per_machine:
+            assert _rps < 8000, f"Not enough workload generator machines: {num_load_generators} which {_rps} rps each"
+
         # Each workload generator instance can target only a single canister ID currently.
         # In the case of multiple canisters, select a different canister for each machine.
         canister_ids = [

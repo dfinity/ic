@@ -11,11 +11,11 @@ use std::convert::TryFrom;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
-    controller: Option<PrincipalId>,
-    controllers: Option<Vec<PrincipalId>>,
-    compute_allocation: Option<ComputeAllocation>,
-    memory_allocation: Option<MemoryAllocation>,
-    freezing_threshold: Option<NumSeconds>,
+    pub(crate) controller: Option<PrincipalId>,
+    pub(crate) controllers: Option<Vec<PrincipalId>>,
+    pub(crate) compute_allocation: Option<ComputeAllocation>,
+    pub(crate) memory_allocation: Option<MemoryAllocation>,
+    pub(crate) freezing_threshold: Option<NumSeconds>,
 }
 
 impl CanisterSettings {

@@ -8,7 +8,7 @@ use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
@@ -22,12 +22,6 @@ use tokio::{
     task::JoinHandle,
     time::Duration,
 };
-
-/// A tag for the server port
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ServerPortTag;
-/// Type definition for a server port
-pub type ServerPort = Id<ServerPortTag, u16>;
 
 /// A tag for the queue size
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -83,10 +77,10 @@ pub(crate) struct TransportImpl {
     /// Configuration
     pub config: TransportConfig,
 
-    /// Ports used to accept connections for this transport-client
-    pub accept_ports: Mutex<HashMap<FlowTag, ServerPortState>>,
+    /// Port used to accept connections for this transport-client
+    pub accept_port: Mutex<Option<ServerPortState>>,
     /// Mapping of peers to their corresponding state
-    pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
+    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerState>>>,
     /// Event handler to report back to the transport client
     pub event_handler: Mutex<Option<TransportEventHandler>>,
 
@@ -138,17 +132,11 @@ impl Drop for ServerPortState {
 
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
-    /// State of the flows with the peer
-    pub flow_map: HashMap<FlowTag, RwLock<FlowState>>,
-}
-
-/// Per-flow state, specific to a transport-client and a peer.
-pub(crate) struct FlowState {
     log: ReplicaLogger,
     /// Flow tag as a metrics label
     flow_tag_label: String,
-    /// Flow label, used for metrics
-    pub flow_label: String,
+    /// Peer label, used for metrics
+    pub peer_label: String,
     /// Connection state
     connection_state: ConnectionState,
     /// The send queue of this flow
@@ -157,18 +145,18 @@ pub(crate) struct FlowState {
     control_plane_metrics: ControlPlaneMetrics,
 }
 
-impl FlowState {
+impl PeerState {
     pub(crate) fn new(
         log: ReplicaLogger,
         flow_tag: FlowTag,
-        flow_label: String,
+        peer_label: String,
         connection_state: ConnectionState,
         queue_size: QueueSize,
         send_queue_metrics: SendQueueMetrics,
         control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
         let send_queue = Box::new(SendQueueImpl::new(
-            flow_label.clone(),
+            peer_label.clone(),
             &flow_tag,
             queue_size,
             send_queue_metrics,
@@ -176,7 +164,7 @@ impl FlowState {
         let ret = Self {
             log,
             flow_tag_label: flow_tag.to_string(),
-            flow_label,
+            peer_label,
             connection_state,
             send_queue,
             control_plane_metrics,
@@ -195,7 +183,7 @@ impl FlowState {
     fn report_connection_state(&self) {
         self.control_plane_metrics
             .flow_state
-            .with_label_values(&[&self.flow_label, &self.flow_tag_label])
+            .with_label_values(&[&self.peer_label, &self.flow_tag_label])
             .set(self.connection_state.idx());
     }
 
@@ -207,17 +195,17 @@ impl FlowState {
     }
 }
 
-impl Drop for FlowState {
+impl Drop for PeerState {
     fn drop(&mut self) {
         if self
             .control_plane_metrics
             .flow_state
-            .remove_label_values(&[&self.flow_label, &self.flow_tag_label])
+            .remove_label_values(&[&self.peer_label, &self.flow_tag_label])
             .is_err()
         {
             warn!(
                 self.log,
-                "Transport:FlowState drop: Could not remove flow metric {:?}", self.flow_label
+                "Transport:PeerState drop: Could not remove peer metric {:?}", self.peer_label
             )
         }
     }

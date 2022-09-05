@@ -1,47 +1,101 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/consensus/message",
+    "//rs/crypto",
+    "//rs/crypto/hash",
+    "//rs/crypto/prng",
+    "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/interfaces",
+    "//rs/interfaces/canister_http_adapter_client",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:hex",
+    "@crate_index//:num-integer",
+    "@crate_index//:prometheus",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rayon",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/bitcoin/types/internal",
+    "//rs/consensus/ecdsa_object",
+    "//rs/cycles_account_manager",
+    "//rs/execution_environment",
+    "//rs/ingress_manager",
+    "//rs/messaging",
+    "//rs/registry/fake",
+    "//rs/registry/proto_data_provider",
+    "//rs/state_manager",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/registry",
+    "@crate_index//:assert_matches",
+    "@crate_index//:criterion",
+    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:proptest",
+    "@crate_index//:prost",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-envlogger",
+    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
+]
 
 rust_library(
     name = "consensus",
     srcs = glob(["src/**"]),
     crate_name = "ic_consensus",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    deps = [
-        "//rs/artifact_pool",
-        "//rs/config",
-        "//rs/consensus/message",
-        "//rs/crypto",
-        "//rs/crypto/hash",
-        "//rs/crypto/test_utils/canister_threshold_sigs",
-        "//rs/interfaces",
-        "//rs/interfaces/canister_http_adapter_client",
-        "//rs/interfaces/state_manager",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/phantom_newtype",
-        "//rs/protobuf",
-        "//rs/registry/helpers",
-        "//rs/registry/keys",
-        "//rs/registry/subnet_features",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/types/error_types",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "//rs/utils",
-        "@crate_index//:hex",
-        "@crate_index//:num-integer",
-        "@crate_index//:prometheus",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:rayon",
-        "@crate_index//:slog",
-        "@crate_index//:strum",
-    ],
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "consensus_test",
+    crate = ":consensus",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "integration_test",
+    srcs = glob(["tests/**"]),
+    crate_root = "tests/integration.rs",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+)
+
+rust_test(
+    name = "payload_test",
+    srcs = glob(["tests/**"]),
+    crate_root = "tests/payload.rs",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+)
+
+rust_test(
+    name = "types_test",
+    srcs = glob(["tests/**"]),
+    crate_root = "tests/types.rs",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+)

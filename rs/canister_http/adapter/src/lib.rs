@@ -42,7 +42,7 @@ impl AdapterServer {
     // but in this case it would be some certificate store to be used by the http
     // client. This complicates unnecessary the production code. For now we decide
     // to keep the 'enforce_https' flag.
-    pub fn new(config: Config, logger: ReplicaLogger, enforce_https: bool) -> Self {
+    pub fn new(config: Config, logger: ReplicaLogger) -> Self {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
@@ -58,13 +58,13 @@ impl AdapterServer {
                     connector: http_connector,
                 };
                 let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
-                https_connector.https_only(enforce_https);
+                https_connector.https_only(true);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
                 Self::new_with_client(https_client, config, logger)
             }
             None => {
                 let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-                https_connector.https_only(enforce_https);
+                https_connector.https_only(true);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
                 Self::new_with_client(https_client, config, logger)
             }

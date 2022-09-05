@@ -8,7 +8,8 @@ use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
-    ledger::{archive_blocks, find_block_in_archive, LedgerAccess},
+    ledger::{archive_blocks, block_locations, find_block_in_archive, LedgerAccess},
+    range_utils,
 };
 use ic_ledger_core::{
     block::{BlockHeight, BlockType, EncodedBlock},
@@ -753,21 +754,14 @@ fn get_blocks_() {
 
 #[candid_method(query, rename = "query_blocks")]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
-    use ledger_canister::range_utils;
+    let ledger = LEDGER.read().unwrap();
+    let locations = block_locations(&*ledger, start, length);
 
-    let requested_range = range_utils::make_range(start, length);
+    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
 
-    let ledger = &LEDGER.read().unwrap();
-    let local_range = ledger.blockchain.local_block_range();
-    let effective_local_range = range_utils::head(
-        &range_utils::intersect(&requested_range, &local_range),
-        MAX_BLOCKS_PER_REQUEST,
-    );
-
-    let local_start = (effective_local_range.start - local_range.start) as usize;
-    let local_end = local_start + range_utils::range_len(&effective_local_range) as usize;
-
-    let local_blocks: Vec<CandidBlock> = ledger.blockchain.blocks[local_start..local_end]
+    let blocks: Vec<CandidBlock> = ledger
+        .blockchain
+        .block_slice(local_blocks.clone())
         .iter()
         .map(|enc_block| -> CandidBlock {
             Block::decode(enc_block.clone())
@@ -776,21 +770,16 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         })
         .collect();
 
-    let archive = ledger.blockchain.archive.read().unwrap();
-
-    let archived_blocks = archive
-        .iter()
-        .flat_map(|archive| archive.index().into_iter())
-        .filter_map(|((from, to), canister_id)| {
-            let slice = range_utils::intersect(&(from..to + 1), &requested_range);
-            (!slice.is_empty()).then(|| ArchivedBlocksRange {
-                start: slice.start,
-                length: range_utils::range_len(&slice) as u64,
-                callback: QueryArchiveFn {
-                    canister_id,
-                    method: "get_blocks".to_string(),
-                },
-            })
+    let archived_blocks = locations
+        .archived_blocks
+        .into_iter()
+        .map(|(canister_id, slice)| ArchivedBlocksRange {
+            start: slice.start,
+            length: range_utils::range_len(&slice) as u64,
+            callback: QueryArchiveFn {
+                canister_id,
+                method: "get_blocks".to_string(),
+            },
         })
         .collect();
 
@@ -799,8 +788,8 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
     QueryBlocksResponse {
         chain_length,
         certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
-        blocks: local_blocks,
-        first_block_index: effective_local_range.start as BlockHeight,
+        blocks,
+        first_block_index: local_blocks.start as BlockHeight,
         archived_blocks,
     }
 }

@@ -1,38 +1,88 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/canonical_state",
+    "//rs/constants",
+    "//rs/crypto/tls_interfaces",
+    "//rs/crypto/tree_hash",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "//rs/xnet/hyper",
+    "//rs/xnet/uri",
+    "@crate_index//:hyper",
+    "@crate_index//:prometheus",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/registry/fake",
+    "//rs/registry/proto_data_provider",
+    "//rs/state_manager",
+    "//rs/test_utilities",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/registry",
+    "@crate_index//:assert_matches",
+    "@crate_index//:maplit",
+    "@crate_index//:mockall",
+    "@crate_index//:nix",
+    "@crate_index//:proptest",
+    "@crate_index//:reqwest",
+    "@crate_index//:tempfile",
+    "@crate_index//:tiny_http",
+    "@crate_index//:url",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
 
 rust_library(
     name = "payload_builder",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_payload_builder",
-    edition = "2018",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "payload_builder_test",
+    crate = ":payload_builder",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "payload_builder_integration_tests",
+    srcs = [
+        "tests/certified_slice_pool.rs",
+        "tests/xnet_payload_builder.rs",
     ],
-    deps = [
-        "//rs/canonical_state",
-        "//rs/constants",
-        "//rs/crypto/tls_interfaces",
-        "//rs/crypto/tree_hash",
-        "//rs/interfaces",
-        "//rs/interfaces/state_manager",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/protobuf",
-        "//rs/registry/helpers",
-        "//rs/registry/keys",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "//rs/xnet/hyper",
-        "//rs/xnet/uri",
-        "@crate_index//:hyper",
-        "@crate_index//:prometheus",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
+    extra_srcs = [
+        "tests/common/mod.rs",
     ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":payload_builder"],
 )

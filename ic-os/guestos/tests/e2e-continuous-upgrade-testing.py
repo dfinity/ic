@@ -92,7 +92,9 @@ def main(argv):
     )
 
     machine_config_images = [
-        ictools.build_ic_prep_inject_config(machines[n], ic_config, n, ictools.build_ssh_extra_config())
+        ictools.build_ic_prep_inject_config(
+            ic_config, n, dict(ictools.build_ssh_extra_config(), **machines[n].get_static_network_config())
+        )
         for n in range(len(machines))
     ]
 

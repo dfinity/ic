@@ -49,8 +49,8 @@ fn test_init_with_sys_params() {
 fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
     local_test_on_sns_subnet(|runtime| {
         async move {
-            // The `initial_voting_period` will change, so this is the `initial_initial_voting_period` :P
-            let initial_initial_voting_period = ONE_DAY_SECONDS * 4;
+            // The `initial_voting_period_seconds` will change, so this is the `initial_initial_voting_period_seconds` :P
+            let initial_initial_voting_period_seconds = ONE_DAY_SECONDS * 4;
 
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -75,7 +75,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: NeuronPermissionType::all(),
                 }),
-                initial_voting_period: Some(initial_initial_voting_period),
+                initial_voting_period_seconds: Some(initial_initial_voting_period_seconds),
                 wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS / 8),
                 ..NervousSystemParameters::with_default_values()
             };
@@ -92,29 +92,60 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await; // slow
 
             // Create neurons.
+            let transaction_fee_e8s = system_params.transaction_fee_e8s();
+            let stake_amount =
+                Tokens::from_e8s(user_1_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_1_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_1, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_1,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_1_subaccount = user_1_neuron_id.subaccount().unwrap();
 
+            let stake_amount =
+                Tokens::from_e8s(user_2_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_2_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_2, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_2,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_2_subaccount = user_2_neuron_id.subaccount().unwrap();
 
             // Need a third neuron or the vote ends too soon
+            let stake_amount =
+                Tokens::from_e8s(user_3_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let _user_3_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_3, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_3,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
 
             // These two are required for the two inconsequential votes for process_proposal
+            let stake_amount =
+                Tokens::from_e8s(user_4_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_4_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_4, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_4,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_4_subaccount = user_4_neuron_id.subaccount().unwrap();
 
+            let stake_amount =
+                Tokens::from_e8s(user_5_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_5_neuron_id = sns_canisters
-                .stake_and_claim_neuron(&user_5, Some(ONE_YEAR_SECONDS as u32))
+                .stake_and_claim_neuron_with_tokens(
+                    &user_5,
+                    Some(ONE_YEAR_SECONDS as u32),
+                    stake_amount,
+                )
                 .await;
             let user_5_subaccount = user_5_neuron_id.subaccount().unwrap();
 
@@ -173,7 +204,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                     &user_1,
                     &user_1_subaccount,
                     NervousSystemParameters {
-                        initial_voting_period: Some(ONE_DAY_SECONDS),
+                        initial_voting_period_seconds: Some(ONE_DAY_SECONDS),
                         ..system_params
                     },
                 )
@@ -203,19 +234,20 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 assert_eq!(proposal.executed_timestamp_seconds, 0);
                 assert!(
                     proposal.proposal_creation_timestamp_seconds
-                        + parameters.initial_voting_period.unwrap()
+                        + parameters.initial_voting_period_seconds.unwrap()
                         > now_seconds
                 );
-                // `proposal.initial_voting_period` should not have been modified from its initial value
+                // `proposal.initial_voting_period_seconds` should not have been modified from its initial value
                 assert_eq!(
-                    proposal.initial_voting_period,
-                    initial_initial_voting_period
+                    proposal.initial_voting_period_seconds,
+                    initial_initial_voting_period_seconds
                 );
                 // Just double checking that the time that's passed and
-                // the current `initial_voting_period` would be enough to
+                // the current `initial_voting_period_seconds` would be enough to
                 // end the proposal
                 assert!(
-                    proposal.proposal_creation_timestamp_seconds + proposal.initial_voting_period
+                    proposal.proposal_creation_timestamp_seconds
+                        + proposal.initial_voting_period_seconds
                         > now_seconds
                 );
             }

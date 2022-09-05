@@ -10,7 +10,7 @@ use crate::{
 use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
@@ -33,11 +33,12 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId},
-    AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode, MemoryAllocation,
     NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
+use std::cmp::Reverse;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -48,6 +49,8 @@ use std::{
 
 mod scheduler_metrics;
 use scheduler_metrics::*;
+mod round_schedule;
+use round_schedule::*;
 
 /// Maximum number of allowed bitcoin requests per round. If this number is
 /// reached we stop executing more bitcoin requests for this round.
@@ -57,6 +60,9 @@ const MAX_BITCOIN_REQUESTS_PER_ROUND: usize = 5;
 pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
+
+////////////////////////////////////////////////////////////////////////
+/// Scheduler Implementation
 
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
@@ -73,195 +79,162 @@ pub(crate) struct SchedulerImpl {
     deterministic_time_slicing: FlagStatus,
 }
 
-/// Orders the canisters and updates their accumulated priorities according to
-/// the strategy described in the Scheduler Analysis document:
-/// https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
-/// A shorter description of the scheduling strategy is available in the note
-/// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
-fn apply_scheduling_strategy(
-    scheduler_cores: usize,
-    current_round: ExecutionRound,
-    all_canister_states: &mut BTreeMap<CanisterId, CanisterState>,
-) -> Vec<CanisterId> {
-    let number_of_canisters = all_canister_states.len() as i64;
-
-    if number_of_canisters <= scheduler_cores as i64 {
-        return all_canister_states
-            .iter()
-            .map(|(canister_id, _canister)| *canister_id)
-            .collect();
-    }
-
-    // Capacity of this CanisterManager is 100 * scheduler_cores.
-    let capacity = 100 * scheduler_cores as i64;
-
-    // This corresponds to |a| in Scheduler Analysis.
-    let mut total_compute_allocation: i64 = 0;
-
-    // Use this multiplier to achieve the following two: 1) The sum of all the
-    // values we add to accumulated priorities to calculate the round priorities
-    // must be divisible by the number of canisters that are given top priority
-    // in this round. 2) The free compute_allocation (the difference between
-    // capacity and total_compute_allocation) can be distributed to all the
-    // canisters evenly.
-    let multiplier = scheduler_cores as i64 * number_of_canisters;
-
-    // This corresponds to the vector p in the Scheduler Analysis document.
-    let mut round_priorities = Vec::<(CanisterId, i64)>::new();
-
-    // Reset the accumulated priorities every 100 rounds (times the multiplier).
-    // We want to reset the scheduler regularly to safely support changes in the set
-    // of canisters and their compute allocations.
-    let reset_round = (current_round.get() as i64 % (100 * multiplier)) == 0;
-
-    // Compute the priority of the canisters for this round.
-    for (canister_id, canister) in all_canister_states.iter_mut() {
-        let compute_allocation = canister.scheduler_state.compute_allocation.as_percent() as i64;
-        let accumulated_priority: i64 = if reset_round {
-            0
-        } else {
-            canister.scheduler_state.accumulated_priority.value()
-        };
-
-        round_priorities.push((
-            *canister_id,
-            accumulated_priority + (multiplier * compute_allocation),
-        ));
-
-        total_compute_allocation += compute_allocation;
-    }
-
-    // Distribute the free capacity to all the canisters evenly:
-    let free_capacity = capacity - total_compute_allocation;
-    // bonus_priority_per_core is (multiplier * free_capacity) /
-    // number_of_canisters. This is equal to scheduler_cores * free_capacity.
-    let bonus_priority_per_core = scheduler_cores as i64 * free_capacity;
-    for round_priority in round_priorities.iter_mut() {
-        round_priority.1 += bonus_priority_per_core;
-    }
-
-    // Sort canisters according to their priorities for this round in descending
-    // order. The higher the value, the higher the priority.
-    //
-    // all_canister_states is a BTreeMap. Looping over its iter_mut above returns
-    // its elements sorted by key (i.e. canister_id) in an ascending order.
-    // Since we populate round_priorities (a vector) in that loop, it keeps the
-    // same order. "sort" preserves the order when there is a tie. As a result,
-    // in case of a tie, the priority is given to the canister with the smaller
-    // canister id.
-    round_priorities.sort_by(|left, right| right.1.cmp(&left.1));
-
-    // Update the canisters' accumulated priorities.
-    for (i, (canister_id, priority)) in round_priorities.iter().enumerate() {
-        if let Some(canister) = all_canister_states.get_mut(canister_id) {
-            // Update the accumulated priority.
-            if i < scheduler_cores {
-                // When handling top canisters, decrease their priority by
-                // multiplier * capacity / scheduler_cores
-                // which is equal to capacity * number_of_canisters.
-                canister.scheduler_state.accumulated_priority =
-                    AccumulatedPriority::from(priority - (capacity * number_of_canisters));
-            } else {
-                canister.scheduler_state.accumulated_priority =
-                    AccumulatedPriority::from(*priority);
-            }
-        }
-    }
-
-    // Return the ordered canister ids.
-    round_priorities
-        .iter()
-        .map(|(canister_id, _priority)| *canister_id)
-        .collect()
-}
-
-/// This struct represents a collection of canister IDs.
-struct FilteredCanisters {
-    /// Active canisters during the execution of the inner round.
-    active_canister_ids: BTreeSet<CanisterId>,
-
-    /// Canisters that were heap delta rate-limited during the execution of the inner round.
-    rate_limited_canister_ids: BTreeSet<CanisterId>,
-}
-
-impl FilteredCanisters {
-    fn new() -> Self {
-        Self {
-            active_canister_ids: BTreeSet::new(),
-            rate_limited_canister_ids: BTreeSet::new(),
-        }
-    }
-
-    fn add_canisters(
-        &mut self,
-        active_canister_ids: &[CanisterId],
-        rate_limited_ids: &BTreeSet<CanisterId>,
-    ) {
-        self.active_canister_ids.extend(active_canister_ids.iter());
-        self.rate_limited_canister_ids
-            .extend(rate_limited_ids.iter());
-    }
-}
-
-/// Separates the ordered canisters into a list of active canisters and a set of canisters that
-/// were heap delta rate limited. Does not alter the order of canisters to be executed.
-///
-/// Returns the filtered canisters.
-fn filter_canisters(
-    ordered_canister_ids: &[CanisterId],
-    canisters: &BTreeMap<CanisterId, CanisterState>,
-    heap_delta_rate_limit: NumBytes,
-    rate_limiting_of_heap_delta: FlagStatus,
-) -> (Vec<CanisterId>, BTreeSet<CanisterId>) {
-    let mut rate_limited_ids = BTreeSet::new();
-
-    // Consider only canisters with some input messages for execution.
-    let active_canister_ids = ordered_canister_ids
-        .iter()
-        .filter(|canister_id| {
-            let canister = canisters.get(canister_id).unwrap();
-            let is_under_limit = canister.scheduler_state.heap_delta_debit < heap_delta_rate_limit
-                || rate_limiting_of_heap_delta == FlagStatus::Disabled;
-            if !is_under_limit {
-                rate_limited_ids.insert(**canister_id);
-                return false;
-            }
-            match canister.next_execution() {
-                NextExecution::None | NextExecution::ContinueInstallCode => false,
-                NextExecution::StartNew | NextExecution::ContinueLong => true,
-            }
-        })
-        .cloned()
-        .collect();
-
-    (active_canister_ids, rate_limited_ids)
-}
-
-/// Partitions the executable canisters to the available cores for execution.
-///
-/// Returns the executable canisters partitioned by cores and the
-/// non-executable canisters.
-///
-/// ## Example
-///
-/// Given a list of 8 executable canisters and 3 cpu cores, then we have the
-/// following assignment:
-/// * Core 1 takes `CanisterId1`, `CanisterId4`, `CanisterId7`
-/// * Core 2 takes `CanisterId2`, `CanisterId5`, `CanisterId8`
-/// * Core 3 takes `CanisterId3`, `CanisterId6`
-fn partition_canisters_to_cores(
-    scheduler_cores: usize,
-    executable_canister_ids: &[CanisterId],
-    mut canisters: BTreeMap<CanisterId, CanisterState>,
-) -> (Vec<Vec<CanisterState>>, BTreeMap<CanisterId, CanisterState>) {
-    let mut res = vec![Vec::<CanisterState>::new(); scheduler_cores];
-    for (i, canister_id) in executable_canister_ids.iter().enumerate() {
-        res[i % scheduler_cores].push(canisters.remove(canister_id).unwrap());
-    }
-    (res, canisters)
-}
-
 impl SchedulerImpl {
+    /// Returns scheduler compute capacity.
+    /// For the DTS scheduler it's (number of cores - 1) * 100%
+    pub fn compute_capacity(scheduler_cores: usize) -> usize {
+        // Note: the DTS scheduler requires at least 2 scheduler cores
+        if scheduler_cores >= 2 {
+            (scheduler_cores - 1) * 100
+        } else {
+            0
+        }
+    }
+
+    /// Orders the canisters and updates their accumulated priorities according to
+    /// the strategy described in the Scheduler Analysis document:
+    ///   https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
+    /// DTS Scheduler design doc:
+    ///   https://docs.google.com/document/d/12mpg2qUq-IAl4BVM_DDClAuwm9LzLvLs_R5mU2aP6WY
+    /// Scheduler simulator:
+    ///   https://github.com/dfinity-lab/scheduler_simulator
+    /// A shorter description of the scheduling strategy is available in the note
+    /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
+    fn apply_scheduling_strategy(
+        &self,
+        scheduler_cores: usize,
+        current_round: ExecutionRound,
+        canister_states: &mut BTreeMap<CanisterId, CanisterState>,
+    ) -> RoundSchedule {
+        let number_of_canisters = canister_states.len();
+
+        // DTS Scheduler: Compute the free allocation as F = N * 100 - 𝚺RCi (>= 1).
+        let compute_capacity = Self::compute_capacity(scheduler_cores) as i64;
+
+        // This corresponds to |a| in Scheduler Analysis.
+        let mut total_compute_allocation: i64 = 0;
+
+        // Use this multiplier to achieve the following two: 1) The sum of all the
+        // values we add to accumulated priorities to calculate the round priorities
+        // must be divisible by the number of canisters that are given top priority
+        // in this round. 2) The free compute_allocation (the difference between
+        // capacity and total_compute_allocation) can be distributed to all the
+        // canisters evenly.
+        // The `max(1)` is the corner case when there are no Canisters
+        let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
+
+        // This corresponds to the vector p in the Scheduler Analysis document.
+        let mut round_states = Vec::with_capacity(number_of_canisters);
+
+        // Reset the accumulated priorities every 100 rounds (times the multiplier).
+        // We want to reset the scheduler regularly to safely support changes in the set
+        // of canisters and their compute allocations.
+        let reset_round = (current_round.get() as i64 % (100 * multiplier)) == 0;
+
+        // Compute the priority of the canisters for this round.
+        for (&canister_id, canister) in canister_states.iter_mut() {
+            if reset_round {
+                canister.scheduler_state.accumulated_priority = 0.into();
+                canister.scheduler_state.priority_credit = 0.into();
+            }
+
+            let has_aborted_or_paused_execution =
+                canister.has_aborted_execution() || canister.has_paused_execution();
+            if !has_aborted_or_paused_execution {
+                canister.scheduler_state.long_execution_mode = LongExecutionMode::Opportunistic;
+            }
+
+            let compute_allocation =
+                canister.scheduler_state.compute_allocation.as_percent() as i64;
+            round_states.push(CanisterRoundState {
+                canister_id,
+                accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
+                compute_allocation,
+                long_execution_mode: canister.scheduler_state.long_execution_mode,
+                has_aborted_or_paused_execution,
+            });
+
+            total_compute_allocation += compute_allocation;
+        }
+        // DTS Scheduler: (Always ensure 𝚺RCi <= N * 100 - 1)
+        debug_assert!(total_compute_allocation < compute_capacity);
+
+        // Distribute the free capacity to all the canisters evenly:
+        // DTS Scheduler: Compute the free allocation as F = N * 100 - 𝚺RCi (>= 1).
+        let free_capacity_per_canister =
+            (compute_capacity.saturating_sub(total_compute_allocation)) * scheduler_cores as i64;
+
+        // Fully divide the free allocation across all canisters.
+        let mut long_executions_compute_allocation = 0;
+        let mut total_long_executions = 0;
+        for rs in round_states.iter_mut() {
+            // De-facto compute allocation includes bonus allocation
+            let factual = rs.compute_allocation * multiplier + free_capacity_per_canister;
+            let canister = canister_states.get_mut(&rs.canister_id).unwrap();
+            // DTS Scheduler: round priority = accumulated priority + ACi
+            rs.accumulated_priority += factual;
+            canister.scheduler_state.accumulated_priority = rs.accumulated_priority.into();
+            if rs.has_aborted_or_paused_execution {
+                long_executions_compute_allocation += factual;
+                total_long_executions += 1;
+            }
+        }
+
+        // DTS Scheduler: long execution cores = round_up(𝚺ACi / 100)
+        let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
+            / (100 * multiplier)) as usize;
+
+        round_states.sort_by_key(|rs| {
+            (
+                Reverse(rs.long_execution_mode),
+                Reverse(rs.has_aborted_or_paused_execution),
+                Reverse(rs.accumulated_priority),
+                rs.canister_id,
+            )
+        });
+
+        let round_schedule = RoundSchedule::new(
+            scheduler_cores,
+            long_execution_cores,
+            round_states
+                .iter()
+                .skip(total_long_executions)
+                .map(|rs| rs.canister_id)
+                .collect(),
+            round_states
+                .iter()
+                .take(total_long_executions)
+                .map(|rs| rs.canister_id)
+                .collect(),
+        );
+
+        {
+            let scheduling_order = round_schedule.scheduling_order();
+            let scheduling_order = scheduling_order
+                .prioritized_long_canister_ids
+                .chain(scheduling_order.new_canister_ids)
+                .chain(scheduling_order.opportunistic_long_canister_ids);
+            // The number of active scheduler cores is limited by the number of Canisters to schedule.
+            let active_cores = scheduler_cores.min(number_of_canisters);
+            for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
+                let canister_state = canister_states.get_mut(canister_id).unwrap();
+                // When handling top canisters, decrease their priority by
+                // `multiplier * capacity / scheduler_cores`
+                // DTS Scheduler: postpone the decrease until the end of the round.
+                canister_state.scheduler_state.priority_credit =
+                    (canister_state.scheduler_state.priority_credit.value()
+                        + compute_capacity * multiplier / active_cores as i64)
+                        .into();
+                if i < round_schedule.long_execution_cores {
+                    canister_state.scheduler_state.long_execution_mode =
+                        LongExecutionMode::Prioritized;
+                }
+            }
+        }
+
+        round_schedule
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: SchedulerConfig,
@@ -422,7 +395,7 @@ impl SchedulerImpl {
     fn inner_round<'a>(
         &'a self,
         mut state: ReplicatedState,
-        ordered_canister_ids: &[CanisterId],
+        round_schedule: &RoundSchedule,
         current_round: ExecutionRound,
         measurement_scope: &MeasurementScope<'a>,
         round_limits: &mut RoundLimits,
@@ -463,21 +436,17 @@ impl SchedulerImpl {
                 self.exec_env.subnet_available_memory(&state).into();
             let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
-            let (active_canister_ids, rate_limited_canister_ids) = filter_canisters(
-                ordered_canister_ids,
-                &canisters,
-                self.config.heap_delta_rate_limit,
-                self.rate_limiting_of_heap_delta,
-            );
+            let (rate_limited_canister_ids, active_round_schedule) = round_schedule
+                .filter_canisters(
+                    &canisters,
+                    self.config.heap_delta_rate_limit,
+                    self.rate_limiting_of_heap_delta,
+                );
             round_filtered_canisters
-                .add_canisters(&active_canister_ids, &rate_limited_canister_ids);
+                .add_canisters(&active_round_schedule, &rate_limited_canister_ids);
 
             let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
-                partition_canisters_to_cores(
-                    self.config.scheduler_cores,
-                    &active_canister_ids,
-                    canisters,
-                );
+                active_round_schedule.partition_canisters_to_cores(canisters);
 
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
@@ -504,13 +473,18 @@ impl SchedulerImpl {
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
-            state.put_canister_states(
+
+            // Put back the executed canisters into the canisters map. Since usually most
+            // canisters have no messages to execute, this is likely to be more efficient
+            // than rebuilding the map from scratch.
+            let mut canisters = inactive_canisters;
+            canisters.extend(
                 executed_canisters
                     .into_iter()
-                    .map(|canister| (canister.canister_id(), canister))
-                    .chain(inactive_canisters)
-                    .collect(),
+                    .map(|canister| (canister.canister_id(), canister)),
             );
+            state.put_canister_states(canisters);
+
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
             round_limits.instructions -= as_round_instructions(
@@ -560,6 +534,13 @@ impl SchedulerImpl {
                     | ExecutionTask::AbortedExecution(..)
                     | ExecutionTask::AbortedInstallCode(..) => true,
                 });
+                // Also, apply priority credit for all the finished executions
+                match canister.next_execution() {
+                    NextExecution::None
+                    | NextExecution::StartNew
+                    | NextExecution::ContinueInstallCode => canister.apply_priority_credit(),
+                    NextExecution::ContinueLong => {}
+                }
             }
         }
 
@@ -651,6 +632,7 @@ impl SchedulerImpl {
             subnet_available_memory: (round_limits.subnet_available_memory.get()
                 / self.config.scheduler_cores as i64)
                 .into(),
+            compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
         thread_pool.scoped(|scope| {
@@ -674,6 +656,7 @@ impl SchedulerImpl {
                         .subnet_available_memory
                         .get()
                         .into(),
+                    compute_allocation_used: round_limits.compute_allocation_used,
                 };
                 let config = &self.config;
                 scope.execute(move || {
@@ -813,25 +796,35 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let duration_since_last_charge = state
-            .metadata
-            .duration_between_batches(state.metadata.time_of_last_allocation_charge);
-
-        if state.time()
-            < state.metadata.time_of_last_allocation_charge
-                + self
-                    .cycles_account_manager
-                    .duration_between_allocation_charges()
-        {
-            return;
-        } else {
-            state.metadata.time_of_last_allocation_charge = state.time();
-        }
-
         let state_path = state.root.clone();
         let state_time = state.time();
+        let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
         for canister in state.canisters_iter_mut() {
+            // Postpone charging for resources when a canister has a paused execution
+            // to avoid modifying the balance of a canister during an unfinished operation.
+            if canister.has_paused_execution() || canister.has_paused_install_code() {
+                continue;
+            }
+
+            let duration_since_last_charge = canister.duration_since_last_allocation_charge(
+                metadata_time_of_last_allocation_charge,
+                state_time,
+            );
+
+            if state_time
+                < canister.scheduler_state.time_of_last_allocation_charge
+                    + self
+                        .cycles_account_manager
+                        .duration_between_allocation_charges()
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            } else {
+                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+            }
+
             self.observe_canister_metrics(canister);
             if self
                 .cycles_account_manager
@@ -1165,6 +1158,7 @@ impl Scheduler for SchedulerImpl {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(self.config.max_instructions_per_round / 16),
             subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
+            compute_allocation_used: state.total_compute_allocation(),
         };
 
         // Execute subnet messages.
@@ -1243,18 +1237,18 @@ impl Scheduler for SchedulerImpl {
             - as_round_instructions(self.config.max_instructions_per_message)
             + RoundInstructions::from(1);
 
-        let ordered_canister_ids;
+        let round_schedule;
         {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
-            ordered_canister_ids = {
+            round_schedule = {
                 let mut canisters = state.take_canister_states();
-                let ordered_canister_ids = apply_scheduling_strategy(
+                let round_schedule = self.apply_scheduling_strategy(
                     self.config.scheduler_cores,
                     current_round,
                     &mut canisters,
                 );
 
-                for canister_id in &ordered_canister_ids {
+                for canister_id in round_schedule.iter() {
                     let canister_state = canisters.get_mut(canister_id).unwrap();
                     if !canister_state.has_input() {
                         canister_state
@@ -1265,13 +1259,13 @@ impl Scheduler for SchedulerImpl {
                 }
 
                 state.put_canister_states(canisters);
-                ordered_canister_ids
+                round_schedule
             };
         }
 
         let (mut state, active_canister_ids) = self.inner_round(
             state,
-            &ordered_canister_ids,
+            &round_schedule,
             current_round,
             &measurement_scope,
             &mut round_limits,
@@ -1378,6 +1372,38 @@ impl Scheduler for SchedulerImpl {
         }
         self.finish_round(&mut final_state, current_round_type);
         final_state
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+/// Filtered Canisters
+
+/// This struct represents a collection of canister IDs.
+struct FilteredCanisters {
+    /// Active canisters during the execution of the inner round.
+    active_canister_ids: BTreeSet<CanisterId>,
+
+    /// Canisters that were heap delta rate-limited during the execution of the inner round.
+    rate_limited_canister_ids: BTreeSet<CanisterId>,
+}
+
+impl FilteredCanisters {
+    fn new() -> Self {
+        Self {
+            active_canister_ids: BTreeSet::new(),
+            rate_limited_canister_ids: BTreeSet::new(),
+        }
+    }
+
+    fn add_canisters(
+        &mut self,
+        active_round_schedule: &RoundSchedule,
+        rate_limited_ids: &[CanisterId],
+    ) {
+        self.active_canister_ids
+            .extend(active_round_schedule.iter());
+        self.rate_limited_canister_ids
+            .extend(rate_limited_ids.iter());
     }
 }
 
@@ -1490,6 +1516,7 @@ fn execute_canisters_on_thread(
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;
+            // TODO(RUN-301): break the loop after finishing long execution
             let ExecuteCanisterResult {
                 canister: new_canister,
                 heap_delta,

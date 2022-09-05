@@ -6,7 +6,7 @@ rust_library(
     name = "keygen",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_keygen",
-    edition = "2018",
+    version = "0.1.0",
     deps = [
         "//rs/protobuf",
         "//rs/registry/keys",

@@ -71,7 +71,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         .await;
 
         info!(logger, "Asserting endpoint reachability");
-        assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
+        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         info!(logger, "Getting public key");
@@ -99,9 +99,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status"
     );
     block_on(async {
-        assert_endpoints_reachability(
+        assert_endpoints_health(
             endpoints_to_remove.as_slice(),
-            EndpointsStatus::AllUnreachable,
+            EndpointsStatus::AllUnhealthy,
         )
         .await
     });

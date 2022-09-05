@@ -150,6 +150,12 @@ message Neuron {
   // same scale as the governance token, maturity is not directly convertible to
   // governance tokens: conversion requires a minting event.
   uint64 maturity_e8s_equivalent = 12;
+
+  // A percentage multiplier to be applied when calculating the voting power of a neuron.
+  // The multiplier's unit is a integer percentage in the range of 0 to 100. The
+  // voting_power_percentage_multiplier can only be less than 100 for a developer neuron
+  // that is created at SNS initialization.
+  uint64 voting_power_percentage_multiplier = 13;
 }
 
 // The types of votes a neuron can issue.
@@ -587,7 +593,7 @@ message ProposalData {
   // The initial voting period of the proposal, identical in meaning to the one in  
   // NervousSystemParameters, and duplicated here so the parameters can be changed 
   // without affecting existing proposals.
-  uint64 initial_voting_period = 17;
+  uint64 initial_voting_period_seconds = 17;
 
   // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in 
   // meaning to the one in NervousSystemParameters, and duplicated here so the 
@@ -634,9 +640,9 @@ message NervousSystemParameters {
   // a proposal's lifecycle due to the wait-for-quiet algorithm.
   //
   // The voting period must be between (inclusive) the defined floor
-  // INITIAL_VOTING_PERIOD_FLOOR and ceiling
-  // INITIAL_VOTING_PERIOD_CEILING.
-  optional uint64 initial_voting_period = 5;
+  // INITIAL_VOTING_PERIOD_SECONDS_FLOOR and ceiling
+  // INITIAL_VOTING_PERIOD_SECONDS_CEILING.
+  optional uint64 initial_voting_period_seconds = 5;
 
   // The wait for quiet algorithm extends the voting period of a proposal when
   // there is a flip in the majority vote during the proposal's voting period.
@@ -998,6 +1004,36 @@ message Governance {
   }
 
   SnsMetadata sns_metadata = 21;
+
+  // A version of the SNS defined by the WASM hashes of its canisters.
+  message Version {
+    // The hash of the Root canister WASM.
+    bytes root_wasm_hash = 1;
+    // The hash of the Governance canister WASM.
+    bytes governance_wasm_hash = 2;
+    // The hash of the Ledger canister WASM.
+    bytes ledger_wasm_hash = 3;
+    // The hash of the Swap canister WASM.
+    bytes swap_wasm_hash = 4;
+    // The hash of the Ledger Archive canister WASM.
+    bytes archive_wasm_hash = 5;
+  }
+
+  // An upgrade in progress, defined as a version target and a time at which it is considered failed.
+  message UpgradeInProgress {
+    // Version to  be upgraded to
+    Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+  }
+  // Current version that this SNS is running.
+  Version deployed_version = 22;
+
+  // Version SNS is in process of upgrading to.
+  UpgradeInProgress pending_version = 23;
 }
 
 // Request message for 'get_metadata'.
@@ -1009,6 +1045,18 @@ message GetMetadataResponse {
   optional string url = 2;
   optional string name = 3;
   optional string description = 4;
+}
+
+// Request for the SNS's currently running version.
+message GetRunningSnsVersionRequest {}
+
+// Response with the SNS's currently running version and any upgrades
+// that are in progress.
+message GetRunningSnsVersionResponse {
+  // The currently deployed version of the SNS.
+  Governance.Version deployed_version = 1;
+  // The upgrade in progress, if any.
+  Governance.UpgradeInProgress pending_version = 2;
 }
 
 // Empty message to use in oneof fields that represent empty
@@ -1449,3 +1497,4 @@ message Account {
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
 }
+

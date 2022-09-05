@@ -1,7 +1,7 @@
 [package]
 name = "ic-state-tool"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,8 +20,12 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-crypto-sha = { path = "../crypto/sha" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prost = "0.10.4"
 scoped_threadpool = "0.1.*"
+
+[dev-dependencies]
+tempfile = "3.1.0"

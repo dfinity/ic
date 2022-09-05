@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-internal-basic-sig-ed25519"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 base64 = "0.11.0"
@@ -9,6 +9,7 @@ curve25519-dalek = "3.0.2"
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-protobuf = { path = "../../../../../protobuf" }

@@ -1,7 +1,7 @@
 [package]
 name = "ic-registry-local-store"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-interfaces = { path = "../../interfaces" }
@@ -13,5 +13,6 @@ bytes = "1.0.1"
 prost = "0.10.4"
 
 [dev-dependencies]
+ic-registry-local-store-artifacts = { path = "./artifacts" }
 rand = "0.8"
 tempfile = "3.0"

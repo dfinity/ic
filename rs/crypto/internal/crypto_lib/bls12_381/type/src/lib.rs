@@ -6,11 +6,11 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
-mod miracl;
-
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
+use paste::paste;
 use rand::{CryptoRng, RngCore};
+use std::fmt;
 use zeroize::Zeroize;
 
 macro_rules! ctoption_ok_or {
@@ -38,7 +38,7 @@ pub enum PairingInvalidScalar {
 }
 
 /// An integer of the order of the groups G1/G2/Gt
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
 pub struct Scalar {
     value: bls12_381::Scalar,
 }
@@ -58,6 +58,18 @@ impl PartialOrd for Scalar {
         Some(self.cmp(other))
     }
 }
+
+macro_rules! impl_debug_using_serialize_for {
+    ( $typ:ty ) => {
+        impl fmt::Debug for $typ {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}({})", stringify!($typ), hex::encode(self.serialize()))
+            }
+        }
+    };
+}
+
+impl_debug_using_serialize_for!(Scalar);
 
 impl Scalar {
     /// The size in bytes of this type
@@ -91,6 +103,33 @@ impl Scalar {
         } else {
             Self::from_u64(v.abs() as u64)
         }
+    }
+
+    /// Create a scalar from a small integer value
+    pub fn from_usize(v: usize) -> Self {
+        Self::from_u64(v as u64)
+    }
+
+    /// Create a scalar from a small integer value
+    pub fn from_isize(v: isize) -> Self {
+        if v < 0 {
+            Self::from_u64((v as i64).abs() as u64).neg()
+        } else {
+            Self::from_u64(v.abs() as u64)
+        }
+    }
+
+    /// Return `cnt` consecutive powers of `x`
+    pub fn xpowers(x: &Self, cnt: usize) -> Vec<Self> {
+        let mut r = Vec::with_capacity(cnt);
+
+        let mut xpow = Self::one();
+        for _ in 0..cnt {
+            xpow *= x;
+            r.push(xpow);
+        }
+
+        r
     }
 
     /// Deterministically hash an input onto a BLS12-381 scalar
@@ -204,15 +243,26 @@ impl Scalar {
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
     /// This should not be used for new code but only for compatability in
-    /// situations where MIRACL's BIG::randomnum was previously used
-    pub fn miracl_random_using_miracl_rand(
-        rng: &mut impl miracl_core_bls12381::rand::RAND,
-    ) -> Self {
-        let mut bytes = [0u8; 64];
-        for i in 0..64 {
-            bytes[i] = rng.getbyte();
+    /// situations where MIRACL's BIG::randomnum was previously used with
+    /// a limited range
+    pub fn miracl_random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
+        use rand::Rng;
+
+        let n_bits = 64 - n.leading_zeros();
+        let mut d = 0u128;
+        let mut j = 0;
+        let mut r: u8 = 0;
+        for _ in 0..2 * n_bits {
+            r = if j == 0 { rng.gen::<u8>() } else { r >> 1 };
+
+            let b = (r & 1) as u128;
+            d <<= 1;
+            d += b;
+            j = (j + 1) % 8;
         }
-        Self::miracl_bigrandomnum_impl(&bytes)
+
+        d %= n as u128; // after this operation, d is < u64::MAX
+        Self::from_u64(d as u64) // so this cast is safe
     }
 
     /// Randomly generate a scalar in a way that is compatible with MIRACL
@@ -252,7 +302,7 @@ impl Scalar {
     }
 
     /// Double this scalar
-    pub(crate) fn double(&self) -> Self {
+    pub fn double(&self) -> Self {
         Self::new(self.value.double())
     }
 
@@ -284,6 +334,38 @@ impl Scalar {
         }
     }
 
+    /// Return a random scalar within a small range
+    ///
+    /// Returns a scalar in range [0,n) using rejection sampling.
+    pub fn random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
+        if n <= 1 {
+            return Self::zero();
+        }
+
+        let t_bits = std::mem::size_of::<u64>() * 8;
+        let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
+        let n_bytes = (n_bits + 7) / 8;
+        let n_mask = if n_bits % 8 == 0 {
+            0xFF
+        } else {
+            0xFF >> (8 - n_bits % 8)
+        };
+
+        let n = Scalar::from_u64(n);
+
+        loop {
+            let mut buf = [0u8; Self::BYTES];
+            rng.fill_bytes(&mut buf[Self::BYTES - n_bytes..]);
+            buf[Self::BYTES - n_bytes] &= n_mask;
+
+            if let Ok(s) = Self::deserialize(&buf) {
+                if s < n {
+                    return s;
+                }
+            }
+        }
+    }
+
     /// Decode a scalar as a big-endian byte string, accepting out of range elements
     ///
     /// Out of range elements are reduced modulo the group order
@@ -298,8 +380,9 @@ impl Scalar {
     }
 
     /// Deserialize a scalar from a big-endian byte string
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidScalar> {
+    pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidScalar> {
         let mut bytes: [u8; Self::BYTES] = bytes
+            .as_ref()
             .try_into()
             .map_err(|_| PairingInvalidScalar::InvalidScalar)?;
         bytes.reverse();
@@ -307,11 +390,51 @@ impl Scalar {
         ctoption_ok_or!(scalar, PairingInvalidScalar::InvalidScalar)
     }
 
+    /// Deserialize multiple scalars
+    ///
+    /// This function returns Ok only if all of the provided inputs
+    /// represent a valid scalar.
+    pub fn batch_deserialize<B: AsRef<[u8]>>(
+        inputs: &[B],
+    ) -> Result<Vec<Self>, PairingInvalidScalar> {
+        let mut r = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            r.push(Self::deserialize(input)?);
+        }
+        Ok(r)
+    }
+
     /// Serialize the scalar to a big-endian byte string
     pub fn serialize(&self) -> [u8; Self::BYTES] {
         let mut bytes = self.value.to_bytes();
         bytes.reverse();
         bytes
+    }
+
+    /// Serialize the scalar to a big-endian byte string in some specific type
+    pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+        T::from(self.serialize())
+    }
+
+    /// Multiscalar multiplication
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+    ///
+    /// Returns zero if terms is empty
+    ///
+    /// Warning: this function may leak information about the scalars via
+    /// memory-based side channels. Do not use this function with secret
+    /// scalars. For the purposes of this warning, the first element of
+    /// the tuple may be a secret, while the values of the second element
+    /// of the tuple could leak to an attacker.
+    ///
+    /// Currently only a naive version is implemented.
+    pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
+        let mut accum = Self::zero();
+        for term in terms {
+            accum += term.0 * term.1;
+        }
+        accum
     }
 
     /// Compare a Scalar with another
@@ -429,6 +552,38 @@ macro_rules! declare_addsub_ops_for {
     };
 }
 
+macro_rules! declare_mixed_addition_ops_for {
+    ( $proj:ty, $affine:ty ) => {
+        impl std::ops::Add<$affine> for $proj {
+            type Output = Self;
+
+            fn add(self, other: $affine) -> Self {
+                Self::new(self.inner().add_mixed(other.inner()))
+            }
+        }
+
+        impl std::ops::Add<&$affine> for $proj {
+            type Output = Self;
+
+            fn add(self, other: &$affine) -> Self {
+                Self::new(self.inner().add_mixed(other.inner()))
+            }
+        }
+
+        impl std::ops::AddAssign<$affine> for $proj {
+            fn add_assign(&mut self, other: $affine) {
+                self.value = self.inner().add_mixed(other.inner());
+            }
+        }
+
+        impl std::ops::AddAssign<&$affine> for $proj {
+            fn add_assign(&mut self, other: &$affine) {
+                self.value = self.inner().add_mixed(other.inner());
+            }
+        }
+    };
+}
+
 macro_rules! declare_mul_scalar_ops_for {
     ( $typ:ty ) => {
         impl std::ops::Mul<Scalar> for $typ {
@@ -442,6 +597,13 @@ macro_rules! declare_mul_scalar_ops_for {
             type Output = Self;
             fn mul(self, scalar: &Scalar) -> Self {
                 Self::new(self.inner() * scalar.inner())
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> $typ {
+                *self * scalar
             }
         }
 
@@ -464,8 +626,15 @@ declare_mul_scalar_ops_for!(Scalar);
 
 macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
+        paste! {
+            lazy_static::lazy_static! {
+                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new(bls12_381::$affine::generator());
+                static ref [<$affine:upper _IDENTITY>] : $affine = $affine::new(bls12_381::$affine::identity());
+            }
+        }
+
         /// An element of the group in affine form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $affine {
             value: bls12_381::$affine
         }
@@ -485,13 +654,13 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> Self {
-                Self::new(bls12_381::$affine::identity())
+            pub fn identity() -> &'static Self {
+                paste! { &[<$affine:upper _IDENTITY>] }
             }
 
             /// Return the generator element in this group
-            pub fn generator() -> Self {
-                Self::new(bls12_381::$affine::generator())
+            pub fn generator() -> &'static Self {
+                paste! { &[<$affine:upper _GENERATOR>] }
             }
 
             /// Hash into the group
@@ -511,12 +680,25 @@ macro_rules! define_affine_and_projective_types {
             ///
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
-                let bytes : &[u8; Self::BYTES] = bytes
+            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+                let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
                 let pt = bls12_381::$affine::from_compressed(bytes);
                 ctoption_ok_or!(pt, PairingInvalidPoint::InvalidPoint)
+            }
+
+            /// Deserialize multiple point (compressed format only)
+            ///
+            /// This version verifies that the decoded point is within the prime order
+            /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
+            /// if all of the provided bytes represent a valid point.
+            pub fn batch_deserialize<B: AsRef<[u8]>>(inputs: &[B]) -> Result<Vec<Self>, PairingInvalidPoint> {
+                let mut r = Vec::with_capacity(inputs.len());
+                for input in inputs {
+                    r.push(Self::deserialize(input)?);
+                }
+                Ok(r)
             }
 
             /// Deserialize a point (compressed format only), trusted bytes edition
@@ -525,8 +707,8 @@ macro_rules! define_affine_and_projective_types {
             /// create a point which is not on the curve. However it is possible
             /// using this function to create a point which is not within the
             /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
-                let bytes : &[u8; Self::BYTES] = bytes
+            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+                let bytes : &[u8; Self::BYTES] = bytes.as_ref()
                     .try_into()
                     .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
                 let pt = bls12_381::$affine::from_compressed_unchecked(bytes);
@@ -536,6 +718,11 @@ macro_rules! define_affine_and_projective_types {
             /// Serialize this point in compressed format
             pub fn serialize(&self) -> [u8; Self::BYTES] {
                 self.value.to_compressed()
+            }
+
+            /// Serialize a point in compressed format in some specific type
+            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+                T::from(self.serialize())
             }
 
             /// Return true if this is the identity element
@@ -558,8 +745,15 @@ macro_rules! define_affine_and_projective_types {
             }
         }
 
+        paste! {
+            lazy_static::lazy_static! {
+                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(bls12_381::$projective::generator());
+                static ref [<$projective:upper _IDENTITY>] : $projective = $projective::new(bls12_381::$projective::identity());
+            }
+        }
+
         /// An element of the group in projective form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+        #[derive(Copy, Clone, Eq, PartialEq, Zeroize)]
         pub struct $projective {
             value: bls12_381::$projective
         }
@@ -578,6 +772,28 @@ macro_rules! define_affine_and_projective_types {
                 &self.value
             }
 
+            /// Constant time selection
+            ///
+            /// Equivalent to from[index] except avoids leaking the index
+            /// through side channels.
+            ///
+            /// If index is out of range, returns the identity element
+            pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
+                use subtle::{ConditionallySelectable, ConstantTimeEq};
+                let mut val = bls12_381::$projective::identity();
+
+                for v in 0..from.len() {
+                    val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
+                }
+
+                Self::new(val)
+            }
+
+            /// Return the doubling of this point
+            pub fn double(&self) -> Self {
+                Self::new(self.value.double())
+            }
+
             /// Sum some points
             pub fn sum(pts: &[Self]) -> Self {
                 let mut sum = bls12_381::$projective::identity();
@@ -591,9 +807,14 @@ macro_rules! define_affine_and_projective_types {
             ///
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
+            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
                 let pt = $affine::deserialize(bytes)?;
                 Ok(pt.into())
+            }
+
+            /// Serialize a point in compressed format in some specific type
+            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
+                T::from(self.serialize())
             }
 
             /// Deserialize a point (compressed format only), trusted bytes edition
@@ -602,7 +823,7 @@ macro_rules! define_affine_and_projective_types {
             /// create a point which is not on the curve. However it is possible
             /// using this function to create a point which is not within the
             /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked(bytes: &[u8]) -> Result<Self, PairingInvalidPoint> {
+            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
                 let pt = $affine::deserialize_unchecked(bytes)?;
                 Ok(pt.into())
             }
@@ -613,13 +834,13 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Return the identity element in this group
-            pub fn identity() -> Self {
-                Self::new(bls12_381::$projective::identity())
+            pub fn identity() -> &'static Self {
+                paste! { &[<$projective:upper _IDENTITY>] }
             }
 
             /// Return the generator element in this group
-            pub fn generator() -> Self {
-                Self::new(bls12_381::$projective::generator())
+            pub fn generator() -> &'static Self {
+                paste! { &[<$projective:upper _GENERATOR>] }
             }
 
             /// Hash into the group
@@ -649,13 +870,18 @@ macro_rules! define_affine_and_projective_types {
                 use std::ops::Neg;
                 Self::new(self.value.neg())
             }
+
+            /// Convert this point to affine format
+            pub fn to_affine(&self) -> $affine {
+                $affine::new(self.value.into())
+            }
         }
 
         impl std::ops::Mul<Scalar> for $affine {
             type Output = $projective;
 
             fn mul(self, scalar: Scalar) -> $projective {
-                <$projective>::new(self.inner() * scalar.inner())
+                <$projective>::from(self).windowed_mul(&scalar)
             }
         }
 
@@ -663,7 +889,23 @@ macro_rules! define_affine_and_projective_types {
             type Output = $projective;
 
             fn mul(self, scalar: &Scalar) -> $projective {
-                <$projective>::new(self.inner() * scalar.inner())
+                <$projective>::from(self).windowed_mul(scalar)
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for &$affine {
+            type Output = $projective;
+
+            fn mul(self, scalar: Scalar) -> $projective {
+               *self * scalar
+            }
+        }
+
+        impl std::ops::Mul<&Scalar> for &$affine {
+            type Output = $projective;
+
+            fn mul(self, scalar: &Scalar) -> $projective {
+               *self * scalar
             }
         }
 
@@ -694,206 +936,270 @@ macro_rules! define_affine_and_projective_types {
     }
 }
 
+macro_rules! declare_mul2_impl_for {
+    ( $typ:ty, $window:expr ) => {
+        impl $typ {
+            /// Multiscalar multiplication (aka sum-of-products)
+            ///
+            /// Equivalent to x*a + y*b
+            ///
+            /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
+            /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
+            ///
+            /// This function is intended to work in constant time, and not
+            /// leak information about the inputs.
+            pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
+                // Configurable window size: can be 1, 2, or 4
+                type Window = WindowInfo<$window>;
+
+                // Derived constants
+                const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
+
+                // Indexing helpers
+                fn tbl_col(i: usize) -> usize {
+                    i
+                }
+                fn tbl_row(i: usize) -> usize {
+                    i << Window::SIZE
+                }
+
+                /*
+                A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
+
+                Each element is equal to a small linear combination of x and y:
+
+                tbl[(yi:xi)] = x*xi + y*yi
+
+                where xi is the lowest bits of the index and yi is the upper bits.  Each
+                xi and yi is WINDOW_SIZE bits long (and thus at most 2^WINDOW_SIZE).
+
+                We build up the table incrementally using additions and doubling, to
+                avoid the cost of full scalar mul.
+                 */
+                let mut tbl = [*Self::identity(); TABLE_SIZE];
+
+                // Precompute the table (tbl[0] is left as the identity)
+                for i in 1..TABLE_SIZE {
+                    // The indexing here depends just on i, which is a public loop index
+
+                    let xi = i % Window::ELEMENTS;
+                    let yi = (i >> Window::SIZE) % Window::ELEMENTS;
+
+                    if xi % 2 == 0 && yi % 2 == 0 {
+                        tbl[i] = tbl[i / 2].double();
+                    } else if xi > 0 && yi > 0 {
+                        tbl[i] = tbl[tbl_col(xi)] + tbl[tbl_row(yi)];
+                    } else if xi > 0 {
+                        tbl[i] = tbl[tbl_col(xi - 1)] + *x;
+                    } else if yi > 0 {
+                        tbl[i] = tbl[tbl_row(yi - 1)] + *y;
+                    }
+                }
+
+                let s1 = a.serialize();
+                let s2 = b.serialize();
+
+                let mut accum = *Self::identity();
+
+                for i in 0..Window::WINDOWS {
+                    // skip on first iteration: doesn't leak secrets as index is public
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w1 = Window::extract(&s1, i);
+                    let w2 = Window::extract(&s2, i);
+                    let window = tbl_col(w1 as usize) + tbl_row(w2 as usize);
+
+                    accum += Self::ct_select(&tbl, window);
+                }
+
+                accum
+            }
+        }
+    };
+}
+
+macro_rules! declare_muln_vartime_impl_for {
+    ( $typ:ty, $window:expr ) => {
+        impl $typ {
+            /// Multiscalar multiplication using Pippenger's algorithm
+            ///
+            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+            ///
+            /// Returns the identity element if terms is empty.
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
+                // Configurable window size: can be 1, 2, 4, or 8
+                type Window = WindowInfo<$window>;
+
+                let mut windows = Vec::with_capacity(terms.len());
+                for (_pt, scalar) in terms {
+                    let sb = scalar.serialize();
+
+                    let mut window = [0u8; Window::WINDOWS];
+                    for i in 0..Window::WINDOWS {
+                        window[i] = Window::extract(&sb, i);
+                    }
+                    windows.push(window);
+                }
+
+                let id = *Self::identity();
+                let mut accum = id;
+
+                let mut buckets = [id; Window::ELEMENTS];
+
+                for i in 0..Window::WINDOWS {
+                    let mut max_bucket = 0;
+                    for j in 0..terms.len() {
+                        let bucket_index = windows[j][i] as usize;
+                        if bucket_index > 0 {
+                            buckets[bucket_index] += terms[j].0;
+                            max_bucket = std::cmp::max(max_bucket, bucket_index);
+                        }
+                    }
+
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let mut t = id;
+
+                    for j in (1..=max_bucket).rev() {
+                        t += buckets[j];
+                        accum += t;
+                        buckets[j] = id;
+                    }
+                }
+
+                accum
+            }
+        }
+    };
+}
+
+macro_rules! declare_muln_vartime_affine_impl_for {
+    ( $proj:ty, $affine:ty ) => {
+        impl $proj {
+            /// Multiscalar multiplication
+            ///
+            /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+            ///
+            /// Returns the identity element if terms is empty.
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn muln_affine_vartime(points: &[$affine], scalars: &[Scalar]) -> Self {
+                let count = std::cmp::min(points.len(), scalars.len());
+                let mut terms = Vec::with_capacity(count);
+
+                for i in 0..count {
+                    terms.push((<$proj>::from(points[i]), scalars[i]));
+                }
+
+                Self::muln_vartime(&terms)
+            }
+        }
+    };
+}
+
+macro_rules! declare_windowed_scalar_mul_ops_for {
+    ( $typ:ty, $window:expr ) => {
+        impl $typ {
+            pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
+                // Configurable window size: can be 1, 2, or 4
+                type Window = WindowInfo<$window>;
+
+                // Derived constants
+                const TABLE_SIZE: usize = Window::ELEMENTS;
+
+                let mut tbl = [*Self::identity(); TABLE_SIZE];
+
+                for i in 1..TABLE_SIZE {
+                    tbl[i] = tbl[i - 1] + *self;
+                }
+
+                let s = scalar.serialize();
+
+                let mut accum = *Self::identity();
+
+                for i in 0..Window::WINDOWS {
+                    // skip on first iteration: doesn't leak secrets as index is public
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w = Window::extract(&s, i);
+                    accum += Self::ct_select(&tbl, w as usize);
+                }
+
+                accum
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for $typ {
+            type Output = Self;
+            fn mul(self, scalar: Scalar) -> Self {
+                self.windowed_mul(&scalar)
+            }
+        }
+
+        impl std::ops::Mul<&Scalar> for $typ {
+            type Output = Self;
+            fn mul(self, scalar: &Scalar) -> Self {
+                self.windowed_mul(scalar)
+            }
+        }
+
+        impl std::ops::Mul<Scalar> for &$typ {
+            type Output = $typ;
+            fn mul(self, scalar: Scalar) -> Self::Output {
+                *self * scalar
+            }
+        }
+
+        impl std::ops::MulAssign<Scalar> for $typ {
+            fn mul_assign(&mut self, other: Scalar) {
+                *self = self.windowed_mul(&other);
+            }
+        }
+
+        impl std::ops::MulAssign<&Scalar> for $typ {
+            fn mul_assign(&mut self, other: &Scalar) {
+                *self = self.windowed_mul(other);
+            }
+        }
+    };
+}
+
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
-declare_mul_scalar_ops_for!(G1Projective);
-
-struct WindowInfo<const WINDOW_SIZE: usize> {}
-
-impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
-    const SIZE: usize = WINDOW_SIZE;
-    const WINDOWS: usize = (Scalar::BYTES * 8) / WINDOW_SIZE;
-
-    const MASK: u8 = 0xFFu8 >> (8 - WINDOW_SIZE);
-    const ELEMENTS: usize = 1 << WINDOW_SIZE;
-    const WINDOWS_IN_BYTE: usize = 8 / WINDOW_SIZE;
-
-    #[inline(always)]
-    fn window_bit_offset(w: usize) -> usize {
-        8 - Self::SIZE - Self::SIZE * (w % Self::WINDOWS_IN_BYTE)
-    }
-
-    #[inline(always)]
-    /// Extract a window from a serialized scalar value
-    ///
-    /// Treat the scalar as if it was a sequence of windows, each of WINDOW_SIZE bits,
-    /// and return the `w`th one of them. For 8 bit windows, this is simply the byte
-    /// value. For smaller windows this is some subset of a single byte.
-    ///
-    /// Only window sizes which are a power of 2 are supported which simplifies the
-    /// implementation to not require creating windows that cross byte boundaries.
-    fn extract(scalar: &[u8; Scalar::BYTES], w: usize) -> u8 {
-        assert!(WINDOW_SIZE == 1 || WINDOW_SIZE == 2 || WINDOW_SIZE == 4 || WINDOW_SIZE == 8);
-
-        let window_byte = scalar[w / Self::WINDOWS_IN_BYTE];
-        (window_byte >> Self::window_bit_offset(w)) & Self::MASK
-    }
-}
-
-impl G1Projective {
-    /// Constant time selection
-    ///
-    /// Equivalent to from[index] except avoids leaking the index
-    /// through side channels.
-    ///
-    /// If index is out of range, returns the identity element
-    pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
-        use subtle::{ConditionallySelectable, ConstantTimeEq};
-        let mut val = bls12_381::G1Projective::identity();
-
-        for v in 0..from.len() {
-            val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
-        }
-
-        Self::new(val)
-    }
-
-    /// Return the doubling of this point
-    pub(crate) fn double(&self) -> Self {
-        Self::new(self.value.double())
-    }
-
-    /// Multiscalar multiplication
-    ///
-    /// Equivalent to x*a + y*b
-    ///
-    /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
-    /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
-    ///
-    /// This function is intended to work in constant time, and not
-    /// leak information about the points or scalars.
-    pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
-        // Configurable window size: can be 1, 2, or 4
-        type Window = WindowInfo<2>;
-
-        // Derived constants
-        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
-
-        // Indexing helpers
-        fn tbl_col(i: usize) -> usize {
-            i
-        }
-        fn tbl_row(i: usize) -> usize {
-            i << Window::SIZE
-        }
-
-        /*
-        A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
-
-        Each element is equal to a small linear combination of x and y:
-
-        tbl[(yi:xi)] = x*xi + y*yi
-
-        where xi is the lowest bits of the index and yi is the upper bits.  Each
-        xi and yi is WINDOW_SIZE bits long (and thus at most 2^WINDOW_SIZE).
-
-        We build up the table incrementally using additions and doubling, to
-        avoid the cost of full scalar mul.
-        */
-        let mut tbl = [Self::identity(); TABLE_SIZE];
-
-        // Precompute the table (tbl[0] is left as the identity)
-        for i in 1..TABLE_SIZE {
-            // The indexing here depends just on i, which is a public loop index
-
-            let xi = i % Window::ELEMENTS;
-            let yi = (i >> Window::SIZE) % Window::ELEMENTS;
-
-            if xi % 2 == 0 && yi % 2 == 0 {
-                tbl[i] = tbl[i / 2].double();
-            } else if xi > 0 && yi > 0 {
-                tbl[i] = tbl[tbl_col(xi)] + tbl[tbl_row(yi)];
-            } else if xi > 0 {
-                tbl[i] = tbl[tbl_col(xi - 1)] + *x;
-            } else if yi > 0 {
-                tbl[i] = tbl[tbl_row(yi - 1)] + *y;
-            }
-        }
-
-        let s1 = a.serialize();
-        let s2 = b.serialize();
-
-        let mut accum = Self::identity();
-
-        for i in 0..Window::WINDOWS {
-            // skip on first iteration: doesn't leak secrets as index is public
-            if i > 0 {
-                for _ in 0..Window::SIZE {
-                    accum = accum.double();
-                }
-            }
-
-            let w1 = Window::extract(&s1, i);
-            let w2 = Window::extract(&s2, i);
-            let window = tbl_col(w1 as usize) + tbl_row(w2 as usize);
-
-            accum += G1Projective::ct_select(&tbl, window);
-        }
-
-        accum
-    }
-
-    /// Multiscalar multiplication using Pippenger's algorithm
-    ///
-    /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
-    ///
-    /// Returns the identity element if terms is empty.
-    ///
-    /// Warning: this function leaks information about the scalars via
-    /// memory-based side channels. Do not use this function with secret
-    /// scalars.
-    pub fn muln_vartime(terms: &[(Self, Scalar)]) -> Self {
-        // Configurable window size: can be 1, 2, 4, or 8
-        type Window = WindowInfo<4>;
-
-        let mut windows = Vec::with_capacity(terms.len());
-        for (_pt, scalar) in terms {
-            let sb = scalar.serialize();
-
-            let mut window = [0u8; Window::WINDOWS];
-            for i in 0..Window::WINDOWS {
-                window[i] = Window::extract(&sb, i);
-            }
-            windows.push(window);
-        }
-
-        let id = Self::identity();
-        let mut accum = id;
-
-        let mut buckets = [id; Window::ELEMENTS];
-
-        for i in 0..Window::WINDOWS {
-            let mut max_bucket = 0;
-            for j in 0..terms.len() {
-                let bucket_index = windows[j][i] as usize;
-                if bucket_index > 0 {
-                    buckets[bucket_index] += terms[j].0;
-                    max_bucket = std::cmp::max(max_bucket, bucket_index);
-                }
-            }
-
-            if i > 0 {
-                for _ in 0..Window::SIZE {
-                    accum = accum.double();
-                }
-            }
-
-            let mut t = id;
-
-            for j in (1..=max_bucket).rev() {
-                t += buckets[j];
-                accum += t;
-                buckets[j] = id;
-            }
-        }
-
-        accum
-    }
-}
+declare_mixed_addition_ops_for!(G1Projective, G1Affine);
+declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
+declare_mul2_impl_for!(G1Projective, 2);
+declare_muln_vartime_impl_for!(G1Projective, 4);
+declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
+impl_debug_using_serialize_for!(G1Affine);
+impl_debug_using_serialize_for!(G1Projective);
 
 define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);
-declare_mul_scalar_ops_for!(G2Projective);
+declare_mixed_addition_ops_for!(G2Projective, G2Affine);
+declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
+declare_mul2_impl_for!(G2Projective, 2);
+declare_muln_vartime_impl_for!(G2Projective, 4);
+impl_debug_using_serialize_for!(G2Affine);
+impl_debug_using_serialize_for!(G2Projective);
 
 /// An element of the group Gt
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -901,7 +1207,15 @@ pub struct Gt {
     value: bls12_381::Gt,
 }
 
+lazy_static::lazy_static! {
+    static ref GT_GENERATOR : Gt = Gt::new(bls12_381::Gt::generator());
+    static ref GT_IDENTITY : Gt = Gt::new(bls12_381::Gt::identity());
+}
+
 impl Gt {
+    /// The size in bytes of this type
+    pub const BYTES: usize = 576;
+
     /// Create a new Gt from the inner type
     pub(crate) fn new(value: bls12_381::Gt) -> Self {
         Self { value }
@@ -912,13 +1226,13 @@ impl Gt {
     }
 
     /// Return the identity element in the group
-    pub fn identity() -> Self {
-        Self::new(bls12_381::Gt::identity())
+    pub fn identity() -> &'static Self {
+        &GT_IDENTITY
     }
 
     /// Return the generator element in the group
-    pub fn generator() -> Self {
-        Self::new(bls12_381::Gt::generator())
+    pub fn generator() -> &'static Self {
+        &GT_GENERATOR
     }
 
     /// Compute the pairing function e(g1,g2) -> gt
@@ -949,6 +1263,14 @@ impl Gt {
         use std::ops::Neg;
         Self::new(self.value.neg())
     }
+
+    /// Return some arbitrary bytes which represent this Gt element
+    ///
+    /// These are not deserializable, and serve only to uniquely identify
+    /// the group element.
+    pub fn tag(&self) -> [u8; Self::BYTES] {
+        self.value.to_bytes()
+    }
 }
 
 declare_addsub_ops_for!(Gt);
@@ -976,13 +1298,13 @@ impl G2Prepared {
     }
 
     /// Return the generator element in the group
-    pub fn generator() -> Self {
-        G2PREPARED_G.clone()
+    pub fn generator() -> &'static Self {
+        &G2PREPARED_G
     }
 
     /// Return the inverse of the generator element in the group
-    pub fn neg_generator() -> Self {
-        G2PREPARED_NEG_G.clone()
+    pub fn neg_generator() -> &'static Self {
+        &G2PREPARED_NEG_G
     }
 }
 
@@ -1024,5 +1346,37 @@ pub fn verify_bls_signature(
 
     let g2_gen = G2Prepared::neg_generator();
     let pub_key_prepared = G2Prepared::from(public_key);
-    Gt::multipairing(&[(signature, &g2_gen), (message, &pub_key_prepared)]).is_identity()
+    Gt::multipairing(&[(signature, g2_gen), (message, &pub_key_prepared)]).is_identity()
+}
+
+struct WindowInfo<const WINDOW_SIZE: usize> {}
+
+impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
+    const SIZE: usize = WINDOW_SIZE;
+    const WINDOWS: usize = (Scalar::BYTES * 8) / WINDOW_SIZE;
+
+    const MASK: u8 = 0xFFu8 >> (8 - WINDOW_SIZE);
+    const ELEMENTS: usize = 1 << WINDOW_SIZE;
+    const WINDOWS_IN_BYTE: usize = 8 / WINDOW_SIZE;
+
+    #[inline(always)]
+    fn window_bit_offset(w: usize) -> usize {
+        8 - Self::SIZE - Self::SIZE * (w % Self::WINDOWS_IN_BYTE)
+    }
+
+    #[inline(always)]
+    /// Extract a window from a serialized scalar value
+    ///
+    /// Treat the scalar as if it was a sequence of windows, each of WINDOW_SIZE bits,
+    /// and return the `w`th one of them. For 8 bit windows, this is simply the byte
+    /// value. For smaller windows this is some subset of a single byte.
+    ///
+    /// Only window sizes which are a power of 2 are supported which simplifies the
+    /// implementation to not require creating windows that cross byte boundaries.
+    fn extract(scalar: &[u8; Scalar::BYTES], w: usize) -> u8 {
+        assert!(WINDOW_SIZE == 1 || WINDOW_SIZE == 2 || WINDOW_SIZE == 4 || WINDOW_SIZE == 8);
+
+        let window_byte = scalar[w / Self::WINDOWS_IN_BYTE];
+        (window_byte >> Self::window_bit_offset(w)) & Self::MASK
+    }
 }

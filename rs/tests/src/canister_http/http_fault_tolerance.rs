@@ -25,7 +25,7 @@ use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformType};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
@@ -100,9 +100,12 @@ pub fn test(env: TestEnv) {
                         request: CanisterHttpRequestArgs {
                             url: format!("https://[{webserver_ipv6}]:20443"),
                             headers: vec![],
-                            http_method: HttpMethod::GET,
+                            method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
-                            transform_method_name: Some("transform".to_string()),
+                            transform: Some(TransformType::Function(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            })),
                             max_response_bytes: None,
                         },
                         cycles: 500_000_000_000,

@@ -20,7 +20,7 @@ impl TestEnvironment {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
         let metrics = StateManagerMetrics::new(&MetricsRegistry::new());
-        let state_layout = StateLayout::new(log.clone(), root_dir.path().to_owned());
+        let state_layout = StateLayout::try_new(log.clone(), root_dir.path().to_owned()).unwrap();
 
         Self {
             log,
@@ -36,11 +36,7 @@ impl TestEnvironment {
 /// We only use download states for comparison in tests, so it doesn't matter
 /// if the contents make sense.
 fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>) {
-    let manifest = Manifest {
-        version: seed,
-        file_table: vec![],
-        chunk_table: vec![],
-    };
+    let manifest = Manifest::new(seed, vec![], vec![]);
     let fetch_chunks: HashSet<usize> = maplit::hashset! { (seed + 1) as usize };
     let state = DownloadState::Loading {
         manifest: manifest.clone(),
@@ -51,11 +47,7 @@ fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>) {
 
 /// Creates a fake DownloadState::Completed for an empty state.
 fn fake_complete() -> DownloadState {
-    let manifest = Manifest {
-        version: 0,
-        file_table: vec![],
-        chunk_table: vec![],
-    };
+    let manifest = Manifest::new(0, vec![], vec![]);
     let artifact = Artifact::StateSync(StateSyncMessage {
         height: Height::new(0),
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),

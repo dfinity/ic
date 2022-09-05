@@ -7,6 +7,18 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 def _wasm_rust_transition_impl(_settings, _attr):
     return {
         "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
+        "@rules_rust//:extra_rustc_flags": [
+            "-C",
+            "linker-plugin-lto",
+            "-C",
+            "opt-level=z",
+            "-C",
+            "debug-assertions=no",
+            "-C",
+            "debuginfo=0",
+            "-C",
+            "lto",
+        ],
     }
 
 wasm_rust_transition = transition(
@@ -14,6 +26,7 @@ wasm_rust_transition = transition(
     inputs = [],
     outputs = [
         "//command_line_option:platforms",
+        "@rules_rust//:extra_rustc_flags",
     ],
 )
 
@@ -45,8 +58,6 @@ def rust_canister(name, **kwargs):
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
     kwargs.setdefault("visibility", ["//visibility:public"])
-    kwargs.setdefault("rustc_flags", ["-C", "opt-level=z", "-C", "debuginfo=0", "-C", "lto"])
-    kwargs.setdefault("edition", "2018")
 
     rust_binary(
         name = wasm_name,

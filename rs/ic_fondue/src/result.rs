@@ -193,11 +193,7 @@ impl From<&TestSuiteContract> for TestResultNode {
         };
         Self {
             name: contract.name.clone(),
-            children: contract
-                .children
-                .iter()
-                .map(|child| TestResultNode::from(child))
-                .collect(),
+            children: contract.children.iter().map(TestResultNode::from).collect(),
             result,
             alert_channels: contract.alert_channels.clone(),
             ..Default::default()
@@ -225,7 +221,7 @@ pub fn propagate_children_results_to_parents(root: &mut TestResultNode) {
     }
     root.children
         .iter_mut()
-        .for_each(|child| propagate_children_results_to_parents(child));
+        .for_each(propagate_children_results_to_parents);
     root.result = infer_parent_result(&root.children);
     root.started_at = root
         .children

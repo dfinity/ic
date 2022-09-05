@@ -1,4 +1,4 @@
-use crate::sign::log_err;
+use crate::sign::{get_log_id, log_err, log_ok_content};
 use crate::CryptoComponentFatClient;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
@@ -11,10 +11,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams,
+    IDkgTranscriptId, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::NodeId;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 mod complaint;
 mod dealing;
@@ -35,14 +35,15 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         &self,
         params: &IDkgTranscriptParams,
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_dealing",
-            crypto.registry_version => params.registry_version().get(),
-            crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
         );
         let start_time = self.metrics.now();
         let result =
@@ -56,6 +57,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.dkg_dealing => log_ok_content(&result),
         );
         result
     }
@@ -63,18 +65,26 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_dealing_public",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("{:?}", signed_dealing),
         );
         let start_time = self.metrics.now();
-        let result = dealing::verify_dealing_public(&self.csp, params, dealer_id, dealing);
+        let result = dealing::verify_dealing_public(
+            &self.csp,
+            &self.registry_client,
+            params,
+            signed_dealing,
+        );
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::IDkgProtocol,
             "verify_dealing_public",
@@ -91,15 +101,18 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_dealing_private",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("{:?}", signed_dealing),
         );
         let start_time = self.metrics.now();
         let result = dealing::verify_dealing_private(
@@ -107,8 +120,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             &self.node_id,
             &self.registry_client,
             params,
-            dealer_id,
-            dealing,
+            signed_dealing,
         );
         self.metrics.observe_full_duration_seconds(
             MetricsDomain::IDkgProtocol,
@@ -128,14 +140,16 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         params: &IDkgTranscriptParams,
         dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "create_transcript",
-            crypto.registry_version => params.registry_version().get(),
-            crypto.dkg_config => format!("{:?}", params),
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_dealing => format!("dealings: {{ {:?} }}", dealings.keys()),
         );
         let start_time = self.metrics.now();
         let result =
@@ -149,6 +163,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.dkg_transcript => log_ok_content(&result),
         );
         result
     }
@@ -158,12 +173,16 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         params: &IDkgTranscriptParams,
         transcript: &IDkgTranscript,
     ) -> Result<(), IDkgVerifyTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_transcript",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_config => format!("{:?}", params),
+            crypto.dkg_transcript => format!("{:?}", transcript),
         );
         let start_time = self.metrics.now();
         let result =
@@ -185,12 +204,15 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         &self,
         transcript: &IDkgTranscript,
     ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "load_transcript",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}", transcript),
         );
         let start_time = self.metrics.now();
         let result = transcript::load_transcript(
@@ -208,6 +230,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.complaint => if let Ok(ref content) = result {
+                Some(format!("{:?}", content))
+            } else {
+                None
+            },
         );
         result
     }
@@ -218,12 +245,17 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_complaint",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.complainer => format!("{:?}", complainer_id),
+            crypto.complaint => format!("{:?}", complaint),
         );
         let start_time = self.metrics.now();
         let result = complaint::verify_complaint(
@@ -252,12 +284,17 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "open_transcript",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.complainer => format!("{:?}", complainer_id),
+            crypto.complaint => format!("{:?}", complaint),
         );
         let start_time = self.metrics.now();
         let result = transcript::open_transcript(
@@ -277,6 +314,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
+            crypto.opening => log_ok_content(&result),
         );
         result
     }
@@ -288,12 +326,18 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         opening: &IDkgOpening,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyOpeningError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "verify_opening",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.opener => format!("{:?}", opener),
+            crypto.opening => format!("{:?}", opening),
+            crypto.complaint => format!("{:?}", complaint),
         );
         let start_time = self.metrics.now();
         let result = transcript::verify_opening(&self.csp, transcript, opener, opening, complaint);
@@ -315,12 +359,16 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         transcript: &IDkgTranscript,
         openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "load_transcript_with_openings",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}", transcript),
+            crypto.opening => format!("{:?}", openings),
         );
         let start_time = self.metrics.now();
         let result = transcript::load_transcript_with_openings(
@@ -345,14 +393,22 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
 
     fn retain_active_transcripts(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscript>,
+        active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "retain_active_transcripts",
         );
         debug!(logger;
             crypto.description => "start",
+            crypto.dkg_transcript => format!("{:?}",
+                active_transcripts
+                .iter()
+                .map(|transcript| transcript.transcript_id)
+                .collect::<BTreeSet<IDkgTranscriptId>>()
+            ),
         );
         let start_time = self.metrics.now();
         let result = retain_active_keys::retain_active_transcripts(&self.csp, active_transcripts);
@@ -363,8 +419,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         );
         debug!(logger;
             crypto.description => "end",
-            crypto.is_ok => true,
-            crypto.error => "none".to_string(),
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
         );
         result
     }

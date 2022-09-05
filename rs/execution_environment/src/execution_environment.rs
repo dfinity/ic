@@ -18,7 +18,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_crypto::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
@@ -61,7 +61,7 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
 use lazy_static::lazy_static;
@@ -189,6 +189,10 @@ pub struct RoundLimits {
     /// - Wasm execution grows the Wasm/stable memory.
     /// - Wasm execution pushes a new request to the output queue.
     pub subnet_available_memory: SubnetAvailableMemory,
+
+    // TODO would be nice to change that to available, but this requires
+    // a lot of changes since available allocation sits in CanisterManager config
+    pub compute_allocation_used: u64,
 }
 
 /// Represent a paused execution that can be resumed or aborted.
@@ -201,13 +205,12 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     ///
     /// If the execution finishes, then it returns the new canister state and
     /// the result of the execution.
-    /// TODO(RUN-231): Add paused execution to `ExecuteMessageResult` to support
-    /// the other case.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
         round_context: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution and returns the original message.
@@ -227,7 +230,7 @@ struct PausedExecutionRegistry {
     paused_execution: HashMap<PausedExecutionId, Box<dyn PausedExecution>>,
 
     // Paused executions of `install_code` subnet messages.
-    paused_install_code: HashMap<PausedExecutionId, PausedInstallCodeExecution>,
+    paused_install_code: HashMap<PausedExecutionId, Box<dyn PausedInstallCodeExecution>>,
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -297,7 +300,7 @@ impl ExecutionEnvironment {
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        num_cores: usize,
+        compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
@@ -308,7 +311,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             config.max_controllers,
-            num_cores,
+            compute_capacity,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
         );
@@ -413,7 +416,7 @@ impl ExecutionEnvironment {
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => Some((Err(err.into()), cycles)),
                                     Ok(settings) =>
-                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size))
+                                        Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state, registry_settings.subnet_size, round_limits))
                                 };
                                 info!(
                                     self.log,
@@ -441,7 +444,7 @@ impl ExecutionEnvironment {
                     Ok(args) => self
                         .canister_manager
                         .uninstall_code(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -462,6 +465,7 @@ impl ExecutionEnvironment {
                                 settings,
                                 canister_id,
                                 &mut state,
+                                round_limits,
                             ),
                         };
                         // The induction cost of `UpdateSettings` is charged
@@ -513,8 +517,9 @@ impl ExecutionEnvironment {
                             args.get_canister_id(),
                             args.get_new_controller(),
                             &mut state,
+                            round_limits,
                         )
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -555,7 +560,7 @@ impl ExecutionEnvironment {
                         let result = self
                             .canister_manager
                             .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
-                            .map(|()| EmptyBlob::encode())
+                            .map(|()| EmptyBlob.encode())
                             .map_err(|err| err.into());
 
                         info!(
@@ -574,7 +579,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::RawRand) => {
                 let res = match EmptyBlob::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
-                    Ok(()) => {
+                    Ok(EmptyBlob) => {
                         let mut buffer = vec![0u8; 32];
                         rng.fill_bytes(&mut buffer);
                         Ok(Encode!(&buffer).unwrap())
@@ -814,6 +819,7 @@ impl ExecutionEnvironment {
                                     &mut state,
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
+                                    round_limits
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -939,6 +945,7 @@ impl ExecutionEnvironment {
                     time,
                     network_topology,
                     round_limits,
+                    subnet_size,
                 );
             }
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
@@ -1056,6 +1063,7 @@ impl ExecutionEnvironment {
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.find_subnet_id(sender) {
             Ok(sender_subnet_id) => {
@@ -1067,6 +1075,7 @@ impl ExecutionEnvironment {
                     max_number_of_canisters,
                     state,
                     subnet_size,
+                    round_limits,
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())
@@ -1084,9 +1093,9 @@ impl ExecutionEnvironment {
         settings: CanisterSettings,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
 
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
@@ -1095,9 +1104,9 @@ impl ExecutionEnvironment {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                round_limits,
             )
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1115,7 +1124,7 @@ impl ExecutionEnvironment {
             Ok(stop_contexts) => {
                 // Reject outstanding stop messages (if any).
                 self.reject_stop_requests(canister_id, stop_contexts, state);
-                Ok(EmptyBlob::encode())
+                Ok(EmptyBlob.encode())
             }
             Err(err) => Err(err.into()),
         }
@@ -1139,7 +1148,7 @@ impl ExecutionEnvironment {
             Some(canister_state) => {
                 self.cycles_account_manager
                     .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
-                (Ok(EmptyBlob::encode()), Cycles::zero())
+                (Ok(EmptyBlob.encode()), Cycles::zero())
             }
         }
     }
@@ -1176,7 +1185,7 @@ impl ExecutionEnvironment {
                 cycles_to_return,
             } => Some((Err(error.into()), cycles_to_return)),
             StopCanisterResult::AlreadyStopped { cycles_to_return } => {
-                Some((Ok(EmptyBlob::encode()), cycles_to_return))
+                Some((Ok(EmptyBlob.encode()), cycles_to_return))
             }
         }
     }
@@ -1192,7 +1201,7 @@ impl ExecutionEnvironment {
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .add_cycles(sender, cycles, canister, provisional_whitelist)
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1209,6 +1218,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
@@ -1227,6 +1237,7 @@ impl ExecutionEnvironment {
             self.metrics.response_cycles_refund_error_counter(),
             round,
             round_limits,
+            subnet_size,
         )
     }
 
@@ -1347,6 +1358,8 @@ impl ExecutionEnvironment {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_message),
             subnet_available_memory,
+            // Ignore compute allocation
+            compute_allocation_used: 0,
         };
         let result = execute_non_replicated_query(
             NonReplicatedQueryKind::Pure {
@@ -1566,19 +1579,15 @@ impl ExecutionEnvironment {
     fn sign_with_ecdsa(
         &self,
         mut request: Request,
-        message_hash: Vec<u8>,
+        message_hash: [u8; 32],
         derivation_path: Vec<Vec<u8>>,
         key_id: EcdsaKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
-        if message_hash.len() != 32 {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "message_hash must be 32 bytes",
-            ));
-        }
+        // We already ensured message_hash is 32 byte statically, so there is
+        // no need to check length here.
 
         // If the request isn't from the NNS, then we need to charge for it.
         // Consensus will return any remaining cycles.
@@ -1681,8 +1690,10 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ReplicatedState {
-        let compute_allocation_used = state.total_compute_allocation();
-        let total_memory_taken = state.total_memory_taken();
+        // overwrite this for now
+        // TODO update round_limits.compute_allocation_used when it changes
+        round_limits.compute_allocation_used = state.total_compute_allocation();
+
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,
@@ -1739,13 +1750,8 @@ impl ExecutionEnvironment {
             install_context.wasm_module.is_empty().to_string(),
         );
 
-        let execution_parameters = ExecutionParameters {
-            instruction_limits,
-            canister_memory_limit: self.config.max_canister_memory_size,
-            compute_allocation: ComputeAllocation::default(),
-            subnet_type: state.metadata.own_subnet_type,
-            execution_mode: ExecutionMode::Replicated,
-        };
+        let execution_parameters =
+            self.execution_parameters(&old_canister, instruction_limits, ExecutionMode::Replicated);
 
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
@@ -1753,8 +1759,6 @@ impl ExecutionEnvironment {
             old_canister,
             state.time(),
             state.path().to_path_buf(),
-            compute_allocation_used,
-            total_memory_taken,
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,
@@ -1804,7 +1808,7 @@ impl ExecutionEnvironment {
                             result.old_wasm_hash,
                             result.new_wasm_hash);
 
-                        Ok(EmptyBlob::encode())
+                        Ok(EmptyBlob.encode())
                     }
                     Err(err) => {
                         info!(
@@ -1898,7 +1902,7 @@ impl ExecutionEnvironment {
     fn take_paused_install_code(
         &self,
         id: PausedExecutionId,
-    ) -> Option<PausedInstallCodeExecution> {
+    ) -> Option<Box<dyn PausedInstallCodeExecution>> {
         let mut guard = self.paused_execution_registry.lock().unwrap();
         guard.paused_install_code.remove(&id)
     }
@@ -1915,7 +1919,7 @@ impl ExecutionEnvironment {
     /// Registers the given paused `install_code` execution and returns its id.
     fn register_paused_install_code(
         &self,
-        paused: PausedInstallCodeExecution,
+        paused: Box<dyn PausedInstallCodeExecution>,
     ) -> PausedExecutionId {
         let mut guard = self.paused_execution_registry.lock().unwrap();
         let id = PausedExecutionId(guard.next_id);
@@ -1928,6 +1932,7 @@ impl ExecutionEnvironment {
     pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
         for canister in state.canisters_iter_mut() {
             if !canister.system_state.task_queue.is_empty() {
+                canister.apply_priority_credit();
                 let task_queue = std::mem::take(&mut canister.system_state.task_queue);
                 canister.system_state.task_queue = task_queue
                     .into_iter()
@@ -2147,7 +2152,7 @@ pub fn execute_canister(
                     log: &exec_env.log,
                     time,
                 };
-                let result = paused.resume(canister, round_context, round_limits);
+                let result = paused.resume(canister, round_context, round_limits, subnet_size);
                 let (canister, heap_delta, ingress_status) = exec_env.process_result(result);
                 ExecuteCanisterResult {
                     canister,

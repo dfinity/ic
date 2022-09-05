@@ -184,6 +184,8 @@ impl Hypervisor {
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
+            self.compilation_cache
+                .insert(&canister_module, Err(err.clone().into()));
             return (compilation_cost, Err(err.into()));
         }
 
@@ -344,8 +346,6 @@ impl Hypervisor {
     }
 
     /// Executes the given WebAssembly function with deterministic time slicing.
-    /// TODO(RUN-232): Change all callers of `execute()` to call `execute_dts()`
-    /// and rename `execute_dts()` to `execute()`.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_dts(
         &self,

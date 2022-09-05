@@ -4,6 +4,7 @@ exports_files(
         "buildifier_test.bash.template",
         "prost_generator.sh",
         "urls_test.sh",
+        "generic_rust_bench.sh",
     ],
     visibility = ["//visibility:public"],
 )

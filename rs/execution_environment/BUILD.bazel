@@ -8,7 +8,8 @@ DEPENDENCIES = [
     "//rs/canister_sandbox/replica_controller",
     "//rs/config",
     "//rs/constants",
-    "//rs/crypto",
+    "//rs/crypto/prng",
+    "//rs/crypto/tecdsa",
     "//rs/crypto/tree_hash",
     "//rs/cycles_account_manager",
     "//rs/embedders",
@@ -80,7 +81,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_execution_environment",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -93,7 +93,6 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
@@ -111,7 +110,6 @@ rust_test_suite(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",

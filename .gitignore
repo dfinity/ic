@@ -97,6 +97,9 @@ test_report.xml
 # Boundary node control plane binary
 boundary-node-control-plane
 
+# Boundary node prober binary
+boundary-node-prober
+
 # Scalability test results
 scalability/results/
 *Pipfile*
@@ -104,3 +107,6 @@ scalability/results/
 # Bazel outdir dirs
 /bazel-*
 bazel-build-log.json
+
+# Visual Studio Code
+.vscode

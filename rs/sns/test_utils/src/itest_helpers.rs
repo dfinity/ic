@@ -27,7 +27,10 @@ use ic_sns_governance::{
             AddNeuronPermissions, ClaimOrRefresh, Command, Configure, Disburse, Follow,
             IncreaseDissolveDelay, RegisterVote, RemoveNeuronPermissions, Split, StartDissolving,
         },
-        manage_neuron_response::Command as CommandResponse,
+        manage_neuron_response::{
+            AddNeuronPermissionsResponse, Command as CommandResponse,
+            RemoveNeuronPermissionsResponse,
+        },
         proposal::Action,
         Account as AccountProto, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         Governance, GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons,
@@ -45,9 +48,9 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
+use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;
-use std::path::Path;
 use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
@@ -57,8 +60,15 @@ use std::time::{Duration, Instant, SystemTime};
 /// be before it's created.
 pub const NONCE: u64 = 12345_u64;
 
-/// Constant that defines the time in tenths of a second to wait for a test
-pub const TIME_FOR_HEARTBEAT: u64 = 200;
+/// Constant that defines the number of retries to attempt while waiting for a canister heartbeat.
+pub const RETRIES_FOR_HEARTBEAT: u64 = 200;
+
+/// Constant that defines the number of retries to attempt while waiting for a canister upgrade.
+pub const RETRIES_FOR_UPGRADE: u64 = 200;
+
+/// Constant that defines the number of retries to attempt while waiting for a proposal to
+/// execute or fail.
+pub const RETRIES_FOR_PROPOSAL_EXECUTION_OR_FAILURE: u64 = 200;
 
 /// Packages commonly used test data into a single struct.
 #[derive(Clone)]
@@ -129,11 +139,16 @@ impl SnsTestsInitPayloadBuilder {
             metadata: vec![],
         };
 
+        let swap = SwapInit {
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
+            ..Default::default()
+        };
+
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
             ledger,
-            swap: SwapInit::default(),
+            swap,
         }
     }
 
@@ -168,6 +183,20 @@ impl SnsTestsInitPayloadBuilder {
 
     pub fn with_nervous_system_parameters(&mut self, params: NervousSystemParameters) -> &mut Self {
         self.governance.with_parameters(params);
+        self
+    }
+
+    pub fn with_initial_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        let mut neuron_map = btreemap! {};
+        for neuron in neurons {
+            neuron_map.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
+        }
+        self.governance.with_neurons(neuron_map);
+        self
+    }
+
+    pub fn with_archive_options(&mut self, archive_options: ArchiveOptions) -> &mut Self {
+        self.ledger.archive_options = archive_options;
         self
     }
 
@@ -523,16 +552,35 @@ impl SnsCanisters<'_> {
     ) -> u64 {
         // Stake the neuron.
         let stake = Tokens::from_tokens(token_amount).unwrap();
+        let block_height = self
+            .icrc1_transfer(
+                sender,
+                &self.governance.canister_id().get(),
+                Some(*to_subaccount),
+                stake.get_e8s(),
+            )
+            .await;
+        block_height
+    }
+
+    pub async fn icrc1_transfer(
+        &self,
+        sender: &Sender,
+        to_principal_id: &PrincipalId,
+        to_subaccount: Option<Subaccount>,
+        token_amount_e8s: u64,
+    ) -> u64 {
+        let amount = Tokens::from_e8s(token_amount_e8s);
         let block_height = crate::icrc1::transfer(
             &self.ledger,
             sender,
             TransferArg {
-                amount: Nat::from(stake.get_e8s()),
+                amount: Nat::from(amount.get_e8s()),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
                 to: Account {
-                    owner: PrincipalId::from(self.governance.canister_id()),
-                    subaccount: Some(*to_subaccount),
+                    owner: *to_principal_id,
+                    subaccount: to_subaccount,
                 },
                 memo: None,
                 created_at_time: Some(
@@ -812,14 +860,14 @@ impl SnsCanisters<'_> {
             .await
             .unwrap();
 
-        let initial_voting_period = self
+        let initial_voting_period_seconds = self
             .get_nervous_system_parameters()
             .await
-            .initial_voting_period
+            .initial_voting_period_seconds
             .unwrap();
 
         // Advance time to have the proposal be eligible for rewards
-        let delta_s = (initial_voting_period + 1) as i64;
+        let delta_s = (initial_voting_period_seconds + 1) as i64;
         self.set_time_warp(delta_s).await?;
 
         let mut proposal = self.get_proposal(proposal_id).await;
@@ -852,13 +900,30 @@ impl SnsCanisters<'_> {
             .await
     }
 
-    pub async fn add_neuron_permissions(
+    pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
         subaccount: &Subaccount,
         principal_to_add: Option<PrincipalId>,
         permissions: Vec<i32>,
     ) {
+        let response = self
+            .add_neuron_permissions(sender, subaccount, principal_to_add, permissions)
+            .await;
+
+        match response {
+            Ok(_add_neuron_permission_response) => (),
+            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
+        };
+    }
+
+    pub async fn add_neuron_permissions(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        principal_to_add: Option<PrincipalId>,
+        permissions: Vec<i32>,
+    ) -> Result<AddNeuronPermissionsResponse, GovernanceError> {
         let add_neuron_permissions = AddNeuronPermissions {
             principal_id: principal_to_add,
             permissions_to_add: Some(NeuronPermissionList { permissions }),
@@ -879,8 +944,29 @@ impl SnsCanisters<'_> {
             .expect("Error calling manage_neuron");
 
         match manage_neuron_response.command.unwrap() {
-            CommandResponse::AddNeuronPermission(_) => (),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            CommandResponse::AddNeuronPermission(response) => Ok(response),
+            CommandResponse::Error(error) => Err(error),
+            response => panic!(
+                "Unexpected response from manage_neuron::AddNeuronPermissions: {:?}",
+                response
+            ),
+        }
+    }
+
+    pub async fn remove_neuron_permissions_or_panic(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        principal_to_remove: &PrincipalId,
+        permissions: Vec<i32>,
+    ) {
+        let response = self
+            .remove_neuron_permissions(sender, subaccount, principal_to_remove, permissions)
+            .await;
+
+        match response {
+            Ok(_remove_neuron_permissions_response) => (),
+            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
         };
     }
 
@@ -890,7 +976,7 @@ impl SnsCanisters<'_> {
         subaccount: &Subaccount,
         principal_to_remove: &PrincipalId,
         permissions: Vec<i32>,
-    ) {
+    ) -> Result<RemoveNeuronPermissionsResponse, GovernanceError> {
         let remove_neuron_permissions = RemoveNeuronPermissions {
             principal_id: Some(*principal_to_remove),
             permissions_to_remove: Some(NeuronPermissionList { permissions }),
@@ -911,9 +997,13 @@ impl SnsCanisters<'_> {
             .expect("Error calling manage_neuron");
 
         match manage_neuron_response.command.unwrap() {
-            CommandResponse::RemoveNeuronPermission(_) => (),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
-        };
+            CommandResponse::RemoveNeuronPermission(response) => Ok(response),
+            CommandResponse::Error(error) => Err(error),
+            response => panic!(
+                "Unexpected response from manage_neuron::RemoveNeuronPermissions: {:?}",
+                response
+            ),
+        }
     }
 
     pub async fn manage_nervous_system_parameters(
@@ -942,7 +1032,7 @@ impl SnsCanisters<'_> {
 
     /// Await a RewardEvent to be created.
     pub async fn await_reward_event(&self, last_round: u64) -> RewardEvent {
-        for _ in 0..TIME_FOR_HEARTBEAT {
+        for _ in 0..RETRIES_FOR_HEARTBEAT {
             let reward_event = self.get_latest_reward_event().await;
 
             if reward_event.round > last_round {
@@ -956,7 +1046,7 @@ impl SnsCanisters<'_> {
 
     /// Await a Proposal being rewarded via it's reward_event_round field.
     pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> u64 {
-        for _ in 0..TIME_FOR_HEARTBEAT {
+        for _ in 0..RETRIES_FOR_HEARTBEAT {
             let proposal = self.get_proposal(proposal_id).await;
 
             if proposal.reward_event_round != 0 {
@@ -981,12 +1071,12 @@ impl SnsCanisters<'_> {
 
     /// Await an SNS canister completing an upgrade. This method should be called after the
     /// execution of an upgrade proposal.
-    pub async fn await_canister_upgrade(&self, canister_id: CanisterId) {
-        for _ in 0..25 {
+    pub async fn await_canister_upgrade(&self, canister_id: CanisterId) -> CanisterStatusResult {
+        for _ in 0..RETRIES_FOR_UPGRADE {
             let status = self.canister_status(canister_id).await;
             // Stop waiting once the canister has reached the Running state.
             if status.status == CanisterStatusType::Running {
-                return;
+                return status;
             }
 
             sleep(Duration::from_millis(100));
@@ -997,13 +1087,38 @@ impl SnsCanisters<'_> {
         )
     }
 
+    pub async fn await_proposal_execution_or_failure(
+        &self,
+        proposal_id: &ProposalId,
+    ) -> ProposalData {
+        let mut proposal = self.get_proposal(*proposal_id).await;
+        for _ in 0..RETRIES_FOR_PROPOSAL_EXECUTION_OR_FAILURE {
+            if proposal.executed_timestamp_seconds != 0 || proposal.failed_timestamp_seconds != 0 {
+                return proposal;
+            }
+
+            sleep(Duration::from_millis(100));
+            proposal = self.get_proposal(*proposal_id).await;
+        }
+
+        panic!(
+            "Proposal {:?} didn't execute or fail in a reasonable time. {:?}",
+            proposal_id, proposal
+        );
+    }
+
     /// Get the summary of the SNS from root
-    pub async fn get_sns_canisters_summary(&self) -> GetSnsCanistersSummaryResponse {
+    pub async fn get_sns_canisters_summary(
+        &self,
+        update_canister_list: Option<bool>,
+    ) -> GetSnsCanistersSummaryResponse {
         self.root
             .update_(
                 "get_sns_canisters_summary",
                 candid_one,
-                GetSnsCanistersSummaryRequest {},
+                GetSnsCanistersSummaryRequest {
+                    update_canister_list,
+                },
             )
             .await
             .expect("Error calling the get_sns_canisters_summary API")
@@ -1040,7 +1155,6 @@ impl SnsCanisters<'_> {
 /// Installs a rust canister with the provided memory allocation.
 pub async fn install_rust_canister_with_memory_allocation(
     canister: &mut Canister<'_>,
-    relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
     cargo_features: &[&str],
     canister_init_payload: Option<Vec<u8>>,
@@ -1048,7 +1162,6 @@ pub async fn install_rust_canister_with_memory_allocation(
 ) {
     // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
     // neither of these implement Send or have a way to clone the whole structure's data
-    let path_string = relative_path_from_rs.as_ref().to_str().unwrap().to_owned();
     let binary_name_ = binary_name.as_ref().to_string();
     let features = cargo_features
         .iter()
@@ -1065,8 +1178,7 @@ pub async fn install_rust_canister_with_memory_allocation(
             );
             // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
-            let path = Path::new(&path_string);
-            Project::cargo_bin_maybe_use_path_relative_to_rs(path, &binary_name_, &features)
+            Project::cargo_bin_maybe_from_env(&binary_name_, &features)
         })
         .await
         .unwrap();
@@ -1103,7 +1215,6 @@ where
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/governance",
         "sns-governance-canister",
         &[],
         Some(CandidOne(init_payload).into_bytes().unwrap()),
@@ -1129,7 +1240,6 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "rosetta-api/icrc1/ledger",
         "ic-icrc1-ledger",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
@@ -1149,7 +1259,6 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
 pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCanister) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/root",
         "sns-root-canister",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
@@ -1169,7 +1278,6 @@ pub async fn set_up_root_canister(runtime: &'_ Runtime, args: SnsRootCanister) -
 pub async fn install_swap_canister(canister: &mut Canister<'_>, args: SwapInit) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns/swap",
         "sns-swap-canister",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),

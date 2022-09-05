@@ -6,7 +6,6 @@ rust_library(
     name = "system_api",
     srcs = glob(["src/**"]),
     crate_name = "ic_system_api",
-    edition = "2018",
     deps = [
         "//rs/config",
         "//rs/constants",
@@ -67,7 +66,6 @@ rust_test(
         "tests/system_api.rs",
     ],
     crate_root = "tests/system_api.rs",
-    edition = "2018",
     deps = INTEGRATION_TEST_DEPS,
 )
 
@@ -78,7 +76,6 @@ rust_test(
         "tests/sandbox_safe_system_state.rs",
     ],
     crate_root = "tests/sandbox_safe_system_state.rs",
-    edition = "2018",
     deps = INTEGRATION_TEST_DEPS + [
         "@crate_index//:prometheus",
     ],

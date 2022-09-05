@@ -5,6 +5,7 @@ import random
 import subprocess
 import tempfile
 import time
+import uuid
 from statistics import mean
 from typing import List
 
@@ -111,12 +112,25 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             if FLAGS.wg_testnet != FLAGS.testnet:
                 # In case wg_testnet and testnet are different, we can use all app-subnet hosts as workload generators
                 workload_generator_machines = self.get_app_subnet_hostnames(f"http://[{wg_testnet_nns_host}]:8080")
-            else:
-                workload_generator_machines = self.get_hostnames(
-                    FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080"
+                print(
+                    (
+                        f"Selecting workload generator machines from all subnets {wg_testnet_nns_host}: "
+                        f"{workload_generator_machines}"
+                    )
                 )
-                if workload_generator_machines is None:
-                    raise Exception(f"Could not find any machines in subnet {FLAGS.wg_subnet} in {FLAGS.wg_testnet}")
+            else:
+                workload_generator_machines = self.get_app_subnet_hostnames(
+                    f"http://[{wg_testnet_nns_host}]:8080", FLAGS.wg_subnet
+                )
+                print(
+                    (
+                        f"Selecting workload generator machines from {wg_testnet_nns_host} on subnet {FLAGS.wg_subnet}: "
+                        f"{workload_generator_machines}"
+                    )
+                )
+
+        if workload_generator_machines is None:
+            raise Exception(f"Could not find any machines in subnet {FLAGS.wg_subnet} in {FLAGS.wg_testnet}")
 
         if self.num_workload_gen > 0 and self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
@@ -164,22 +178,17 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """Kill all workload generators on the given machine."""
         self.kill_pids = ssh.spawn_ssh_in_parallel(
             machines,
-            "sudo systemctl stop ic-replica; kill $(pidof ic-workload-generator) || true",
+            "sudo systemctl stop ic-replica",
             f_stdout=tempfile.NamedTemporaryFile().name,
             f_stderr=tempfile.NamedTemporaryFile().name,
         )
+        for _, s in self.kill_pids:
+            s.wait()
+        self.kill_pids = []
 
     def __restart_services(self, machines):
         """Kill all workload generators on the given machine."""
-        print("Restarting services")
-        self.start_pids = ssh.spawn_ssh_in_parallel(
-            machines,
-            "sudo systemctl start ic-replica",
-            f_stdout=tempfile.NamedTemporaryFile().name,
-            f_stderr=tempfile.NamedTemporaryFile().name,
-        )
-        for _, s in self.start_pids:
-            s.wait()
+        print("Removed for now")
 
     def end_experiment(self):
         self.__restart_services(self.machines)
@@ -292,11 +301,20 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         since_time = self.t_iter_end - self.t_iter_start
         self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
 
-    def start_iteration(self):
-        """Start a new iteration of the experiment."""
+    def __wait_kill(self):
+        """Wait for previously asynchronously started processes that kill running workload generator instances."""
+        print(f"Waiting for previous workload generator kill commands: {self.kill_pids}")
         for (machine, p) in self.kill_pids:
             p.wait()
         self.kill_pids = []
+
+    def __del__(self):
+        """Make sure all asynchronously spawned processes are terminated."""
+        self.__wait_kill()
+
+    def start_iteration(self):
+        """Start a new iteration of the experiment."""
+        self.__wait_kill()
 
         super().start_iteration()
         self.__wait_for_quiet()
@@ -327,6 +345,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         arguments=[],
     ):
         """Run the workload generator on all given machines."""
+        assert (
+            len(self.kill_pids) == 0
+        ), "Some previous commands to kill workload generators has not been completed when attempting to start new ones. This might lead to races. Make sure to start an iteration via start_iteration() before calling run_workload_generator()"
         if canister_ids is None:
             canister_ids = self.get_canister_ids()
 
@@ -334,8 +355,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Running against target_list")
 
         curr_outdir = self.iter_outdir
-        f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
-        f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
+        f_stdout = os.path.join(curr_outdir, "workload-generator-%s-{}.stdout.txt" % uuid.uuid4())
+        f_stderr = os.path.join(curr_outdir, "workload-generator-%s-{}.stderr.txt" % uuid.uuid4())
 
         # To handle stragglers we allow the workload generator to run longer than "duration".
         # We don't really care about requests that took longer than 2min to complete, so
@@ -376,8 +397,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
                 # Try to open file in exclusive mode
                 with open(filename, "x") as cmd_file:
-                    for cmd in commands:
-                        cmd_file.write(cmd + "\n")
+                    for cmd, generator in zip(commands, load_generators):
+                        cmd_file.write(generator + ":" + cmd + "\n")
                 break
             except FileExistsError:
                 print(f"Failed to open - file {filename} already exists, trying next sequential file name.")
@@ -393,7 +414,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Evaluating results from {} machines".format(len(destinations)))
         return report.evaluate_summaries(destinations)
 
-    def __build_summary_file(self):
+    def _build_summary_file(self):
         """Build dictionary used to render summary file for report."""
         return {
             "wg_testnet": self.wg_testnet,

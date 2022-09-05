@@ -6,7 +6,7 @@ use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
 use ledger_canister::Tokens;
 use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::time::SystemTime;
 

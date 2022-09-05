@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "certification",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_certification",
+    deps = [
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+rust_test(
+    name = "certification_test",
+    crate = ":certification",
+    deps = [
+        "//rs/certification/test-utils",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/types/base_types",
+        "@crate_index//:rand_0_8_4",
+    ],
+)

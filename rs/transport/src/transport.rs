@@ -72,14 +72,13 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
+    FlowTag, Transport, TransportError, TransportEventHandler, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node::v1::NodeRecord;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
 use tokio::{
@@ -114,7 +113,7 @@ impl TransportImpl {
             log,
 
             peer_map: tokio::sync::RwLock::new(HashMap::new()),
-            accept_ports: Mutex::new(HashMap::new()),
+            accept_port: Mutex::new(None),
             event_handler: Mutex::new(None),
             weak_self: std::sync::RwLock::new(Weak::new()),
         });
@@ -151,45 +150,55 @@ impl Transport for TransportImpl {
         self.init_client(event_handler)
     }
 
-    fn start_connections(
+    /// Mark the peer as valid neighbor, and set up the transport layer to
+    /// exchange messages with the peer. This call would create the
+    /// necessary wiring in the transport layer for the peer:
+    /// - 1. Set up the Tx/Rx queueing, based on TransportQueueConfig.
+    /// - 2. If the peer is the server, initiate connection requests to the peer
+    ///   server ports.
+    /// - 3. If the peer is the client, set up the connection state to accept
+    ///   connection requests from the peer.
+    /// These are all implementation details that should not bother the
+    /// components that are using Transport (the Transport clients).
+    fn start_connection(
         &self,
         peer_id: &NodeId,
-        node_record: &NodeRecord,
+        peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         info!(
             self.log,
-            "Transport::start_connections(): peer_id = {:?}", peer_id
+            "Transport::start_connection(): peer_id = {:?}", peer_id
         );
-        self.start_peer_connections(peer_id, node_record, registry_version)
+        self.start_peer_connection(peer_id, peer_addr, registry_version)
     }
 
-    fn stop_connections(&self, peer_id: &NodeId) {
+    /// Remove the peer from the set of valid neighbors, and tear down the
+    /// queues and connections for the peer. Any messages in the Tx and Rx
+    /// queues for the peer will be discarded.
+    /// It is fine to call the function on non-existing connection(s).
+    fn stop_connection(&self, peer_id: &NodeId) {
         info!(
             self.log,
-            "Transport::stop_connections(): peer_id = {:?}", peer_id,
+            "Transport::stop_connection(): peer_id = {:?}", peer_id,
         );
-        self.stop_peer_connections(peer_id);
+        self.stop_peer_connection(peer_id);
     }
 
     fn send(
         &self,
         peer_id: &NodeId,
-        flow_tag: FlowTag,
+        _flow_tag: FlowTag,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let peer_map = self.peer_map.blocking_read();
-        let peer_state = match peer_map.get(peer_id) {
+        let peer_state_mu = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
-            None => return Err(TransportErrorCode::TransportClientNotFound),
+            None => return Err(TransportError::NotFound),
         };
-        let flow_state_mu = match peer_state.flow_map.get(&flow_tag) {
-            Some(flow_state) => flow_state,
-            None => return Err(TransportErrorCode::FlowNotFound),
-        };
-        let flow_state = flow_state_mu.blocking_read();
-        match flow_state.send_queue.enqueue(message) {
-            Some(unsent) => Err(TransportErrorCode::TransportBusy(unsent)),
+        let peer_state = peer_state_mu.blocking_read();
+        match peer_state.send_queue.enqueue(message) {
+            Some(unsent) => Err(TransportError::SendQueueFull(unsent)),
             None => Ok(()),
         }
     }
@@ -199,11 +208,6 @@ impl Transport for TransportImpl {
         let peer_state = peer_map
             .get_mut(peer_id)
             .expect("Transport client not found");
-        peer_state
-            .flow_map
-            .iter_mut()
-            .for_each(|(_flow_id, flow_state)| {
-                flow_state.blocking_write().send_queue.clear();
-            });
+        peer_state.blocking_write().send_queue.clear();
     }
 }

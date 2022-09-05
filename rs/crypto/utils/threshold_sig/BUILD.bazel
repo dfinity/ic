@@ -1,17 +1,39 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/interfaces",
+    "//rs/types/types",
+    "@crate_index//:base64",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_service_provider",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "threshold_sig",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_utils_threshold_sig",
-    edition = "2018",
-    deps = [
-        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/interfaces",
-        "//rs/types/types",
-        "@crate_index//:base64",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "threshold_sig_test",
+    aliases = ALIASES,
+    crate = ":threshold_sig",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

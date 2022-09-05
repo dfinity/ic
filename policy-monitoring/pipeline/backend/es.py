@@ -237,9 +237,9 @@ class Es:
         Exceptions:
             - [EsException] if logs could not be downloaded due to ES API issues
         """
-        for gid in groups:
+        for group_name in groups:
             try:
-                groups[gid].logs = self._get_logs_for_group(gid, limit_per_group, minutes_per_group)
+                groups[group_name].logs = self._get_logs_for_group(group_name, limit_per_group, minutes_per_group)
             except EsException as e:
                 self.alert_service.alert(
                     level="🧀",

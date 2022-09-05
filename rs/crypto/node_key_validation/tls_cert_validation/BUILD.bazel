@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,10 +20,35 @@ DEPENDENCIES = [
     "//conditions:default": [],
 })
 
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/crypto/test_utils",
+    "//rs/test_utilities",
+    "@crate_index//:curve25519-dalek",
+    "@crate_index//:openssl",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "tls_cert_validation",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_tls_cert_validation",
-    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "tls_cert_validation_test",
+    aliases = ALIASES,
+    crate = ":tls_cert_validation",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

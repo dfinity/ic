@@ -1,7 +1,7 @@
 [package]
 name = "ic-nns-governance"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "governance-canister"
@@ -34,6 +34,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -46,8 +47,8 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
 serde = { version = "1.0", features = ["derive"] }
-rand = "0.7.3"
-rand_core = "0.5.1"
+rand = "0.8"
+rand_chacha = "0.3"
 registry-canister = { path = "../../registry/canister" }
 strum_macros = "0.23.0"
 strum = "0.23.0"
@@ -69,12 +70,10 @@ build-info-build = { version="0.0.26", default-features = false, features = [] }
 [dev-dependencies]
 criterion = "0.3"
 futures = "0.3.13"
-ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-config = { path = "../../config" }
-ic-nns-common = { path = "../common", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
+lazy_static = "1.4.0"
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
@@ -82,4 +81,4 @@ tokio = { version = "1.15.0", features = [ "full" ] }
 tokio-test = "0.4.2"
 
 [features]
-test = ["ic-base-types/test", "ic-nns-common/test", "ledger-canister/test", "ic-sns-swap/test"]
+test = ["ic-sns-swap/test"]

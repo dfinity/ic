@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use candid::Encode;
 #[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
@@ -18,90 +19,66 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(feature = "test")]
-use ic_nns_governance::governance::governance_minting_account;
-#[cfg(feature = "test")]
-use ic_nns_governance::pb::v1::{
-    governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange, proposal::ActionDesc,
-    BallotChange, BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange,
-    ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+use ic_nns_governance::{
+    governance::governance_minting_account,
+    pb::v1::{
+        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
+        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
+        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+    },
 };
 use ic_nns_governance::{
     governance::{
         subaccount_from_slice, validate_proposal_title, Environment, Governance,
         HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_DAY_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
+        governance::GovernanceCachedMetrics,
         governance_error::ErrorType::{
-            self, External, InsufficientFunds, InvalidCommand, NotAuthorized, PreconditionFailed,
+            self, External, InsufficientFunds, InvalidCommand, NotAuthorized, NotFound,
+            PreconditionFailed, ResourceExhausted,
         },
         manage_neuron,
-        manage_neuron::claim_or_refresh::{By, MemoAndController},
-        manage_neuron::configure::Operation,
-        manage_neuron::disburse::Amount,
-        manage_neuron::ClaimOrRefresh,
-        manage_neuron::Command,
-        manage_neuron::Configure,
-        manage_neuron::Disburse,
-        manage_neuron::DisburseToNeuron,
-        manage_neuron::Follow,
-        manage_neuron::IncreaseDissolveDelay,
-        manage_neuron::JoinCommunityFund,
-        manage_neuron::LeaveCommunityFund,
-        manage_neuron::Merge,
-        manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron::SetDissolveTimestamp,
-        manage_neuron::Spawn,
-        manage_neuron::Split,
-        manage_neuron::StartDissolving,
-        manage_neuron_response,
-        manage_neuron_response::Command as CommandResponse,
-        neuron,
-        neuron::DissolveState,
-        neuron::Followees,
-        proposal,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            disburse::Amount,
+            ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, Follow,
+            IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, Merge, MergeMaturity,
+            NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split, StartDissolving,
+        },
+        manage_neuron_response::{self, Command as CommandResponse, MergeMaturityResponse},
+        neuron::{self, DissolveState, Followees},
+        proposal::{self, Action},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, SetSnsTokenSwapOpenTimeWindow, Tally,
-        Topic, Vote,
+        NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        ProposalRewardStatus,
+        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
+        ProposalStatus,
+        ProposalStatus::Rejected,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
+        UpdateNodeProvider, Vote,
     },
 };
 use ic_sns_swap::pb::v1 as sns_swap_pb;
-use ledger_canister::{AccountIdentifier, Memo, Tokens};
+use ledger_canister::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::iter;
-use std::iter::once;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::iter::{self, once};
 use std::path::PathBuf;
-
-use dfn_protobuf::ToProto;
-use ic_nns_governance::governance::{
-    MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
-};
-use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
-use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
-use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
-use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
-use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ProposalRewardStatus, RewardNodeProviders, UpdateNodeProvider};
-use ledger_canister::Subaccount;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -124,7 +101,6 @@ use common::increase_dissolve_delay_raw;
 use ic_nervous_system_common::ledger::Ledger;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
-const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 #[cfg(feature = "test")]
 fn check_proposal_status_after_voting_and_after_expiration_new(
@@ -5725,7 +5701,11 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
 
 #[test]
 fn test_not_for_profit_neurons() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
+
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5795,7 +5775,10 @@ fn test_not_for_profit_neurons() {
 
 #[test]
 fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5866,7 +5849,10 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
 
 #[test]
 fn test_add_and_remove_hot_key() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -5946,7 +5932,10 @@ fn test_add_and_remove_hot_key() {
 
 #[test]
 fn test_manage_and_reward_node_providers() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6292,7 +6281,10 @@ fn test_manage_and_reward_node_providers() {
 
 #[test]
 fn test_manage_and_reward_multiple_node_providers() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6667,7 +6659,10 @@ fn test_manage_and_reward_multiple_node_providers() {
 
 #[test]
 fn test_network_economics_proposal() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -6735,7 +6730,10 @@ fn test_network_economics_proposal() {
 
 #[test]
 fn test_default_followees() {
-    let p: PathBuf = ["tests", "neurons.csv"].iter().collect();
+    let p = match std::env::var("NEURON_CSV_PATH") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => PathBuf::from("tests/neurons.csv"),
+    };
     let mut builder = GovernanceCanisterInitPayloadBuilder::new();
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
@@ -10398,7 +10396,7 @@ fn test_known_neurons() {
 }
 
 #[test]
-fn test_set_sns_token_swap_open_time_window() {
+fn test_open_sns_token_swap_proposal() {
     // Step 0: Define helper(s)
 
     #[derive(Debug, PartialEq, Eq, Clone)]
@@ -10483,24 +10481,57 @@ fn test_set_sns_token_swap_open_time_window() {
     // Step 1: Prepare the world.
 
     // Parameters which will later be used to construct the swap proposal.
-    let swap_canister_id = PrincipalId::new_user_test_id(1);
-    let start_timestamp_seconds = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
-    let request = sns_swap_pb::SetOpenTimeWindowRequest {
-        open_time_window: Some(sns_swap_pb::TimeWindow {
-            start_timestamp_seconds,
-            end_timestamp_seconds: start_timestamp_seconds + 2 * SECONDS_PER_DAY,
-        }),
+    let target_swap_canister_id = PrincipalId::new_user_test_id(1);
+    let params = sns_swap_pb::Params {
+        sns_token_e8s: 1_000_000,
+        min_icp_e8s: 1,
+        max_icp_e8s: 42_000,
+        min_participant_icp_e8s: 1,
+        max_participant_icp_e8s: 42_000,
+        min_participants: 1,
+        swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
     };
 
+    let neuron_base = Neuron {
+        cached_neuron_stake_e8s: 100_000_000,
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+            MAX_DISSOLVE_DELAY_SECONDS,
+        )),
+        ..Default::default()
+    };
+
+    // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.
+    // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
+    // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
     let neurons = hashmap! {
         1 => Neuron {
             id: Some(NeuronId { id: 1 }),
             controller: Some(principal(1)),
-            cached_neuron_stake_e8s: 100_000_000,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                MAX_DISSOLVE_DELAY_SECONDS,
-            )),
-            ..Default::default()
+            maturity_e8s_equivalent: 60,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+        2 => Neuron {
+            id: Some(NeuronId { id: 2 }),
+            controller: Some(principal(1)),
+            maturity_e8s_equivalent: 10,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+        3 => Neuron {
+            id: Some(NeuronId { id: 3 }),
+            controller: Some(principal(2)),
+            maturity_e8s_equivalent: 30,
+            joined_community_fund_timestamp_seconds: Some(1),
+            ..neuron_base.clone()
+        },
+
+        // Unlike the foregoing neurons, this one is NOT a CF neuron.
+        4 => Neuron {
+            id: Some(NeuronId { id: 4 }),
+            controller: Some(principal(1)),
+            maturity_e8s_equivalent: 1_000_000,
+            ..neuron_base
         },
     };
 
@@ -10510,11 +10541,38 @@ fn test_set_sns_token_swap_open_time_window() {
         ..Default::default()
     };
 
+    let mut cf_participants = vec![
+        sns_swap_pb::CfParticipant {
+            hotkey_principal: principal(1).to_string(),
+            cf_neurons: vec![
+                sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 1,
+                    amount_icp_e8s: 42 * 60 / 100,
+                },
+                sns_swap_pb::CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 42 * 10 / 100,
+                },
+            ],
+        },
+        sns_swap_pb::CfParticipant {
+            hotkey_principal: principal(2).to_string(),
+            cf_neurons: vec![sns_swap_pb::CfNeuron {
+                nns_neuron_id: 3,
+                amount_icp_e8s: 42 * 30 / 100,
+            }],
+        },
+    ];
+    cf_participants.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
     let expected_call_canister_method_calls = [(
         ExpectedCallCanisterMethodCallArguments {
-            target: CanisterId::try_from(swap_canister_id).unwrap(),
-            method_name: "set_open_time_window",
-            request: Encode!(&request).unwrap(),
+            target: CanisterId::try_from(target_swap_canister_id).unwrap(),
+            method_name: "open",
+            request: Encode!(&sns_swap_pb::OpenRequest {
+                params: Some(params.clone()),
+                cf_participants,
+            })
+            .unwrap(),
         },
         Ok(Encode!(&sns_swap_pb::SetOpenTimeWindowResponse {}).unwrap()),
     )]
@@ -10540,14 +10598,13 @@ fn test_set_sns_token_swap_open_time_window() {
         &NeuronId { id: 1 },
         &principal(1),
         &Proposal {
-            title: Some("Schedule SNS Token Swap".to_string()),
+            title: Some("Open SNS Token Swap".to_string()),
             summary: "".to_string(),
-            action: Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(
-                SetSnsTokenSwapOpenTimeWindow {
-                    swap_canister_id: Some(swap_canister_id),
-                    request: Some(request),
-                },
-            )),
+            action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+                target_swap_canister_id: Some(target_swap_canister_id),
+                params: Some(params),
+                community_fund_investment_e8s: Some(42),
+            })),
             ..Default::default()
         },
     )
@@ -10563,7 +10620,7 @@ fn test_set_sns_token_swap_open_time_window() {
     let (_id, proposal) = proposals.pop().unwrap();
     assert_eq!(
         proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
-        "Schedule SNS Token Swap",
+        "Open SNS Token Swap",
         "{:#?}",
         proposal.proposal.as_ref().unwrap()
     );

@@ -23,7 +23,7 @@ use std::iter::FromIterator;
 use std::time::{Duration, Instant};
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::util::{assert_endpoints_reachability, get_unassinged_nodes_endpoints, EndpointsStatus};
+use crate::util::{assert_endpoints_health, get_unassinged_nodes_endpoints, EndpointsStatus};
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::ic_manager::IcSubnet;
@@ -82,8 +82,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .as_permutation(&mut rng)
             .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::System))
             .collect::<Vec<_>>();
-        assert_endpoints_reachability(nns_endpoints.as_slice(), EndpointsStatus::AllReachable)
-            .await;
+        assert_endpoints_health(nns_endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
         // Check readiness of all unassigned nodes.
         for ep in unassigned_endpoints.iter() {
             ep.assert_ready_with_start(Instant::now(), ctx).await;
@@ -207,7 +206,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .try_read_stable(0, UPDATE_MSG_1.len() as u32)
                 .await,
             UPDATE_MSG_1.to_vec(),
-            "could not validate that subnet is healty: universal canister is broken"
+            "could not validate that subnet is healthy: universal canister is broken"
         );
     });
 

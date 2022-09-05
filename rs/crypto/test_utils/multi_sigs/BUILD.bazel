@@ -1,6 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:private"])
+package(default_visibility = [
+    "//rs/crypto:__subpackages__",
+])
 
 DEPENDENCIES = [
     "//rs/crypto",
@@ -15,13 +17,12 @@ rust_library(
     name = "multi_sigs",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_multi_sigs",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "multi_sigs_test",
     crate = ":multi_sigs",
-    edition = "2018",
     deps = DEPENDENCIES,
 )

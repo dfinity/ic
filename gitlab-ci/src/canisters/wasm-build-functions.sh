@@ -12,6 +12,7 @@ wasm_canister_list=(
     governance-canister_test
     governance-mem-test-canister
     identity-canister
+    ic-ckbtc-minter
     ic-icrc1-archive
     ic-icrc1-ledger
     ic-nervous-system-common-test-canister

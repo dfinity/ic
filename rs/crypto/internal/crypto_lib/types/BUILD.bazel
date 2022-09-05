@@ -4,12 +4,13 @@ rust_library(
     name = "types",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     visibility = [
-        "//rs/certified_vars/test-utils:__pkg__",
+        "//rs/certification:__pkg__",
+        "//rs/certification/test-utils:__pkg__",
         "//rs/crypto:__subpackages__",
         "//rs/identity:__pkg__",
         "//rs/registry/admin:__pkg__",

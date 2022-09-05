@@ -56,8 +56,10 @@ function make_var_cryptsetup() {
     # Check which partition to use.
     if [ "$1" == A ]; then
         local DEVICE=vda6
+        local ALT_DEVICE=vda9
     else
         local DEVICE=vda9
+        local ALT_DEVICE=vda6
     fi
     # Generate a unit that will set up the partition as encrypted storage.
     # The "mount" unit depends on the "blockdev@dev-mapper-var_crypt.target"
@@ -86,7 +88,7 @@ function make_var_cryptsetup() {
     echo "TimeoutSec=0"
     echo "KeyringMode=shared"
     echo "OOMScoreAdjust=500"
-    echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/${DEVICE}"
+    echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/${DEVICE} /dev/${ALT_DEVICE}"
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }
 

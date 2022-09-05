@@ -1,24 +1,49 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    "//rs/certification",
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/sha",
+    "//rs/crypto/tree_hash",
+    "//rs/types/types",
+    "@crate_index//:base64",
+    "@crate_index//:hex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:simple_asn1",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto",
+    "//rs/crypto/internal/test_vectors",
+    "//rs/crypto/test_utils",
+    "//rs/interfaces",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "iccsa",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_iccsa",
-    edition = "2018",
-    deps = [
-        "//rs/certified_vars",
-        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/sha",
-        "//rs/crypto/tree_hash",
-        "//rs/types/types",
-        "@crate_index//:base64",
-        "@crate_index//:hex",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:simple_asn1",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "iccsa_test",
+    aliases = ALIASES,
+    crate = ":iccsa",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

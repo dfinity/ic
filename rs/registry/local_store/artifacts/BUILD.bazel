@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "artifacts",
+    srcs = ["src/lib.rs"],
+    compile_data = ["mainnet_delta_00-6d-c1.pb"],
+    crate_name = "ic_registry_local_store_artifacts",
+    version = "0.8.0",
+)

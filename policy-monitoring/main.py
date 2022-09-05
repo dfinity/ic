@@ -1,16 +1,19 @@
+#!/usr/bin/env python3
 import argparse
 import os
 import sys
 import traceback
 from pathlib import Path
+from typing import Dict
+from typing import FrozenSet
 from typing import Iterable
 from typing import Optional
+from typing import TypedDict
 
 from monpoly.monpoly import Monpoly
 from pipeline.alert import AlertService
 from pipeline.alert import DummyAlertService
 from pipeline.artifact_manager import ArtifactManager
-from pipeline.backend import file_io
 from pipeline.backend.ci import Ci
 from pipeline.backend.ci import CiException
 from pipeline.backend.es import Es
@@ -158,21 +161,44 @@ def main():
         help="The Git branch name or revision SHA of this pipeline invocation. Used to add policy definition links in violation alerts",
     )
     args = parser.parse_args()
-    args_by_name = vars(args)
 
     # Detect meaningless option combinations
-    conflicting_modes = set(filter(lambda x: args_by_name[x], ["mainnet", "group_names", "pre_master_pipeline"]))
-    conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", conflicting_modes))
-    if len(conflicting_modes) > 1:
-        print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
-        exit(1)
+
+    ModeConflictSpec = TypedDict(
+        "ModeConflictSpec",
+        {
+            "modes": FrozenSet[str],
+            "is_required": bool,
+        },
+    )
+    CONFLICTING_MODES: Dict[str, ModeConflictSpec] = {
+        "source_of_logs": {
+            "modes": frozenset(["mainnet", "group_names", "pre_master_pipeline", "system_tests_working_dir"]),
+            "is_required": True,
+        },
+        "test_driver_artifacts_locality": {
+            "modes": frozenset(["system_tests_working_dir", "gitlab_token"]),
+            "is_required": False,
+        },
+    }
+
+    def activated_modes(category: str) -> FrozenSet[str]:
+        return frozenset(filter(lambda x: vars(args)[x], CONFLICTING_MODES[category]["modes"]))
+
+    for category, cmodes in CONFLICTING_MODES.items():
+        if len(activated_modes(category)) > 1:
+            conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", cmodes["modes"]))
+            print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
+            exit(1)
+
+    # TODO: specify the dependencies between CLI options via the above approach for conflicts
     if args.mainnet and not args.limit_time:
         print("Option --limit_time should be specified together with --mainnet")
         exit(1)
     if args.mainnet and not args.global_infra:
         print(
             "Warning: if you are monitoring policies that require Global Infra, "
-            "then option --global_infra shoul dbe used together with --mainnet; see --list_policies"
+            "then option --global_infra should be used together with --mainnet; see --list_policies"
         )
     if args.limit_time and args.limit != 0:
         print("Option --limit_time requires setting --limit to 0")
@@ -183,11 +209,41 @@ def main():
         exit(0)
 
     if args.list_policies:
-        for formula in UniversalPreProcessor.get_supported_formulas():
-            if UniversalPreProcessor.is_global_infra_required(set([formula])):
-                print(f"{formula} (requires global infra)")
+        print("--- Supported events ---")
+        preambles = set(UniversalPreProcessor.get_supported_preamble_events())
+        for event in UniversalPreProcessor.get_supported_events():
+            attrs = []
+            if UniversalPreProcessor.is_event_dbg_level(event):
+                attrs.append("requires DEBUG-level logs")
+            if event in preambles:
+                attrs.append("preamble event")
+            if UniversalPreProcessor.is_global_infra_event(event):
+                attrs.append("requires global infra")
+            if len(attrs) > 0:
+                attrs_str = " (" + "; ".join(attrs) + ")"
             else:
-                print(f"{formula}")
+                attrs_str = ""
+            print(f"{event}{attrs_str}")
+
+        print("--- Supported IC policies ---")
+        enabled_formulas = set(UniversalPreProcessor.get_enabled_formulas())
+        for formula in UniversalPreProcessor.get_supported_formulas():
+            attrs = []
+            if formula not in enabled_formulas:
+                attrs.append("DISABLED")
+            if UniversalPreProcessor.is_dbg_log_level_required(formula):
+                attrs.append("requires DEBUG-level logs")
+            if UniversalPreProcessor.is_preamble_required(formula):
+                attrs.append("needs preamble events")
+            if UniversalPreProcessor.is_global_infra_required(set([formula])):
+                attrs.append("requires global infra")
+            if UniversalPreProcessor.is_end_event_required(formula):
+                attrs.append("requires end event")
+            if len(attrs) > 0:
+                attrs_str = " (" + "; ".join(attrs) + ")"
+            else:
+                attrs_str = ""
+            print(f"{formula}{attrs_str}")
         exit(0)
 
     # Read environment variables
@@ -264,24 +320,37 @@ def main():
     with_docker = not args.without_docker
 
     try:
+        gitlab: Optional[Ci]
+        if gitlab_token is None:
+            gitlab = None
+        else:
+            gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
+
         # Obtains logs for each group
         if args.read:
-            groups = file_io.read_logs(log_file=args.read)
+            # If the input file is small enough, it would be faster to load in into memory completely and then process, i.e.:
+            # groups = file_io.read_logs(log_file=args.read)
+            group = Group.fromFile(log_file=args.read, as_stream=True)
+            groups = {group.name: group}
         else:
-            gitlab: Optional[Ci] = None
             if args.mainnet:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True, fail=args.fail)
-                gid = "mainnet"
-                groups = {gid: Group(gid)}
+                group_name = "mainnet"
+                groups = {group_name: Group(group_name)}
             else:
                 es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False, fail=args.fail)
                 if args.group_names:
                     assert isinstance(args.group_names, Iterable)
-                    gids: Iterable[str] = args.group_names
-                    groups = {gid: Group(gid) for gid in gids}
+                    group_names: Iterable[str] = args.group_names
+                    if (
+                        any([Group.is_group_name_local(g) for g in group_names])
+                        and args.system_tests_working_dir is None
+                    ):
+                        print("please specify --system_tests_working_dir to monitor locally invoked tests")
+                        exit(1)
+                    groups = {g: Group(g) for g in group_names}
                 else:
                     if gitlab_token is not None:
-                        gitlab = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
                         if args.pre_master_pipeline:
                             # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
                             groups = gitlab.get_premaster_groups_for_pipeline(
@@ -297,7 +366,9 @@ def main():
                             SystemTestsArtifactManager(args.system_tests_working_dir).test_driver_log_path()
                         )
                     else:
-                        print(f"Please specify at least one of the following options: {conflicting_modes_disjunction}")
+                        print(
+                            f"Please specify at least one of the following options: {CONFLICTING_MODES['source_of_logs']}"
+                        )
                         exit(1)
 
             es.download_logs(groups, limit_per_group=args.limit, minutes_per_group=args.limit_time)
@@ -308,12 +379,12 @@ def main():
         if args.global_infra:
             # Load global infra from file (same for all groups)
             print(f"Setting global infra for all groups based on {args.global_infra}")
-            glob_infra_path = Path(args.global_infra)
-            suf = glob_infra_path.suffix
+            gi_path = Path(args.global_infra)
+            suf = gi_path.suffix
             if suf in [".yml", ".yaml"]:
-                infra = GlobalInfra.fromYamlFile(glob_infra_path)
+                infra = GlobalInfra.fromYamlFile(gi_path)
             elif suf == ".json":
-                infra = GlobalInfra.fromIcRegeditSnapshotFile(glob_infra_path)
+                infra = GlobalInfra.fromIcRegeditSnapshotFile(gi_path)
             else:
                 raise Exception(f"unsupported file format: {suf}")
             for group in groups.values():
@@ -329,13 +400,15 @@ def main():
                         )
                     )
                 else:
-                    # Obrain Global Infra from initial registry snapshot Gitbal artifact
-                    assert gitlab is not None
+                    # Obtain Global Infra from initial registry snapshot GitLab artifact
+                    assert gitlab is not None, "Did you forget to specify --global_infra?"
                     try:
                         snap_bulb = gitlab.get_registry_snapshot_for_group(group)
-                        group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb)
+                        group.global_infra = GlobalInfra.fromIcRegeditSnapshotBulb(snap_bulb, source=group.job_url())
                     except CiException:
                         print("Falling back to inferring Global Infra from logs ...")
+                        # logs need to be reusable, so we serialize the stream
+                        group.logs = list(group.logs)
                         group.infer_global_infra()
         else:
             print("Skipping Global Infra")

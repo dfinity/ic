@@ -6,3 +6,4 @@ pub mod import_state;
 pub mod list;
 pub mod manifest;
 mod utils;
+pub mod verify_manifest;

@@ -28,6 +28,48 @@ impl std::fmt::Display for Network {
     }
 }
 
+impl From<NetworkInRequest> for Network {
+    fn from(network: NetworkInRequest) -> Self {
+        match network {
+            NetworkInRequest::Mainnet => Self::Mainnet,
+            NetworkInRequest::mainnet => Self::Mainnet,
+            NetworkInRequest::Testnet => Self::Testnet,
+            NetworkInRequest::testnet => Self::Testnet,
+            NetworkInRequest::Regtest => Self::Regtest,
+            NetworkInRequest::regtest => Self::Regtest,
+        }
+    }
+}
+
+/// A network enum that allows both upper and lowercase variants.
+/// Supporting both variants allows us to be compatible with the spec (lowercase)
+/// while not breaking current dapps that are using uppercase variants.
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum NetworkInRequest {
+    Mainnet,
+    #[allow(non_camel_case_types)]
+    mainnet,
+    Testnet,
+    #[allow(non_camel_case_types)]
+    testnet,
+    Regtest,
+    #[allow(non_camel_case_types)]
+    regtest,
+}
+
+impl std::fmt::Display for NetworkInRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+            Self::mainnet => write!(f, "mainnet"),
+            Self::testnet => write!(f, "testnet"),
+            Self::regtest => write!(f, "regtest"),
+        }
+    }
+}
+
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct OutPoint {
@@ -51,12 +93,36 @@ pub enum UtxosFilter {
     Page(Page),
 }
 
+impl From<UtxosFilterInRequest> for UtxosFilter {
+    fn from(filter: UtxosFilterInRequest) -> Self {
+        match filter {
+            UtxosFilterInRequest::MinConfirmations(x) => Self::MinConfirmations(x),
+            UtxosFilterInRequest::min_confirmations(x) => Self::MinConfirmations(x),
+            UtxosFilterInRequest::Page(p) => Self::Page(p),
+            UtxosFilterInRequest::page(p) => Self::Page(p),
+        }
+    }
+}
+
+/// A UtxosFilter enum that allows both upper and lowercase variants.
+/// Supporting both variants allows us to be compatible with the spec (lowercase)
+/// while not breaking current dapps that are using uppercase variants.
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
+pub enum UtxosFilterInRequest {
+    MinConfirmations(u32),
+    #[allow(non_camel_case_types)]
+    min_confirmations(u32),
+    Page(Page),
+    #[allow(non_camel_case_types)]
+    page(Page),
+}
+
 /// A request for getting the UTXOs for a given address.
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct GetUtxosRequest {
     pub address: Address,
-    pub network: Network,
-    pub filter: Option<UtxosFilter>,
+    pub network: NetworkInRequest,
+    pub filter: Option<UtxosFilterInRequest>,
 }
 
 /// The response returned for a request to get the UTXOs of a given address.
@@ -80,7 +146,7 @@ pub enum GetUtxosError {
 /// A request for getting the current fee percentiles.
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct GetCurrentFeePercentilesRequest {
-    pub network: Network,
+    pub network: NetworkInRequest,
 }
 
 impl std::fmt::Display for GetUtxosError {
@@ -113,7 +179,7 @@ impl std::fmt::Display for GetUtxosError {
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct GetBalanceRequest {
     pub address: Address,
-    pub network: Network,
+    pub network: NetworkInRequest,
     pub min_confirmations: Option<u32>,
 }
 
@@ -144,7 +210,7 @@ impl std::fmt::Display for GetBalanceError {
 pub struct SendTransactionRequest {
     #[serde(with = "serde_bytes")]
     pub transaction: Vec<u8>,
-    pub network: Network,
+    pub network: NetworkInRequest,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]

@@ -6,7 +6,7 @@ rust_library(
     name = "wasm_types",
     srcs = glob(["src/**"]),
     crate_name = "ic_wasm_types",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/sha",
         "//rs/protobuf",

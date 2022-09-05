@@ -6,6 +6,13 @@ use ic_types::{RegistryVersion, SubnetId};
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use tokio::sync::RwLock;
+
+#[derive(Default)]
+pub(crate) struct SshAccessParameters {
+    pub registry_version: RegistryVersion,
+    pub subnet_id: Option<SubnetId>,
+}
 
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the readonly and backup public key sets.If so, updates
@@ -14,7 +21,7 @@ pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
-    last_used_check_parameters: (RegistryVersion, Option<SubnetId>),
+    last_applied_parameters: Arc<RwLock<SshAccessParameters>>,
 }
 
 impl SshAccessManager {
@@ -27,16 +34,20 @@ impl SshAccessManager {
             registry,
             metrics,
             logger,
-            last_used_check_parameters: Default::default(),
+            last_applied_parameters: Default::default(),
         }
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
     pub(crate) async fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
-        if self.last_used_check_parameters == (registry_version, subnet_id) {
+        let last_applied_parameters = self.last_applied_parameters.read().await;
+        if last_applied_parameters.registry_version == registry_version
+            && last_applied_parameters.subnet_id == subnet_id
+        {
             return;
         }
+        drop(last_applied_parameters);
         debug!(
             self.logger,
             "Checking for the access keys in the registry version {} for subnet_id {:?}",
@@ -59,11 +70,18 @@ impl SshAccessManager {
 
         // Update the readonly & backup keys. If it fails, log why.
         if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
-            self.last_used_check_parameters = (registry_version, subnet_id);
+            *self.last_applied_parameters.write().await = SshAccessParameters {
+                registry_version,
+                subnet_id,
+            };
             self.metrics
                 .ssh_access_registry_version
                 .set(registry_version.get() as i64);
         }
+    }
+
+    pub(crate) fn get_last_applied_parameters(&self) -> Arc<RwLock<SshAccessParameters>> {
+        Arc::clone(&self.last_applied_parameters)
     }
 
     fn update_access_keys(&self, readonly_keys: &[String], backup_keys: &[String]) -> bool {

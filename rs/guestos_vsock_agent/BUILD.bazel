@@ -10,7 +10,6 @@ rust_library(
         "src/server.rs",
     ],
     crate_name = "vsock_agent",
-    edition = "2018",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "@crate_index//:libc",
@@ -18,12 +17,11 @@ rust_library(
 )
 
 rust_binary(
-    name = "guestos_vsock_agent",
+    name = "vsock_agent",
     srcs = [
         "src/agent.rs",
         "src/main.rs",
     ],
-    edition = "2018",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":lib",

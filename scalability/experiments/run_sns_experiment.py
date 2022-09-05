@@ -58,6 +58,18 @@ def sns_except_hook(exctype, value, tb_in):
             },
         ]
     }
+    env = os.environ.copy()
+    if "CI_JOB_ID" in env:
+        job_id = env["CI_JOB_ID"]
+        blocks["blocks"].append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<https://https://gitlab.com/dfinity-lab/public/ic/-/jobs/{job_id}|View CI job>",
+                },
+            },
+        )
     send_slack(blocks)
     sys.__excepthook__(exctype, value, tb)
 

@@ -10,11 +10,7 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 
 #[test]
 fn list_deployed_snses_lists_created_sns_instances() {
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/sns-wasm",
-        "sns-wasm-canister",
-        &[], // features
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
     let machine = set_up_state_machine_with_nns();
 

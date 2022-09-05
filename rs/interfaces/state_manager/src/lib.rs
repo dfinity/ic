@@ -259,8 +259,6 @@ pub trait StateManager: StateReader {
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
-    ///  * It is the responsibiltiy of the caller to not remove the most recent
-    ///    certified state
     fn remove_states_below(&self, height: Height);
 
     /// Notify the state manager that states committed with partial certification
@@ -272,8 +270,6 @@ pub trait StateManager: StateReader {
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
     ///  * No checkpoints are removed, see also `remove_states_below()`
-    ///  * It is the responsibiltiy of the caller to not remove the most recent
-    ///    certified state
     fn remove_inmemory_states_below(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to

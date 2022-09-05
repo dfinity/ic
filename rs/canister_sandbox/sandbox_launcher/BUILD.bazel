@@ -12,7 +12,7 @@ rust_library(
     name = "sandbox_launcher_lib",
     srcs = glob(["src/**"]),
     crate_name = "ic_canister_sandbox_launcher",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -21,6 +21,5 @@ rust_library(
 rust_binary(
     name = "sandbox_launcher",
     srcs = ["bin/sandbox_launcher.rs"],
-    edition = "2018",
     deps = [":sandbox_launcher_lib"],
 )

@@ -3,7 +3,6 @@ use std::{
     convert::{TryFrom, TryInto},
     path::PathBuf,
     sync::{Arc, Mutex},
-    thread::{self, ThreadId},
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -66,8 +65,8 @@ use crate::{
 
 use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
-use ic_crypto::prng::Csprng;
-use ic_crypto::prng::RandomnessPurpose::ExecutionThread;
+use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_types::time::UNIX_EPOCH;
 use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
@@ -154,9 +153,7 @@ impl SchedulerTest {
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
-    pub fn executed_schedule(
-        &self,
-    ) -> Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)> {
+    pub fn executed_schedule(&self) -> Vec<(ExecutionRound, CanisterId, NumInstructions)> {
         let wasm_executor = self.wasm_executor.core.lock().unwrap();
         wasm_executor.schedule.clone()
     }
@@ -166,6 +163,7 @@ impl SchedulerTest {
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
+            None,
             None,
         )
     }
@@ -181,11 +179,14 @@ impl SchedulerTest {
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
         system_method: Option<SystemMethod>,
+        time_of_last_allocation_charge: Option<Time>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
         let wasm_source = system_method
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
+        let time_of_last_allocation_charge =
+            time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let mut canister_state = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
@@ -194,6 +195,7 @@ impl SchedulerTest {
             .with_memory_allocation(memory_allocation.bytes())
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
+            .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
@@ -394,6 +396,7 @@ impl SchedulerTest {
         long_running_canister_ids: &BTreeSet<CanisterId>,
     ) -> ReplicatedState {
         let state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_seed_and_purpose(
             &Randomness::from([0; 32]),
             &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
@@ -407,6 +410,7 @@ impl SchedulerTest {
                 .exec_env
                 .subnet_available_memory(&state)
                 .into(),
+            compute_allocation_used,
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
@@ -418,6 +422,11 @@ impl SchedulerTest {
             &test_registry_settings(),
             &BTreeMap::new(),
         )
+    }
+
+    pub fn charge_for_resource_allocations(&mut self) {
+        self.scheduler
+            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
@@ -623,7 +632,7 @@ impl SchedulerTestBuilder {
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            1,
+            SchedulerImpl::compute_capacity(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
         );
@@ -834,7 +843,7 @@ struct TestWasmExecutorCore {
     install_code: HashMap<CanisterId, VecDeque<TestInstallCode>>,
     current_install_code: Option<TestInstallCode>,
     heartbeat: HashMap<CanisterId, VecDeque<TestMessage>>,
-    schedule: Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)>,
+    schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
 }
@@ -858,7 +867,6 @@ impl TestWasmExecutorCore {
         mut paused: Box<TestPausedWasmExecution>,
         execution_state: &ExecutionState,
     ) -> WasmExecutionResult {
-        let thread_id = thread::current().id();
         let canister_id = paused.sandbox_safe_system_state.canister_id();
 
         let message_limit = paused.execution_parameters.instruction_limits.message();
@@ -872,8 +880,7 @@ impl TestWasmExecutorCore {
             let slice = SliceExecutionOutput {
                 executed_instructions: slice_limit,
             };
-            self.schedule
-                .push((thread_id, self.round, canister_id, slice_limit));
+            self.schedule.push((self.round, canister_id, slice_limit));
             return WasmExecutionResult::Paused(slice, paused);
         }
 
@@ -894,7 +901,7 @@ impl TestWasmExecutorCore {
                 },
             };
             self.schedule
-                .push((thread_id, self.round, canister_id, instructions_to_execute));
+                .push((self.round, canister_id, instructions_to_execute));
             return WasmExecutionResult::Finished(slice, output, None);
         }
 
@@ -932,7 +939,7 @@ impl TestWasmExecutorCore {
             instance_stats,
         };
         self.schedule
-            .push((thread_id, self.round, canister_id, instructions_to_execute));
+            .push((self.round, canister_id, instructions_to_execute));
         WasmExecutionResult::Finished(slice, output, Some(canister_state_changes))
     }
 

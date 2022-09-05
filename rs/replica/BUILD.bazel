@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -68,6 +68,19 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+    "//rs/types/ic00_types",
+    "@crate_index//:assert_cmd",
+    "@crate_index//:criterion",
+    "@crate_index//:predicates",
+    "@wabt_rs//:wabt",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_library(
@@ -75,7 +88,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replica",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -87,7 +99,35 @@ rust_binary(
         "src/main.rs",
     ],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":replica_lib"],
+)
+
+rust_binary(
+    name = "replica_malicious",
+    srcs = [
+        "src/jemalloc_metrics.rs",
+        "src/main.rs",
+    ],
+    aliases = ALIASES,
+    features = ["malicious_code"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":replica_lib"],
+)
+
+rust_test(
+    name = "replica_test",
+    aliases = ALIASES,
+    crate = ":replica",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "replica_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    data = [":replica"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

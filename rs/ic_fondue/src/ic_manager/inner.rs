@@ -6,7 +6,7 @@ use ic_config::{
     metrics::Config as MetricsConfig,
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
     state_manager::Config as StateManagerConfig,
-    transport::{TransportConfig, TransportFlowConfig},
+    transport::TransportConfig,
     ConfigOptional as ReplicaConfig,
 };
 use ic_prep_lib::initialized_subnet::InitializedSubnet;
@@ -359,10 +359,7 @@ impl IcManager {
         );
 
         debug!(logger, "ic_config.initialize");
-        let rt = tokio::runtime::Runtime::new().expect("Could not create runtime");
-        let init_ic = rt
-            .block_on(async { ic_config.initialize().await })
-            .expect("can't fail");
+        let init_ic = ic_config.initialize().expect("can't fail");
 
         IcPrepStateDir::new(init_ic.target_dir.as_path());
         (init_ic, malicious_nodes)
@@ -482,11 +479,9 @@ impl IcManager {
             node_ip: SocketAddr::from(&init_node.node_config.p2p_addr)
                 .ip()
                 .to_string(),
-            p2p_flows: vec![TransportFlowConfig {
-                flow_tag: 1234,
-                server_port: p2p_port,
-                queue_size: 256,
-            }],
+            legacy_flow_tag: 1234,
+            listening_port: p2p_port,
+            send_queue_size: 256,
         });
         replica_config.state_manager = Some(StateManagerConfig::new(state_manager_root));
         replica_config.http_handler = Some(http_handler::ExternalConfig {

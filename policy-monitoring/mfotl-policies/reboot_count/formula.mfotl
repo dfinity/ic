@@ -1,15 +1,30 @@
 (*
-  Policy: An alert is raised if there are more than 2 (unintended) reboots of machines 
+  Policy: An alert is raised if there are more than 2 (unintended) reboots of IC hosts
   in the same data center within 30min windows. The first reboot is ignored, as every
   machine is (re)booted when a testnet starts.
 
   Relevant events:
+  - originally_in_ic(node_id:string, node_addr:string)
+  - registry__node_removed_from_ic(node_id:string, node_addr:string)
+  - registry__node_added_to_ic(node_id:string, node_addr:string)
   - reboot(ip_addr:string, data_center_prefix:string)
   - reboot_intent(ip_addr:string, data_center_prefix:string)
 *)
 
+LET in_ic(node_id, node_addr) =
+  ((*
+      The node was originally in the IC, and it has not been removed.
+    *)
+    (ONCE originally_in_ic(node_id, node_addr)) AND NOT ONCE registry__node_removed_from_ic(node_id, node_addr)
+  ) OR (
+    (*
+      The node was possibly not originally in the IC, but it has been added to it.
+    *)
+    ((NOT registry__node_removed_from_ic(node_id, node_addr)) SINCE registry__node_added_to_ic(node_id, node_addr))
+  )
+IN
 LET true_reboot(ip_addr, data_center) =
-  reboot(ip_addr, data_center) AND PREV ONCE reboot(ip_addr, data_center)
+  in_ic(_, ip_addr) AND reboot(ip_addr, data_center) AND PREV ONCE reboot(ip_addr, data_center)
 IN
 LET unintended_reboot(ip_addr, data_center) =
   true_reboot(ip_addr, data_center) AND NOT PREV

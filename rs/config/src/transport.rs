@@ -1,24 +1,26 @@
 use serde::{Deserialize, Serialize};
+use std::default::Default;
 
 /// The transport format specified in the ic.json
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransportConfig {
     pub node_ip: String,
 
-    /// P2P specific config. In future, this will be made more generic.
-    pub p2p_flows: Vec<TransportFlowConfig>,
+    pub listening_port: u16,
+
+    pub send_queue_size: usize,
+
+    /// This field is deprecated and will be deleted once NET-1086 is rolled out.
+    pub legacy_flow_tag: u32,
 }
 
-/// Per-flow config
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TransportFlowConfig {
-    /// The flow tag. This should be unique per transport client.
-    pub flow_tag: u32,
-
-    /// Server port for the flow connection. This should be unique across
-    /// all transport clients.
-    pub server_port: u16,
-
-    /// Flow queue size
-    pub queue_size: usize,
+impl Default for TransportConfig {
+    fn default() -> Self {
+        Self {
+            send_queue_size: 51200,
+            node_ip: String::default(),
+            listening_port: u16::default(),
+            legacy_flow_tag: u32::default(),
+        }
+    }
 }

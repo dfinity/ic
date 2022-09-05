@@ -12,7 +12,6 @@ rust_canister(
     name = "nns-ui-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

@@ -805,11 +805,7 @@ pub fn compute_manifest(
         assert_eq!(chunk_table, seq_chunk_table);
     }
 
-    Ok(Manifest {
-        version,
-        file_table,
-        chunk_table,
-    })
+    Ok(Manifest::new(version, file_table, chunk_table))
 }
 
 /// Validates manifest contents and checks that the hash of the manifest matches

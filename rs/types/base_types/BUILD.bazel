@@ -20,6 +20,7 @@ COMMON_DEPS = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:strum",
+    "@crate_index//:comparable",
 ]
 
 rust_library(
@@ -29,26 +30,11 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_base_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     deps = COMMON_DEPS,
-)
-
-rust_library(
-    name = "base_types_comparable",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
-    crate_features = ["test"],
-    crate_name = "ic_base_types",
-    edition = "2018",
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
-    deps = COMMON_DEPS + ["@crate_index//:comparable"],
 )
 
 rust_test(

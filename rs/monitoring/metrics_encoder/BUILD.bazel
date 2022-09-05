@@ -6,5 +6,5 @@ rust_library(
     name = "metrics_encoder",
     srcs = glob(["src/**"]),
     crate_name = "ic_metrics_encoder",
-    edition = "2018",
+    version = "0.8.0",
 )

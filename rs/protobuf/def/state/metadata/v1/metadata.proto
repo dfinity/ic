@@ -174,7 +174,7 @@ message SystemMetadata {
     reserved "stable_memory_delta_estimate";
 
     registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
-
+    // TODO(EXC-1214): This field is deprecated.
     TimeOfLastAllocationCharge time_of_last_allocation_charge_nanos = 14;
     SubnetMetrics subnet_metrics = 15;
 }

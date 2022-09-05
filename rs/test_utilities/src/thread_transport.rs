@@ -1,12 +1,12 @@
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportEventHandler,
-    TransportMessage, TransportPayload,
+    FlowTag, Transport, TransportError, TransportEvent, TransportEventHandler, TransportMessage,
+    TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use tower::Service;
 
@@ -102,7 +102,7 @@ impl ThreadPort {
         src_node_id: NodeId,
         dest_node_id: NodeId,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         // Dispatch  or defer send a message to a node.
         // Dispatch happens only if all 3 conditions are met
         //.
@@ -173,12 +173,12 @@ impl Transport for ThreadPort {
         *self.event_handler.lock().unwrap() = Some(event_handler);
     }
 
-    fn start_connections(
+    fn start_connection(
         &self,
         node_id: &NodeId,
-        _record: &NodeRecord,
+        _peer_addr: SocketAddr,
         _registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         info!(
             self.log,
             "Node{} -> Connections to peer {} started", self.id, node_id
@@ -190,7 +190,7 @@ impl Transport for ThreadPort {
     /// Remove the peer from the set of valid neighbors, and tear down the
     /// queues and connections for the peer. Any messages in the Tx and Rx
     /// queues for the peer will be discarded.
-    fn stop_connections(&self, peer_id: &NodeId) {
+    fn stop_connection(&self, peer_id: &NodeId) {
         info!(
             self.log,
             "Node{} -> Connections to peer {} stopped", self.id, *peer_id
@@ -204,7 +204,7 @@ impl Transport for ThreadPort {
         peer_id: &NodeId,
         _flow_tag: FlowTag,
         message: TransportPayload,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let peer_id = *peer_id;
         let id = self.id;
         let weak_self = self.weak_self.read().unwrap().clone();

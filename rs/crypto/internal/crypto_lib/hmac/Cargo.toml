@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-internal-hmac"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-crypto-internal-sha2 = { path = "../sha2" }

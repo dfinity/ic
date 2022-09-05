@@ -1,28 +1,69 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/canonical_state/certification_version",
+    "//rs/crypto/tree_hash",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/types",
+    "@crate_index//:leb128",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/registry/subnet_features",
+    "//rs/sys",
+    "//rs/test_utilities",
+    "//rs/types/wasm_types",
+    "//rs/utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:hex",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:proptest",
+    "@crate_index//:strum",
+    "@crate_index//:tempfile",
+]
+
+DEV_MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 rust_library(
     name = "canonical_state",
     srcs = glob(["src/**"]),
     crate_name = "ic_canonical_state",
-    edition = "2018",
-    deps = [
-        "//rs/canonical_state/certification_version",
-        "//rs/crypto/tree_hash",
-        "//rs/phantom_newtype",
-        "//rs/protobuf",
-        "//rs/registry/routing_table",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/types/base_types",
-        "//rs/types/error_types",
-        "//rs/types/types",
-        "@crate_index//:leb128",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_cbor",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
+rust_test(
+    name = "canonical_state_test",
+    crate = ":canonical_state",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "compatibility_test",
+    srcs = ["tests/compatibility.rs"],
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
+)
+
+rust_test(
+    name = "size_limit_visitor_test",
+    srcs = ["tests/size_limit_visitor.rs"],
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
+)

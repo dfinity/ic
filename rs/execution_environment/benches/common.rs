@@ -67,6 +67,7 @@ where
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        compute_allocation_used: 0,
     };
     let execution_state = hypervisor
         .create_execution_state(

@@ -72,7 +72,7 @@ fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalErro
     let threshold = 2;
     let dealer_index = 0;
 
-    let secret = EccScalar::random(curve, &mut rng)?;
+    let secret = EccScalar::random(curve, &mut rng);
     let shares = SecretShares::ReshareOfUnmasked(secret);
 
     let dealing = create_dealing(
@@ -111,8 +111,8 @@ fn create_reshare_masked_dealings() -> Result<(), IdkgCreateDealingInternalError
     let threshold = 2;
     let dealer_index = 0;
 
-    let secret = EccScalar::random(curve, &mut rng)?;
-    let mask = EccScalar::random(curve, &mut rng)?;
+    let secret = EccScalar::random(curve, &mut rng);
+    let mask = EccScalar::random(curve, &mut rng);
     let shares = SecretShares::ReshareOfMasked(secret, mask);
 
     let dealing = create_dealing(
@@ -151,9 +151,9 @@ fn create_mult_dealing() -> Result<(), IdkgCreateDealingInternalError> {
     let threshold = 2;
     let dealer_index = 0;
 
-    let lhs = EccScalar::random(curve, &mut rng)?;
-    let rhs = EccScalar::random(curve, &mut rng)?;
-    let mask = EccScalar::random(curve, &mut rng)?;
+    let lhs = EccScalar::random(curve, &mut rng);
+    let rhs = EccScalar::random(curve, &mut rng);
+    let mask = EccScalar::random(curve, &mut rng);
     let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
 
     let dealing = create_dealing(
@@ -247,7 +247,7 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     }
 
     {
-        let secret = EccScalar::random(curve, &mut rng)?;
+        let secret = EccScalar::random(curve, &mut rng);
         let shares = SecretShares::ReshareOfUnmasked(secret);
         let log = format!("{:?}", shares);
         assert_eq!(
@@ -257,8 +257,8 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     }
 
     {
-        let secret = EccScalar::random(curve, &mut rng)?;
-        let mask = EccScalar::random(curve, &mut rng)?;
+        let secret = EccScalar::random(curve, &mut rng);
+        let mask = EccScalar::random(curve, &mut rng);
         let shares = SecretShares::ReshareOfMasked(secret, mask);
         let log = format!("{:?}", shares);
         assert_eq!(
@@ -268,9 +268,9 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     }
 
     {
-        let lhs = EccScalar::random(curve, &mut rng)?;
-        let rhs = EccScalar::random(curve, &mut rng)?;
-        let mask = EccScalar::random(curve, &mut rng)?;
+        let lhs = EccScalar::random(curve, &mut rng);
+        let rhs = EccScalar::random(curve, &mut rng);
+        let mask = EccScalar::random(curve, &mut rng);
         let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
         let log = format!("{:?}", shares);
         assert_eq!(
@@ -303,7 +303,7 @@ fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError>
     let (_private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 3;
 
-    let secret = EccScalar::random(curve, &mut rng)?;
+    let secret = EccScalar::random(curve, &mut rng);
     let shares = SecretShares::ReshareOfUnmasked(flip_curve(&secret));
 
     let dealing = create_dealing(
@@ -333,8 +333,8 @@ fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
     let (_private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 3;
 
-    let secret = EccScalar::random(curve, &mut rng)?;
-    let mask = EccScalar::random(curve, &mut rng)?;
+    let secret = EccScalar::random(curve, &mut rng);
+    let mask = EccScalar::random(curve, &mut rng);
     let shares = SecretShares::ReshareOfMasked(flip_curve(&secret), mask);
 
     let dealing = create_dealing(
@@ -364,9 +364,9 @@ fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
     let (_private_keys, public_keys) = gen_private_keys(curve, 5)?;
     let threshold = 3;
 
-    let lhs = EccScalar::random(curve, &mut rng)?;
-    let rhs = EccScalar::random(curve, &mut rng)?;
-    let mask = EccScalar::random(curve, &mut rng)?;
+    let lhs = EccScalar::random(curve, &mut rng);
+    let rhs = EccScalar::random(curve, &mut rng);
+    let mask = EccScalar::random(curve, &mut rng);
 
     let shares = SecretShares::UnmaskedTimesMasked(flip_curve(&lhs), (rhs, mask));
 

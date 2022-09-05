@@ -16,7 +16,6 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     data = ["src/backtrace.c"],
-    edition = "2018",
     deps = ["@crate_index//:cc"],
 )
 
@@ -25,7 +24,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "canister_sandbox",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )

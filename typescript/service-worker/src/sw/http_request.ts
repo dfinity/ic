@@ -223,22 +223,6 @@ export async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
   /**
-   * We forward all requests to /api/ to the replica, as is.
-   */
-  if (url.pathname.startsWith('/api/')) {
-    const response = await fetch(request);
-    // force the content-type to be cbor as /api/ is exclusively used for canister calls
-    const sanitizedHeaders = new Headers(response.headers);
-    sanitizedHeaders.set('X-Content-Type-Options', 'nosniff');
-    sanitizedHeaders.set('Content-Type', 'application/cbor');
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: sanitizedHeaders,
-    });
-  }
-
-  /**
    * We refuse any request to /_/*
    */
   if (url.pathname.startsWith('/_/')) {
@@ -254,6 +238,22 @@ export async function handleRequest(request: Request): Promise<Response> {
     isLocal
   );
   if (maybeCanisterId) {
+    /**
+     * We forward all requests to /api/ to the replica, as is.
+     */
+    if (url.pathname.startsWith('/api/')) {
+      const response = await fetch(request);
+      // force the content-type to be cbor as /api/ is exclusively used for canister calls
+      const sanitizedHeaders = new Headers(response.headers);
+      sanitizedHeaders.set('X-Content-Type-Options', 'nosniff');
+      sanitizedHeaders.set('Content-Type', 'application/cbor');
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: sanitizedHeaders,
+      });
+    }
+
     try {
       const origin = splitHostnameForCanisterId(url.hostname);
       const [agent, actor] = await createAgentAndActor(
@@ -262,9 +262,14 @@ export async function handleRequest(request: Request): Promise<Response> {
         shouldFetchRootKey
       );
       const requestHeaders: [string, string][] = [];
-      request.headers.forEach((value, key) =>
-        requestHeaders.push([key, value])
-      );
+      request.headers.forEach((value, key) => {
+        if (key.toLowerCase() === 'if-none-match') {
+          // Drop the if-none-match header because we do not want a "304 not modified" response back.
+          // See TT-30.
+          return;
+        }
+        requestHeaders.push([key, value]);
+      });
 
       // If the accept encoding isn't given, add it because we want to save bandwidth.
       if (!request.headers.has('Accept-Encoding')) {
@@ -282,6 +287,18 @@ export async function handleRequest(request: Request): Promise<Response> {
       let httpResponse: HttpResponse = (await actor.http_request(
         httpRequest
       )) as HttpResponse;
+
+      // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
+      // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
+      if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
+        console.error(
+          'Due to security reasons redirects are blocked on the IC until further notice!'
+        );
+        return new Response(
+          'Due to security reasons redirects are blocked on the IC until further notice!',
+          { status: 500 }
+        );
+      }
 
       if (httpResponse.upgrade.length === 1 && httpResponse.upgrade[0]) {
         // repeat the request as an update call

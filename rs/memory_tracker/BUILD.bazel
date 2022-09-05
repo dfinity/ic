@@ -19,15 +19,14 @@ rust_library(
     name = "memory_tracker",
     srcs = glob(["src/**"]),
     crate_name = "memory_tracker",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "memory_tracker_test",
     crate = ":memory_tracker",
-    edition = "2018",
     deps = [
+        "//rs/types/types",
         "@crate_index//:tempfile",
     ],
 )
@@ -35,7 +34,6 @@ rust_test(
 rust_binary(
     name = "memory_tracker_bench",
     srcs = ["benches/traps.rs"],
-    edition = "2018",
     deps = [
         ":memory_tracker",
         "@crate_index//:criterion",

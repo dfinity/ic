@@ -38,23 +38,19 @@ type SnsCanisterIds = record {
 };
 type SnsInitPayload = record {
   url : opt text;
-  min_participant_icp_e8s : opt nat64;
   fallback_controller_principal_ids : vec text;
   token_symbol : opt text;
-  max_icp_e8s : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
   logo : opt text;
   name : opt text;
   description : opt text;
-  min_participants : opt nat32;
   transaction_fee_e8s : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   token_name : opt text;
-  max_participant_icp_e8s : opt nat64;
   proposal_reject_cost_e8s : opt nat64;
-  min_icp_e8s : opt nat64;
 };
 type SnsVersion = record {
+  archive_wasm_hash : vec nat8;
   root_wasm_hash : vec nat8;
   swap_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
@@ -74,6 +70,7 @@ type TreasuryDistribution = record { total_e8s : nat64 };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
+  get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
     ) query;

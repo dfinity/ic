@@ -33,13 +33,13 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     match image_type {
         UpdateImageType::Image => {
             format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
                 git_revision
             )
         }
         UpdateImageType::ImageTest => {
             format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.gz",
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst",
                 git_revision
             )
         }
@@ -52,7 +52,25 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     }
 }
 
-pub(crate) async fn fetch_update_file_sha256(version_str: &str, is_test_img: bool) -> String {
+pub(crate) async fn fetch_update_file_sha256_with_retry(
+    log: &Logger,
+    version_str: &str,
+    is_test_img: bool,
+) -> String {
+    retry_async(log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        match fetch_update_file_sha256(version_str, is_test_img).await {
+            Err(err) => bail!(err),
+            Ok(sha) => Ok(sha),
+        }
+    })
+    .await
+    .expect("Failed to fetch sha256 file.")
+}
+
+pub(crate) async fn fetch_update_file_sha256(
+    version_str: &str,
+    is_test_img: bool,
+) -> Result<String, String> {
     let sha_url = get_update_image_url(UpdateImageType::Sha256, version_str);
     let tmp_dir = tempfile::tempdir().unwrap().into_path();
     let mut tmp_file = tmp_dir.clone();
@@ -62,20 +80,21 @@ pub(crate) async fn fetch_update_file_sha256(version_str: &str, is_test_img: boo
     file_downloader
         .download_file(&sha_url, &tmp_file, None)
         .await
-        .expect("Download of SHA256SUMS file failed.");
-    let contents = fs::read_to_string(tmp_file).expect("Something went wrong reading the file");
+        .map_err(|err| format!("Download of SHA256SUMS file failed: {:?}", err))?;
+    let contents = fs::read_to_string(tmp_file)
+        .map_err(|err| format!("Something went wrong reading the file: {:?}", err))?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
         let suffix = match is_test_img {
-            true => "-img-test.tar.gz",
-            false => "-img.tar.gz",
+            true => "-img-test.tar.zst",
+            false => "-img.tar.zst",
         };
         if words.len() == 2 && words[1].ends_with(suffix) {
-            return words[0].to_string();
+            return Ok(words[0].to_string());
         }
     }
 
-    panic!("SHA256 hash is not fund in {}", sha_url)
+    Err(format!("SHA256 hash is not found in {}", sha_url))
 }
 
 pub(crate) async fn get_blessed_replica_versions(
@@ -157,7 +176,7 @@ pub(crate) fn assert_assigned_replica_version(
 pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
-        Ok(_) => return Err("Replica is not healty".to_string()),
+        Ok(status) => return Err(format!("Replica is not healthy: {:?}", status)),
         Err(err) => return Err(err.to_string()),
     }
     .impl_version;
@@ -184,8 +203,12 @@ pub(crate) async fn bless_replica_version(
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
     info!(logger, "Initial: {:?}", blessed_versions);
-    let sha256 =
-        fetch_update_file_sha256(target_version, image_type == UpdateImageType::ImageTest).await;
+    let sha256 = fetch_update_file_sha256_with_retry(
+        logger,
+        target_version,
+        image_type == UpdateImageType::ImageTest,
+    )
+    .await;
 
     let replica_version = match image_type == UpdateImageType::ImageTest {
         true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),

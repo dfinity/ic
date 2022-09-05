@@ -1,7 +1,7 @@
 [package]
 name = "ic-p8s-service-discovery"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.31"
@@ -28,6 +28,7 @@ ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils/" }
 lazy_static = "1.4.0"
@@ -45,7 +46,7 @@ strum_macros = "0.23.0"
 thiserror = "1.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }

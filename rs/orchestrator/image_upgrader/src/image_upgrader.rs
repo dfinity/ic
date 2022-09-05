@@ -3,7 +3,6 @@ use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use std::future::Future;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{
     fmt::Debug,
     io::Write,
@@ -12,7 +11,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::watch::Receiver;
 use tokio::time::error::Elapsed;
 
 use crate::error::{UpgradeError, UpgradeResult};
@@ -284,7 +283,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// the result returned by the check.
     async fn upgrade_loop<F, Fut>(
         &mut self,
-        exit_signal: Arc<RwLock<bool>>,
+        mut exit_signal: Receiver<bool>,
         interval: Duration,
         timeout: Duration,
         handler: F,
@@ -292,10 +291,13 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
         Fut: Future<Output = ()> + Send,
     {
-        while !*exit_signal.read().await {
+        while !*exit_signal.borrow() {
             let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
             handler(r).await;
-            tokio::time::sleep(interval).await;
+            tokio::select! {
+                _ = tokio::time::sleep(interval) => {}
+                _ = exit_signal.changed() => {}
+            };
         }
     }
 }

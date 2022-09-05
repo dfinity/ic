@@ -1,11 +1,13 @@
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
+use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
     NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
@@ -13,18 +15,20 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+    install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
+    UserInfo,
 };
-use ic_types::PrincipalId;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 // The minimum WASM payload.
 lazy_static! {
     pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 }
+
+// Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
 
 #[test]
 fn test_upgrade_canister_proposal_is_successful() {
@@ -80,7 +84,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
         // Step 2: Execute code under test: Propose that we upgrade dapp.
 
-        // Step 2.a: Make sure that the proposal will have a discernable
+        // Step 2.a: Make sure that the proposal will have a discernible
         // effect (verified in Step 3). Specifically, that the wasm will
         // have changed (upon successful execution).
         let status: CanisterStatusResult = sns_canisters
@@ -121,7 +125,10 @@ fn test_upgrade_canister_proposal_is_successful() {
         // Step 3: Inspect result(s).
 
         // Step 3.a: Assert that the proposal was approved.
-        let proposal = sns_canisters.get_proposal(proposal_id).await;
+        let proposal = sns_canisters
+            .await_proposal_execution_or_failure(&proposal_id)
+            .await;
+
         assert_ne!(
             proposal.decided_timestamp_seconds, 0,
             "proposal: {:?}",
@@ -140,28 +147,9 @@ fn test_upgrade_canister_proposal_is_successful() {
         assert_eq!(proposal.failure_reason, None, "proposal: {:?}", proposal);
 
         // Step 3.b: Wait until new dapp is running.
-        let mut attempt_count = 0;
-        let status = loop {
-            // Query dapp status.
-            let status: CanisterStatusResult = sns_canisters
-                .root
-                .update_(
-                    "canister_status",
-                    candid_one,
-                    CanisterIdRecord::from(dapp_canister.canister_id()),
-                )
-                .await
-                .unwrap();
-            attempt_count += 1;
-
-            // Stop waiting once it dapp has reached the Running state.
-            if status.status == CanisterStatusType::Running {
-                break status;
-            }
-
-            assert!(attempt_count < 25, "status: {:?}", status);
-            sleep(Duration::from_millis(100)).await;
-        };
+        let status = sns_canisters
+            .await_canister_upgrade(dapp_canister.canister_id())
+            .await;
 
         // Step 3.c: Assert that the new wasm hash is new_dapp_wasm_hash.
         assert_eq!(
@@ -364,11 +352,8 @@ fn governance_mem_test() {
             .await
             .unwrap();
 
-        let state_initializer_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "sns/integration_tests",
-            "sns-governance-mem-test-canister",
-            &[],
-        );
+        let state_initializer_wasm =
+            Project::cargo_bin_maybe_from_env("sns-governance-mem-test-canister", &[]);
 
         // It's on purpose that we don't want retries here! This test is only about
         // initializing a canister with a very large state. A failure is most
@@ -379,11 +364,7 @@ fn governance_mem_test() {
         install.install(&mut governance, Vec::new()).await.unwrap();
 
         // Now let's upgrade to the real governance canister
-        let real_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "sns/governance",
-            "sns-governance-canister",
-            &[],
-        );
+        let real_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
         governance.set_wasm(real_wasm.bytes());
 
         // Exercise canister_post_upgrade of the real canister
@@ -440,7 +421,7 @@ fn test_upgrade_after_state_shrink() {
         // Use the neuron_claimer to add the extra_user's unique principal as a permission to
         // the neuron. This permission is what will shrink the state after the update.
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &neuron_claimer.sender,
                 &neuron_claimer.subaccount,
                 Some(extra_user.sender.get_principal_id()),
@@ -449,12 +430,8 @@ fn test_upgrade_after_state_shrink() {
             .await;
 
         // Get the WASM of the sns-governance canister to be used in the upgrades
-        let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "sns/governance",
-            "sns-governance-canister",
-            &[], // features
-        )
-        .bytes();
+        let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]) // features
+            .bytes();
 
         // Create and submit an upgrade proposal to trigger the first "write and read" of
         // stable memory for the governance canister.
@@ -485,7 +462,7 @@ fn test_upgrade_after_state_shrink() {
         // Now that the first upgrade is complete, shrink the state by removing the NeuronPermission
         // granted to the extra_voter user.
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &neuron_claimer.sender,
                 &neuron_claimer.subaccount,
                 &extra_user.sender.get_principal_id(),
@@ -534,20 +511,34 @@ fn test_install_canisters_in_any_order() {
             .await
             .expect("Couldn't create Ledger canister");
 
+        let mut swap = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Sale canister");
+
         let root_canister_id = root.canister_id();
         let governance_canister_id = governance.canister_id();
         let ledger_canister_id = ledger.canister_id();
+        let swap_canister_id = swap.canister_id();
 
         // Populate the minimal set of fields for install
         sns_init_payload.governance.ledger_canister_id = Some(ledger_canister_id.into());
         sns_init_payload.governance.root_canister_id = Some(root_canister_id.into());
+        sns_init_payload.governance.swap_canister_id = Some(swap_canister_id.into());
         sns_init_payload.root.governance_canister_id = Some(governance_canister_id.into());
         sns_init_payload.root.ledger_canister_id = Some(ledger_canister_id.into());
-        // TODO(NNS1-1526): Install swap canister.
-        sns_init_payload.root.swap_canister_id = Some(PrincipalId::new_user_test_id(999_999));
+        sns_init_payload.root.swap_canister_id = Some(swap_canister_id.into());
+
+        sns_init_payload.swap.nns_governance_canister_id = GOVERNANCE_CANISTER_ID.to_string();
+        sns_init_payload.swap.sns_governance_canister_id = governance_canister_id.to_string();
+        sns_init_payload.swap.sns_ledger_canister_id = ledger_canister_id.to_string();
+        sns_init_payload.swap.icp_ledger_canister_id = LEDGER_CANISTER_ID.to_string();
+        sns_init_payload.swap.sns_root_canister_id = root_canister_id.to_string();
+        sns_init_payload.swap.fallback_controller_principal_ids =
+            vec![CanisterId::from_u64(900).get().to_string()];
 
         // Use canister tags to generate all the permutations needed to test random order installs
-        let canister_tags = vec!["governance", "ledger", "root"];
+        let canister_tags = vec!["governance", "ledger", "root", "swap"];
 
         // Generate the permutations
         let permutation_size = canister_tags.len();
@@ -573,6 +564,7 @@ fn test_install_canisters_in_any_order() {
                         install_ledger_canister(&mut ledger, sns_init_payload.ledger.clone()).await
                     }
                     "root" => install_root_canister(&mut root, sns_init_payload.root.clone()).await,
+                    "swap" => install_swap_canister(&mut swap, sns_init_payload.swap.clone()).await,
                     _ => panic!("Unexpected canister tag"),
                 };
                 println!("Successfully installed {}", canister_tag);
@@ -583,6 +575,7 @@ fn test_install_canisters_in_any_order() {
             reset_canister_to_empty_wasm(&mut governance).await;
             reset_canister_to_empty_wasm(&mut ledger).await;
             reset_canister_to_empty_wasm(&mut root).await;
+            reset_canister_to_empty_wasm(&mut swap).await;
         }
 
         Ok(())

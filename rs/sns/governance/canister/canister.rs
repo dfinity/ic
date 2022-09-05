@@ -37,7 +37,8 @@ use ic_sns_governance::{
     ledger::LedgerCanister,
     pb::v1::{
         governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
-        GetProposal, GetProposalResponse, Governance as GovernanceProto,
+        GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
+        GetRunningSnsVersionResponse, Governance as GovernanceProto,
         ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
         ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
         RewardEvent, SetMode, SetModeResponse,
@@ -468,6 +469,24 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     .expect("Unable to get the status of the SNS root canister.")
 }
 
+/// Gets the current SNS version, as understood by Governance.  This is useful
+/// for diagnosing upgrade problems, such as if multiple ledger archives are not
+/// running the same version.
+#[export_name = "canister_query get_running_sns_version"]
+fn get_running_sns_version() {
+    println!("{}get_running_sns_version", log_prefix());
+    over(candid_one, get_running_sns_version_)
+}
+
+/// Internal method for calling get_sns_version.
+#[candid_method(query, rename = "get_running_sns_version")]
+fn get_running_sns_version_(_: GetRunningSnsVersionRequest) -> GetRunningSnsVersionResponse {
+    GetRunningSnsVersionResponse {
+        deployed_version: governance().proto.deployed_version.clone(),
+        pending_version: governance().proto.pending_version.clone(),
+    }
+}
+
 /// Sets the mode. Only the swap canister is allowed to call this.
 ///
 /// In practice, the only mode that the swap canister would ever choose is
@@ -543,8 +562,11 @@ fn main() {}
 /// A test that fails if the API was updated but the candid definition was not.
 #[test]
 fn check_governance_candid_file() {
-    let governance_did =
-        String::from_utf8(std::fs::read("canister/governance.did").unwrap()).unwrap();
+    let did_file = format!(
+        "{}/canister/governance.did",
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
+    );
+    let governance_did = String::from_utf8(std::fs::read(did_file).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();

@@ -1,0 +1,166 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test_suite")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "//rs/rust_canisters/on_wire",
+    "@crate_index//:mersenne_twister",
+    "@crate_index//:rand_0_4_6",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_macro",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/test_utilities",
+    "//rs/test_utilities/identity",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid",
+    "@crate_index//:criterion",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+# Use the sh_binary rule below to execute the benchmark.
+rust_binary(
+    name = "tests_bench_bin",
+    srcs = ["benches/json.rs"],
+    crate_root = "benches/json.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# rust_binary rule doesn't support env attribute, so pass them in here.
+sh_binary(
+    name = "test_bench",
+    srcs = ["benches/run_test_bench.sh"],
+    data = [
+        ":json",
+        ":tests_bench_bin",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "TESTS_BENCH_BIN": "$(rootpath :tests_bench_bin)",
+        "JSON_WASM_PATH": "$(rootpath :json)",
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests/",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+)
+
+rust_canister(
+    name = "json_raw",
+    srcs = ["src/json.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "json",
+    wasm = "json_raw",
+)
+
+rust_canister(
+    name = "inter_canister_error_handling_raw",
+    srcs = ["src/inter_canister_error_handling.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "inter_canister_error_handling",
+    wasm = "inter_canister_error_handling_raw",
+)
+
+rust_canister(
+    name = "nan_canonicalized_raw",
+    srcs = ["src/nan_canonicalized.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "nan_canonicalized",
+    wasm = "nan_canonicalized_raw",
+)
+
+rust_canister(
+    name = "stable_raw",
+    srcs = ["src/stable.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "stable",
+    wasm = "stable_raw",
+)
+
+rust_canister(
+    name = "time_raw",
+    srcs = ["src/time.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "time",
+    wasm = "time_raw",
+)
+
+rust_canister(
+    name = "panics",
+    srcs = ["src/panics.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tests_test",
+    srcs = glob(["test/**/*.rs"]),
+    aliases = ALIASES,
+    data = [
+        ":inter_canister_error_handling",
+        ":json",
+        ":nan_canonicalized",
+        ":panics",
+        ":stable",
+        ":time",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "NAN_CANONICALIZED_WASM_PATH": "$(rootpath :nan_canonicalized)",
+        "STABLE_WASM_PATH": "$(rootpath :stable)",
+        "TIME_WASM_PATH": "$(rootpath :time)",
+        "PANICS_WASM_PATH": "$(rootpath :panics)",
+        "JSON_WASM_PATH": "$(rootpath :json)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests",
+        "INTER_CANISTER_ERROR_HANDLING_WASM_PATH": "$(rootpath :inter_canister_error_handling)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

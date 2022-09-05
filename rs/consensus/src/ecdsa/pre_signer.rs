@@ -15,6 +15,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     dealing_prefix, dealing_support_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaStats,
+    IDkgTranscriptParamsRef,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId,
@@ -25,7 +26,6 @@ use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{Height, NodeId, SubnetId};
 
-use prometheus::IntCounterVec;
 use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
@@ -85,29 +85,31 @@ impl EcdsaPreSignerImpl {
         transcript_loader: &dyn EcdsaTranscriptLoader,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "send_dealings",
-            self.metrics.pre_sign_errors.clone(),
-            &self.log,
-        );
-
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
-        requested_transcripts
-            .iter()
-            .filter(|transcript_params| {
-                // Issue a dealing if we are in the dealer list and we haven't
-                //already issued a dealing for this transcript
-                transcript_params.dealers().position(self.node_id).is_some()
-                    && !self.has_dealer_issued_dealing(
-                        ecdsa_pool,
-                        &transcript_params.transcript_id(),
-                        &self.node_id,
-                    )
+        block_reader
+            .requested_transcripts()
+            .filter_map(|transcript_params_ref| {
+                let mut ret = None;
+                if let Some(transcript_params) =
+                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
+                {
+                    // Issue a dealing if we are in the dealer list and we haven't
+                    //already issued a dealing for this transcript
+                    if transcript_params.dealers().position(self.node_id).is_some()
+                        && !self.has_dealer_issued_dealing(
+                            ecdsa_pool,
+                            &transcript_params.transcript_id(),
+                            &self.node_id,
+                        )
+                    {
+                        ret = Some(transcript_params);
+                    }
+                }
+                ret
             })
             .flat_map(|transcript_params| {
                 if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
@@ -120,7 +122,7 @@ impl EcdsaPreSignerImpl {
                     );
                 }
 
-                self.crypto_create_dealing(ecdsa_pool, transcript_loader, transcript_params)
+                self.crypto_create_dealing(ecdsa_pool, transcript_loader, &transcript_params)
             })
             .collect()
     }
@@ -131,12 +133,8 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "validate_dealings",
-            self.metrics.pre_sign_errors.clone(),
-            &self.log,
-        );
+        // TranscriptId -> TranscriptParamsRef
+        let transcript_param_map = self.requested_transcripts(block_reader);
 
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
@@ -181,11 +179,29 @@ impl EcdsaPreSignerImpl {
 
             match Action::action(
                 block_reader,
-                &requested_transcripts,
+                &transcript_param_map,
                 Some(dealing.transcript_id.source_height()),
                 &dealing.transcript_id,
             ) {
-                Action::Process(transcript_params) => {
+                Action::Process(transcript_params_ref) => {
+                    let transcript_params = match self.resolve_ref(
+                        transcript_params_ref,
+                        block_reader,
+                        "validate_dealings",
+                    ) {
+                        Some(transcript_params) => transcript_params,
+                        None => {
+                            ret.push(EcdsaChangeAction::HandleInvalid(
+                                id,
+                                format!(
+                                    "validate_dealings(): failed to translate transcript_params_ref: {}",
+                                    signed_dealing
+                                ),
+                            ));
+                            continue;
+                        }
+                    };
+
                     if transcript_params
                         .dealers()
                         .position(signed_dealing.dealer_id())
@@ -211,7 +227,7 @@ impl EcdsaPreSignerImpl {
                     } else {
                         let mut changes = self.crypto_verify_dealing(
                             &id,
-                            transcript_params,
+                            &transcript_params,
                             &signed_dealing,
                             &mut validated_dealings,
                         );
@@ -232,18 +248,8 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "send_dealing_support",
-            self.metrics.pre_sign_errors.clone(),
-            &self.log,
-        );
-
-        // TranscriptId -> TranscriptParams
-        let mut trancript_param_map = BTreeMap::new();
-        for transcript_params in &requested_transcripts {
-            trancript_param_map.insert(transcript_params.transcript_id(), transcript_params);
-        }
+        // TranscriptId -> TranscriptParamsRef
+        let transcript_param_map = self.requested_transcripts(block_reader);
 
         let mut source_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.source_subnet_xnet_transcripts() {
@@ -279,11 +285,16 @@ impl EcdsaPreSignerImpl {
                 let dealing = signed_dealing.idkg_dealing();
                 // Look up the transcript params for the dealing, and check if we
                 // are a receiver for this dealing
-                if let Some(transcript_params) = trancript_param_map.get(&dealing.transcript_id) {
-                    transcript_params
-                        .receivers()
-                        .position(self.node_id)
-                        .map(|_| (id, transcript_params, signed_dealing))
+                if let Some(transcript_params_ref) =
+                    transcript_param_map.get(&dealing.transcript_id)
+                {
+                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealing_support")
+                        .and_then(|transcript_params| {
+                            transcript_params
+                                .receivers()
+                                .position(self.node_id)
+                                .map(|_| (id, transcript_params, signed_dealing))
+                        })
                 } else {
                     self.metrics
                         .pre_sign_errors_inc("create_support_missing_transcript_params");
@@ -305,7 +316,7 @@ impl EcdsaPreSignerImpl {
                         signed_dealing,
                     );
                 }
-                self.crypto_create_dealing_support(&id, transcript_params, &signed_dealing)
+                self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing)
             })
             .collect()
     }
@@ -316,12 +327,8 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "validate_dealing_support",
-            self.metrics.pre_sign_errors.clone(),
-            &self.log,
-        );
+        // TranscriptId -> TranscriptParamsRef
+        let transcript_param_map = self.requested_transcripts(block_reader);
 
         // Build the map of valid dealings crypto hash -> dealings
         let mut valid_dealings = BTreeMap::new();
@@ -372,11 +379,26 @@ impl EcdsaPreSignerImpl {
 
             match Action::action(
                 block_reader,
-                &requested_transcripts,
+                &transcript_param_map,
                 msg_height,
                 &support.transcript_id,
             ) {
-                Action::Process(transcript_params) => {
+                Action::Process(transcript_params_ref) => {
+                    let transcript_params = match self.resolve_ref(
+                        transcript_params_ref,
+                        block_reader,
+                        "validate_dealing_support",
+                    ) {
+                        Some(transcript_params) => transcript_params,
+                        None => {
+                            ret.push(EcdsaChangeAction::HandleInvalid(
+                                id,
+                                format!("Failed to translate transcript_params_ref: {}", support),
+                            ));
+                            continue;
+                        }
+                    };
+
                     if transcript_params
                         .receivers()
                         .position(support.sig_share.signer)
@@ -424,7 +446,7 @@ impl EcdsaPreSignerImpl {
                         } else {
                             let mut changes = self.crypto_verify_dealing_support(
                                 &id,
-                                transcript_params,
+                                &transcript_params,
                                 signed_dealing,
                                 &support,
                                 ecdsa_pool.stats(),
@@ -471,17 +493,10 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "purge_artifacts",
-            self.metrics.pre_sign_errors.clone(),
-            &self.log,
-        );
-
-        let mut in_progress = BTreeSet::new();
-        for transcript_params in requested_transcripts {
-            in_progress.insert(transcript_params.transcript_id());
-        }
+        let in_progress = block_reader
+            .requested_transcripts()
+            .map(|transcript_params| transcript_params.transcript_id)
+            .collect::<BTreeSet<_>>();
 
         let mut ret = Vec::new();
         let current_height = block_reader.tip_height();
@@ -634,75 +649,39 @@ impl EcdsaPreSignerImpl {
         signed_dealing: &SignedIDkgDealing,
         validated_dealings: &mut BTreeSet<(IDkgTranscriptId, NodeId)>,
     ) -> EcdsaChangeSet {
-        let dealing = signed_dealing.idkg_dealing();
-
-        // Verify the dealer signature
-        if let Err(error) = self
-            .crypto
-            .verify(signed_dealing, transcript_params.registry_version())
-        {
-            if error.is_replicated() {
-                self.metrics
-                    .pre_sign_errors_inc("verify_dealing_signature_permanent");
-                return vec![EcdsaChangeAction::HandleInvalid(
-                    id.clone(),
-                    format!(
-                        "Dealing signature validation(permanent error): {}, error = {:?}",
-                        signed_dealing, error
-                    ),
-                )];
-            } else {
-                // Defer in case of transient errors
-                debug!(
-                    self.log,
-                    "Dealing signature validation(transient error): {}, error = {:?}",
-                    signed_dealing,
-                    error
-                );
-                self.metrics
-                    .pre_sign_errors_inc("verify_dealing_signature_transient");
-                return Default::default();
-            }
-        }
-
-        IDkgProtocol::verify_dealing_public(
-            &*self.crypto,
-            transcript_params,
-            signed_dealing.dealer_id(),
-            dealing,
-        )
-        .map_or_else(
-            |error| {
-                if error.is_replicated() {
-                    self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
-                    vec![EcdsaChangeAction::HandleInvalid(
-                        id.clone(),
-                        format!(
-                            "Dealing validation(permanent error): {}, error = {:?}",
-                            signed_dealing, error
-                        ),
-                    )]
-                } else {
-                    // Defer in case of transient errors
-                    debug!(
-                        self.log,
-                        "Dealing validation(transient error): {}, error = {:?}",
-                        signed_dealing,
-                        error
-                    );
-                    self.metrics.pre_sign_errors_inc("verify_dealing_transient");
-                    Default::default()
-                }
-            },
-            |()| {
-                validated_dealings.insert((
-                    signed_dealing.idkg_dealing().transcript_id,
-                    signed_dealing.dealer_id(),
-                ));
-                self.metrics.pre_sign_metrics_inc("dealing_received");
-                vec![EcdsaChangeAction::MoveToValidated(id.clone())]
-            },
-        )
+        IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, signed_dealing)
+            .map_or_else(
+                |error| {
+                    if error.is_replicated() {
+                        self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
+                        vec![EcdsaChangeAction::HandleInvalid(
+                            id.clone(),
+                            format!(
+                                "Dealing validation(permanent error): {}, error = {:?}",
+                                signed_dealing, error
+                            ),
+                        )]
+                    } else {
+                        // Defer in case of transient errors
+                        debug!(
+                            self.log,
+                            "Dealing validation(transient error): {}, error = {:?}",
+                            signed_dealing,
+                            error
+                        );
+                        self.metrics.pre_sign_errors_inc("verify_dealing_transient");
+                        Default::default()
+                    }
+                },
+                |()| {
+                    validated_dealings.insert((
+                        signed_dealing.idkg_dealing().transcript_id,
+                        signed_dealing.dealer_id(),
+                    ));
+                    self.metrics.pre_sign_metrics_inc("dealing_received");
+                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+                },
+            )
     }
 
     /// Helper to corrupt the crypto dealing for malicious testing
@@ -757,12 +736,9 @@ impl EcdsaPreSignerImpl {
         signed_dealing: &SignedIDkgDealing,
     ) -> EcdsaChangeSet {
         let dealing = signed_dealing.idkg_dealing();
-        if let Err(error) = IDkgProtocol::verify_dealing_private(
-            &*self.crypto,
-            transcript_params,
-            signed_dealing.dealer_id(),
-            dealing,
-        ) {
+        if let Err(error) =
+            IDkgProtocol::verify_dealing_private(&*self.crypto, transcript_params, signed_dealing)
+        {
             if error.is_replicated() {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_permanent");
@@ -938,6 +914,45 @@ impl EcdsaPreSignerImpl {
 
         transcript_id.source_height() <= current_height && !in_progress.contains(transcript_id)
     }
+
+    /// Resolves the IDkgTranscriptParamsRef -> IDkgTranscriptParams.
+    fn resolve_ref(
+        &self,
+        transcript_params_ref: &IDkgTranscriptParamsRef,
+        block_reader: &dyn EcdsaBlockReader,
+        reason: &str,
+    ) -> Option<IDkgTranscriptParams> {
+        match transcript_params_ref.translate(block_reader) {
+            Ok(transcript_params) => {
+                self.metrics.pre_sign_metrics_inc("resolve_transcript_refs");
+                Some(transcript_params)
+            }
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "Failed to translate transcript ref: reason = {}, \
+                     transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
+                    reason,
+                    transcript_params_ref,
+                    block_reader.tip_height(),
+                    error
+                );
+                self.metrics.pre_sign_errors_inc("resolve_transcript_refs");
+                None
+            }
+        }
+    }
+
+    /// Returns the requested transcript map.
+    fn requested_transcripts<'a>(
+        &self,
+        block_reader: &'a dyn EcdsaBlockReader,
+    ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscriptParamsRef> {
+        block_reader
+            .requested_transcripts()
+            .map(|transcript_params| (transcript_params.transcript_id, transcript_params))
+            .collect::<BTreeMap<_, _>>()
+    }
 }
 
 impl EcdsaPreSigner for EcdsaPreSignerImpl {
@@ -1008,7 +1023,7 @@ pub(crate) trait EcdsaTranscriptBuilder {
 }
 
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
-    requested_transcripts: Vec<IDkgTranscriptParams>,
+    block_reader: &'a dyn EcdsaBlockReader,
     crypto: &'a dyn ConsensusCrypto,
     metrics: &'a EcdsaPayloadMetrics,
     ecdsa_pool: &'a dyn EcdsaPool,
@@ -1024,19 +1039,11 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
         metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
-        let requested_transcripts = resolve_transcript_refs(
-            block_reader,
-            "transcript_builder",
-            metrics.payload_errors.clone(),
-            &log,
-        );
-        let cache = RefCell::new(BTreeMap::new());
-
         Self {
-            requested_transcripts,
+            block_reader,
             crypto,
             ecdsa_pool,
-            cache,
+            cache: RefCell::new(BTreeMap::new()),
             metrics,
             log,
         }
@@ -1046,11 +1053,26 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     fn build_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         // Look up the transcript params
         let transcript_params = match self
-            .requested_transcripts
-            .iter()
-            .find(|transcript_params| transcript_params.transcript_id() == transcript_id)
+            .block_reader
+            .requested_transcripts()
+            .find(|transcript_params| transcript_params.transcript_id == transcript_id)
         {
-            Some(params) => params,
+            Some(params_ref) => match params_ref.translate(self.block_reader) {
+                Ok(transcript_params) => transcript_params,
+                Err(error) => {
+                    warn!(
+                        self.log,
+                        "build_transcript(): failed to translate transcript ref: \
+                                transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
+                        params_ref,
+                        self.block_reader.tip_height(),
+                        error
+                    );
+                    self.metrics
+                        .transcript_builder_errors_inc("resolve_transcript_refs");
+                    return None;
+                }
+            },
             None => {
                 self.metrics
                     .transcript_builder_errors_inc("missing_transcript_params");
@@ -1099,7 +1121,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                 // Aggregate the support shares per dealing
                 for dealing_state in transcript_state.dealing_state.into_values() {
                     if let Some(sig_batch) = self.crypto_aggregate_dealing_support(
-                        transcript_params,
+                        &transcript_params,
                         &dealing_state.support_shares,
                     ) {
                         let dealer_id = dealing_state.signed_dealing.dealer_id();
@@ -1117,7 +1139,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
         // Step 2: Build the transcript from the verified dealings
         timed_call(
             "create_transcript",
-            || self.crypto_create_transcript(transcript_params, &completed_dealings),
+            || self.crypto_create_transcript(&transcript_params, &completed_dealings),
             &self.metrics.transcript_builder_duration,
         )
     }
@@ -1256,7 +1278,7 @@ enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately. The transcript params for this transcript
     /// (as specified by the finalized block) is the argument
-    Process(&'a IDkgTranscriptParams),
+    Process(&'a IDkgTranscriptParamsRef),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -1272,7 +1294,7 @@ impl<'a> Action<'a> {
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn EcdsaBlockReader,
-        requested_transcripts: &'a [IDkgTranscriptParams],
+        requested_transcripts: &'a BTreeMap<IDkgTranscriptId, &'a IDkgTranscriptParamsRef>,
         msg_height: Option<Height>,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
@@ -1284,14 +1306,13 @@ impl<'a> Action<'a> {
             }
         }
 
-        for transcript_params in requested_transcripts {
-            if *msg_transcript_id == transcript_params.transcript_id() {
-                return Action::Process(transcript_params);
+        match requested_transcripts.get(msg_transcript_id) {
+            Some(transcript_params_ref) => Action::Process(transcript_params_ref),
+            None => {
+                // Its for a transcript that has not been requested, drop it
+                Action::Drop
             }
         }
-
-        // Its for a transcript that has not been requested, drop it
-        Action::Drop
     }
 }
 
@@ -1303,7 +1324,7 @@ impl<'a> Debug for Action<'a> {
                 write!(
                     f,
                     "Action::Process(): transcript_id = {:?}",
-                    transcript_params.transcript_id()
+                    transcript_params.transcript_id
                 )
             }
             Self::Defer => write!(f, "Action::Defer"),
@@ -1359,37 +1380,6 @@ impl TranscriptState {
     }
 }
 
-/// Resolves the IDkgTranscriptParamsRef -> IDkgTranscriptParams
-fn resolve_transcript_refs(
-    block_reader: &dyn EcdsaBlockReader,
-    reason: &str,
-    metric: IntCounterVec,
-    log: &ReplicaLogger,
-) -> Vec<IDkgTranscriptParams> {
-    let mut ret = Vec::new();
-    for transcript_params_ref in block_reader.requested_transcripts() {
-        // Translate the IDkgTranscriptParamsRef -> IDkgTranscriptParams
-        match transcript_params_ref.translate(block_reader) {
-            Ok(transcript_params) => {
-                ret.push(transcript_params);
-            }
-            Err(error) => {
-                warn!(
-                    log,
-                    "Failed to translate transcript ref: reason = {}, \
-                     transcript_params_ref = {:?}, tip = {:?}, error = {:?}",
-                    reason,
-                    transcript_params_ref,
-                    block_reader.tip_height(),
-                    error
-                );
-                metric.with_label_values(&[reason]).inc();
-            }
-        }
-    }
-    ret
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1424,9 +1414,9 @@ mod tests {
                 create_transcript_param(id_3, &nodes, &nodes),
             ],
         );
-        let mut requested = Vec::new();
+        let mut requested = BTreeMap::new();
         for transcript_params_ref in block_reader.requested_transcripts() {
-            requested.push(transcript_params_ref.translate(&block_reader).unwrap());
+            requested.insert(transcript_params_ref.transcript_id, transcript_params_ref);
         }
 
         // Message from a node ahead of us

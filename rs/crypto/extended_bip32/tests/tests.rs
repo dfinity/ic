@@ -6,7 +6,7 @@ fn assert_ebip32_result(
     expected_chain_code: &'static str,
 ) {
     assert_eq!(hex::encode(result.derived_public_key), expected_public_key);
-    assert_eq!(hex::encode(result.chain_code), expected_chain_code);
+    assert_eq!(hex::encode(result.derived_chain_code), expected_chain_code);
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn check_bip32_result(
     let path = DerivationPath::new_bip32(path);
     let result = path.key_derivation(&input_public_key, &input_chain_code)?;
     assert_eq!(hex::encode(result.derived_public_key), expected_public_key);
-    assert_eq!(hex::encode(result.chain_code), expected_chain_code);
+    assert_eq!(hex::encode(result.derived_chain_code), expected_chain_code);
 
     Ok(())
 }

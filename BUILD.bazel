@@ -38,9 +38,15 @@ buildifier_test(
         "external",
         "local",
         "no-sandbox",
+        "precommit",
         "small",
         "smoke",
     ],
+)
+
+test_suite(
+    name = "precommit",
+    tags = ["precommit"],
 )
 
 alias(
@@ -53,64 +59,54 @@ alias(
     actual = "@rules_rust//:rustfmt",
 )
 
-opt_stripped_binary(
-    name = "replica",
-    binary = "//rs/replica",
+BINARIES = {
+    "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
+    "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
+    "canister_sandbox": "//rs/canister_sandbox",
+    "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
+    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "ic-admin": "//rs/registry/admin:ic-admin",
+    "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
+    "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
+    "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
+    "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
+    "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
+    "ic-nns-init": "//rs/nns/init:ic-nns-init",
+    "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
+    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
+    "ic-prep": "//rs/prep:ic-prep",
+    "ic-recovery": "//rs/recovery:ic-recovery",
+    "ic-replay": "//rs/replay:ic-replay",
+    "ic-regedit": "//rs/registry/regedit:ic-regedit",
+    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:registry_replicator",
+    "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
+    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
+    "orchestrator": "//rs/orchestrator",
+    "prod-test-driver": "//rs/tests:prod-test-driver",
+    "replica": "//rs/replica",
+    "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
+    "sns": "//rs/sns/cli:sns",
+    "state-tool": "//rs/state_tool:state-tool",
+    "system-tests": "//rs/tests:system-tests",
+    "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
+}
+
+[opt_stripped_binary(
+    name = name,
+    binary = BINARIES[name],
+) for name in BINARIES]
+
+filegroup(
+    name = "binaries",
+    srcs = [name for name in BINARIES],
 )
 
-opt_stripped_binary(
-    name = "ic-btc-adapter",
-    binary = "//rs/bitcoin/adapter:ic-btc-adapter",
-)
-
-opt_stripped_binary(
-    name = "ic-consensus-pool-util",
-    binary = "//rs/artifact_pool:ic-consensus-pool-util",
-)
-
-opt_stripped_binary(
-    name = "sandbox_launcher",
-    binary = "//rs/canister_sandbox/sandbox_launcher",
-)
-
-opt_stripped_binary(
-    name = "canister_sandbox",
-    binary = "//rs/canister_sandbox",
-)
-
-opt_stripped_binary(
-    name = "ic-canister-http-adapter",
-    binary = "//rs/canister_http/adapter:ic-canister-http-adapter",
-)
-
-opt_stripped_binary(
-    name = "orchestrator",
-    binary = "//rs/orchestrator",
-)
-
-opt_stripped_binary(
-    name = "vsock_agent",
-    binary = "//rs/guestos_vsock_agent",
-)
-
-opt_stripped_binary(
-    name = "ic-regedit",
-    binary = "//rs/registry/regedit:ic-regedit",
-)
-
-opt_stripped_binary(
-    name = "ic-crypto-csp",
-    binary = "//rs/crypto:ic-crypto-csp",
-)
-
-opt_stripped_binary(
-    name = "state-tool",
-    binary = "//rs/state_tool",
-)
-
-opt_stripped_binary(
-    name = "ic-recovery",
-    binary = "//rs/recovery:ic-recovery",
+sh_binary(
+    # A unique name for this target.
+    name = "collect_binaries",
+    srcs = ["gitlab-ci/tools/copy-bins.sh"],
+    data = [":binaries"],
+    env = {"BINARIES": "$(rootpaths :binaries)"},
 )
 
 optimized_canister(

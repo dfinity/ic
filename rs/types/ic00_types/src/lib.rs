@@ -16,7 +16,9 @@ use strum_macros::{Display, EnumIter, EnumString};
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
-pub use http::{CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod};
+pub use http::{
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformType,
+};
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
 /// Methods exported by ic:00.
@@ -461,14 +463,13 @@ impl InstallCodeArgs {
 #[derive(CandidType, Deserialize)]
 pub struct EmptyBlob;
 
-// TODO(EXC-239): Implement the `Payload` interface.
-impl EmptyBlob {
-    pub fn encode() -> Vec<u8> {
+impl<'a> Payload<'a> for EmptyBlob {
+    fn encode(&self) -> Vec<u8> {
         Encode!().unwrap()
     }
 
-    pub fn decode(blob: &[u8]) -> Result<(), candid::Error> {
-        Decode!(blob)
+    fn decode(blob: &'a [u8]) -> Result<EmptyBlob, candid::Error> {
+        Decode!(blob).map(|_| EmptyBlob)
     }
 }
 
@@ -830,7 +831,7 @@ fn ecdsa_key_id_round_trip() {
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SignWithECDSAArgs {
-    pub message_hash: Vec<u8>,
+    pub message_hash: [u8; 32],
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: EcdsaKeyId,
 }
@@ -880,14 +881,14 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 /// Argument of the compute_initial_ecdsa_dealings API.
 /// `(record {
 ///     key_id: ecdsa_key_id;
-///     subnet_id: opt principal;
+///     subnet_id: principal;
 ///     nodes: vec principal;
 ///     registry_version: nat;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
     pub key_id: EcdsaKeyId,
-    pub subnet_id: Option<SubnetId>,
+    pub subnet_id: SubnetId,
     nodes: Vec<PrincipalId>,
     registry_version: u64,
 }
@@ -895,7 +896,7 @@ pub struct ComputeInitialEcdsaDealingsArgs {
 impl ComputeInitialEcdsaDealingsArgs {
     pub fn new(
         key_id: EcdsaKeyId,
-        subnet_id: Option<SubnetId>,
+        subnet_id: SubnetId,
         nodes: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Self {

@@ -24,10 +24,13 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, cannot_store_msg, store_message};
+use crate::orchestrator::utils::rw_message::{
+    can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
+};
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
 use ic_base_types::NodeId;
@@ -45,7 +48,10 @@ const SUBNET_SIZE: usize = 3;
 
 pub fn config_same_nodes() -> InternetComputer {
     InternetComputer::new()
-        .add_fast_single_node_subnet(SubnetType::System)
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -57,6 +63,8 @@ pub fn setup_same_nodes(env: TestEnv) {
     config_same_nodes()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
@@ -64,19 +72,12 @@ pub fn setup_failover_nodes(env: TestEnv) {
         .with_unassigned_nodes(3)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-
-    env.topology_snapshot().unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh().unwrap();
-    });
 
     let master_version = match env::var("IC_VERSION_ID") {
         Ok(ver) => ver,
@@ -101,11 +102,6 @@ pub fn test(env: TestEnv) {
     // choose a node from the nns subnet
     let nns_node = get_nns_node(&env.topology_snapshot());
 
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
-
     info!(
         logger,
         "Selected NNS node: {} ({:?})",
@@ -129,6 +125,7 @@ pub fn test(env: TestEnv) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
+    can_install_canister_with_retries(&app_node.get_public_url(), &logger, secs(600), secs(10));
     let msg = "subnet recovery works!";
     let app_can_id = store_message(&app_node.get_public_url(), msg);
     assert!(can_read_msg(
@@ -305,6 +302,10 @@ pub fn test(env: TestEnv) {
         );
     }
 
+    upload_node.await_status_is_healthy().unwrap();
+    // make sure that state sync is completed
+    can_install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
+
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(
         &logger,
@@ -312,7 +313,6 @@ pub fn test(env: TestEnv) {
         app_can_id,
         msg
     ));
-    upload_node.await_status_is_healthy().unwrap();
     let new_msg = "subnet recovery still works!";
     info!(
         logger,

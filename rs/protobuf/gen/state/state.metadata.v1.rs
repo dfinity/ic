@@ -221,6 +221,7 @@ pub struct SystemMetadata {
     #[prost(message, optional, tag = "13")]
     pub own_subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
+    /// TODO(EXC-1214): This field is deprecated.
     #[prost(message, optional, tag = "14")]
     pub time_of_last_allocation_charge_nanos: ::core::option::Option<TimeOfLastAllocationCharge>,
     #[prost(message, optional, tag = "15")]

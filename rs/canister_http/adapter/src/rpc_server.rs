@@ -1,43 +1,18 @@
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::Uri;
+use http::{uri::Scheme, Uri};
 use hyper::{
     client::connect::Connect,
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
-use ic_async_utils::receive_body_without_timeout;
+use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_canister_http_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_logger::{debug, ReplicaLogger};
-use itertools::Itertools;
-use std::{fmt, ops::RangeInclusive};
 use tonic::{Request, Response, Status};
-
-// Ports that the adapter is allowed to connect to. The ports are restricted to prevent access to
-// internal (inside firewall) resources (prometheus, etc.)
-struct AllowedPorts([RangeInclusive<u16>; 3]);
-const ALLOWED_DESTINATION_PORTS: AllowedPorts = AllowedPorts([80..=80, 443..=443, 20000..=65_535]);
-
-// Pretty print port ranges. I.e "80, 443, 20000-65535"
-impl fmt::Display for AllowedPorts {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}, {}",
-            self.0
-                .iter()
-                .filter(|&e| e.start() == e.end())
-                .format_with(", ", |elt, f| f(&format!("{}", elt.start()))),
-            self.0
-                .iter()
-                .filter(|&e| e.start() != e.end())
-                .format_with(", ", |elt, f| f(&format!("{}-{}", elt.start(), elt.end())))
-        )
-    }
-}
 
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
@@ -67,13 +42,14 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             )
         })?;
 
-        if !is_allowed_destination_port(uri.port_u16()) {
+        if uri.scheme() != Some(&Scheme::HTTPS) {
+            debug!(
+                self.logger,
+                "Got request with no or http scheme specified. {}", uri
+            );
             return Err(Status::new(
                 tonic::Code::InvalidArgument,
-                format!(
-                    "Invalid port specified. Only {} allowed",
-                    ALLOWED_DESTINATION_PORTS
-                ),
+                "Url need to specify https scheme",
             ));
         }
 
@@ -146,10 +122,15 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
         .await
         .map_err(|err| {
             debug!(self.logger, "Failed to fetch body: {}", err);
-            Status::new(
-                tonic::Code::Unavailable,
-                format!("Failed to fetch body: {}", err),
-            )
+            match err {
+                // SysTransient error
+                BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => Status::new(
+                    tonic::Code::Unavailable,
+                    format!("Failed to fetch body: {}", e),
+                ),
+                // SysFatal error
+                BodyReceiveError::TooLarge(e) => Status::new(tonic::Code::OutOfRange, e),
+            }
         })?;
 
         Ok(Response::new(CanisterHttpSendResponse {
@@ -157,31 +138,5 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             headers,
             content: body_bytes.to_vec(),
         }))
-    }
-}
-
-fn is_allowed_destination_port(port: Option<u16>) -> bool {
-    match &port {
-        None => true,
-        Some(p) => ALLOWED_DESTINATION_PORTS
-            .0
-            .iter()
-            .any(|allowed| allowed.contains(p)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_allowed_destination_port;
-    #[test]
-    fn valid_port() {
-        assert!(is_allowed_destination_port(Some(443)));
-        assert!(is_allowed_destination_port(Some(80)));
-        assert!(is_allowed_destination_port(Some(20003)));
-    }
-    #[test]
-    fn invalid_port() {
-        assert!(!is_allowed_destination_port(Some(8080)));
-        assert!(!is_allowed_destination_port(Some(19999)));
     }
 }

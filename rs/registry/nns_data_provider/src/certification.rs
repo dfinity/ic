@@ -1,4 +1,4 @@
-use ic_certified_vars::{verify_certificate, CertificateValidationError};
+use ic_certification::{verify_certificate, CertificateValidationError};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::registry::RegistryTransportRecord;
 use ic_registry_transport::pb::v1::{

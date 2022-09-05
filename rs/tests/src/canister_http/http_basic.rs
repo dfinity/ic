@@ -25,7 +25,7 @@ use anyhow::bail;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformType};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 
@@ -62,8 +62,11 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                             url: url.to_string(),
                             headers: vec![],
                             body: Some("".as_bytes().to_vec()),
-                            transform_method_name: Some("transform".to_string()),
-                            http_method: HttpMethod::GET,
+                            transform: Some(TransformType::Function(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "transform".to_string(),
+                            })),
+                            method: HttpMethod::GET,
                             max_response_bytes: None,
                         },
                         cycles: 500_000_000_000,

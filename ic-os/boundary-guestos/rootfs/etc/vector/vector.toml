@@ -4,7 +4,7 @@ type = "internal_metrics"
 [sinks.vector_exporter]
 type = "prometheus_exporter"
 inputs = ["vector_metrics"]
-address = "0.0.0.0:9598"
+address = "${VECTOR_PROMETHUS_ADDR}"
 default_namespace = "vector"
 
 # nginx
@@ -46,16 +46,6 @@ for_each([
     }
 }
 """
-
-# nginx access (elasticsearch)
-
-[sinks.elasticsearch_nginx_access]
-type = "elasticsearch"
-inputs = ["nginx_access_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
-tls.verify_certificate = false
 
 # nginx access (metrics)
 
@@ -120,16 +110,6 @@ if err != null {
 }
 """
 
-# nginx error (elasticsearch)
-
-[sinks.elasticsearch_nginx_error]
-type = "elasticsearch"
-inputs = ["nginx_error_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-bulk.index = "boundary-node-nginx-error-%Y.%m.%d"
-tls.verify_certificate = false
-
 # nginx error (metrics)
 
 [transforms.nginx_error_metrics]
@@ -150,65 +130,4 @@ inputs = ["nginx_error_json"]
 type = "prometheus_exporter"
 inputs = ["nginx_access_metrics", "nginx_error_metrics"]
 address = "${NGINX_PROMETHUS_ADDR}"
-default_namespace = "nginx_access"
-
-# prober
-
-[sources.prober]
-type = "file"
-include = ["/var/log/prober/prober.log.*"]
-
-[transforms.prober_json]
-type = "remap"
-inputs = ["prober"]
-source = """
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp!(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-"""
-
-[sinks.elasticsearch_prober]
-type = "elasticsearch"
-inputs = ["prober_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-bulk.index = "boundary-node-prober-%Y.%m.%d"
-tls.verify_certificate = false
-
-# control-plane
-
-[sources.control_plane]
-type = "journald"
-include_units = ["control-plane"]
-
-[transforms.control_plane_json]
-type = "remap"
-inputs = ["control_plane"]
-source = """
-d = {}; ks = ["host"]
-
-for_each(ks) -> |_, k| {
-    v = get!(., [k])
-    if v != null {
-        d = set!(d, [k], v)
-    }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp!(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge!(., d)
-"""
-
-[sinks.elasticsearch_control_plane]
-type = "elasticsearch"
-inputs = ["control_plane_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-bulk.index = "boundary-node-control-plane-%Y.%m.%d"
-tls.verify_certificate = false
+default_namespace = "nginx"

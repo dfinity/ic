@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 arrayvec = "0.5.1"
@@ -15,7 +15,6 @@ ic-config = { path = "../config" }
 ic-crypto-hash = { path = "./hash" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
-ic-crypto-internal-fs-ni-dkg = { path = "internal/crypto_lib/fs_ni_dkg" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "internal/crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
@@ -73,6 +72,7 @@ ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
 ic-registry-client = { path = "../registry/client" }
+ic-crypto-tecdsa = { path = "tecdsa" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }

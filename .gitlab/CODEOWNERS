@@ -1,9 +1,8 @@
-
 # New top-level dir creation requires approvals from codeowners.
-[Root-Level]
+# [Root-Level]
 * @dfinity-lab/teams/owners-owners
 
-[Misc]
+# [Misc]
 /.dependencies/           @dfinity-lab/teams/prodsec
 /.devcontainer/           @dfinity-lab/teams/idx
 /buf.yaml	              @dfinity-lab/teams/message-routing-owners
@@ -12,22 +11,25 @@
 /licenses/                @dfinity-lab/teams/idx
 /outsource/               @dfinity-lab/teams/idx
 
-[Bazel]
+# [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
 /toolchains/              @dfinity-lab/teams/idx
+/WORKSPACE.bazel          @dfinity-lab/teams/idx
+/BUILD.bazel              @dfinity-lab/teams/idx
 
-[Documentation]
+
+# [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
 /docs/spec/replica/protocol/consensus_layer/	           @dfinity-lab/teams/consensus-owners
 /docs/internal/testing/testing-plan.adoc                   @dfinity-lab/teams/ic-testing-verification
 
-[IC-OS]
+# [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
-[GitLab-CI]
+# [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
 /.gitlab-ci.yml                                                         @dfinity-lab/teams/idx
 /.gitlab/                                                               @dfinity-lab/teams/idx
@@ -40,25 +42,22 @@
 /gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 
-[Typescript]    
+# [Typescript]    
 /typescript/                 @dfinity-lab/teams/owners-owners
 /typescript/service-worker/  @dfinity-lab/teams/trust-team
 
-[Testnet]
-/testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/ic-build-qualification
+# [Testnet]
+/testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/release-team
 /testnet/ansible/                                          @dfinity-lab/teams/dcs
-/testnet/ansible/roles/boundary_node/                      @dfinity-lab/teams/networking-team @dfinity-lab/teams/dcs        
-/testnet/ansible/roles/icos_test_boundary_node/            @dfinity-lab/teams/boundarynode-team
 /testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
 /testnet/env/                                              @dfinity-lab/teams/dcs
 
-/testnet/release/                                          @dfinity-lab/teams/ic-build-qualification
+/testnet/release/                                          @dfinity-lab/teams/release-team
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification @sasa-tomic
+/testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/tools/                                      @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/tools/nns_state_deployment.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/nns_state_deployment_test.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/generic.sh                          @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/maximum_capacity_rejoin.sh          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/maximum_capacity_subnet_query.sh    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/runtime-owners
 /testnet/tests/scripts/maximum_capacity_subnet_update.sh   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
@@ -69,8 +68,9 @@
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 
 /testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
-[Rust]
+# [Rust]
 /rs/                                    @dfinity-lab/teams/interface-owners
 /rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
@@ -86,8 +86,9 @@
 /rs/canister_http/                      @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                   @dfinity-lab/teams/runtime-owners
 /rs/canonical_state/                    @dfinity-lab/teams/message-routing-owners
-/rs/certified_vars/                     @dfinity-lab/teams/message-routing-owners
+/rs/certification/                      @dfinity-lab/teams/message-routing-owners
 /rs/config/                             @dfinity-lab/teams/interface-owners
+/rs/config/src/embedders.rs             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                          @dfinity-lab/teams/interface-owners
@@ -125,6 +126,7 @@
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
 /rs/prep/                               @dfinity-lab/teams/ic-testing-verification
+/rs/protobuf/                           @dfinity-lab/teams/interface-owners
 /rs/protobuf/def/bitcoin/               @dfinity-lab/teams/execution-team
 /rs/protobuf/def/canister_http/         @dfinity-lab/teams/consensus-owners
 /rs/protobuf/def/crypto/                @dfinity-lab/teams/crypto-owners
@@ -134,6 +136,7 @@
 /rs/protobuf/def/state/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/protobuf/def/types/                 @dfinity-lab/teams/interface-owners
 /rs/recovery/                           @dfinity-lab/teams/orchestrator-owners
+/rs/registry/                           @dfinity-lab/teams/nns-team
 /rs/registry/admin/                     @dfinity-lab/teams/nns-team
 /rs/registry/canister/                  @dfinity-lab/teams/nns-team
 /rs/registry/client/                    @dfinity-lab/teams/node-team
@@ -168,8 +171,11 @@
 /rs/state_manager/                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                         @dfinity-lab/teams/execution-owners
+/rs/test_utilities/src/cycles_account_manager.rs         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/src/crypto.rs        @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/crypto/          @dfinity-lab/teams/crypto-owners
+/rs/test_utilities/src/execution_environment.rs         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
+/rs/test_utilities/src/wasm_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/prod_test_driver.rs       @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
@@ -209,19 +215,27 @@
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-[Scalability]
+# [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
 /scalability/experiments/run_sns_experiment.py                      @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
-[Nix]
+# [Nix]
 *.nix                     @dfinity-lab/teams/idx
 /nix/                     @dfinity-lab/teams/idx
 /experimental/nix/        @dfinity-lab/teams/idx
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
 
 # Log-based formal policy monitoring
-[Policy-Monitoring]
+# [Policy-Monitoring]
 /policy-monitoring/       @dfinity-lab/teams/ic-testing-verification
+
+# [No-Approvals]
+# Ghost is a group with no direct memberes. GitLab will bypass codeowners for files that match ghost ownership.
+/experimental/            @dfinity-lab/teams/ghost
+*.lock                    @dfinity-lab/teams/ghost
+/rs/Cargo.toml            @dfinity-lab/teams/ghost
+.gitignore                @dfinity-lab/teams/ghost
+Capsule.toml              @dfinity-lab/teams/ghost

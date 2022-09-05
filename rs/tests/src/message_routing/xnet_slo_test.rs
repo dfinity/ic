@@ -18,11 +18,14 @@ Success::
 1. Xnet canisters are successfully installed and started on each subnet.
 2. Metrics collected for subnets are within the limits.
 
+Notes::
+If the NNS canisters are not deployed, the subnets will stop making progress after 50min, therefore the test either needs to be short enough in this case.
+
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::NnsExt;
-use crate::util::{assert_endpoints_reachability, block_on, runtime_from_url, EndpointsStatus};
+use crate::util::{assert_endpoints_health, block_on, runtime_from_url, EndpointsStatus};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
@@ -112,7 +115,7 @@ pub fn config_prod_slo_3_subnets() -> Config {
 }
 
 pub fn config_120_subnets() -> Config {
-    Config::new(120, 1, Duration::from_secs(1200), 10) // 1200s = 20min
+    Config::new(120, 1, Duration::from_secs(600), 10) // 600s = 10min
 }
 
 pub fn config_hotfix_slo_3_subnets() -> Config {
@@ -126,9 +129,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     let mut endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
     assert_eq!(endpoints.len(), config.subnets * config.nodes_per_subnet);
     // Assert all nodes are reachable after IC setup.
-    block_on(assert_endpoints_reachability(
+    block_on(assert_endpoints_health(
         endpoints.as_slice(),
-        EndpointsStatus::AllReachable,
+        EndpointsStatus::AllHealthy,
     ));
     info!(
         ctx.logger,
@@ -136,7 +139,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     );
     // Install NNS for long tests (note that for large numbers of subnets or
     // nodes the registry might be too big for installation as a canister)
-    if config.runtime > Duration::from_secs(1500) {
+    if config.runtime > Duration::from_secs(1200) {
         info!(
             &ctx.logger,
             "Installing NNS canisters on the root subnet ..."
@@ -161,11 +164,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Build and install Xnet canisters on each subnet.
     info!(ctx.logger, "Building Xnet canister wasm...");
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rust_canisters/xnet_test",
-        "xnet-test-canister",
-        &[],
-    );
+    let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
     info!(ctx.logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
         &endpoints_runtime,

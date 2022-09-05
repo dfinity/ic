@@ -10,14 +10,33 @@ def external_crates_repository(name, annotations):
         name = name,
         annotations = annotations,
         isolated = True,
-        lockfile = "//:Cargo.Bazel.lock",
+        cargo_lockfile = "//:Cargo.Bazel.toml.lock",
+        lockfile = "//:Cargo.Bazel.json.lock",
         cargo_config = "//:bazel/cargo.config",
+        generator_urls = {
+            "aarch64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-aarch64-apple-darwin",
+            "x86_64-pc-windows-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-pc-windows-gnu.exe",
+            "x86_64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-pc-windows-msvc.exe",
+            "x86_64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-apple-darwin",
+            "x86_64-unknown-linux-musl": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.9.0/cargo-bazel-aarch64-unknown-linux-gnu",
+        },
         packages = {
             "actix-rt": crate.spec(
                 version = "^2.2.0",
             ),
             "actix-web": crate.spec(
                 version = "^4.0.0-beta.6",
+            ),
+            "arbitrary": crate.spec(
+                version = "=1.1.3",
+            ),
+            "assert_approx_eq": crate.spec(
+                version = "^1.1.0",
+            ),
+            "chacha20poly1305": crate.spec(
+                version = "^0.10.0",
             ),
             "anyhow": crate.spec(
                 version = "^1",
@@ -64,6 +83,9 @@ def external_crates_repository(name, annotations):
             "base64": crate.spec(
                 version = "^0.11.0",
             ),
+            "bech32": crate.spec(
+                version = "^0.9.0",
+            ),
             "bincode": crate.spec(
                 version = "^1.2.1",
             ),
@@ -89,11 +111,15 @@ def external_crates_repository(name, annotations):
                     "use-serde",
                 ],
             ),
+            "bitcoincore-rpc": crate.spec(
+                version = "^0.15.0",
+            ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
             "bls12_381": crate.spec(
-                version = "^0.7.0",
+                git = "https://github.com/dfinity/bls12_381",
+                rev = "33efe7ff95c912b19533bcc445430e860c782ccd",
                 features = [
                     "alloc",
                     "experimental",
@@ -110,6 +136,7 @@ def external_crates_repository(name, annotations):
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
                 rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                default_features = False,
             ),
             "byte-unit": crate.spec(
                 version = "^4.0.14",
@@ -135,7 +162,7 @@ def external_crates_repository(name, annotations):
             ),
             "cfg-if": crate.spec(version = "^0.1.10"),
             "chrono": crate.spec(
-                version = "^0.4.19",
+                version = "=0.4.19",
             ),
             "ciborium": crate.spec(
                 git = "https://github.com/enarx/ciborium",
@@ -217,9 +244,6 @@ def external_crates_repository(name, annotations):
             ),
             "eyre": crate.spec(
                 version = "^0.6.8",
-            ),
-            "fast-socks5": crate.spec(
-                version = "^0.7.0",
             ),
             "features": crate.spec(
                 version = "^0.10.0",
@@ -353,7 +377,7 @@ def external_crates_repository(name, annotations):
                 version = "^1.0.6",
             ),
             "insta": crate.spec(
-                version = "^1.8.0",
+                version = "=1.8.0",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",
@@ -370,6 +394,9 @@ def external_crates_repository(name, annotations):
             ),
             "jemallocator": crate.spec(
                 version = "^0.3.2",
+            ),
+            "json-patch": crate.spec(
+                version = "^0.2.6",
             ),
             "json5": crate.spec(
                 version = "^0.4.1",
@@ -430,15 +457,16 @@ def external_crates_repository(name, annotations):
                     "pipe",
                 ],
             ),
-            "miracl_core_bls12381": crate.spec(
-                version = "=4.1.2",
-            ),
             "mockall": crate.spec(
                 version = "^0.11.1",
             ),
             "mockall-0_7_2": crate.spec(
                 package = "mockall",
                 version = "^0.7.2",
+            ),
+            "mockall-0_8_3": crate.spec(
+                package = "mockall",
+                version = "^0.8.3",
             ),
             "native-tls": crate.spec(
                 version = "^0.2.7",
@@ -617,6 +645,10 @@ def external_crates_repository(name, annotations):
             "rand_distr": crate.spec(
                 version = "^0.3.0",
             ),
+            "rand_distr-0_4": crate.spec(
+                package = "rand_distr",
+                version = "^0.4",
+            ),
             "rand_pcg": crate.spec(
                 version = "^0.3.1",
             ),
@@ -648,11 +680,18 @@ def external_crates_repository(name, annotations):
                     "std",
                 ],
             ),
+            "ripemd": crate.spec(
+                version = "^0.1.1",
+            ),
             "rocksdb": crate.spec(
                 version = "^0.15.0",
                 default_features = False,
             ),
             "rsa": crate.spec(
+                version = "^0.6.1",
+            ),
+            "rsa-0_4_0": crate.spec(
+                package = "rsa",
                 version = "^0.4.0",
             ),
             "rusqlite": crate.spec(
@@ -723,6 +762,10 @@ def external_crates_repository(name, annotations):
                 version = "^0.8.0",
             ),
             "sha2": crate.spec(
+                version = "^0.10.2",
+            ),
+            "sha2-0_9_1": crate.spec(
+                package = "sha2",
                 version = "^0.9.1",
             ),
             "sha3": crate.spec(
@@ -898,6 +941,9 @@ def external_crates_repository(name, annotations):
                     "util",
                 ],
             ),
+            "tower-test": crate.spec(
+                version = "^0.4.0",
+            ),
             "tracing": crate.spec(
                 version = "^0.1.34",
             ),
@@ -925,17 +971,26 @@ def external_crates_repository(name, annotations):
             "vsock": crate.spec(
                 version = "^0.2.6",
             ),
+            "walrus": crate.spec(
+                version = "^0.19.0",
+            ),
             "wait-timeout": crate.spec(
                 version = "^0.2.0",
             ),
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
+            "warp": crate.spec(
+                version = "^0.3.2",
+                features = [
+                    "tls",
+                ],
+            ),
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
             ),
             "wasmtime": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -944,10 +999,10 @@ def external_crates_repository(name, annotations):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^0.38.3",
+                version = "^0.39.1",
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",
@@ -957,9 +1012,6 @@ def external_crates_repository(name, annotations):
             ),
             "which": crate.spec(
                 version = "^4.2.2",
-            ),
-            "wiremock": crate.spec(
-                version = "^0.5.10",
             ),
             "wsl": crate.spec(
                 version = "^0.1.0",

@@ -116,7 +116,7 @@ fn compute_priority(
     if height < expected_batch_height.min(catch_up_height) {
         return Drop;
     }
-    // Other decisions depend on type, default is to fetch.
+    // Other decisions depend on type, default is to FetchNow.
     match attr {
         ConsensusMessageAttribute::RandomBeacon(_)
         | ConsensusMessageAttribute::RandomBeaconShare(_) => {
@@ -124,7 +124,7 @@ fn compute_priority(
             if height <= beacon_height {
                 Drop
             } else if height < beacon_height + Height::from(LOOK_AHEAD) {
-                Fetch
+                FetchNow
             } else {
                 Stash
             }
@@ -134,7 +134,7 @@ fn compute_priority(
             if height <= notarized_height {
                 Drop
             } else if height < notarized_height + Height::from(LOOK_AHEAD) {
-                Fetch
+                FetchNow
             } else {
                 Stash
             }
@@ -154,7 +154,7 @@ fn compute_priority(
                 {
                     Stash
                 } else {
-                    Fetch
+                    FetchNow
                 }
             }
         }
@@ -169,7 +169,7 @@ fn compute_priority(
                 {
                     Stash
                 } else {
-                    Fetch
+                    FetchNow
                 }
             }
         }
@@ -179,7 +179,7 @@ fn compute_priority(
             if height <= finalized_height {
                 Drop
             } else if height < finalized_height + Height::from(LOOK_AHEAD) {
-                Fetch
+                FetchNow
             } else {
                 Stash
             }
@@ -189,7 +189,7 @@ fn compute_priority(
             if height < expected_batch_height {
                 Drop
             } else if height < finalized_height + Height::from(LOOK_AHEAD) {
-                Fetch
+                FetchNow
             } else {
                 Stash
             }
@@ -201,7 +201,7 @@ fn compute_priority(
             } else if height > finalized_height {
                 Stash
             } else {
-                Fetch
+                FetchNow
             }
         }
     }
@@ -227,14 +227,14 @@ mod tests {
 
             let expected_batch_height = Height::from(1);
             let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
-            // New block ==> Fetch
+            // New block ==> FetchNow
             let block = pool.make_next_block();
             assert_eq!(
                 priority(
                     &block.get_id(),
                     &ConsensusMessageAttribute::from(&block.clone().into_message())
                 ),
-                Fetch
+                FetchNow
             );
 
             // Older than finalized ==> Drop

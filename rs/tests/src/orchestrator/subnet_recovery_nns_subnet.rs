@@ -17,6 +17,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::driver_setup::{
     IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
@@ -24,9 +25,8 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister, can_read_msg, cannot_store_msg, store_message,
+    can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
 };
-use anyhow::bail;
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
@@ -46,16 +46,13 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 
     let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
     let ic_version_str = ic_version.to_string();
@@ -78,11 +75,6 @@ pub fn test(env: TestEnv) {
     // choose a node from the nns subnet
     let mut nns_nodes = topo_snapshot.root_subnet().nodes();
     let upload_node = nns_nodes.next().expect("there is no NNS node");
-
-    upload_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     info!(
         logger,
@@ -198,21 +190,13 @@ pub fn test(env: TestEnv) {
         step.exec()
             .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
+    info!(logger, "NNS recovery has finished");
 
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
 
-    // wait until state sync is completed
-    retry(logger.clone(), secs(120), secs(5), || {
-        info!(logger, "Try to install canister...");
-        if can_install_canister(&upload_node.get_public_url()) {
-            info!(logger, "Installing canister is possible.");
-            Ok(())
-        } else {
-            bail!("retry...")
-        }
-    })
-    .expect("Canister installation should work!");
+    info!(logger, "Wait for state sync to complete");
+    can_install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(

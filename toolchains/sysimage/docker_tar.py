@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tarfile
 
-image_hash_re = re.compile("((Successfully built )|(.*writing image sha256:))([0-9a-f]+).*\n")
+image_hash_re = re.compile("((Successfully built )|(.*writing image sha256:))([0-9a-f]+).*")
 
 
 def docker_build(args, dockerfile):

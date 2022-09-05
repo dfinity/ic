@@ -31,8 +31,8 @@ members = [
   "canister_sandbox/replica_controller",
   "canister_sandbox/sandbox_launcher",
   "canonical_state",
-  "certified_vars",
-  "certified_vars/test-utils",
+  "certification",
+  "certification/test-utils",
   "config",
   "consensus",
   "consensus/message",
@@ -48,9 +48,7 @@ members = [
   "crypto/internal/crypto_lib/basic_sig/ed25519",
   "crypto/internal/crypto_lib/basic_sig/iccsa",
   "crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-  "crypto/internal/crypto_lib/bls12_381/serde/miracl",
   "crypto/internal/crypto_lib/bls12_381/type",
-  "crypto/internal/crypto_lib/fs_ni_dkg",
   "crypto/internal/crypto_lib/hmac",
   "crypto/internal/crypto_lib/multi_sig/bls12_381",
   "crypto/internal/crypto_lib/seed",
@@ -68,12 +66,14 @@ members = [
   "crypto/internal/test_vectors",
   "crypto/node_key_validation",
   "crypto/getrandom_for_wasm",
+  "crypto/prng",
   "crypto/sha",
   "crypto/test_utils",
   "crypto/test_utils/threshold_sigs",
   "crypto/test_utils/canister_threshold_sigs",
+  "crypto/tecdsa",
   "crypto/tls_interfaces",
-  "crypto/tls",
+  "crypto/tls_interfaces/mocks",
   "crypto/tree_hash",
   "crypto/utils/basic_sig",
   "crypto/utils/threshold_sig",
@@ -100,6 +100,7 @@ members = [
   "interfaces/state_manager",
   "interfaces/p2p",
   "interfaces/transport",
+  "interfaces/transport/mocks",
   "log_analyzer",
   "memory_tracker",
   "messaging",
@@ -140,6 +141,7 @@ members = [
   "nns/sns-wasm",
   "determinism_test",
   "orchestrator",
+  "orchestrator/dashboard",
   "orchestrator/registry_replicator",
   "p2p",
   "replica/setup_ic_network",
@@ -156,6 +158,7 @@ members = [
   "registry/helpers",
   "registry/local_registry",
   "registry/local_store",
+  "registry/local_store/artifacts",
   "registry/keys",
   "registry/proto",
   "registry/proto/generator",
@@ -181,6 +184,7 @@ members = [
   "rosetta-api/icrc1",
   "rosetta-api/icrc1/agent",
   "rosetta-api/icrc1/client",
+  "rosetta-api/icrc1/client/cdk",
   "rosetta-api/icrc1/ledger",
   "rosetta-api/icrc1/archive",
   "rosetta-api/hardware_wallet_tests",
@@ -276,10 +280,6 @@ inherits = "release"
 debug = false
 lto = true
 opt-level = 'z'
-
-[profile.dev.package.miracl_core_bls12381]
-# Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
-opt-level = 3
 
 [profile.dev.package.bls12_381]
 opt-level = 3

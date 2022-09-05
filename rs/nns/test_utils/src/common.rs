@@ -216,47 +216,27 @@ impl NnsInitPayloadsBuilder {
 /// Build Wasm for NNS Governance canister
 pub fn build_governance_wasm() -> Wasm {
     let features = ["test"];
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/governance",
-        "governance-canister",
-        &features,
-    )
+    Project::cargo_bin_maybe_from_env("governance-canister", &features)
 }
 /// Build Wasm for NNS Root canister
 pub fn build_root_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/handlers/root",
-        "root-canister",
-        &features,
-    )
+    Project::cargo_bin_maybe_from_env("root-canister", &features)
 }
 /// Build Wasm for NNS Registry canister
 pub fn build_registry_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "registry/canister",
-        "registry-canister",
-        &features,
-    )
+    Project::cargo_bin_maybe_from_env("registry-canister", &features)
 }
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
     let features = ["notify-method"];
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rosetta-api/ledger_canister",
-        "ledger-canister",
-        &features,
-    )
+    Project::cargo_bin_maybe_from_env("ledger-canister", &features)
 }
 /// Build Wasm for NNS CMC
 pub fn build_cmc_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/cmc",
-        "cycles-minting-canister",
-        &features,
-    )
+    Project::cargo_bin_maybe_from_env("cycles-minting-canister", &features)
 }
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {
@@ -266,10 +246,10 @@ pub fn build_lifeline_wasm() -> Wasm {
 /// Build Wasm for NNS Genesis Token canister
 pub fn build_genesis_token_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_use_path_relative_to_rs("nns/gtc", "genesis-token-canister", &features)
+    Project::cargo_bin_maybe_from_env("genesis-token-canister", &features)
 }
 /// Build Wasm for NNS SnsWasm canister
 pub fn build_sns_wasms_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_use_path_relative_to_rs("nns/sns-wasm", "sns-wasm-canister", &features)
+    Project::cargo_bin_maybe_from_env("sns-wasm-canister", &features)
 }

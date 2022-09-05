@@ -45,11 +45,11 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 ///
 /// Currently heap delta pages are stored in memory and not backed by a file.
 /// The gen 1 machines in production have 500GiB of RAM available to replica.
-/// Set the upper limit to 150GiB to reserve memory for other components and
+/// Set the upper limit to 140GiB to reserve memory for other components and
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(150 * GB);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -142,7 +142,8 @@ impl Default for Config {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
             rate_limiting_of_instructions: FlagStatus::Enabled,
-            // TODO(RUN-211): Increase the allocatable capacity.
+            // The allocatable compute capacity is capped at 50% to ensure that
+            // best-effort canisters have sufficient compute to make progress.
             allocatable_compute_capacity_in_percent: 50,
             deterministic_time_slicing: FlagStatus::Disabled,
             module_sharing: FlagStatus::Enabled,

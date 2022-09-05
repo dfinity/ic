@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/log_analyzer",
     "//rs/monitoring/logger",
@@ -78,7 +78,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_scenario_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -87,7 +86,6 @@ rust_binary(
     name = "e2e-test-driver",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":scenario_tests"],
 )
@@ -96,7 +94,6 @@ rust_test(
     name = "scenario_tests_test",
     aliases = ALIASES,
     crate = ":scenario_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

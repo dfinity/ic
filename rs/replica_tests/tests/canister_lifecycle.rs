@@ -64,7 +64,7 @@ fn full_canister_lifecycle_from_another_canister() {
         // Let the canister stop the newly created canister.
         assert_eq!(
             canister.update(wasm().call(management::stop_canister(expected_canister_id))),
-            Ok(WasmResult::Reply(EmptyBlob::encode())),
+            Ok(WasmResult::Reply(EmptyBlob.encode())),
         );
 
         // Verify that the newly created canister is now stopped.
@@ -78,7 +78,7 @@ fn full_canister_lifecycle_from_another_canister() {
         // Start the canister again.
         assert_eq!(
             canister.update(wasm().call(management::start_canister(expected_canister_id))),
-            Ok(WasmResult::Reply(EmptyBlob::encode())),
+            Ok(WasmResult::Reply(EmptyBlob.encode())),
         );
 
         // Verify that the canister is running again.
@@ -110,7 +110,7 @@ fn full_canister_lifecycle_ingress() {
                 wasm().call_with_cycles(
                     ic00::IC_00,
                     Method::CreateCanister,
-                    call_args().other_side(EmptyBlob::encode()),
+                    call_args().other_side(EmptyBlob.encode()),
                     num_cycles.into_parts(),
                 )
             ),
@@ -142,7 +142,7 @@ fn full_canister_lifecycle_ingress() {
         // Let ic:00 stop the newly created canister.
         assert_eq!(
             test.ingress(IC_00, Method::StopCanister, canister_id_record.clone()),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Verify that the newly created canister is now stopped.
@@ -154,7 +154,7 @@ fn full_canister_lifecycle_ingress() {
         // Start the canister again.
         assert_eq!(
             test.ingress(IC_00, Method::StartCanister, canister_id_record.clone()),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Verify that the newly created canister is running.
@@ -200,7 +200,7 @@ fn delete_canister_delete_self_fails() {
                 Method::SetController,
                 SetControllerArgs::new(canister_id, canister_id.get()).encode()
             ),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Canister tries to delete itself. Should fail because a self-controlling
@@ -241,7 +241,7 @@ fn delete_running_canister_fails() {
                 Method::SetController,
                 ic00::SetControllerArgs::new(canister_b, canister_a.get()).encode()
             ),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Delete the canister. Should fail since it's running.
@@ -271,7 +271,7 @@ fn delete_stopped_canister_succeeds() {
         let canister_id_record = CanisterIdRecord::from(canister_b).encode();
         assert_eq!(
             test.ingress(IC_00, "stop_canister", canister_id_record),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Set the controller of canister_b to be canister_a
@@ -481,7 +481,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
                 wasm().call_with_cycles(
                     IC_00,
                     Method::CreateCanister,
-                    call_args().other_side(EmptyBlob::encode()),
+                    call_args().other_side(EmptyBlob.encode()),
                     cycles_for_new_canister.into_parts(),
                 ),
             )
@@ -652,7 +652,7 @@ fn can_get_canister_information() {
                 Method::SetController,
                 ic00::SetControllerArgs::new(canister_b, canister_a.get()).encode()
             ),
-            Ok(WasmResult::Reply(EmptyBlob::encode()))
+            Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
         // Request the status of canister_b.

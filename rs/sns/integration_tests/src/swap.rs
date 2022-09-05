@@ -1,9 +1,10 @@
-use candid::{CandidType, Decode, Encode};
+use candid::{types::number::Nat, CandidType, Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
 use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
 };
@@ -13,22 +14,23 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
 };
 use ic_nns_governance::pb::v1::{
+    self as nns_governance_pb,
     manage_neuron::{self, RegisterVote},
-    manage_neuron_response, proposal, ManageNeuron, ManageNeuronResponse, Proposal,
-    SetSnsTokenSwapOpenTimeWindow, Vote,
+    manage_neuron_response, proposal, ManageNeuron, OpenSnsTokenSwap, Proposal, Vote,
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_1_ID, state_test_helpers::setup_nns_canisters,
+    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_1_ID, state_test_helpers,
+    state_test_helpers::setup_nns_canisters,
 };
-use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
+use ic_sns_governance::pb::v1::{self as sns_governance_pb, ListNeurons, ListNeuronsResponse};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
     pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse},
     CanisterIdRecord, CanisterStatusResultV2,
 };
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, set_dapp_controllers_call_result, RefreshSnsTokensRequest,
-    SetDappControllersCallResult, SetDappControllersResponse, SetOpenTimeWindowRequest, TimeWindow,
+    self as swap_pb, set_dapp_controllers_call_result, SetDappControllersCallResult,
+    SetDappControllersResponse,
 };
 use ic_sns_test_utils::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
 use ic_state_machine_tests::StateMachine;
@@ -38,14 +40,24 @@ use ledger_canister::{
     AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, Memo, TransferArgs,
     DEFAULT_TRANSFER_FEE,
 };
+use num_traits::ToPrimitive;
+use std::collections::HashMap;
 
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 /// 10^8
 const E8: u64 = 1_0000_0000;
 
+const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 30 * E8;
+
 lazy_static! {
     static ref TEST_USER2_ORIGINAL_BALANCE_ICP: Tokens = Tokens::from_tokens(100).unwrap();
+    static ref SWAP_DUE_TIMESTAMP_SECONDS: u64 = StateMachine::new()
+        .time()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 13 * SECONDS_PER_DAY;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -59,23 +71,7 @@ enum SnsCanisterType {
 impl SnsCanisterType {
     fn get_wasm(self) -> Vec<u8> {
         let features = [];
-        Project::cargo_bin_maybe_use_path_relative_to_rs(
-            self.cargo_package_path(),
-            self.bin_name(),
-            &features,
-        )
-        .bytes()
-    }
-
-    fn cargo_package_path(self) -> &'static str {
-        use SnsCanisterType::*;
-        match self {
-            Ledger => "rosetta-api/icrc1/ledger",
-
-            Root => "sns/root",
-            Governance => "sns/governance",
-            Swap => "sns/swap",
-        }
+        Project::cargo_bin_maybe_from_env(self.bin_name(), &features).bytes()
     }
 
     fn bin_name(self) -> &'static str {
@@ -165,7 +161,7 @@ impl Scenario {
     /// precisely, it builds upon SnsTestsInitPayloadBuilder::new().build(), but
     /// this makes two enhancements:
     ///
-    ///   1. The swap canister is funded (with 10 SNS tokens).
+    ///   1. The swap canister is funded (with 100 SNS tokens).
     ///   2. The canister_id fields are populated.
     ///
     /// The dapp canister is owned by TEST_USER1.
@@ -215,7 +211,7 @@ impl Scenario {
             subaccount: None,
         }];
         let mut configuration = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_accounts(account_identifiers, Tokens::from_tokens(10).unwrap())
+            .with_ledger_accounts(account_identifiers, Tokens::from_tokens(100).unwrap())
             .build();
         populate_canister_ids(
             root_canister_id,
@@ -278,16 +274,39 @@ impl Scenario {
 /// Begins a swap.
 ///
 /// TEST_USER2 has 100 ICP that he can use to buy into the swap.
-fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
+fn begin_swap(
+    state_machine: &mut StateMachine,
+) -> (
+    Scenario,
+    /* community_fund_nns_neurons */ Vec<nns_governance_pb::Neuron>,
+) {
     // Give TEST_USER2 some ICP so that he can buy into the swap.
     let test_user2_principal_id: PrincipalId = *TEST_USER2_PRINCIPAL;
-    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+    let mut nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_account(
             test_user2_principal_id.into(),
             *TEST_USER2_ORIGINAL_BALANCE_ICP,
         )
         .with_test_neurons()
         .build();
+    // Give neurons maturity and make the first two join the community fund.
+    let mut community_fund_neurons = vec![];
+    {
+        for (i, neuron) in nns_init_payloads
+            .governance
+            .neurons
+            .values_mut()
+            .enumerate()
+        {
+            let n = (i + 1) as u64;
+            neuron.maturity_e8s_equivalent = n * 25 * E8;
+
+            if i < 2 {
+                neuron.joined_community_fund_timestamp_seconds = Some(1);
+                community_fund_neurons.push(neuron.clone());
+            }
+        }
+    }
     let neuron_id_to_principal_id: Vec<(u64, PrincipalId)> = nns_init_payloads
         .governance
         .neurons
@@ -308,22 +327,11 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
     {
         let swap = &mut scenario.configuration.swap;
 
-        // Succeed as soon as 10 ICP has been raised.
-        swap.max_icp_e8s = 10 * E8;
-        // Still succeed if 2 ICP has been raised, but only after the open time
-        // window has passed.
-        swap.min_icp_e8s = 2 * E8;
-
-        // We need at least one participant, but they can contribute whatever
-        // amount they want (subject to max_icp_e8s for the whole swap).
-        swap.min_participants = 1;
-        swap.min_participant_icp_e8s = 1;
-        swap.max_participant_icp_e8s = swap.max_icp_e8s;
-
         // In case of failure, restore TEST_USER1 as the controller of the dapp.
         swap.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
 
-        assert!(swap.is_valid(), "{:#?}", swap);
+        swap.validate()
+            .unwrap_or_else(|err| panic!("Swap init arg: {:#?} invalid because {:?}", swap, err));
     }
     scenario.init_all_canisters(state_machine);
 
@@ -342,28 +350,8 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
         },
     );
 
-    // Let swap know that it has SNS tokens.
-    state_machine
-        .execute_ingress(
-            scenario.swap_canister_id,
-            "refresh_sns_tokens",
-            Encode!(&RefreshSnsTokensRequest {}).unwrap(),
-        )
-        .unwrap();
-
     // Propose that a swap be scheduled to start 3 days from now, and last for
     // 10 days.
-    let start_timestamp_seconds = state_machine
-        .time()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 3 * SECONDS_PER_DAY;
-    let end_timestamp_seconds = start_timestamp_seconds + 10 * SECONDS_PER_DAY;
-    let open_time_window = TimeWindow {
-        start_timestamp_seconds,
-        end_timestamp_seconds,
-    };
     let neuron_id = nns_common_pb::NeuronId {
         id: TEST_NEURON_1_ID,
     };
@@ -375,14 +363,29 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
             title: Some("Schedule SNS Token Sale".to_string()),
             summary: "".to_string(),
             url: "".to_string(),
-            action: Some(proposal::Action::SetSnsTokenSwapOpenTimeWindow(
-                SetSnsTokenSwapOpenTimeWindow {
-                    swap_canister_id: Some(scenario.swap_canister_id.into()),
-                    request: Some(SetOpenTimeWindowRequest {
-                        open_time_window: Some(open_time_window),
-                    }),
-                },
-            )),
+            action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+                target_swap_canister_id: Some(scenario.swap_canister_id.into()),
+                params: Some(swap_pb::Params {
+                    // Succeed as soon as 100 ICP has been raised. In this case,
+                    // SNS tokens and ICP trade at parity.
+                    max_icp_e8s: 100 * E8,
+                    // Still succeed if 40 ICP has been raised, but only after
+                    // the open time window has passed. At this level of
+                    // participation, the price of an SNS token is 2.5 ICP.
+                    min_icp_e8s: 40 * E8,
+
+                    // We need at least one participant, but they can contribute whatever
+                    // amount they want (subject to max_icp_e8s for the whole swap).
+                    min_participants: 1,
+                    min_participant_icp_e8s: 1,
+                    max_participant_icp_e8s: 100 * E8,
+
+                    swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
+                    sns_token_e8s: 100 * E8,
+                }),
+                // This is not sufficient to make the swap an automatic success.
+                community_fund_investment_e8s: Some(COMMUNITY_FUND_INVESTMENT_E8S),
+            })),
         },
     );
     let proposal_id = response
@@ -414,11 +417,6 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
             .unwrap();
     }
 
-    // Advance time so that the swap is open.
-    state_machine.set_time(
-        std::time::UNIX_EPOCH + std::time::Duration::from_secs(start_timestamp_seconds + 1),
-    );
-
     // Make sure that the swap is now open.
     {
         let result = swap_get_state(
@@ -427,8 +425,6 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
             &swap_pb::GetStateRequest {},
         )
         .swap
-        .unwrap()
-        .state
         .unwrap();
 
         assert_eq!(
@@ -439,25 +435,24 @@ fn begin_swap(state_machine: &mut StateMachine) -> (Scenario, TimeWindow) {
         );
     }
 
-    (scenario, open_time_window)
+    (scenario, community_fund_neurons)
 }
 
 #[test]
 fn swap_lifecycle_happy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, _open_time_window) = begin_swap(&mut state_machine);
+    let (scenario, community_fund_neurons) = begin_swap(&mut state_machine);
 
     // Step 2: Run code under test.
 
-    // Make the swap an immediate success by having TEST_USER2 participate.
-    // First, they must transfer funds to the swap canister under the
-    // appropriate subaccount...
+    // Make the swap an immediate success by having TEST_USER2 participate with
+    // a large amount (just enough to hit the max).
     participate_in_swap(
         &mut state_machine,
         scenario.swap_canister_id,
         *TEST_USER2_PRINCIPAL,
-        Tokens::from_tokens(10).unwrap(),
+        Tokens::from_tokens(70).unwrap(),
     );
 
     // Make sure the swap reached the Committed state.
@@ -468,8 +463,6 @@ fn swap_lifecycle_happy() {
             &swap_pb::GetStateRequest {},
         )
         .swap
-        .unwrap()
-        .state
         .unwrap();
 
         assert_eq!(
@@ -501,21 +494,25 @@ fn swap_lifecycle_happy() {
 
     // Step 3: Inspect results.
 
+    // Step 3.1: Inspect finalize_swap_response.
     assert_eq!(
         finalize_swap_response,
         swap_pb::FinalizeSwapResponse {
             sweep_icp: Some(swap_pb::SweepResult {
+                // While, the other fields in the response count 3 successes,
+                // this only counts 1, because 2 of the participants are from
+                // the (maturity of) Community Fund (NNS neurons).
                 success: 1,
                 failure: 0,
                 skipped: 0,
             }),
             sweep_sns: Some(swap_pb::SweepResult {
-                success: 1,
+                success: 3,
                 failure: 0,
                 skipped: 0,
             }),
             create_neuron: Some(swap_pb::SweepResult {
-                success: 1,
+                success: 3,
                 failure: 0,
                 skipped: 0,
             }),
@@ -525,6 +522,8 @@ fn swap_lifecycle_happy() {
             set_dapp_controllers_result: None,
         }
     );
+
+    // Step 3.2.1: Inspect ICP balances.
 
     // SNS governance should get the ICP.
     {
@@ -536,43 +535,122 @@ fn swap_lifecycle_happy() {
                     .to_address(),
             },
         );
-        let expected_balance = (Tokens::from_tokens(10).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
+        // TODO(NNS1-1664): ICP from the community fund should also appear in
+        // the account of SNS governance, but that hasn't been implemented yet.
+        let expected_balance = (Tokens::from_tokens(70).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
+        assert_eq!(observed_balance, expected_balance);
+    }
+    // TEST_USER2 still has the change left over from their participation in the swap/sale.
+    {
+        let observed_balance = ledger_account_balance(
+            &mut state_machine,
+            ICP_LEDGER_CANISTER_ID,
+            &AccountBalanceArgs {
+                account: AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None).to_address(),
+            },
+        );
+        let expected_balance = (Tokens::from_tokens(30).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
         assert_eq!(observed_balance, expected_balance);
     }
 
-    // TEST_USER2 should receive the SNS tokens, but in the form a neuron.
-    {
-        let observed_neurons = sns_governance_list_neurons(
-            &mut state_machine,
-            scenario.governance_canister_id,
-            &ListNeurons::default(),
+    // Step 3.2.2: Inspect SNS token balances.
+    let community_fund_total_maturity: u64 = community_fund_neurons
+        .iter()
+        .map(|neuron| neuron.maturity_e8s_equivalent)
+        .sum();
+    let expected_sns_neuron_subaccount_to_gross_participation_amount_e8s = community_fund_neurons
+        .iter()
+        .map(|nns_neuron| {
+            let sns_neuron_subaccount = compute_neuron_staking_subaccount_bytes(
+                NNS_GOVERNANCE_CANISTER_ID.into(),
+                nns_neuron.id.clone().unwrap().id,
+            );
+            let participation_amount_e8s = COMMUNITY_FUND_INVESTMENT_E8S
+                * nns_neuron.maturity_e8s_equivalent
+                / community_fund_total_maturity;
+
+            (sns_neuron_subaccount, participation_amount_e8s)
+        })
+        .chain(
+            vec![(
+                compute_neuron_staking_subaccount_bytes(*TEST_USER2_PRINCIPAL, 0),
+                70 * E8,
+            )]
+            .into_iter(),
         )
-        .neurons;
+        .collect::<Vec<(
+            /* subaccount: */ [u8; 32],
+            /* gross_participation_amount_e8s: */ u64,
+        )>>();
+    for (sns_neuron_subaccount, expected_gross_participation_amount_e8s) in
+        &expected_sns_neuron_subaccount_to_gross_participation_amount_e8s
+    {
+        let observed_balance = icrc1_balance_of(
+            &mut state_machine,
+            scenario.ledger_canister_id,
+            &ic_icrc1::Account {
+                owner: scenario.governance_canister_id.into(),
+                subaccount: Some(*sns_neuron_subaccount),
+            },
+        )
+        .0
+        .to_u64()
+        .unwrap();
+        let expected_balance =
+            expected_gross_participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s();
 
-        assert_eq!(observed_neurons.len(), 1, "{:#?}", observed_neurons);
-        let observed_neuron = &observed_neurons[0];
+        assert_eq!(observed_balance, expected_balance);
+    }
+    let expected_sns_neuron_id_to_net_participation_amount_e8s =
+        expected_sns_neuron_subaccount_to_gross_participation_amount_e8s
+            .iter()
+            .map(|(sns_neuron_subaccount, participation_amount_e8s)| {
+                let sns_neuron_id = sns_governance_pb::NeuronId::from(*sns_neuron_subaccount);
+                (
+                    sns_neuron_id,
+                    participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
 
-        // Inspect the neuron.
+    // Step 3.3: Inspect SNS neurons.
+    let observed_sns_neurons = sns_governance_list_neurons(
+        &mut state_machine,
+        scenario.governance_canister_id,
+        &ListNeurons::default(),
+    )
+    .neurons;
+    assert_eq!(observed_sns_neurons.len(), 3, "{:#?}", observed_sns_neurons);
+    for observed_sns_neuron in &observed_sns_neurons {
         assert_eq!(
-            observed_neuron.maturity_e8s_equivalent, 0,
+            observed_sns_neuron.maturity_e8s_equivalent, 0,
             "{:#?}",
-            observed_neuron,
+            observed_sns_neuron,
         );
         assert_eq!(
-            observed_neuron.cached_neuron_stake_e8s,
-            10 * E8
-                - scenario
-                    .configuration
-                    .governance
-                    .parameters
-                    .as_ref()
-                    .unwrap()
-                    .transaction_fee_e8s
-                    .unwrap(),
+            observed_sns_neuron.neuron_fees_e8s, 0,
             "{:#?}",
-            observed_neuron
+            observed_sns_neuron
         );
-        assert_eq!(observed_neuron.neuron_fees_e8s, 0, "{:#?}", observed_neuron);
+
+        let neuron_id = observed_sns_neuron.id.clone().unwrap();
+        let expected_e8s = *expected_sns_neuron_id_to_net_participation_amount_e8s
+            .get(&neuron_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Unexpected SNS NeuronId: {}. Expected NeuronIds: {:#?}",
+                    neuron_id,
+                    expected_sns_neuron_id_to_net_participation_amount_e8s
+                        .keys()
+                        .map(|neuron_id| neuron_id.to_string())
+                        .collect::<Vec<_>>(),
+                )
+            });
+        assert_eq!(
+            observed_sns_neuron.cached_neuron_stake_e8s, expected_e8s,
+            "{:#?}",
+            observed_sns_neuron
+        );
     }
 }
 
@@ -580,18 +658,17 @@ fn swap_lifecycle_happy() {
 fn swap_lifecycle_sad() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, open_time_window) = begin_swap(&mut state_machine);
+    let (scenario, _community_fund_neurons) = begin_swap(&mut state_machine);
 
     // Step 2: Run code under test.
 
     // TEST_USER2 participates, but not enough for the swap to succeed, even
-    // after the open time window has passed.  First, they must transfer funds
-    // to the swap canister under the appropriate subaccount...
+    // after the open time window has passed.
     participate_in_swap(
         &mut state_machine,
         scenario.swap_canister_id,
         *TEST_USER2_PRINCIPAL,
-        Tokens::from_tokens(1).unwrap(),
+        Tokens::from_e8s(E8 - 1),
     );
 
     // Make sure the swap is still in the Open state.
@@ -602,8 +679,6 @@ fn swap_lifecycle_sad() {
             &swap_pb::GetStateRequest {},
         )
         .swap
-        .unwrap()
-        .state
         .unwrap();
 
         assert_eq!(
@@ -616,8 +691,7 @@ fn swap_lifecycle_sad() {
 
     // Advance time well into the future so that the swap fails due to no participants.
     state_machine.set_time(
-        std::time::UNIX_EPOCH
-            + std::time::Duration::from_secs(open_time_window.end_timestamp_seconds + 1),
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(*SWAP_DUE_TIMESTAMP_SECONDS + 1),
     );
 
     // Make sure the swap reached the Aborted state.
@@ -628,8 +702,6 @@ fn swap_lifecycle_sad() {
             &swap_pb::GetStateRequest {},
         )
         .swap
-        .unwrap()
-        .state
         .unwrap();
 
         assert_eq!(
@@ -661,6 +733,7 @@ fn swap_lifecycle_sad() {
 
     // Step 3: Inspect results.
 
+    // Step 3.1: Inspect finalize_swap_response.
     assert_eq!(
         finalize_swap_response,
         swap_pb::FinalizeSwapResponse {
@@ -682,6 +755,7 @@ fn swap_lifecycle_sad() {
         }
     );
 
+    // Step 3.2.1: Inspect ICP balance(s).
     // TEST_USER2 (the participant) should get their ICP back (less two transfer fees).
     {
         let observed_balance = ledger_account_balance(
@@ -697,7 +771,26 @@ fn swap_lifecycle_sad() {
         assert_eq!(observed_balance, expected_balance);
     }
 
-    // There should be no SNS neurons.
+    // Step 3.2.2: Inspect SNS token balance(s).
+    {
+        // Assert that the swap/sale canister's SNS token balance is unchanged.
+        // Since this is the entire supply, we can be sure that nobody else has
+        // any SNS tokens.
+        let observed_balance = icrc1_balance_of(
+            &mut state_machine,
+            scenario.ledger_canister_id,
+            &ic_icrc1::Account {
+                owner: scenario.swap_canister_id.into(),
+                subaccount: None,
+            },
+        )
+        .0
+        .to_u64()
+        .unwrap();
+        assert_eq!(observed_balance, 100 * E8);
+    }
+
+    // Step 3.3: There should be no SNS neurons.
     {
         let observed_neurons = sns_governance_list_neurons(
             &mut state_machine,
@@ -768,28 +861,13 @@ fn nns_governance_make_proposal(
     neuron_id: nns_common_pb::NeuronId,
     proposal: &Proposal,
 ) -> manage_neuron_response::MakeProposalResponse {
-    let result = state_machine
-        .execute_ingress_as(
-            sender,
-            NNS_GOVERNANCE_CANISTER_ID,
-            "manage_neuron",
-            Encode!(&ManageNeuron {
-                id: Some(neuron_id),
-                command: Some(manage_neuron::Command::MakeProposal(Box::new(
-                    proposal.clone()
-                ))),
-                neuron_id_or_subaccount: None
-            })
-            .unwrap(),
-        )
-        .unwrap();
+    let result = state_test_helpers::nns_governance_make_proposal(
+        state_machine,
+        sender,
+        neuron_id,
+        proposal,
+    );
 
-    let result = match result {
-        WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Failed to make proposal: {:#?}", s),
-    };
-
-    let result = Decode!(&result, ManageNeuronResponse).unwrap();
     match result.command {
         Some(manage_neuron_response::Command::MakeProposal(response)) => response,
         _ => panic!("Response was not of type MakeProposal: {:#?}", result),
@@ -839,6 +917,27 @@ fn sns_governance_list_neurons(
         }
     };
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+fn icrc1_balance_of(
+    state_machine: &mut StateMachine,
+    target_canister_id: CanisterId,
+    request: &ic_icrc1::Account,
+) -> Nat {
+    let result = state_machine
+        .execute_ingress(
+            target_canister_id,
+            "icrc1_balance_of",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+        }
+    };
+    Decode!(&result, Nat).unwrap()
 }
 
 fn ledger_account_balance(

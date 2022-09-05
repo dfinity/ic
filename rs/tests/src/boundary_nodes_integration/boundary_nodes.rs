@@ -29,33 +29,95 @@ use crate::{
     },
     util::{assert_create_agent, delay},
 };
-use anyhow::bail;
-use ic_agent::{export::Principal, Agent};
+use anyhow::{anyhow, bail, Context, Error};
+use futures::stream::FuturesUnordered;
+use garcon::Delay;
+use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
+use ic_interfaces::registry::RegistryValue;
+use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+use ic_registry_keys::make_routing_table_record_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
-use slog::info;
-use std::{
-    io::Read,
-    net::{Ipv4Addr, SocketAddrV6},
-    time::Duration,
-};
+use serde::Deserialize;
+use slog::{error, info};
+use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
+use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
-struct PanicStruct<F: FnOnce()>(Option<F>);
+struct PanicHandler {
+    env: TestEnv,
+    is_enabled: bool,
+}
 
-impl<F: FnOnce()> PanicStruct<F> {
-    fn forget(mut self) {
-        self.0 = None;
+impl PanicHandler {
+    fn new(env: TestEnv) -> Self {
+        Self {
+            env,
+            is_enabled: true,
+        }
+    }
+
+    fn disable(&mut self) {
+        self.is_enabled = false;
     }
 }
 
-impl<F: FnOnce()> Drop for PanicStruct<F> {
+impl Drop for PanicHandler {
     fn drop(&mut self) {
-        if let Some(v) = self.0.take() {
-            v()
+        if !self.is_enabled {
+            return;
         }
+
+        std::thread::sleep(Duration::from_secs(60));
+
+        let logger = self.env.logger();
+
+        let boundary_node_vm = self
+            .env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+
+        let (journalbeat_output, exit_status) =
+            exec_ssh_command(&boundary_node_vm, "systemctl status journalbeat").unwrap();
+
+        info!(
+            logger,
+            "journalbeat status {BOUNDARY_NODE_NAME} = '{journalbeat_output}'. Exit status = {}",
+            exit_status,
+        );
     }
+}
+
+fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
+    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+
+    channel.exec(command)?;
+
+    let mut output = String::new();
+    channel.read_to_string(&mut output)?;
+    channel.wait_close()?;
+
+    Ok((output, channel.exit_status()?))
+}
+
+fn get_install_url(env: &TestEnv) -> Result<url::Url, Error> {
+    let subnet = env
+        .topology_snapshot()
+        .subnets()
+        .next()
+        .ok_or_else(|| anyhow!("missing subnet"))?;
+
+    let node = subnet
+        .nodes()
+        .next()
+        .ok_or_else(|| anyhow!("missing node"))?;
+
+    Ok(node.get_public_url())
 }
 
 async fn create_canister(
@@ -77,14 +139,18 @@ async fn create_canister(
     if let Some(arg) = arg {
         install_code = install_code.with_raw_arg(arg)
     }
+
     install_code
         .call_and_wait(delay())
         .await
         .map_err(|err| format!("Couldn't install canister: {}", err))?;
+
     Ok::<_, String>(canister_id)
 }
 
 pub fn config(env: TestEnv) {
+    let logger = env.logger();
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
@@ -100,7 +166,7 @@ pub fn config(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let nns_urls = handle
+    let nns_urls: Vec<_> = handle
         .public_api_endpoints
         .iter()
         .filter(|ep| ep.is_root_subnet)
@@ -108,108 +174,112 @@ pub fn config(env: TestEnv) {
         .collect();
 
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .with_nns_urls(nns_urls)
+        .with_nns_urls(nns_urls.clone())
         .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
         .start(&env)
         .expect("failed to setup universal VM");
-}
 
-pub fn test(env: TestEnv) {
-    let counter_canister = env.load_wasm("counter.wat");
-    let http_counter_canister = env.load_wasm("http_counter.wasm");
-
-    let logger = env.logger();
-    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
-    info!(
-        &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv6: {:?}",
-        boundary_node_vm.ipv6()
-    );
-
-    let boundary_node_ipv4: Ipv4Addr = boundary_node_vm.block_on_ipv4().unwrap();
-    info!(
-        &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}", boundary_node_ipv4
-    );
-
-    // Example of SSH access to Boundary Nodes:
-    let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
-    let mut channel = sess.channel_session().unwrap();
-    channel.exec("uname -a").unwrap();
-    let mut uname = String::new();
-    channel.read_to_string(&mut uname).unwrap();
-    channel.wait_close().unwrap();
-    info!(
-        logger,
-        "uname of {BOUNDARY_NODE_NAME} = '{}'. Exit status = {}",
-        uname.trim(),
-        channel.exit_status().unwrap()
-    );
-
-    let panic_struct = {
-        let logger = env.logger();
-        let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-        let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
-        PanicStruct(Some(move || {
-            std::thread::sleep(Duration::from_secs(60));
-
-            let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
-            let mut channel = sess.channel_session().unwrap();
-            channel.exec("systemctl status journalbeat").unwrap();
-            let mut journalbeat = String::new();
-            channel.read_to_string(&mut journalbeat).unwrap();
-            channel.wait_close().unwrap();
-            info!(
-                logger,
-                "journalbeat status {BOUNDARY_NODE_NAME} = '{journalbeat}'. Exit status = {}",
-                channel.exit_status().unwrap()
-            );
-        }))
-    };
-
-    info!(&logger, "Checking readiness of all nodes...");
-    let mut install_url = None;
+    // Await Replicas
+    info!(&logger, "Checking readiness of all replica nodes...");
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
             node.await_status_is_healthy()
                 .expect("Replica did not come up healthy.");
-
-            // Example of SSH access to IC nodes:
-            let sess = node.block_on_ssh_session(ADMIN).unwrap();
-            let mut channel = sess.channel_session().unwrap();
-            channel.exec("hostname").unwrap();
-            let mut hostname = String::new();
-            channel.read_to_string(&mut hostname).unwrap();
-            info!(
-                logger,
-                "Hostname of node {:?} = '{}'",
-                node.node_id,
-                hostname.trim()
-            );
-            install_url = Some(node.get_public_url());
-            channel.wait_close().unwrap();
         }
     }
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    info!(&logger, "Polling registry");
+    let registry = RegistryCanister::new(nns_urls);
+    let (latest, routes) = rt.block_on(retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+            .context("Failed to `get_value` from registry")?;
+        let routes = PbRoutingTable::decode(bytes.as_slice())
+            .context("Failed to decode registry routes")?;
+        let routes = RoutingTable::try_from(routes)
+            .context("Failed to convert registry routes")?;
+        Ok((latest, routes))
+    }))
+    .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
+    info!(&logger, "Latest registry {latest}: {routes:?}");
+
+    // Await Boundary Node
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    info!(
+        &logger,
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap(),
+        boundary_node_vm.ipv6()
+    );
+
+    info!(&logger, "Waiting for routes file");
+    let sleep_command = "until [ -f /var/cache/ic_routes/* ]; do sleep 5; done";
+    let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, sleep_command).unwrap();
+    info!(
+        logger,
+        "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
+        cmd_output.trim(),
+    );
+
+    info!(&logger, "Checking BN health");
     boundary_node_vm
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes binary canister test
+
+Goal:: Install and query a binary canister
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and calls against it
+return the expected responses
+
+Coverage:: binary canisters behave as expected
+
+end::catalog[] */
+
+pub fn canister_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let mut install_url = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_url = Some(node.get_public_url());
+        }
+    }
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_url.unwrap().as_str()).await;
 
-        info!(&logger, "Installing canisters...");
-        let counter_canister_id = create_canister(&agent, &counter_canister, None)
+        let counter_canister = env.load_wasm("counter.wat");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, &counter_canister, None)
             .await
             .expect("Could not create counter canister");
 
-        let http_counter_canister_id = create_canister(&agent, &http_counter_canister, None)
-            .await
-            .expect("Could not create http_counter canister");
-
-        info!(&logger, "Created counter={counter_canister_id} and http_counter={http_counter_canister_id}.");
+        info!(&logger, "created canister={canister_id}");
 
         // Wait for the canisters to finish installing
         // TODO: maybe this should be status calls?
@@ -226,23 +296,78 @@ pub fn test(env: TestEnv) {
         // We must retry the first request to a canister.
         // This is because a new canister might take a few seconds to show up in the BN's routing tables
         let read_result = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
-            Ok(agent.query(&counter_canister_id, "read").call().await?)
+            Ok(agent.query(&canister_id, "read").call().await?)
         })
         .await
         .unwrap();
 
         assert_eq!(read_result, [0; 4]);
+    });
 
-        let host = format!("{}.raw.ic0.app", http_counter_canister_id);
+    panic_handler.disable();
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes HTTP canister test
+
+Goal:: Install and query an HTTP canister
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and HTTP calls against it
+return the expected responses
+
+Coverage:: HTTP Canisters behave as expected
+
+end::catalog[] */
+
+pub fn http_canister_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let mut install_url = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_url = Some(node.get_public_url());
+        }
+    }
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        info!(&logger, "Creating replica agent...");
+        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+
+        let http_counter_canister = env.load_wasm("http_counter.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, &http_counter_canister, None)
+            .await
+            .expect("Could not create http_counter canister");
+
+        info!(&logger, "created canister={canister_id}");
+
+        // Wait for the canisters to finish installing
+        // TODO: maybe this should be status calls?
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let host = format!("{}.raw.ic0.app", canister_id);
         let client = reqwest::ClientBuilder::new()
-            // FIXME: use `ClientBuilder::add_root_certificate` instead
             .danger_accept_invalid_certs(true)
             .resolve(
-                "invalid-canister-id.raw.ic0.app",
+                &host,
                 SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
             )
             .resolve(
-                &host,
+                "invalid-canister-id.raw.ic0.app",
                 SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
             )
             .build()
@@ -255,11 +380,15 @@ pub fn test(env: TestEnv) {
                 .await?
                 .text()
                 .await?;
+
             if res != "Counter is 0\n" {
                 bail!(res)
             }
+
             Ok(())
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
@@ -268,65 +397,45 @@ pub fn test(env: TestEnv) {
                 .await?
                 .text()
                 .await?;
+
             if res != "Counter is 0 streaming\n" {
                 bail!(res)
             }
+
             Ok(())
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Check that `canisterId` parameters go unused
         retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
-                .get(format!("https://invalid-canister-id.raw.ic0.app/?canisterId={}", http_counter_canister_id))
+                .get(format!(
+                    "https://invalid-canister-id.raw.ic0.app/?canisterId={}",
+                    canister_id
+                ))
                 .send()
                 .await?
                 .text()
                 .await?;
+
             if res != "Could not find a canister id to forward to." {
                 bail!(res)
             }
+
             Ok(())
-        }).await.unwrap();
-
-        // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "ryjl3-tyaaa-aaaaa-aaaba-cai 1;\n{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, http_counter_canister_id);
-        let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
-        let mut channel = sess.channel_session().unwrap();
-        channel.exec(denylist_command.as_str()).unwrap();
-        let mut output = String::new();
-        channel.read_to_string(&mut output).unwrap();
-        channel.wait_close().unwrap();
-        info!(
-            logger,
-            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to '{}'. Exit status = {}",
-            output.trim(),
-            channel.exit_status().unwrap()
-        );
-
-        // Wait a bit for the reload to complete
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        // Probe the (now-blocked) canister again, we should get a 451
-        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
-            let res = client
-                .get(format!("https://{}/", host))
-                .send()
-                .await?
-                .status();
-            if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
-                bail!(res)
-            }
-            Ok(())
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
     });
 
-    panic_struct.forget();
+    panic_handler.disable();
 }
 
 /* tag::catalog[]
-Title:: Boundary nodes nginx test
+Title:: Boundary nodes valid Nginx configuration test
 
-Goal:: Verify that nginx configuration is correct by running `nginx -T` on the boundary node.
+Goal:: Verify that nginx configuration is valid by running `nginx -T` on the boundary node.
 
 Runbook:
 . Set up a subnet with 4 nodes and a boundary node.
@@ -339,25 +448,1173 @@ Coverage:: NGINX configuration is not broken
 
 end::catalog[] */
 
-pub fn nginx_test(env: TestEnv) {
+pub fn nginx_valid_config_test(env: TestEnv) {
     let logger = env.logger();
-    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
 
-    // SSH into Boundary Nodes:
-    let sess = boundary_node_vm.block_on_ssh_session(ADMIN).unwrap();
-    let mut channel = sess.channel_session().unwrap();
-    channel.exec("sudo nginx -t 2>&1").unwrap();
-    let mut nginx_result = String::new();
-    channel.read_to_string(&mut nginx_result).unwrap();
-    channel.wait_close().unwrap();
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let (cmd_output, exit_status) =
+        exec_ssh_command(&boundary_node_vm, "sudo nginx -t 2>&1").unwrap();
+
     info!(
         logger,
         "nginx test result = '{}'. Exit status = {}",
-        nginx_result.trim(),
-        channel.exit_status().unwrap()
+        cmd_output.trim(),
+        exit_status,
     );
-    if !nginx_result.trim().contains("test is successful") {
-        panic!("NGINX test failed.");
+
+    if !cmd_output.trim().contains("test is successful") {
+        panic!("nginx config failed validation");
     }
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes denylist blocking test
+
+Goal:: Ensure that access to a canister specified in the denylist is blocked
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+. ?
+
+Success:: ?
+
+Coverage:: Blocking requests based on the denylist works
+
+end::catalog[] */
+
+pub fn denylist_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let mut install_url = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_url = Some(node.get_public_url());
+        }
+    }
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        info!(&logger, "creating replica agent");
+        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+
+        let http_counter_canister = env.load_wasm("http_counter.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, &http_counter_canister, None)
+            .await
+            .expect("Could not create http_counter canister");
+
+        // wait for canister to finish installing
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        info!(&logger, "created canister={canister_id}");
+
+        // Update the denylist and reload nginx
+        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, canister_id);
+        let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_command).unwrap();
+        info!(
+            logger,
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to '{}'. Exit status = {}",
+            cmd_output.trim(),
+            exit_status,
+        );
+
+        // Wait a bit for the reload to complete
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let client = reqwest::ClientBuilder::new()
+            .danger_accept_invalid_certs(true)
+            .resolve(
+                &format!("{}.raw.ic0.app", canister_id),
+                SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
+            )
+            .build()
+            .unwrap();
+
+        // Probe the blocked canister, we should get a 451
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{}.raw.ic0.app/", canister_id))
+                .send()
+                .await?
+                .status();
+
+            if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
+                bail!(res)
+            }
+
+            Ok(())
+        }).await.unwrap();
+    });
+
+    panic_handler.disable();
+}
+
+pub fn redirect_http_to_https_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("ic0.app", vm_addr.into())
+        .resolve("raw.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect http to https";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("http://ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://ic0.app/" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "redirect raw http to https";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("http://raw.ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://raw.ic0.app/" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn redirect_to_dashboard_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("ic0.app", vm_addr.into())
+        .resolve("raw.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect to dashboard";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::FOUND {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://dashboard.internetcomputer.org/" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "redirect raw to dashboard";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://raw.ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::FOUND {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://dashboard.internetcomputer.org/" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn redirect_to_non_raw_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("raw.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect status to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get("https://raw.ic0.app/api/v2/status")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://ic0.app/api/v2/status" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect query to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post("https://raw.ic0.app/api/v2/canister/CID/query")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://ic0.app/api/v2/canister/CID/query" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect call to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post("https://raw.ic0.app/api/v2/canister/CID/call")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://ic0.app/api/v2/canister/CID/call" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "redirect read_state to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post("https://raw.ic0.app/api/v2/canister/CID/read_state")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != "https://ic0.app/api/v2/canister/CID/read_state" {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn sw_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("cid.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "get index.html with sw.js include from root path";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://cid.ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Loading The Internet Computer Service Worker...") {
+                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            }
+            if !body.contains(r#"<script defer="defer" src="/install-script.js">"#) {
+                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "get index.html with sw.js include from non-root path";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://cid.ic0.app/a/b/c").send().await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Loading The Internet Computer Service Worker...") {
+                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            }
+            if !body.contains(r#"<script defer="defer" src="/install-script.js">"#) {
+                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "get service-worker bundle";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://cid.ic0.app/sw.js").send().await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            if !res
+                .headers()
+                .get("Content-Type")
+                .unwrap()
+                .as_bytes()
+                .eq(b"application/javascript")
+            {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("sourceMappingURL=sw.js.map") {
+                bail!("{name} failed: expected sw.js but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "get uninstall script";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get("https://cid.ic0.app/anything.js")
+                .header("Service-Worker", "script")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            if !res
+                .headers()
+                .get("Content-Type")
+                .unwrap()
+                .as_bytes()
+                .eq(b"application/javascript")
+            {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("unregister()") {
+                bail!("{name} failed: expected uninstall script but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn icx_proxy_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("cid.ic0.app", vm_addr.into())
+        .resolve("CID.raw.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "get sent to icx-proxy via /_/raw/";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://cid.ic0.app/_/raw/").send().await?;
+
+            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Could not find a canister id to forward to") {
+                bail!("{name} failed: expected icx-response but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "get sent to icx-proxy via raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://CID.raw.ic0.app/").send().await?;
+
+            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Could not find a canister id to forward to") {
+                bail!("{name} failed: expected icx-response but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn direct_to_replica_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .expect("failed to get BN snapshot");
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("ic0.app", vm_addr.into())
+        .build()
+        .expect("failed to build http client");
+
+    let install_url = get_install_url(&env).expect("failed to get install url");
+
+    let rt = Runtime::new().expect("failed to create tokio runtime");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "status from random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client.get("https://ic0.app/api/v2/status").send().await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            #[derive(Deserialize)]
+            struct Status {
+                replica_health_status: String,
+            }
+
+            let body = res.bytes().await?;
+
+            let Status {
+                replica_health_status,
+            } = serde_cbor::from_slice::<Status>(&body.to_vec())?;
+
+            if replica_health_status != "healthy" {
+                bail!("{name} failed: status check failed: {replica_health_status}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let env = env.clone();
+        let logger = logger.clone();
+        let client = client.clone();
+        let install_url = install_url.clone();
+        let name = "query random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "creating management agent");
+            let agent = assert_create_agent(install_url.as_str()).await;
+
+            info!(&logger, "loading wasm");
+            let wasm = env.load_wasm("counter.wat");
+
+            info!(&logger, "creating canister");
+            let cid = create_canister(&agent, &wasm, None)
+                .await
+                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+            // Wait for the canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestHttpReplicaV2Transport::create_with_client("https://ic0.app/", client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            agent.fetch_root_key().await?;
+
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[0, 0, 0, 0]) {
+                bail!(
+                    "{name} failed: read failed with output {:?}, expected {:?}",
+                    out,
+                    &[0, 0, 0, 0],
+                )
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let env = env.clone();
+        let logger = logger.clone();
+        let client = client;
+        let install_url = install_url;
+        let name = "update random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "creating management agent");
+            let agent = assert_create_agent(install_url.as_str()).await;
+
+            info!(&logger, "loading wasm");
+            let wasm = env.load_wasm("counter.wat");
+
+            info!(&logger, "creating canister");
+            let cid = create_canister(&agent, &wasm, None)
+                .await
+                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+            // Wait for the canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestHttpReplicaV2Transport::create_with_client("https://ic0.app/", client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "updating canister");
+            agent
+                .update(&cid, "write")
+                .call_and_wait(Delay::builder().build())
+                .await?;
+
+            info!(&logger, "querying canister");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[1, 0, 0, 0]) {
+                bail!(
+                    "{name} failed: read failed with output {:?}, expected {:?}",
+                    out,
+                    &[1, 0, 0, 0],
+                )
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn direct_to_replica_rosetta_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .expect("failed to get BN snapshot");
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("rosetta.dfinity.network", vm_addr.into())
+        .build()
+        .expect("failed to build http client");
+
+    let install_url = get_install_url(&env).expect("failed to get install url");
+
+    let rt = Runtime::new().expect("failed to create tokio runtime");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "rosetta: status from random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get("https://rosetta.dfinity.network/api/v2/status")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            #[derive(Deserialize)]
+            struct Status {
+                replica_health_status: String,
+            }
+
+            let body = res.bytes().await?;
+
+            let Status {
+                replica_health_status,
+            } = serde_cbor::from_slice::<Status>(&body.to_vec())?;
+
+            if replica_health_status != "healthy" {
+                bail!("{name} failed: status check failed: {replica_health_status}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let env = env.clone();
+        let logger = logger.clone();
+        let client = client.clone();
+        let install_url = install_url.clone();
+        let name = "rosetta: query random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "creating management agent");
+            let agent = assert_create_agent(install_url.as_str()).await;
+
+            info!(&logger, "loading wasm");
+            let wasm = env.load_wasm("counter.wat");
+
+            info!(&logger, "creating canister");
+            let cid = create_canister(&agent, &wasm, None)
+                .await
+                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+            // Wait for the canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            info!(&logger, "creating agent");
+            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
+                "https://rosetta.dfinity.network/",
+                client,
+            )?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "querying canister");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[0, 0, 0, 0]) {
+                bail!(
+                    "{name} failed: read failed with output {:?}, expected {:?}",
+                    out,
+                    &[0, 0, 0, 0],
+                )
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let env = env.clone();
+        let logger = logger.clone();
+        let client = client;
+        let install_url = install_url;
+        let name = "rosetta: update random node";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "creating management agent");
+            let agent = assert_create_agent(install_url.as_str()).await;
+
+            info!(&logger, "loading wasm");
+            let wasm = env.load_wasm("counter.wat");
+
+            info!(&logger, "creating canister");
+            let cid = create_canister(&agent, &wasm, None)
+                .await
+                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+            // Wait for the canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            info!(&logger, "creating agent");
+            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
+                "https://rosetta.dfinity.network/",
+                client,
+            )?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "updating canister");
+            agent
+                .update(&cid, "write")
+                .call_and_wait(Delay::builder().build())
+                .await?;
+
+            info!(&logger, "querying canister");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[1, 0, 0, 0]) {
+                bail!(
+                    "{name} failed: read failed with output {:?}, expected {:?}",
+                    out,
+                    &[1, 0, 0, 0],
+                )
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
+pub fn seo_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("cid.ic0.app", vm_addr.into())
+        .build()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    futs.push(rt.spawn({
+        let name = "get sent to icx-proxy if you're a bot";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get("https://cid.ic0.app/")
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+                )
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::BAD_REQUEST {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Could not find a canister id to forward to") {
+                bail!("{name} failed: expected icx-response but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
 }

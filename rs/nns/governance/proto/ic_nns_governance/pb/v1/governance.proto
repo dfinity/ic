@@ -93,7 +93,7 @@ enum Topic {
   // Topic for proposals to reward node providers.
   TOPIC_NODE_PROVIDER_REWARDS = 10;
   // Currently, the only type of proposal in this topic is
-  // SetSnsTokenSwapOpenTimeWindow. It is not expected that more types of proposals will
+  // OpenSnsTokenSwap. It is not expected that more types of proposals will
   // be added to this topic.
   TOPIC_SNS_DECENTRALIZATION_SALE = 11;
 }
@@ -578,7 +578,7 @@ message SetDefaultFollowees {
   map<int32, Neuron.Followees> default_followees = 1;
 }
 
-// Calls the set_open_time_window Candid method on a swap canister.
+// Obsolete. Superceded by OpenSnsTokenSwap.
 message SetSnsTokenSwapOpenTimeWindow {
   // The swap canister to send the request to.
   ic_base_types.pb.v1.PrincipalId swap_canister_id = 1;
@@ -663,8 +663,10 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
-    // Call the set_open_time_window on a swap canister.
-    SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22;
+    // Obsolete. Use open_sns_token_swap instead. Kept for Candid compatibility.
+    SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22 [deprecated = true];
+    // Call the open method on an SNS swap canister.
+    OpenSnsTokenSwap open_sns_token_swap = 23;
   }
 }
 
@@ -1140,6 +1142,9 @@ message ProposalData {
 
   // Wait-for-quiet state that needs to be saved in stable memory.
   WaitForQuietState wait_for_quiet_state = 16;
+
+  // This is populated when an OpenSnsTokenSwap proposal is first made.
+  optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 }
 
 // Stores data relevant to the "wait for quiet" implementation.
@@ -1299,6 +1304,20 @@ message KnownNeuron {
 message KnownNeuronData {
   string name = 1;
   optional string description = 2;
+}
+
+// Proposal action to call the "open" method of an SNS token swap canister.
+message OpenSnsTokenSwap {
+  // The ID of the canister where the command will be sent (assuming that the
+  // proposal is adopted, of course).
+  ic_base_types.pb.v1.PrincipalId target_swap_canister_id = 1;
+
+  // Various limits on the swap.
+  ic_sns_swap.pb.v1.Params params = 2;
+
+  // The amount that the community fund will collectively spend in maturity on
+  // the swap.
+  optional uint64 community_fund_investment_e8s = 3;
 }
 
 // This represents the whole NNS governance system. It contains all

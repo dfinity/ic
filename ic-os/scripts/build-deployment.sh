@@ -134,8 +134,8 @@ while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_typ
         ['ipv6_prefix']=$ipv6_prefix
         ['ipv6_subnet']=$ipv6_subnet
         ['ipv6_address']=$ipv6_address
-        ['subnet_type']=$subnet_type
         ['hostname']=$hostname
+        ['subnet_type']=$subnet_type
         ['subnet_idx']=$subnet_idx
         ['node_idx']=$node_idx
         ['use_hsm']=$use_hsm
@@ -291,12 +291,11 @@ function generate_node_config() {
         local ipv6_address=${NODE["ipv6_address"]}
         local subnet_idx=${NODE["subnet_idx"]}
         local node_idx=${NODE["node_idx"]}
-        local subnet_type=${NODE["subnet_type"]}
 
         if [[ "${NODE["type"]}" != "replica" ]]; then
             continue
         fi
-        if [[ "$subnet_type" != "root_subnet" ]]; then
+        if [[ "${NODE["subnet_type"]}" != "root_subnet" ]]; then
             continue
         fi
 

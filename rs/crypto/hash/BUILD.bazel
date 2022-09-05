@@ -6,7 +6,7 @@ rust_library(
     name = "hash",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_hash",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/sha",
         "//rs/interfaces",
@@ -17,7 +17,6 @@ rust_library(
 rust_test(
     name = "hash_test",
     crate = ":hash",
-    edition = "2018",
     deps = [
         "@crate_index//:hex",
     ],

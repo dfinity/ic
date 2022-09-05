@@ -34,6 +34,7 @@ type FailedUpdate = record {
   err : opt CanisterCallError;
   dapp_canister_id : opt principal;
 };
+type GetSnsCanistersSummaryRequest = record { update_canister_list : opt bool };
 type GetSnsCanistersSummaryResponse = record {
   root : opt CanisterSummary;
   swap : opt CanisterSummary;
@@ -66,7 +67,9 @@ type SnsRootCanister = record {
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   get_build_metadata : () -> (text) query;
-  get_sns_canisters_summary : (record {}) -> (GetSnsCanistersSummaryResponse);
+  get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
+      GetSnsCanistersSummaryResponse,
+    );
   list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (

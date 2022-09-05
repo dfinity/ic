@@ -5,9 +5,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
+    "//rs/certification",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/interfaces/p2p",
     "//rs/interfaces/state_manager",
@@ -63,7 +65,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
-    edition = "2018",
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -72,7 +73,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_http_handler",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":build_script"],
 )
@@ -81,7 +81,6 @@ rust_test(
     name = "http_handler_test",
     aliases = ALIASES,
     crate = ":http_handler",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

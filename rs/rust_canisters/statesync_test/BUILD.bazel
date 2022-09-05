@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,6 +13,12 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/test_utilities",
+    "//rs/types/types",
+]
+
 MACRO_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_macro",
 ]
@@ -20,7 +27,38 @@ rust_binary(
     name = "statesync_test",
     srcs = glob(["src/**"]),
     crate_name = "statesync_test",
-    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "statesync_test_canister",
+    srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "statesync_test_test",
+    crate = ":statesync_test",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "statesync_test_integration_test",
+    srcs = ["test/test.rs"],
+    data = [
+        ":statesync_test_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/statesync_test",
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync_test_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

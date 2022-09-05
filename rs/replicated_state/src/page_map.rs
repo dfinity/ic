@@ -324,11 +324,11 @@ impl PageMap {
     /// Creates a page map backed by the provided heap file.
     ///
     /// Note that the file is assumed to be read-only.
-    pub fn open(heap_file: &Path, base_height: Option<Height>) -> Result<Self, PersistenceError> {
+    pub fn open(heap_file: &Path, base_height: Height) -> Result<Self, PersistenceError> {
         let checkpoint = Checkpoint::open(heap_file)?;
         Ok(Self {
             checkpoint,
-            base_height,
+            base_height: Some(base_height),
             page_delta: Default::default(),
             round_delta: Default::default(),
             page_allocator: Default::default(),

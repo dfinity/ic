@@ -1,8 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/interfaces",
     "//rs/nns/common",
@@ -28,13 +29,20 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 rust_library(
     name = "init",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_init",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -42,7 +50,6 @@ rust_binary(
     name = "ic-nns-init",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":init"],
 )
@@ -51,7 +58,13 @@ rust_binary(
     name = "ic-get-neuron-ids",
     srcs = ["src/get_neuron_ids.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":init"],
+)
+
+rust_test(
+    name = "init_test",
+    crate = ":init",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
 )

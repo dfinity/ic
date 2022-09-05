@@ -92,29 +92,11 @@
     cd_target_env: "SLO"
   timeout: 3 hours
 
-# HOURLY TESTS
-
 # TESTING NOTE:
 # $SHELL_WRAPPER allows us to emulate CI runs without actually executing the complicated and time-consuming
 #      operations.
 #      While validating the CI configuration, "$SHELL_WRAPPER" will be substituted with "echo"
 #      During actual execution, "$SHELL_WRAPPER" will be substituted with "time", i.e. will time the execution
-
-# Generic: 30 minutes 1k @ 100 update requests per second despite a failed nodes
-generic-hourly:
-  extends: .prod-hourly-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 50m ./testnet/tests/scripts/generic.sh "$TESTNET" 1800 100 1k "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-      finalization_rate=$(jq -r '.FinalizationRate' <"$(find . -name 'FinalizationRate.json')")
-      finish_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-      curl -X POST http://elasticsearch.dfinity.systems:9200/performance-trend/_doc/ -H 'Content-Type: application/json' -d "{\"timestamp\":\"$finish_time\", \"test\": \"generic-hourly\", \"finalization_rate\":$finalization_rate}"
 
 # NIGHTLY TESTS
 
@@ -147,6 +129,7 @@ rejoin-nightly:
 # SCENARIO TEST deploy_nns_prod_state: Tests the NNS state deployment script
 nns-state-deployment-test-nightly:
   extends: .prod-nightly-test-group-2
+  allow_failure: true #nns state deployment is not needed for release of replica
   script:
     - |
       set -eExou pipefail
@@ -314,46 +297,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-boundary-nodes-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "boundary_nodes_pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-tecdsa-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "tecdsa_pre_master"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test   
-
-# The 'pre-master' tests are also run hourly
-hourly-system-tests-subnet-recover-pre-master:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "subnet_recovery"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test   
-
 rosetta-hourly:
   extends:
     - .system-tests
@@ -389,7 +332,7 @@ wasm-generator-hourly:
     NUMBER_OF_CANISTERS: 100
 
 wasm-generator-nightly:
-  extends: 
+  extends:
     - .system-tests-wasm-generator
     - .with-monitoring
   stage: prod-tests-04
@@ -419,16 +362,40 @@ system-tests-short-nightly:
   script:
     - *run-farm-based-test
 
-system-tests-long-nightly:
+system-tests-default-subnet-query-workload-long-duration-nightly:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
-    SUITE_NAME: "nightly_long_duration"
+    SUITE_NAME: "nightly_default_subnet_query_workload_long_duration_test"
     cd_target_env: "NIGHTLY"
     SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
   script:
+    - echo "ulimit -n = $(ulimit -n)"
+    - *run-farm-based-test
+
+system-tests-default-subnet-update-workload-long-duration-nightly:
+  extends:
+    - .system-tests
+  variables:
+    SUITE_NAME: "nightly_default_subnet_update_workload_long_duration_test"
+    cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
+  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
+  script:
+    - echo "ulimit -n = $(ulimit -n)"
+    - *run-farm-based-test
+
+system-tests-default-subnet-update-workload-large-payload-nightly:
+  extends:
+    - .system-tests
+  variables:
+    SUITE_NAME: "nightly_default_subnet_update_workload_large_payload"
+    cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
+  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
+  script:
+    - echo "ulimit -n = $(ulimit -n)"
     - *run-farm-based-test
 
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
@@ -488,7 +455,6 @@ system-tests-hotfix:
 system-tests-staging-nightly:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "staging"
     SYSTEM_TESTS_TIMEOUT: "30000" #8h 20min
@@ -496,7 +462,7 @@ system-tests-staging-nightly:
   timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
   script:
     - *run-farm-based-test
-  allow_failure: true 
+  allow_failure: true
 
 ingress-manager-proptests-nightly:
   extends:

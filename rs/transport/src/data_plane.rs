@@ -119,7 +119,7 @@ fn unpack_header(data: Vec<u8>) -> TransportHeader {
 fn spawn_write_task(
     peer_id: NodeId,
     flow_tag: FlowTag,
-    flow_label: String,
+    peer_label: String,
     mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
     mut writer: Box<TlsWriteHalf>,
     data_plane_metrics: DataPlaneMetrics,
@@ -128,6 +128,7 @@ fn spawn_write_task(
 ) -> JoinHandle<()> {
     let flow_tag_str = flow_tag.to_string();
     rt_handle.spawn(async move  {
+            let _ = &data_plane_metrics;
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
             loop {
                 let loop_start_time = Instant::now();
@@ -151,7 +152,7 @@ fn spawn_write_task(
                     arc_self
                         .data_plane_metrics
                         .heart_beats_sent
-                        .with_label_values(&[&flow_label, &flow_tag_str])
+                        .with_label_values(&[&peer_label, &flow_tag_str])
                         .inc();
                 } else {
                     for mut payload in dequeued {
@@ -165,7 +166,7 @@ fn spawn_write_task(
                 arc_self
                     .data_plane_metrics
                     .write_task_overhead_time_msec
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .observe(loop_start_time.elapsed().as_millis() as f64);
 
                 // Send the payload
@@ -194,17 +195,17 @@ fn spawn_write_task(
                 arc_self
                     .data_plane_metrics
                     .socket_write_time_msec
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .observe(start_time.elapsed().as_millis() as f64);
                 arc_self
                     .data_plane_metrics
                     .socket_write_bytes
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .inc_by(to_send.len() as u64);
                 arc_self
                     .data_plane_metrics
                     .socket_write_size
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .observe(to_send.len() as f64);
             }
         })
@@ -215,7 +216,7 @@ fn spawn_write_task(
 fn spawn_read_task(
     peer_id: NodeId,
     flow_tag: FlowTag,
-    flow_label: String,
+    peer_label: String,
     mut event_handler: TransportEventHandler,
     mut reader: Box<TlsReadHalf>,
     data_plane_metrics: DataPlaneMetrics,
@@ -225,6 +226,7 @@ fn spawn_read_task(
     let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
     let flow_tag_str = flow_tag.to_string();
     rt_handle.spawn(async move {
+            let _ = &data_plane_metrics;
             let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
             loop {
                 // If the TransportImpl has been deleted, abort.
@@ -247,7 +249,7 @@ fn spawn_read_task(
                     if let Err(ReadError::SocketReadTimeOut) = ret {
                         arc_self.data_plane_metrics
                             .socket_heart_beat_timeouts
-                            .with_label_values(&[&flow_label, &flow_tag_str])
+                            .with_label_values(&[&peer_label, &flow_tag_str])
                             .inc();
                     }
                     arc_self.on_disconnect(peer_id, flow_tag).await;
@@ -260,7 +262,7 @@ fn spawn_read_task(
                     // It's an empty heartbeat message -- do nothing
                     arc_self.data_plane_metrics
                         .heart_beats_received
-                        .with_label_values(&[&flow_label, &flow_tag_str])
+                        .with_label_values(&[&peer_label, &flow_tag_str])
                         .inc();
                     continue;
                 }
@@ -271,7 +273,7 @@ fn spawn_read_task(
                 let payload = payload.unwrap();
                 arc_self.data_plane_metrics
                     .socket_read_bytes
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .inc_by(payload.0.len() as u64);
                 let start_time = Instant::now();
                 event_handler
@@ -283,7 +285,7 @@ fn spawn_read_task(
                     .expect("Can't panic on infallible");
                 arc_self.data_plane_metrics
                     .client_send_time_msec
-                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .with_label_values(&[&peer_label, &flow_tag_str])
                     .observe(start_time.elapsed().as_millis() as f64);
             }
         })
@@ -345,7 +347,7 @@ async fn read_from_socket(
 pub(crate) fn create_connected_state(
     peer_id: NodeId,
     flow_tag: FlowTag,
-    flow_label: String,
+    peer_label: String,
     send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
     role: ConnectionRole,
     peer_addr: SocketAddr,
@@ -360,7 +362,7 @@ pub(crate) fn create_connected_state(
     let write_task = spawn_write_task(
         peer_id,
         flow_tag,
-        flow_label.clone(),
+        peer_label.clone(),
         send_queue_reader,
         Box::new(tls_writer),
         data_plane_metrics.clone(),
@@ -371,7 +373,7 @@ pub(crate) fn create_connected_state(
     let read_task = spawn_read_task(
         peer_id,
         flow_tag,
-        flow_label,
+        peer_label,
         event_handler,
         Box::new(tls_reader),
         data_plane_metrics,

@@ -41,7 +41,7 @@ SERIAL_NUMBER_VARNAME = "system_serial_number"
 
 
 class IcDeploymentInventory:
-    """Dynamic inventory for the deployment."""
+    """Dynamic inventory for the IC deployment."""
 
     def __init__(self, deployment_name):
         """Initialize the class object."""
@@ -68,7 +68,7 @@ class IcDeploymentInventory:
     def _load_baseline_config(self):
         """Load the config shared by all deployments."""
         cfg = BASE_DIR / "env/shared-config.yml"
-        self.common_config = yaml.load(open(cfg), Loader=yaml.FullLoader)
+        self.common_config = yaml.load(open(cfg, encoding="utf8"), Loader=yaml.FullLoader)
         self.data_centers = self.common_config.get("data_centers")
         if not self.data_centers:
             logging.error("No data centers defined in %s", cfg)
@@ -85,9 +85,11 @@ class IcDeploymentInventory:
                 inv["children"] = val["children"]
             if inv:
                 self._inventory[key] = inv
-        # Load a complete list of physical hosts and a unique string per host to generate a unique IPv6 address
-        self.phy_serial_numbers_filename = BASE_DIR / "env/host-unique-string.yml"
-        self.phy_serial_numbers = yaml.load(open(self.phy_serial_numbers_filename), Loader=yaml.FullLoader)
+        # Load a complete list of physical hosts and their serial numbers
+        self.phy_serial_numbers_filename = BASE_DIR / "env/serial-numbers.yml"
+        self.phy_serial_numbers = yaml.load(
+            open(self.phy_serial_numbers_filename, encoding="utf8"), Loader=yaml.FullLoader
+        )
 
     def _load_hosts(self):
         # inventory hosts file can be comma separated
@@ -158,7 +160,7 @@ class IcDeploymentInventory:
                 SERIAL_NUMBER_VARNAME: self.phy_serial_numbers[host],
             }
 
-        # Update a list of all "nodes" in the deployment
+        # Update a list of all IC "nodes" in the deployment
         self._update_all_nodes_hosts(inventory)
         self._update_nns_nodes(inventory)
         self._update_boundary_nodes(inventory)
@@ -166,40 +168,48 @@ class IcDeploymentInventory:
         self._update_all_physical_nodes_hosts(inventory)
 
         # Check and if necessary fix/set missing node_index
-        self._inventory_patch_node_index(inventory)
-        self._inventory_patch_external_nodes(inventory)
+        self._inventory_patch_node_index()
+        self._inventory_patch_external_nodes()
 
         # Populate the potentially missing variables for hosts
         for host in inventory.get_hosts():
             if host.name in self._all_nodes_hosts:
-                host = self._host_patch_ipv6(host)
+                host = self._host_patch_vars(host)
 
         # Check and if necessary fix/set missing subnet_index
         self._inventory_patch_subnet_index(inventory)
 
-    def _host_patch_ipv6(self, host):
+    def _host_patch_vars(self, host):
         """Set the node IPv6 address, MAC address, guest hostname, and related."""
+        ic_host = host.vars.get("ic_host")
+        host.vars["guest_hostname"] = ic_host
         ansible_host = host.vars.get("ansible_host")
-        if "ipv6" not in host.vars:
+        phy_fqdn = self._phy_short_mapping[ic_host]
+        phy_vars = self._inventory["_meta"]["hostvars"][phy_fqdn]
+        # Each guest on a host (per deployment) gets a unique number 1..N
+        # used to generate a unique MAC address.
+        guest_number = phy_vars["ic_guests"].index(host.name) + 1
+        host.vars["guest_number"] = guest_number
+        phy_system_serial_number = phy_vars.get(SERIAL_NUMBER_VARNAME)
+        if phy_system_serial_number:
+            mac_address = mac_address_mainnet(phy_system_serial_number, self.deployment_name, guest_number)
+            host.vars["mac_address"] = mac_address
+        if "ipv6_address" not in host.vars:
             ipv6 = self._ipv6_resolve(host.name)
             ansible_host = host.vars.get("ansible_host")
             if not ipv6 and ansible_host:
                 # ipv6 is not defined by ansible_host is.
-                # Let's try to build "ipv6" from ansible_host
+                # Let's try to build "ipv6_address" from ansible_host
                 ipv6 = self._ipv6_resolve(ansible_host)
             if not ipv6:
                 # That didn't work, try to build IPv6 from the MAC address
-                ic_host = host.vars.get("ic_host")
                 if ic_host:
                     ipv6_prefix = self._get_ipv6_prefix_for_ic_host(ic_host)
                     ipv6_subnet = self._get_ipv6_subnet_for_ic_host(ic_host)
                     # For the mainnet deployments, the MAC address is calculated based on the number of guests on
                     # the physical host, so we need to enumerate and count the guests on each physical host.
-                    phy_fqdn = self._phy_short_mapping[ic_host]
-                    phy_vars = self._inventory["_meta"]["hostvars"][phy_fqdn]
                     # Assign a unique ID to each physical host. This will be a serial number if
                     # available, or fallback to the hostname.
-                    phy_system_serial_number = phy_vars.get(SERIAL_NUMBER_VARNAME)
                     if not phy_system_serial_number:
                         logging.error(
                             "Physical host does not have a valid serial number: %s",
@@ -215,24 +225,16 @@ class IcDeploymentInventory:
                             self.phy_serial_numbers_filename.absolute(),
                         )
                         sys.exit(1)
-                    # Each guest on a host (per deployment) gets a unique number 1..N
-                    # used to generate a unique MAC address.
-                    guest_number = phy_vars["ic_guests"].index(host.name) + 1
-                    host.vars["guest_number"] = guest_number
-                    guest_hostname = f"{host.name.rsplit('.', 1)[0]}-{guest_number}"
-                    host.vars["guest_hostname"] = re.sub(r"\W+", "-", guest_hostname)
-                    mac_address = mac_address_mainnet(phy_system_serial_number, self.deployment_name, guest_number)
-                    host.vars["mac_address"] = mac_address
                     ipv6 = ipv6_address_calculate_slaac(ipv6_prefix, ipv6_subnet, mac_address)
             if ipv6:
                 # Normalize the IPv6 address before using it elsewhere
                 ipv6 = ipaddress.ip_address(ipv6)
-                host.vars["ipv6"] = str(ipv6)
+                host.vars["ipv6_address"] = str(ipv6)
                 if not ansible_host:
                     host.vars["ansible_host"] = str(ipv6)
         return host
 
-    def _inventory_patch_external_nodes(self, inventory):
+    def _inventory_patch_external_nodes(self):
         """Set an 'external' tag for nodes not operated by DFINITY."""
         for hostname in self._all_nodes_hosts:
             host_vars = self._inventory["_meta"]["hostvars"][hostname]
@@ -247,7 +249,7 @@ class IcDeploymentInventory:
                 else:
                     phy_vars["external"] = False
 
-    def _inventory_patch_node_index(self, inventory):
+    def _inventory_patch_node_index(self):
         """Set node_index for all hosts if any are missing."""
         # Check if any node_index appears twice, possibly due to a copy&paste bug
         found_node_idx = set()
@@ -406,7 +408,7 @@ class IcDeploymentInventory:
         self._all_aux_hosts = set(self._get_all_group_hosts(inventory, "aux"))
 
     def _update_all_physical_nodes_hosts(self, inventory):
-        # make a complete list of physical hosts and the nodes assigned to them
+        # make a complete list of physical hosts and the IC nodes assigned to them
         for phy_fqdn in self._get_all_group_hosts(inventory, "physical_hosts"):
             self._all_physical_hosts[phy_fqdn] = []
 
@@ -423,8 +425,9 @@ class IcDeploymentInventory:
             phy_fqdn = self._phy_short_mapping[phy_short]
             if phy_short not in self._phy_short_mapping:
                 logging.error(
-                    "Host %s not found in the list of physical hosts, check the contents of %s"
-                    % (phy_short, self.phy_serial_numbers_filename.absolute())
+                    "Host %s not found in the list of physical hosts, check the contents of %s",
+                    phy_short,
+                    self.phy_serial_numbers_filename.absolute(),
                 )
                 sys.exit(1)
             self._all_physical_hosts[phy_fqdn].append(node)
@@ -465,7 +468,18 @@ class IcDeploymentInventory:
     def _get_dc_config_for_ic_host(self, ic_host):
         hostname_short = ic_host.split(".")[0]
         dc = hostname_short.split("-")[0]
-        return self.data_centers.get(dc, {})
+        if self.data_centers.get(hostname_short, None) is not None:
+            logging.debug(
+                "Using hostname_short %s",
+                hostname_short,
+            )
+            return self.data_centers.get(hostname_short, {})
+        else:
+            logging.debug(
+                "Using dc %s",
+                dc,
+            )
+            return self.data_centers.get(dc, {})
 
     @property
     def inventory(self):
@@ -507,7 +521,7 @@ class IcDeploymentInventory:
 
     @property
     def media_config(self):
-        """Config data for preparing the USB media for network deployment."""
+        """Config data for preparing the USB media for IC network deployment."""
         result = {
             "deployment": self.deployment_name,
             "name_servers": ["2606:4700:4700::1111", "2606:4700:4700::1001"],
@@ -523,20 +537,26 @@ class IcDeploymentInventory:
         journalbeat_tags = nodes_vars.get("journalbeat_tags", [])
         result["journalbeat_tags"] = journalbeat_tags
 
+        bn_nodes_vars = self._inventory["boundary"].get("vars", {})
+        domain = bn_nodes_vars.get("domain", "ic0.app")
+        result["domain"] = domain
+
         deployment_dcs = set()
         ic_nodes_by_dc = {}
         for node in self._all_nodes_hosts:
             node_vars = self.hostvars(node)
             ic_host = node_vars.get("ic_host")
             if not ic_host:
-                logging.error("No host (ic_host) defined for %s", node)
+                logging.error("No IC host (ic_host) defined for %s", node)
                 continue
             # Create a list of all DCs used by this deployment
             hostname_short = ic_host.split(".")[0]
             dc_name = hostname_short.split("-")[0]
+            if hostname_short in self.data_centers:
+                dc_name = hostname_short
             deployment_dcs.add(dc_name)
 
-            # Create a list of nodes sorted by DC
+            # Create a list of IC nodes sorted by DC
             if dc_name not in ic_nodes_by_dc:
                 ic_nodes_by_dc[dc_name] = []
             ic_nodes_by_dc[dc_name].append(node)
@@ -569,14 +589,18 @@ class IcDeploymentInventory:
                 else:
                     node_config["subnet_type"] = "app_subnet"
 
-                if "ipv6" in node_vars.keys():
-                    node_config["ipv6_address"] = node_vars["ipv6"]
+                if "ipv6_address" in node_vars.keys():
+                    node_config["ipv6_address"] = node_vars["ipv6_address"]
                 if "ipv6_gateway" in node_vars.keys():
                     node_config["ipv6_gateway"] = node_vars["ipv6_gateway"]
                 if "ipv4_address" in node_vars.keys():
                     node_config["ipv4_address"] = node_vars["ipv4_address"]
                 if "ipv4_gateway" in node_vars.keys():
                     node_config["ipv4_gateway"] = node_vars["ipv4_gateway"]
+                if "ansible_host" in node_vars.keys():
+                    node_config["host"] = node_vars["ansible_host"]
+                if "batch" in node_vars.keys():
+                    node_config["batch"] = node_vars["batch"]
 
                 use_hsm = node_vars.get("use_hsm")
                 if use_hsm:
@@ -599,7 +623,7 @@ class IcDeploymentInventory:
         with io.StringIO() as f:
             for node in self._all_nodes_hosts:
                 node_vars = self.hostvars(node)
-                ipv6 = node_vars["ipv6"]
+                ipv6 = node_vars["ipv6_address"]
                 f.write("Host %s.testnet\n" % node)
                 f.write("  Hostname %s\n\n" % ipv6)
 
@@ -611,7 +635,7 @@ class IcDeploymentInventory:
         with io.StringIO() as f:
             for node in self._all_nodes_hosts:
                 node_vars = self.hostvars(node)
-                f.write("%s\n" % node_vars["ipv6"])
+                f.write("%s\n" % node_vars["ipv6_address"])
 
             return f.getvalue()
 
@@ -622,7 +646,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nodes_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6"]
+                nodes[node] = node_vars["ipv6_address"]
 
             yaml.dump(nodes, f)
             return f.getvalue()
@@ -634,7 +658,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nns_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6"]
+                nodes[node] = node_vars["ipv6_address"]
 
             yaml.dump(nodes, f)
             return f.getvalue()

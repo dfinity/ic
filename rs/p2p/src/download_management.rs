@@ -89,7 +89,7 @@ use ic_interfaces::{
         registry::RegistryClient,
     },
 };
-use ic_interfaces_transport::{FlowTag, Transport, TransportErrorCode, TransportPayload};
+use ic_interfaces_transport::{FlowTag, Transport, TransportError, TransportPayload};
 use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
@@ -942,7 +942,7 @@ impl DownloadManagerImpl {
         message: GossipMessage,
         peer_id: NodeId,
         flow_tag: FlowTag,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(), TransportError> {
         let _timer = self
             .metrics
             .op_duration
@@ -1321,6 +1321,7 @@ pub mod tests {
     };
     use crate::gossip_protocol::Percentage;
     use ic_interfaces::artifact_manager::OnArtifactError;
+    use ic_interfaces_transport_mocks::MockTransport;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1330,7 +1331,6 @@ pub mod tests {
         consensus::MockConsensusCache,
         p2p::*,
         thread_transport::*,
-        transport::MockTransport,
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};

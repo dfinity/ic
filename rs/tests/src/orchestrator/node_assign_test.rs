@@ -22,10 +22,10 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
-use crate::orchestrator::upgrade_downgrade::wait_node_unreachable;
 use crate::util::*;
 use canister_test;
 use ic_base_types::NodeId;
@@ -34,6 +34,7 @@ use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
+use slog::info;
 
 const UPDATE_MSG_1: &[u8] = b"This beautiful prose should be persisted for future generations";
 const UPDATE_MSG_2: &[u8] = b"And this beautiful prose should be persisted for future generations";
@@ -55,16 +56,15 @@ pub fn config(env: TestEnv) {
         .with_unassigned_nodes(UNASSIGNED_NODES_COUNT as i32)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let topo_snapshot = env.topology_snapshot();
+    let logger = env.logger();
 
-    // Install all necessary NNS canisters.
     let nns_node = get_nns_node(&topo_snapshot);
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
 
     let unassigned_node_ids: Vec<NodeId> = topo_snapshot
         .unassigned_nodes()
@@ -72,15 +72,19 @@ pub fn test(env: TestEnv) {
         .collect();
     assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT);
 
-    topo_snapshot.unassigned_nodes().for_each(|n| {
-        n.await_can_login_as_admin_via_ssh().unwrap();
-    });
     let unassigned_nodes = topo_snapshot.unassigned_nodes();
 
     // get application node
+    info!(logger, "Getting application node");
     let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
+    info!(
+        logger,
+        "Continuing with app node: {}",
+        app_node.get_ip_addr()
+    );
 
     // Create NNS runtime.
+    info!(logger, "Creating NNS runtime");
     let nns_runtime = runtime_from_url(nns_node.get_public_url());
 
     // Send a proposal for the nodes to join a subnet via the governance canister.
@@ -89,6 +93,11 @@ pub fn test(env: TestEnv) {
         subnet_id: app_subnet.subnet_id.get(),
         node_ids: unassigned_node_ids,
     };
+
+    info!(
+        logger,
+        "Submitting AddNodeToSubnet proposal: {:#?}", proposal_payload
+    );
     let proposal_id = block_on(submit_external_proposal_with_test_id(
         &governance_canister,
         NnsFunction::AddNodeToSubnet,
@@ -96,6 +105,7 @@ pub fn test(env: TestEnv) {
     ));
 
     // Explicitly vote for the proposal to add nodes to subnet.
+    info!(logger, "Voting on proposal");
     block_on(vote_execute_proposal_assert_executed(
         &governance_canister,
         proposal_id,
@@ -105,22 +115,26 @@ pub fn test(env: TestEnv) {
     let newly_assigned_nodes: Vec<_> = unassigned_nodes.collect();
 
     // Wait for registry update
+    info!(logger, "Waiting for registry update");
     topo_snapshot
         .block_for_newer_registry_version()
         .expect("Could not block for newer registry version");
 
     // Assert that new nodes are reachable (via http call).
+    info!(logger, "Assert that new nodes are reachable");
     for n in newly_assigned_nodes.iter() {
         n.await_status_is_healthy().unwrap();
     }
 
     // Install a canister in the Application subnet for testing consensus (sending
     // `update` messages).
+    info!(logger, "Creating a canister using selected app node");
     let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
     let universal_canister = block_on(UniversalCanister::new(&agent));
 
     // Assert that `update` call to the canister succeeds.
-    let delay = create_delay(500, 60);
+    info!(logger, "Assert that update call to the canister succeeds");
+    let delay = create_delay(500, 300);
     block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_1, delay.clone()))
         .expect("Update canister call failed.");
     assert_eq!(
@@ -130,15 +144,21 @@ pub fn test(env: TestEnv) {
 
     // Kill floor(X/3) nodes.
     let kill_nodes_count = UNASSIGNED_NODES_COUNT / 3;
+    info!(logger, "Kill {} of the new nodes", kill_nodes_count);
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
         n.vm().kill();
     }
     // Second loop to paralelize the effects of the previous one
+    info!(logger, "Wait for killed nodes to become unavailable");
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
-        wait_node_unreachable(&env.logger(), n);
+        n.await_status_is_unavailable().expect("Node still healthy");
     }
 
     // Assert that `update` call to the canister succeeds.
+    info!(
+        logger,
+        "Assert that update call to the canister still succeeds"
+    );
     block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_2, delay.clone()))
         .expect("Update canister call failed.");
     assert_eq!(
@@ -147,9 +167,14 @@ pub fn test(env: TestEnv) {
     );
 
     // Kill one more node and break consensus.
+    info!(logger, "Kill one more node and break consensus");
     newly_assigned_nodes[kill_nodes_count].vm().kill();
-    wait_node_unreachable(&env.logger(), &newly_assigned_nodes[kill_nodes_count]);
+    info!(logger, "Wait for it to become unavailable");
+    newly_assigned_nodes[kill_nodes_count]
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
 
     // Assert that `update` call to the canister now fails.
+    info!(logger, "Assert that update call to the canister now fails");
     assert!(block_on(universal_canister.try_store_to_stable(0, UPDATE_MSG_3, delay)).is_err());
 }

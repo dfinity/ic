@@ -1,7 +1,7 @@
 [package]
 name = "ic-sns-wasm"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "sns-wasm-canister"
@@ -19,16 +19,19 @@ candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 futures = "0.3.21"
+hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.5.2"
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-nns-constants = { path = "../constants" }
+ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types"}
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.85"
 prost = "0.10.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -50,7 +53,6 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }

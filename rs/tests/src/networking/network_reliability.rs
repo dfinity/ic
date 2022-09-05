@@ -248,7 +248,7 @@ pub fn test(env: TestEnv, config: Config) {
         "At least one node needs to be stressed on each subnet."
     );
     // We stress (modify node's traffic) using random parameters.
-    let rng: ChaCha8Rng = rand_core::SeedableRng::seed_from_u64(RND_SEED);
+    let rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
     // Stress function for each node is executed in a separate thread.
     let stress_nns_handles: Vec<_> = subnet_nns
         .nodes()
@@ -519,7 +519,7 @@ fn limit_tc_randomly_ssh_command(mut rng: &mut ChaCha8Rng) -> String {
     let latency_dist = Uniform::from(LATENCY_MIN..=LATENCY_MAX);
     let drops_perc_dist = Uniform::from(DROPS_PERC_MIN..=DROPS_PERC_MAX);
     let cfg = util::get_config();
-    let p2p_listen_port = cfg.transport.unwrap().p2p_flows.get(0).unwrap().server_port;
+    let p2p_listen_port = cfg.transport.unwrap().listening_port;
     // The second command deletes existing tc rules (if present).
     // The last command reads the active tc rules.
     format!(

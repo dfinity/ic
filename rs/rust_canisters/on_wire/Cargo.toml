@@ -1,6 +1,6 @@
 [package]
 name = "on_wire"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]

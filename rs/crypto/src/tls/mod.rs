@@ -15,9 +15,7 @@ use openssl::x509::{X509NameEntries, X509NameEntryRef};
 use std::str::FromStr;
 use tokio::net::TcpStream;
 
-mod client_handshake;
 mod rustls;
-mod server_handshake;
 
 #[async_trait]
 impl<CSP> TlsHandshake for CryptoComponentFatClient<CSP>
@@ -30,13 +28,17 @@ where
         allowed_clients: AllowedClients,
         registry_version: RegistryVersion,
     ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "TlsHandshake",
             crypto.method_name => "perform_tls_server_handshake",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::perform_tls_server_handshake(
             &self.csp,
@@ -60,48 +62,22 @@ where
         result
     }
 
-    async fn perform_tls_server_handshake_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        allowed_clients: AllowedClients,
-        registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
-        let logger = new_logger!(&self.logger;
-            crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_server_handshake_with_rustls",
-            crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
-        );
-        debug!(logger; crypto.description => "start",);
-        let result = rustls::server_handshake::perform_tls_server_handshake(
-            &self.csp,
-            self.node_id,
-            &self.registry_client,
-            tcp_stream,
-            allowed_clients,
-            registry_version,
-        )
-        .await;
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-
     async fn perform_tls_server_handshake_without_client_auth(
         &self,
         tcp_stream: TcpStream,
         registry_version: RegistryVersion,
     ) -> Result<TlsStream, TlsServerHandshakeError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "TlsHandshake",
             crypto.method_name => "perform_tls_server_handshake_without_client_auth",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.allowed_tls_clients => "all clients allowed",
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::perform_tls_server_handshake_without_client_auth(
             &self.csp,
@@ -124,47 +100,23 @@ where
         result
     }
 
-    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError> {
-        let logger = new_logger!(&self.logger;
-            crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_server_handshake_without_client_auth_with_rustls",
-            crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => "all clients allowed",
-        );
-        debug!(logger; crypto.description => "start",);
-        let result = rustls::server_handshake::perform_tls_server_handshake_without_client_auth(
-            &self.csp,
-            self.node_id,
-            &self.registry_client,
-            tcp_stream,
-            registry_version,
-        )
-        .await;
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-
     async fn perform_tls_client_handshake(
         &self,
         tcp_stream: TcpStream,
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<TlsStream, TlsClientHandshakeError> {
+        let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
             crypto.trait_name => "TlsHandshake",
             crypto.method_name => "perform_tls_client_handshake",
+        );
+        debug!(logger;
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.tls_server => format!("{}", server),
         );
-        debug!(logger; crypto.description => "start",);
         let start_time = self.metrics.now();
         let result = rustls::client_handshake::perform_tls_client_handshake(
             &self.csp,
@@ -180,36 +132,6 @@ where
             "perform_tls_client_handshake",
             start_time,
         );
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-
-    async fn perform_tls_client_handshake_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError> {
-        let logger = new_logger!(&self.logger;
-            crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_client_handshake_with_rustls",
-            crypto.registry_version => registry_version.get(),
-            crypto.tls_server => format!("{}", server),
-        );
-        debug!(logger; crypto.description => "start",);
-        let result = rustls::client_handshake::perform_tls_client_handshake(
-            &self.csp,
-            self.node_id,
-            &self.registry_client,
-            tcp_stream,
-            server,
-            registry_version,
-        )
-        .await;
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

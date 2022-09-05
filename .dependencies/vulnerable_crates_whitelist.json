@@ -7,6 +7,13 @@
         "expiry_days": 60
     },
     {
+        "name": "rocksdb",
+        "version": "0.15.0",
+        "date_added": "11/08/2022",
+        "date_updated": "11/08/2022",
+        "expiry_days": 30
+    },
+    {
         "name": "chrono",
         "version": "0.4.19",
         "date_added": "04/08/2022",

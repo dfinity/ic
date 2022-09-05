@@ -3,23 +3,20 @@ load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "//rs/utils/rustfmt",
-    "@crate_index//:prost-build",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
 
 rust_library(
     name = "lib",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
+    srcs = ["src/lib.rs"],
     crate_name = "ic_sns_wasm_proto_generator",
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    version = "0.8.0",
+    deps = [
+        "//rs/utils/rustfmt",
+        "@crate_index//:prost-build",
+    ],
 )
 
 protobuf_generator(

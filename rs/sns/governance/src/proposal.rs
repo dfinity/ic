@@ -1,16 +1,14 @@
 use crate::canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call;
 use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
+use crate::pb::v1::governance::Version;
 use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    governance, proposal, ExecuteGenericNervousSystemFunction, Motion, NervousSystemFunction,
-    NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
-    Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    governance, proposal, ExecuteGenericNervousSystemFunction, Governance, Motion,
+    NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
+    ProposalRewardStatus, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
-use crate::sns_upgrade::{
-    canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canister_to_upgrade,
-    get_current_version, get_next_version, SnsVersion,
-};
+use crate::sns_upgrade::{get_upgrade_params, UpgradeSnsParams};
 use crate::types::Environment;
 use crate::{validate_chars_count, validate_len, validate_required_field};
 use dfn_core::api::CanisterId;
@@ -67,14 +65,7 @@ impl Proposal {
 pub async fn validate_and_render_proposal(
     proposal: &Proposal,
     env: &dyn Environment,
-
-    // Only needed when validating ManageNervousSystemParameters.
-    mode: governance::Mode,
-    current_parameters: &NervousSystemParameters,
-
-    // Only needed when validating NervousSystemFunction-related proposals.
-    functions: &BTreeMap<u64, NervousSystemFunction>,
-    root_canister_id: CanisterId,
+    governance_proto: &Governance,
 ) -> Result<String, String> {
     let mut defects = Vec::new();
 
@@ -107,16 +98,7 @@ pub async fn validate_and_render_proposal(
     ));
 
     // Even if we already found defects, still validate as to return all the errors found.
-    match validate_and_render_action(
-        &proposal.action,
-        env,
-        mode,
-        current_parameters,
-        functions,
-        root_canister_id,
-    )
-    .await
-    {
+    match validate_and_render_action(&proposal.action, env, governance_proto).await {
         Err(err) => {
             defects.push(err);
             Err(format!(
@@ -144,15 +126,16 @@ pub async fn validate_and_render_proposal(
 pub async fn validate_and_render_action(
     action: &Option<proposal::Action>,
     env: &dyn Environment,
-
-    // Only needed when validating ManageNervousSystemParameters.
-    mode: governance::Mode,
-    current_parameters: &NervousSystemParameters,
-
-    // Only needed when validating NervousSystemFunction-related actions.
-    existing_functions: &BTreeMap<u64, NervousSystemFunction>,
-    root_canister_id: CanisterId,
+    governance_proto: &Governance,
 ) -> Result<String, String> {
+    let mode = governance_proto.get_mode();
+    let current_parameters = governance_proto
+        .parameters
+        .as_ref()
+        .expect("Governance must have NervousSystemParameters.");
+    let existing_functions = &governance_proto.id_to_nervous_system_functions;
+    let root_canister_id = governance_proto.root_canister_id_or_panic();
+
     let action = match action.as_ref() {
         None => return Err("No action was specified.".into()),
         Some(action) => action,
@@ -170,8 +153,15 @@ pub async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            validate_and_render_upgrade_sns_to_next_version(upgrade_sns, env, root_canister_id)
-                .await
+            let current_version = governance_proto.deployed_version_or_panic();
+
+            validate_and_render_upgrade_sns_to_next_version(
+                upgrade_sns,
+                env,
+                root_canister_id,
+                current_version,
+            )
+            .await
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
@@ -288,20 +278,20 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     ))
 }
 
-// TODO NNS1-1590 Move to impl Display for SnsVersion
-// TODO NNS-1576 Add Ledger archive
-fn render_sns_version(version: &SnsVersion) -> String {
+pub(crate) fn render_version(version: &Version) -> String {
     format!(
-        r"SnsVersion {{
+        r"Version {{
     root: {},
     governance: {},
     ledger: {},
     swap: {}
+    archive: {}
 }}",
         hex::encode(&version.root_wasm_hash),
         hex::encode(&version.governance_wasm_hash),
         hex::encode(&version.ledger_wasm_hash),
         hex::encode(&version.swap_wasm_hash),
+        hex::encode(&version.archive_wasm_hash),
     )
 }
 /// Validates and renders a proposal with action UpgradeSnsToNextVersion.
@@ -309,44 +299,21 @@ async fn validate_and_render_upgrade_sns_to_next_version(
     _upgrade_sns: &UpgradeSnsToNextVersion,
     env: &dyn Environment,
     root_canister_id: CanisterId,
+    current_version: Version,
 ) -> Result<String, String> {
-    // This function panics, as it should not fail.
-    let current_version = get_current_version(env, root_canister_id).await;
-
-    // If there is no next version found, we fail validation.
-    let next_version = match get_next_version(env, &current_version).await {
-        Some(next) => next,
-        None => {
-            return Err(format!(
-                "UpgradeSnsToNextVersion was invalid for the following reason:\n\
-                There is no next version found for the current SNS version: {}",
-                render_sns_version(&current_version)
-            ))
-        }
-    };
-
-    let (canister_type, version) =
-        match canister_type_and_wasm_hash_for_upgrade(&current_version, &next_version) {
-            Ok(upgrade_info) => upgrade_info,
-            Err(e) => {
-                return Err(format!(
-                    "UpgradeSnsToNextVersion was invalid for the following reason:\n {}",
-                    e
-                ))
-            }
-        };
-
-    let list_sns_canisters_response = get_all_sns_canisters(env, root_canister_id).await;
-    let canister_to_be_upgraded =
-        match get_canister_to_upgrade(canister_type, &list_sns_canisters_response) {
-            Ok(canister_id) => canister_id,
-            Err(e) => {
-                return Err(format!(
-                    "UpgradeSnsToNextVersion was invalid for the following reason:\n {}",
-                    e
-                ))
-            }
-        };
+    let UpgradeSnsParams {
+        next_version,
+        canister_type_to_upgrade: _,
+        new_wasm_hash,
+        canister_ids_to_upgrade,
+    } = get_upgrade_params(env, root_canister_id, &current_version)
+        .await
+        .map_err(|e| {
+            format!(
+                "UpgradeSnsToNextVersion was invalid for the following reason: {}\n",
+                e
+            )
+        })?;
 
     // TODO display the hashes for current version and new version
     Ok(format!(
@@ -358,13 +325,17 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 ## SNS New Version:
 {}
 
-## Canister to be upgraded: {}
+## Canisters to be upgraded: {}
 ## Upgrade Version: {}
 ",
-        render_sns_version(&current_version),
-        render_sns_version(&next_version),
-        canister_to_be_upgraded,
-        hex::encode(&version),
+        render_version(&current_version),
+        render_version(&next_version),
+        canister_ids_to_upgrade
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        hex::encode(&new_wasm_hash),
     ))
 }
 
@@ -694,28 +665,28 @@ impl ProposalData {
         }
 
         // Let W be short for wait_for_quiet_deadline_increase_seconds. A proposal's voting
-        // period starts with an initial_voting_period and can be extended
-        // to at most initial_voting_period + 2 * W.
+        // period starts with an initial_voting_period_seconds and can be extended
+        // to at most initial_voting_period_seconds + 2 * W.
         // The required_margin reflects the proposed deadline extension to be
         // made beyond the current moment, so long as that extends beyond the
         // current wait-for-quiet deadline. We calculate the required_margin a
         // bit indirectly here so as to keep with unsigned integers, but the
         // idea is:
         //
-        //     W + (initial_voting_period - elapsed) / 2
+        //     W + (initial_voting_period_seconds - elapsed) / 2
         //
         // Thus, while we are still within the initial voting period, we add
         // to W, but once we are beyond that window, we subtract from W until
         // reaching the limit where required_margin remains at zero. This
         // occurs when:
         //
-        //     elapsed = initial_voting_period + 2 * W
+        //     elapsed = initial_voting_period_seconds + 2 * W
         //
-        // As an example, given that W = 12h, if the initial_voting_period is
+        // As an example, given that W = 12h, if the initial_voting_period_seconds is
         // 24h then the maximum deadline will be 24h + 2 * 12h = 48h.
         //
         // The required_margin ends up being a linearly decreasing value,
-        // starting at W + initial_voting_period / 2 and reducing to zero at the
+        // starting at W + initial_voting_period_seconds / 2 and reducing to zero at the
         // furthest possible deadline. When the vote does not flip, we do not
         // update the deadline, and so there is a chance of ending prior to
         // the extreme limit. But each time the vote flips, we "re-enter" the
@@ -728,7 +699,7 @@ impl ProposalData {
         let elapsed_seconds = now_seconds.saturating_sub(self.proposal_creation_timestamp_seconds);
         let required_margin = self
             .wait_for_quiet_deadline_increase_seconds
-            .saturating_add(self.initial_voting_period / 2)
+            .saturating_add(self.initial_voting_period_seconds / 2)
             .saturating_sub(elapsed_seconds / 2);
         let new_deadline = std::cmp::max(
             current_deadline,
@@ -874,12 +845,11 @@ impl ProposalRewardStatus {
 mod tests {
     use super::*;
     use crate::{
-        pb::v1::Empty,
+        pb::v1::{governance::Version, Empty, Governance as GovernanceProto},
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, ListSnsCanistersRequest, ListSnsCanistersResponse, SnsCanisterType,
-            SnsWasm,
+            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
         },
         tests::{assert_is_err, assert_is_ok},
         types::test_helpers::NativeEnvironment,
@@ -904,30 +874,38 @@ mod tests {
         static ref SNS_ROOT_CANISTER_ID: CanisterId = canister_test_id(500);
     }
 
+    fn governance_proto_for_proposal_tests(deployed_version: Option<Version>) -> GovernanceProto {
+        GovernanceProto {
+            neurons: Default::default(),
+            proposals: Default::default(),
+            parameters: Some(DEFAULT_PARAMS.clone()),
+            latest_reward_event: None,
+            in_flight_commands: Default::default(),
+            genesis_timestamp_seconds: 0,
+            metrics: None,
+            ledger_canister_id: None,
+            root_canister_id: Some(canister_test_id(10000).get()),
+            id_to_nervous_system_functions: EMPTY_FUNCTIONS.clone(),
+            mode: governance::Mode::Normal.into(),
+            swap_canister_id: None,
+            sns_metadata: None,
+            deployed_version,
+            pending_version: None,
+        }
+    }
+
     fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
-        validate_and_render_proposal(
-            proposal,
-            &**FAKE_ENV,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            CanisterId::ic_00(),
-        )
-        .now_or_never()
-        .unwrap()
+        let governance_proto = governance_proto_for_proposal_tests(None);
+        validate_and_render_proposal(proposal, &**FAKE_ENV, &governance_proto)
+            .now_or_never()
+            .unwrap()
     }
 
     fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
-        validate_and_render_action(
-            action,
-            &**FAKE_ENV,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            CanisterId::ic_00(),
-        )
-        .now_or_never()
-        .unwrap()
+        let governance_proto = governance_proto_for_proposal_tests(None);
+        validate_and_render_action(action, &**FAKE_ENV, &governance_proto)
+            .now_or_never()
+            .unwrap()
     }
 
     fn basic_principal_id() -> PrincipalId {
@@ -1417,31 +1395,43 @@ mod tests {
     ///     governance_wasm_hash:  Sha256::hash(&[2]),
     ///     ledger_wasm_hash:  Sha256::hash(&[3]),
     ///     swap_wasm_hash:  Sha256::hash(&[4]),
+    ///     archive_wasm_hash: Sha256::hash(&[5])
     /// }
     ///
     /// It also is set to only upgrade root.
-    fn setup_env_for_upgrade_sns_to_next_version_validation_tests() -> NativeEnvironment {
+    fn setup_for_upgrade_sns_to_next_version_validation_tests(
+    ) -> (NativeEnvironment, GovernanceProto) {
         let expected_canister_to_be_upgraded = SnsCanisterType::Root;
 
-        let next_version = SnsVersion {
-            root_wasm_hash: Sha256::hash(&[5]).to_vec(),
-            governance_wasm_hash: Sha256::hash(&[2]).to_vec(),
-            ledger_wasm_hash: Sha256::hash(&[3]).to_vec(),
-            swap_wasm_hash: Sha256::hash(&[4]).to_vec(),
-        };
-        let expected_wasm_hash_requested = Sha256::hash(&[5]).to_vec();
+        let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
         let governance_canister_id = canister_test_id(501);
         let ledger_canister_id = canister_test_id(502);
         let swap_canister_id = canister_test_id(503);
         let ledger_archive_ids = vec![canister_test_id(504)];
-        let dapp_canisters = vec![canister_test_id(600)];
 
         let root_hash = Sha256::hash(&[1]).to_vec();
         let governance_hash = Sha256::hash(&[2]).to_vec();
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
+        let archive_hash = Sha256::hash(&[5]).to_vec();
+
+        let next_sns_version = SnsVersion {
+            root_wasm_hash: Sha256::hash(&[6]).to_vec(),
+            governance_wasm_hash: governance_hash.clone(),
+            ledger_wasm_hash: ledger_hash.clone(),
+            swap_wasm_hash: swap_hash.clone(),
+            archive_wasm_hash: archive_hash.clone(),
+        };
+
+        let current_governance_proto_version = Version {
+            root_wasm_hash: root_hash.clone(),
+            governance_wasm_hash: governance_hash.clone(),
+            ledger_wasm_hash: ledger_hash.clone(),
+            swap_wasm_hash: swap_hash.clone(),
+            archive_wasm_hash: archive_hash.clone(),
+        };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
         env.default_canister_call_response =
@@ -1449,52 +1439,50 @@ mod tests {
         env.set_call_canister_response(
             root_canister_id,
             "get_sns_canisters_summary",
-            Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
             Ok(Encode!(&GetSnsCanistersSummaryResponse {
                 root: Some(CanisterSummary {
                     status: Some(canister_status_for_test(
-                        root_hash.clone(),
+                        root_hash,
                         CanisterStatusType::Running
                     )),
                     canister_id: Some(root_canister_id.get())
                 }),
                 governance: Some(CanisterSummary {
                     status: Some(canister_status_for_test(
-                        governance_hash.clone(),
+                        governance_hash,
                         CanisterStatusType::Running
                     )),
                     canister_id: Some(governance_canister_id.get())
                 }),
                 ledger: Some(CanisterSummary {
                     status: Some(canister_status_for_test(
-                        ledger_hash.clone(),
+                        ledger_hash,
                         CanisterStatusType::Running
                     )),
                     canister_id: Some(ledger_canister_id.get())
                 }),
                 swap: Some(CanisterSummary {
                     status: Some(canister_status_for_test(
-                        swap_hash.clone(),
+                        swap_hash,
                         CanisterStatusType::Running
                     )),
                     canister_id: Some(swap_canister_id.get())
                 }),
                 dapps: vec![],
-                archives: vec![],
-            })
-            .unwrap()),
-        );
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(governance_canister_id.get()),
-                ledger: Some(ledger_canister_id.get()),
-                swap: Some(swap_canister_id.get()),
-                dapps: dapp_canisters.iter().map(|id| id.get()).collect(),
-                archives: ledger_archive_ids.iter().map(|id| id.get()).collect()
+                archives: ledger_archive_ids
+                    .iter()
+                    .map(|canister_id| CanisterSummary {
+                        status: Some(canister_status_for_test(
+                            archive_hash.clone(),
+                            CanisterStatusType::Running
+                        )),
+                        canister_id: Some(canister_id.get())
+                    })
+                    .collect()
             })
             .unwrap()),
         );
@@ -1502,16 +1490,11 @@ mod tests {
             SNS_WASM_CANISTER_ID,
             "get_next_sns_version",
             Encode!(&GetNextSnsVersionRequest {
-                current_version: Some(SnsVersion {
-                    root_wasm_hash: root_hash,
-                    governance_wasm_hash: governance_hash,
-                    ledger_wasm_hash: ledger_hash,
-                    swap_wasm_hash: swap_hash
-                })
+                current_version: Some(current_governance_proto_version.clone().into())
             })
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse {
-                next_version: Some(next_version)
+                next_version: Some(next_sns_version)
             })
             .unwrap()),
         );
@@ -1531,47 +1514,45 @@ mod tests {
             .unwrap()),
         );
 
-        env
+        let mut governance_proto =
+            governance_proto_for_proposal_tests(Some(current_governance_proto_version));
+        governance_proto.root_canister_id = Some(root_canister_id.get());
+
+        (env, governance_proto)
     }
 
     #[test]
     fn upgrade_sns_to_next_version_renders_correctly() {
-        let env = setup_env_for_upgrade_sns_to_next_version_validation_tests();
+        let (env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
-        let root_canister_id = *SNS_ROOT_CANISTER_ID;
         // Same id as setup_env_for_upgrade_sns_proposals
-        let actual_text = validate_and_render_action(
-            &Some(action),
-            &env,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            root_canister_id,
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+        let actual_text = validate_and_render_action(&Some(action), &env, &governance_proto)
+            .now_or_never()
+            .unwrap()
+            .unwrap();
 
         let expected_text = r"# Proposal to upgrade SNS to next version:
 
 ## SNS Current Version:
-SnsVersion {
+Version {
     root: 4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a,
     governance: dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986,
     ledger: 084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5,
     swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71
+    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db
 }
 
 ## SNS New Version:
-SnsVersion {
-    root: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db,
+Version {
+    root: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6,
     governance: dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986,
     ledger: 084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5,
     swap: e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71
+    archive: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db
 }
 
-## Canister to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
-## Upgrade Version: e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db
+## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
+## Upgrade Version: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6
 ";
         assert_eq!(actual_text, expected_text);
     }
@@ -1579,13 +1560,14 @@ SnsVersion {
     #[test]
     fn fail_validation_for_upgrade_sns_to_next_version_when_no_next_version() {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
-        let mut env = setup_env_for_upgrade_sns_to_next_version_validation_tests();
-        let root_canister_id = *SNS_ROOT_CANISTER_ID;
+        let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
 
         let root_hash = Sha256::hash(&[1]).to_vec();
         let governance_hash = Sha256::hash(&[2]).to_vec();
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
+        let archive_hash = Sha256::hash(&[5]).to_vec();
+
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
             "get_next_sns_version",
@@ -1594,50 +1576,52 @@ SnsVersion {
                     root_wasm_hash: root_hash,
                     governance_wasm_hash: governance_hash,
                     ledger_wasm_hash: ledger_hash,
-                    swap_wasm_hash: swap_hash
+                    swap_wasm_hash: swap_hash,
+                    archive_wasm_hash: archive_hash
                 })
             })
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse { next_version: None }).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            root_canister_id,
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
-        assert!(err
-            .contains("There is no next version found for the current SNS version: SnsVersion {"))
+        let target_string = "There is no next version found for the current SNS version: Version {";
+        assert!(
+            err.contains(target_string),
+            "Test did not contain '{}'.  Actual: {}",
+            target_string,
+            err
+        );
     }
 
     #[test]
     fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version(
     ) {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
-        let mut env = setup_env_for_upgrade_sns_to_next_version_validation_tests();
-        let root_canister_id = *SNS_ROOT_CANISTER_ID;
+        let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
 
         let root_hash = Sha256::hash(&[1]).to_vec();
         let governance_hash = Sha256::hash(&[2]).to_vec();
         let ledger_hash = Sha256::hash(&[3]).to_vec();
         let swap_hash = Sha256::hash(&[4]).to_vec();
+        let archive_hash = Sha256::hash(&[5]).to_vec();
+
         let current_version = SnsVersion {
             root_wasm_hash: root_hash.clone(),
             governance_wasm_hash: governance_hash.clone(),
             ledger_wasm_hash: ledger_hash,
             swap_wasm_hash: swap_hash,
+            archive_wasm_hash: archive_hash.clone(),
         };
         let next_version = SnsVersion {
             root_wasm_hash: root_hash,
             governance_wasm_hash: governance_hash,
             ledger_wasm_hash: Sha256::hash(&[5]).to_vec(),
             swap_wasm_hash: Sha256::hash(&[6]).to_vec(),
+            archive_wasm_hash: archive_hash,
         };
 
         env.set_call_canister_response(
@@ -1652,17 +1636,10 @@ SnsVersion {
             })
             .unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            root_canister_id,
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains(
             "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  \
@@ -1673,34 +1650,31 @@ SnsVersion {
     #[test]
     fn fail_validation_for_upgrade_sns_to_next_version_with_empty_list_sns_canisters_response() {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
-        let mut env = setup_env_for_upgrade_sns_to_next_version_validation_tests();
+        let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
+
+        let canisters_summary_response = GetSnsCanistersSummaryResponse {
+            root: None,
+            governance: None,
+            ledger: None,
+            swap: None,
+            dapps: vec![],
+            archives: vec![],
+        };
 
         env.set_call_canister_response(
             root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: None,
-                governance: None,
-                ledger: None,
-                swap: None,
-                dapps: vec![],
-                archives: vec![]
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
             })
-            .unwrap()),
+            .unwrap(),
+            Ok(Encode!(&canisters_summary_response).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            governance::Mode::Normal,
-            &DEFAULT_PARAMS,
-            &EMPTY_FUNCTIONS,
-            root_canister_id,
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto)
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains("Did not receive Root CanisterId from list_sns_canisters call"))
     }

@@ -61,6 +61,8 @@ pub fn execute_inspect_message(
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(message_instruction_limit),
         subnet_available_memory,
+        // Ignore compute allocation
+        compute_allocation_used: 0,
     };
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,

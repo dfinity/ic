@@ -24,15 +24,19 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.type_attribute(
         "ic_sns_governance.pb.v1.VotingRewardsParameters",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.Mode",
         "#[derive(strum_macros::EnumIter)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.Version",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Governance.UpgradeInProgress",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.SetMode",
@@ -49,136 +53,94 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermission",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash, comparable::Comparable)]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ProposalId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Neuron",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Neuron.dissolve_state",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Neuron.Followees",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Vote",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NervousSystemFunction",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NervousSystemFunction.function_type",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NervousSystemFunction.GenericNervousSystemFunction",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ExecuteGenericNervousSystemFunction",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.CallCanisterMethod",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Motion",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.UpgradeSnsControlledCanister",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.UpgradeSnsToNextVersion",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Proposal",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Proposal.action",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
             "#[allow(clippy::large_enum_variant)]",
         ]
         .join(" "),
@@ -186,16 +148,16 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_sns_governance.pb.v1.GovernanceError",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Ballot",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
@@ -210,457 +172,255 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_sns_governance.pb.v1.Tally",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[self_describing]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.WaitForQuietState",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ProposalData",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ProposalData.proposal_decision_status",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.DefaultFollowees",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionList",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NervousSystemParameters",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.RewardEvent",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[ compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.SnsMetadata",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetMetadataRequest",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetMetadataResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetRunningSnsVersionRequest",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetRunningSnsVersionResponse",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.NeuronInFlightCommand",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.NeuronInFlightCommand.command",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Governance.GovernanceCachedMetrics",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), compare_default)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[compare_default]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Empty",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.IncreaseDissolveDelay",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.StartDissolving",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.StopDissolving",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.SetDissolveTimestamp",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Configure",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Configure.operation",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Disburse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Disburse.Amount",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Split",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Spawn",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.MergeMaturity",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.DisburseMaturity",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Follow",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.RegisterVote",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.ClaimOrRefresh",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.ClaimOrRefresh.MemoAndController",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.ClaimOrRefresh.by",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.AddNeuronPermissions",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.RemoveNeuronPermissions",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.command",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
             "#[allow(clippy::large_enum_variant)]",
         ]
         .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.ConfigureResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.DisburseResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.SpawnResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.MergeMaturityResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.DisburseMaturityResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.FollowResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.MakeProposalResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.RegisterVoteResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.SplitResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.ClaimOrRefreshResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.AddNeuronPermissionsResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.RemoveNeuronPermissionsResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.command",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetNeuron",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetNeuronResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetNeuronResponse.result",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetProposal",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetProposalResponse",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetProposalResponse.result",
         [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
             "#[allow(clippy::large_enum_variant)]",
         ]
         .join(" "),
@@ -687,19 +447,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Subaccount",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.Account",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
-        ]
-        .join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
 
     std::fs::create_dir_all(out).expect("failed to create output directory");

@@ -24,12 +24,12 @@ use internal_types::Epoch;
 fn constants_should_be_compatible() {
     assert_eq!(
         ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::NUM_ZK_REPETITIONS,
-        ic_crypto_internal_fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS,
+        crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS,
         "NUM_ZK_REPETITIONS differs"
     );
     assert_eq!(
         std::mem::size_of::<Epoch>() * 8,
-        ic_crypto_internal_fs_ni_dkg::forward_secure::LAMBDA_T,
+        crate::ni_dkg::fs_ni_dkg::forward_secure::LAMBDA_T,
         "The size of the epoch is incompatible"
     );
 }
@@ -271,7 +271,7 @@ fn decryption_should_fail_below_epoch() {
         .take(5)
         .map(Epoch::from)
         .collect();
-    let ciphertexts_at_epochs: Vec<FsEncryptionCiphertext> = encryption_epochs
+    let ciphertexts_at_epochs: Vec<FsEncryptionCiphertextBytes> = encryption_epochs
         .iter()
         .map(|epoch| {
             encrypt_and_prove(

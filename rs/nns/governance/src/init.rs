@@ -5,9 +5,9 @@ use ic_nervous_system_common::ledger;
 #[cfg(not(target_arch = "wasm32"))]
 use ledger_canister::Subaccount;
 #[cfg(not(target_arch = "wasm32"))]
-use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 #[cfg(not(target_arch = "wasm32"))]
-use rand_core::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
@@ -20,7 +20,7 @@ pub struct GovernanceCanisterInitPayloadBuilder {
     pub proto: Governance,
     voters_to_add_to_all_neurons: Vec<PrincipalId>,
     #[cfg(not(target_arch = "wasm32"))]
-    rng: StdRng,
+    rng: ChaCha20Rng,
 }
 
 #[allow(clippy::new_without_default)]
@@ -35,7 +35,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             },
             voters_to_add_to_all_neurons: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
-            rng: StdRng::seed_from_u64(0),
+            rng: ChaCha20Rng::seed_from_u64(0),
         }
     }
 

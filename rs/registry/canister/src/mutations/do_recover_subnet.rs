@@ -181,54 +181,20 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
-    /// Validates that the requested key exists outside of the subnet being recovered and that if
-    /// requested from a particular subnet, is actually held there. This is similar to
-    /// validation in do_create_subnet except for constraints to avoid requesting keys from itself.
+    /// Ensures the requested ECDSA keys exist somewhere.
+    /// Ensures that a subnet_id is specified for EcdsaKeyRequests.
+    /// Ensures that the requested key exists outside of the subnet being recovered.
+    /// Ensures that the requested key exists on the specified subnet.
+    /// This is similar to validation in do_create_subnet except for constraints to avoid requesting
+    /// keys from the subnet.
     fn validate_ecdsa_recover_subnet_payload(&self, payload: &RecoverSubnetPayload) {
-        if payload.ecdsa_config.is_none() {
-            return;
-        }
-
-        let ecdsa_config = payload.ecdsa_config.as_ref().unwrap();
-
-        let ecdsa_subnet_map = self.get_ecdsa_keys_to_subnets_map();
-
-        for key_request in &ecdsa_config.keys {
-            // Requested key must be a known key.
-            if !ecdsa_subnet_map.contains_key(&key_request.key_id) {
-                panic!(
-                        "{}Cannot recover subnet '{}': The requested ECDSA key '{}' was not found in any subnet.",
-                        LOG_PREFIX, payload.subnet_id, key_request.key_id
-                    );
-            }
-
-            let subnets_for_key = ecdsa_subnet_map.get(&key_request.key_id).unwrap();
-            // If targeting subnet_id, validate it is found there and is not the same as this subnet
-            if let Some(ref subnet_id_principal) = key_request.subnet_id {
-                if subnet_id_principal == &payload.subnet_id {
-                    panic!(
-                            "{}Cannot recover subnet '{}': Attempted to recover ECDSA key '{}' by \
-                               requesting it from itself.  Subnets cannot recover ECDSA keys from themselves.",
-                            LOG_PREFIX, payload.subnet_id, key_request.key_id
-                        );
-                }
-
-                let subnet_id = SubnetId::new(*subnet_id_principal);
-                if !subnets_for_key.contains(&subnet_id) {
-                    panic!(
-                        "{}Cannot recover subnet '{}': The requested ECDSA key '{}' \
-                           is not available in targeted subnet '{}'.",
-                        LOG_PREFIX, payload.subnet_id, key_request.key_id, subnet_id_principal
-                    );
-                }
-            } else if subnets_for_key.contains(&SubnetId::new(payload.subnet_id))
-                && subnets_for_key.len() == 1
-            {
-                panic!(
-                        "{}Cannot recover subnet '{}': The requested ECDSA key '{}' is only available in \
-                           the subnet being recovered.  Subnets cannot recover ECDSA keys from themselves.",
-                        LOG_PREFIX, payload.subnet_id, key_request.key_id
-                    );
+        if let Some(ecdsa_config) = payload.ecdsa_config.as_ref() {
+            match self.validate_ecdsa_initial_config(ecdsa_config, Some(payload.subnet_id)) {
+                Ok(_) => {}
+                Err(message) => panic!(
+                    "{}Cannot recover subnet '{}': {}",
+                    LOG_PREFIX, payload.subnet_id, message
+                ),
             }
         }
     }
@@ -337,6 +303,7 @@ mod test {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
             }
             .into(),
         );
@@ -452,6 +419,38 @@ mod test {
                 subnet_id: None,
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+        });
+
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Cannot recover subnet 'ge6io-epiam-aaaaa-aaaap-yai': EcdsaKeyRequest for key \
+        'Secp256k1:test_key_id' did not specify subnet_id."
+    )]
+    fn do_recover_subnet_should_panic_if_ecdsa_keys_subnet_not_specified() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "test_key_id".to_string(),
+        };
+        let subnet_id_to_recover = subnet_test_id(1000);
+        let subnet_id_to_request_key_from = subnet_test_id(1003);
+        let (mut registry, subnet_id_holding_key) = setup_registry_with_subnet_holding_key(&key_id);
+
+        assert_ne!(subnet_id_holding_key, subnet_id_to_request_key_from);
+
+        // Make a request for the key from a subnet that does not have the key
+        let mut payload = get_default_recover_subnet_payload(subnet_id_to_recover);
+        payload.ecdsa_config = Some(EcdsaInitialConfig {
+            quadruples_to_create_in_advance: 1,
+            keys: vec![EcdsaKeyRequest {
+                key_id,
+                subnet_id: None,
+            }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -482,6 +481,7 @@ mod test {
                 subnet_id: Some(subnet_id_to_request_key_from.get()),
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -510,34 +510,7 @@ mod test {
                 subnet_id: Some(subnet_id.get()),
             }],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-        });
-
-        futures::executor::block_on(registry.do_recover_subnet(payload));
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Cannot recover subnet '337oy-l7jam-aaaaa-aaaap-yai': The requested ECDSA key \
-        'Secp256k1:test_key_id' is only available in the subnet being recovered.  \
-         Subnets cannot recover ECDSA keys from themselves."
-    )]
-    fn do_recover_subnet_panics_if_no_other_subnet_holds_a_requested_key() {
-        let key_id = EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "test_key_id".to_string(),
-        };
-        // We use the subnet_id from our setup, which is the only subnet holding the key
-        let (mut registry, subnet_id) = setup_registry_with_subnet_holding_key(&key_id);
-
-        // We attempt to get the key even though the only subnet holding it is the one we're recovering
-        let mut payload = get_default_recover_subnet_payload(subnet_id);
-        payload.ecdsa_config = Some(EcdsaInitialConfig {
-            quadruples_to_create_in_advance: 1,
-            keys: vec![EcdsaKeyRequest {
-                key_id,
-                subnet_id: None,
-            }],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));

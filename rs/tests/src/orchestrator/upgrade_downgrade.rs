@@ -12,12 +12,12 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::*;
 use crate::util::block_on;
-use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
@@ -41,7 +41,9 @@ pub fn config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 // Tests a downgrade of the nns subnet to the mainnet version and an upgrade back to the branch version
@@ -63,13 +65,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
     assert!(hex::decode(&mainnet_version).is_ok());
 
-    info!(logger, "Make sure all nodes are healty...");
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-
     // choose a node from the nns subnet
     let nns_node = env
         .topology_snapshot()
@@ -77,11 +72,6 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .nodes()
         .next()
         .unwrap();
-
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
     // We have to upgrade to `<VERSION>-test` because the original version is stored without the
@@ -203,7 +193,6 @@ fn upgrade_to(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
-    use std::convert::TryFrom;
     block_on(update_subnet_replica_version(
         nns_node,
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
@@ -218,36 +207,26 @@ fn upgrade_to(
 
 // Stops the node and makes sure it becomes unreachable
 pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
-    wait_node_healthy(logger, app_node);
+    app_node
+        .await_status_is_healthy()
+        .expect("Node not healthy");
     info!(logger, "Kill node: {}", app_node.get_ip_addr());
     app_node.vm().kill();
-    wait_node_unreachable(logger, app_node);
+    app_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
     info!(logger, "Node killed: {}", app_node.get_ip_addr());
 }
 
 // Starts a node and makes sure it becomes reachable
 pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
-    wait_node_unreachable(logger, app_node);
+    app_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
     info!(logger, "Starting node: {}", app_node.get_ip_addr());
     app_node.vm().start();
-    wait_node_healthy(logger, app_node);
+    app_node
+        .await_status_is_healthy()
+        .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
-}
-
-fn wait_node_healthy(logger: &Logger, node: &IcNodeSnapshot) {
-    retry(logger.clone(), secs(600), secs(20), || {
-        node.status_is_healthy()
-            .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
-    })
-    .expect("Node not healty");
-}
-
-pub fn wait_node_unreachable(logger: &Logger, node: &IcNodeSnapshot) {
-    retry(logger.clone(), secs(600), secs(20), || {
-        match node.status_is_healthy() {
-            Ok(true) => bail!("Still ready!"),
-            _ => Ok(()),
-        }
-    })
-    .expect("Node still healty");
 }

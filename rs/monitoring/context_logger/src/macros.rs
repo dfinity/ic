@@ -101,6 +101,11 @@ macro_rules! debug {
             log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
+    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
+            log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
+        }
+    }};
     ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
         log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};

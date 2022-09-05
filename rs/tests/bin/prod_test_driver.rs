@@ -5,9 +5,7 @@ use ic_fondue::slack::{Alertable, SlackAlert};
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
-use ic_tests::driver::config::{
-    self, ENG_CONSENSUS_CHANNEL, ENG_NODE_CHANNEL, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL,
-};
+use ic_tests::driver::config::{self, *};
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::{
@@ -18,8 +16,8 @@ use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, consensus, execution, icrc1_agent_test, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    btc_integration, canister_http, consensus, execution, icrc1_agent_test, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
@@ -226,12 +224,53 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     boundary_nodes_integration::boundary_nodes::config,
                     par(vec![
                         sys_t(
-                            "boundary_nodes_test",
-                            boundary_nodes_integration::boundary_nodes::test,
+                            "boundary_nodes_canister_test",
+                            boundary_nodes_integration::boundary_nodes::canister_test,
                         ),
                         sys_t(
-                            "boundary_nodes_nginx_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_test,
+                            "boundary_nodes_http_canister_test",
+                            boundary_nodes_integration::boundary_nodes::http_canister_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_valid_config_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
+                        ),
+                        // https://dfinity.atlassian.net/browse/BOUN-461
+                        // sys_t(
+                        //     "boundary_nodes_denylist_test",
+                        //     boundary_nodes_integration::boundary_nodes::denylist_test,
+                        // ),
+                        sys_t(
+                            "boundary_nodes_redirect_http_to_https_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_dashboard_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_non_raw_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_sw_test",
+                            boundary_nodes_integration::boundary_nodes::sw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_icx_proxy_test",
+                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_rosetta_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_seo_test",
+                            boundary_nodes_integration::boundary_nodes::seo_test,
                         ),
                     ]),
                 ),
@@ -251,12 +290,28 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(
         suite(
+            "boundary_nodes_sev_snp_pre_master",
+            vec![pot_with_setup(
+                "boundary_nodes_sev_snp_pot",
+                boundary_nodes_snp_tests::boundary_nodes_snp::config,
+                par(vec![sys_t(
+                    "boundary_nodes_sev_snp_kernel_test",
+                    boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                )]),
+            )
+            .with_alert(ENG_NODE_CHANNEL)],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
+
+    m.add_suite(
+        suite(
             "tecdsa_pre_master",
             vec![
-                pot(
+                pot_with_setup(
                     "tecdsa_add_nodes_pot",
-                    tecdsa::tecdsa_add_nodes_test::config(),
-                    par(vec![t(
+                    tecdsa::tecdsa_add_nodes_test::config,
+                    par(vec![sys_t(
                         "test_tecdsa_add_nodes",
                         tecdsa::tecdsa_add_nodes_test::test,
                     )]),
@@ -275,6 +330,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     seq(vec![t(
                         "test_threshold_ecdsa_life_cycle",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
+                    )]),
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_timeout",
+                    tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_timeout",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_timeout,
                     )]),
                 ),
             ],
@@ -300,7 +363,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            /*
             pot_with_setup(
                 "btc_pot",
                 btc_integration::btc::config,
@@ -308,6 +370,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("btc_get_balance", btc_integration::btc::get_balance),
                 ]),
             ),
+            /*
             pot_with_setup(
                 "boundary_nodes_pot",
                 boundary_nodes_integration::boundary_nodes::config,
@@ -317,12 +380,17 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         boundary_nodes_integration::boundary_nodes::test,
                     ),
                     sys_t(
-                        "boundary_nodes_nginx_test",
-                        boundary_nodes_integration::boundary_nodes::nginx_test,
+                        "boundary_nodes_nginx_valid_config_test",
+                        boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
                     ),
                 ]),
             ),
              */
+            pot_with_setup(
+                "canister_http",
+                canister_http::lib::config,
+                par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
+            ),
             pot_with_setup(
                 "firewall_priority_pot",
                 networking::firewall_priority::config,
@@ -330,13 +398,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority),
                 ]),
             ),
-            /*
-            pot(
-                "create_subnet",
-                nns_tests::create_subnet::pre_master_config(),
-                par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
-            ),
-             */
             execution::upgraded_pots::general_execution_pot(),
             execution::upgraded_pots::cycles_restrictions_pot(),
             execution::upgraded_pots::inter_canister_queries(),
@@ -366,7 +427,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "node_assign_test",
                     orchestrator::node_assign_test::test,
                 )]),
-            ),
+            ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
             pot(
                 "node_graceful_leaving_pot",
                 consensus::node_graceful_leaving_test::config(),
@@ -487,64 +548,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            /*
-            pot(
-                "tecdsa_add_nodes_pot",
-                tecdsa::tecdsa_add_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_add_nodes",
-                    tecdsa::tecdsa_add_nodes_test::test,
-                )]),
-            ),
-            pot(
-                "tecdsa_remove_nodes_pot",
-                tecdsa::tecdsa_remove_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_remove_nodes",
-                    tecdsa::tecdsa_remove_nodes_test::test,
-                )]),
-            ),
-            pot_with_setup(
-                "tecdsa_signature_same_subnet_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_same_subnet",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_life_cycle",
-                tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                seq(vec![t(
-                    "test_threshold_ecdsa_life_cycle",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_from_other_subnet_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_from_other_subnet",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_fails_without_cycles_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_fails_without_cycles",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
-                )])
-            ),
-            pot_with_setup(
-                "tecdsa_signature_from_nns_without_cycles_pot",
-                tecdsa::tecdsa_signature_test::config,
-                seq(vec![t(
-                    "test_threshold_ecdsa_signature_from_nns_without_cycles",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
-                )])
-            ),
-             */
         ],
     ).with_alert(TEST_FAILURE_CHANNEL));
 
@@ -579,24 +582,65 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
-                // TODO: Re-enable the test, once the issue is resolved.
                 pot(
                     "xnet_120_subnets_pot",
                     xnet_120_subnets.build(),
                     par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
                 ),
                 pot_with_setup(
-                    "canister_http",
-                    canister_http::lib::config,
-                    par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
-                ),
-                pot_with_setup(
-                    "canister_http_time_out",
-                    canister_http::lib::config,
-                    seq(vec![sys_t(
-                        "http_time_out",
-                        canister_http::http_time_out::test,
-                    )]),
+                    "boundary_nodes_pot",
+                    boundary_nodes_integration::boundary_nodes::config,
+                    par(vec![
+                        sys_t(
+                            "boundary_nodes_canister_test",
+                            boundary_nodes_integration::boundary_nodes::canister_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_http_canister_test",
+                            boundary_nodes_integration::boundary_nodes::http_canister_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_nginx_valid_config_test",
+                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
+                        ),
+                        // https://dfinity.atlassian.net/browse/BOUN-461
+                        // sys_t(
+                        //     "boundary_nodes_denylist_test",
+                        //     boundary_nodes_integration::boundary_nodes::denylist_test,
+                        // ),
+                        sys_t(
+                            "boundary_nodes_redirect_http_to_https_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_dashboard_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_redirect_to_non_raw_test",
+                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_sw_test",
+                            boundary_nodes_integration::boundary_nodes::sw_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_icx_proxy_test",
+                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_rosetta_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_seo_test",
+                            boundary_nodes_integration::boundary_nodes::seo_test,
+                        ),
+                    ]),
                 ),
                 pot_with_setup(
                     "canister_http_fault_tolerance",
@@ -631,39 +675,38 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    // let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(suite(
-        "nightly_long_duration",
-        vec![
-            // Readiness of the node's status endpoint (after VM boot) is still an issue (VER-1791).
-            // Having that many nodes results in a substantial probability of the IC setup failure.
-            // TODO: Re-enable the test, once the issue is resolved.
-            /*
-            pot(
-                "xnet_120_subnets_pot",
-                xnet_120_subnets.build(),
-                par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-            ),
-            */
-            pot_with_setup(
-                "default_subnet_workload_pot",
-                networking::subnet_update_workload::default_config,
-                par(vec![
-                    sys_t(
-                        "default_subnet_query_workload_long_duration_test",
-                        networking::subnet_query_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_long_duration_test",
-                        networking::subnet_update_workload::long_duration_test,
-                    ),
-                    sys_t(
-                        "default_subnet_update_workload_large_payload",
-                        networking::subnet_update_workload::large_payload_test,
-                    ),
-                ]),
-            ),
-        ],
+        "nightly_default_subnet_query_workload_long_duration_test",
+        vec![pot_with_setup(
+            "nightly_default_subnet_query_workload_long_duration_test",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_query_workload_long_duration_test",
+                networking::subnet_query_workload::long_duration_test,
+            )]),
+        )],
+    ));
+    m.add_suite(suite(
+        "nightly_default_subnet_update_workload_long_duration_test",
+        vec![pot_with_setup(
+            "nightly_default_subnet_update_workload_long_duration_test",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_update_workload_long_duration_test",
+                networking::subnet_update_workload::long_duration_test,
+            )]),
+        )],
+    ));
+    m.add_suite(suite(
+        "nightly_default_subnet_update_workload_large_payload",
+        vec![pot_with_setup(
+            "nightly_default_subnet_update_workload_large_payload",
+            networking::subnet_update_workload::default_config,
+            par(vec![sys_t(
+                "default_subnet_update_workload_large_payload",
+                networking::subnet_update_workload::large_payload_test,
+            )]),
+        )],
     ));
 
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
@@ -694,6 +737,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![sys_t(
                     "http_basic_remote",
                     canister_http::http_basic_remote::test,
+                )]),
+            ),
+            pot_with_setup(
+                "canister_http_time_out",
+                canister_http::lib::config,
+                seq(vec![sys_t(
+                    "http_time_out",
+                    canister_http::http_time_out::test,
                 )]),
             ),
             pot(
@@ -739,7 +790,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "node_reassignment_test",
                         orchestrator::node_reassignment_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot(
                     "token_fault_tolerance_pot",
                     ledger_tests::token_fault_tolerance::config(),
@@ -752,6 +803,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "create_subnet",
                     nns_tests::create_subnet::hourly_config(),
                     par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+                ),
+                pot_with_setup(
+                    "canister_http_correctness",
+                    canister_http::lib::config,
+                    par(vec![sys_t(
+                        "http_correctness",
+                        canister_http::http_correctness::test,
+                    )]),
                 ),
                 pot(
                     "rejoin",
@@ -775,7 +834,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "nns_backup_test",
                         orchestrator::nns_backup::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_same_subnet_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -815,7 +874,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unassigned_node_upgrade_test",
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
                 pot_with_setup(
                     "unstuck_subnet_test_pot",
                     orchestrator::unstuck_subnet_test::config,
@@ -823,7 +882,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unstuck_subnet_test",
                         orchestrator::unstuck_subnet_test::test,
                     )]),
-                ),
+                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -848,11 +907,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "subnet_recovery",
             vec![
                 pot_with_setup(
-                    "subnet_recovery_app_same_nodes",
+                    "subnet_recovery_app_same_nodes_pot",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
                     par(vec![sys_t(
-                        "subnet_recovery_app_same_nodes",
+                        "subnet_recovery_app_same_nodes_test",
                         orchestrator::subnet_recovery_app_subnet::test,
+                    )]),
+                ),
+                pot_with_setup(
+                    "subnet_recovery_app_same_nodes_no_upgrade",
+                    orchestrator::subnet_recovery_app_subnet_no_upgrade::setup,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes_no_upgrade",
+                        orchestrator::subnet_recovery_app_subnet_no_upgrade::test,
                     )]),
                 ),
                 pot_with_setup(
@@ -881,38 +948,42 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
+        .with_alert(ENG_ORCHESTRATOR_CHANNEL)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    m.add_suite(suite(
-        "upgrade_compatibility",
-        vec![
-            pot_with_setup(
-                "downgrade_app_subnet_with_ecdsa",
-                orchestrator::downgrade_with_ecdsa::config,
-                par(vec![sys_t(
+    m.add_suite(
+        suite(
+            "upgrade_compatibility",
+            vec![
+                pot_with_setup(
                     "downgrade_app_subnet_with_ecdsa",
-                    orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
-                )]),
-            ),
-            pot_with_setup(
-                "upgrade_downgrade_app_subnet",
-                orchestrator::upgrade_downgrade::config,
-                par(vec![sys_t(
+                    orchestrator::downgrade_with_ecdsa::config,
+                    par(vec![sys_t(
+                        "downgrade_app_subnet_with_ecdsa",
+                        orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
+                    )]),
+                ),
+                pot_with_setup(
                     "upgrade_downgrade_app_subnet",
-                    orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
-                )]),
-            ),
-            pot_with_setup(
-                "upgrade_downgrade_nns_subnet",
-                orchestrator::upgrade_downgrade::config,
-                par(vec![sys_t(
+                    orchestrator::upgrade_downgrade::config,
+                    par(vec![sys_t(
+                        "upgrade_downgrade_app_subnet",
+                        orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
+                    )]),
+                ),
+                pot_with_setup(
                     "upgrade_downgrade_nns_subnet",
-                    orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
-                )]),
-            ),
-        ],
-    ));
+                    orchestrator::upgrade_downgrade::config,
+                    par(vec![sys_t(
+                        "upgrade_downgrade_nns_subnet",
+                        orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
+                    )]),
+                ),
+            ],
+        )
+        .with_alert(ENG_ORCHESTRATOR_CHANNEL),
+    );
 
     m.add_suite(
         suite(

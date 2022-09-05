@@ -20,11 +20,13 @@ Success::
 
 end::catalog[] */
 
-use std::convert::TryFrom;
-
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::{
     driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes,
+    orchestrator::utils::{
+        ssh_access::update_ssh_keys_for_all_unassigned_nodes,
+        upgrade::fetch_update_file_sha256_with_retry,
+    },
 };
 use crate::{
     nns::{
@@ -36,8 +38,8 @@ use crate::{
         wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{
-        fetch_unassigned_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
-        get_update_image_url, UpdateImageType,
+        fetch_unassigned_node_version, get_blessed_replica_versions, get_update_image_url,
+        UpdateImageType,
     },
     util::{block_on, get_nns_node, runtime_from_url},
 };
@@ -50,6 +52,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use slog::info;
+use std::convert::TryFrom;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -57,6 +60,8 @@ pub fn config(env: TestEnv) {
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
@@ -64,14 +69,9 @@ pub fn test(env: TestEnv) {
 
     // choose a node from the nns subnet
     let nns_node = get_nns_node(&env.topology_snapshot());
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
 
     // choose an unassigned node
     let unassigned_node = env.topology_snapshot().unassigned_nodes().next().unwrap();
-    unassigned_node.await_can_login_as_admin_via_ssh().unwrap();
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
@@ -106,7 +106,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256(&original_version, true).await;
+        let sha256 = fetch_update_file_sha256_with_retry(&logger, &original_version, true).await;
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal

@@ -80,7 +80,6 @@ pub mod threshold_sign_error;
 /// * If `threshold > signatory_eligibility.len()` then it is impossible for the
 ///   signatories to create a valid combined signature, so this is treated as an
 ///   error.
-#[allow(unused)]
 pub fn keygen(
     seed: Seed,
     threshold: NumberOfNodes,

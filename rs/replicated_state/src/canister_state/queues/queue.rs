@@ -8,7 +8,7 @@ use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     QueueIndex,
 };
-use ic_types::{CountBytes, Cycles};
+use ic_types::{CountBytes, Cycles, Time};
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
@@ -98,7 +98,7 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         self.queue.front()
     }
 
-    /// Number of slots used in output queues.
+    /// Number of messages in the queue.
     fn num_messages(&self) -> usize {
         self.queue.len()
     }
@@ -251,7 +251,7 @@ impl InputQueue {
         self.queue.pop()
     }
 
-    /// Returns the number of actual messages in the queue.
+    /// Returns the number of messages in the queue.
     pub(super) fn num_messages(&self) -> usize {
         self.queue.num_messages()
     }
@@ -292,6 +292,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
             index: q.index.get(),
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
+            deadline_range_ends: Vec::<pb_queues::MessageDeadline>::new(),
         }
     }
 }
@@ -300,6 +301,11 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
+        if !q.deadline_range_ends.is_empty() {
+            return Err(Self::Error::Other(
+                "Found deadlines on decoding InputQueue".to_string(),
+            ));
+        }
         Ok(Self {
             index: q.index.into(),
             queue: q.try_into()?,
@@ -323,6 +329,19 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 pub(crate) struct OutputQueue {
     queue: QueueWithReservation<Option<RequestOrResponse>>,
     index: QueueIndex,
+    /// Ordered ranges of messages having the same request deadline. Each range
+    /// is represented as a deadline and its end index (the `QueueIndex` just past
+    /// the last request where the deadline applies). Both the deadlines and queue
+    /// indices are strictly increasing.
+    deadline_range_ends: VecDeque<(Time, QueueIndex)>,
+    /// Queue index from which request timing out will resume.
+    ///
+    /// Used to ensure amortized constant time for timing out requests.
+    /// May point before the beginning of the queue if messages have been popped
+    /// since the last `time_out_requests()` call.
+    timeout_index: QueueIndex,
+    /// The number of actual messages in the queue.
+    num_messages: usize,
 }
 
 impl OutputQueue {
@@ -330,6 +349,9 @@ impl OutputQueue {
         Self {
             queue: QueueWithReservation::new(capacity),
             index: QueueIndex::from(0),
+            deadline_range_ends: VecDeque::new(),
+            timeout_index: QueueIndex::from(0),
+            num_messages: 0,
         }
     }
 
@@ -344,12 +366,37 @@ impl OutputQueue {
     pub(super) fn push_request(
         &mut self,
         msg: Arc<Request>,
+        deadline: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         if let Err((err, Some(RequestOrResponse::Request(msg)))) =
             self.queue.push(Some(RequestOrResponse::Request(msg)))
         {
             return Err((err, msg));
         }
+
+        // Update the deadline queue.
+        //
+        // If the deadline is <= the one at the tail of the deadline queue,
+        // update the `deadline_range_end`.
+        //
+        // If the new deadline is greater than the one of the previous request or
+        // there is no previous request in the queue. push a new tuple.
+        let back_index = self.index + (self.queue.queue.len() as u64).into();
+        match self.deadline_range_ends.back_mut() {
+            Some((back_deadline, deadline_range_end)) if *back_deadline >= deadline => {
+                *deadline_range_end = back_index;
+            }
+            _ => {
+                self.deadline_range_ends.push_back((deadline, back_index));
+            }
+        }
+        self.num_messages += 1;
+
+        debug_assert_eq!(
+            self.num_messages,
+            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
+        );
+
         Ok(())
     }
 
@@ -357,6 +404,12 @@ impl OutputQueue {
         self.queue
             .push_into_reserved_slot(Some(RequestOrResponse::Response(msg)))
             .unwrap();
+        self.num_messages += 1;
+
+        debug_assert_eq!(
+            self.num_messages,
+            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
+        );
     }
 
     pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
@@ -369,16 +422,40 @@ impl OutputQueue {
     pub(crate) fn pop(&mut self) -> Option<(QueueIndex, RequestOrResponse)> {
         match self.queue.pop() {
             None => None,
-            Some(msg) => {
-                let ret = Some((self.index, msg.unwrap()));
-                self.index.inc_assign();
+            Some(None) => {
+                panic!("OutputQueue invariant violated: Found `None` at the front.");
+            }
+            Some(Some(msg)) => {
+                let ret = Some((self.index, msg));
 
-                while let Some(None) = self.queue.peek() {
-                    self.queue.pop();
-                    self.index.inc_assign();
-                }
+                self.index.inc_assign();
+                self.advance_to_next_message();
+
+                self.num_messages -= 1;
+                debug_assert_eq!(
+                    self.num_messages,
+                    self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
+                );
 
                 ret
+            }
+        }
+    }
+
+    /// Consumes any empty slots at the head of the queue and discards consumed deadline ranges.
+    fn advance_to_next_message(&mut self) {
+        // Remove None in front.
+        while let Some(None) = self.queue.peek() {
+            self.queue.pop();
+            self.index.inc_assign();
+        }
+
+        // Remove deadlines that are no longer relevant.
+        while let Some((_, deadline_range_end)) = self.deadline_range_ends.front() {
+            if *deadline_range_end <= self.index || *deadline_range_end <= self.timeout_index {
+                self.deadline_range_ends.pop_front();
+            } else {
+                break;
             }
         }
     }
@@ -391,9 +468,9 @@ impl OutputQueue {
             .map(|msg| (self.index, msg.as_ref().unwrap()))
     }
 
-    /// Number of slots used in output queues
+    /// Number of actual messages in the queue (`None` are ignored).
     pub fn num_messages(&self) -> usize {
-        self.queue.num_messages()
+        self.num_messages
     }
 
     /// Returns the number of reserved slots in the queue.
@@ -418,6 +495,76 @@ impl OutputQueue {
             |item: &Option<RequestOrResponse>| if let Some(item) = item { stat(item) } else { 0 };
         self.queue.calculate_stat_sum(stat)
     }
+
+    /// Purges timed out requests. Returns an iterator over the timed out requests.
+    /// Only consumed items are purged.
+    #[allow(dead_code)]
+    pub(super) fn time_out_requests(&mut self, current_time: Time) -> TimedOutRequestsIter {
+        TimedOutRequestsIter {
+            q: self,
+            current_time,
+        }
+    }
+}
+
+/// Iterator over timed out requests in an OutputQueue.
+///
+/// This extracts timed out requests by removing them from the queue,
+/// leaving `None` in their place and returning them one by one.
+pub(super) struct TimedOutRequestsIter<'a> {
+    /// A mutable reference to the queue whose requests are to be timed out and returned.
+    q: &'a mut OutputQueue,
+    /// The time used to determine which requests should be considered timed out.
+    /// This is compared to deadlines in q.deadline_range_ends.
+    current_time: Time,
+}
+
+impl<'a> Iterator for TimedOutRequestsIter<'a> {
+    type Item = Arc<Request>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use RequestOrResponse::Request;
+
+        while let Some(&(deadline, deadline_range_end)) = self.q.deadline_range_ends.front() {
+            if deadline > self.current_time {
+                return None;
+            }
+
+            self.q.timeout_index = self.q.timeout_index.max(self.q.index);
+
+            debug_assert!(
+                deadline_range_end.get() <= self.q.index.get() + self.q.queue.queue.len() as u64
+            );
+            while self.q.timeout_index < deadline_range_end {
+                let i = (self.q.timeout_index - self.q.index).get() as usize;
+                self.q.timeout_index.inc_assign();
+
+                if let Some(Request(request)) = match self.q.queue.queue.get_mut(i) {
+                    Some(item @ Some(Request(_))) => item.take(),
+                    _ => continue,
+                } {
+                    self.q.num_messages -= 1;
+                    debug_assert_eq!(
+                        self.q.num_messages,
+                        self.q.queue.queue.iter().filter(|rr| rr.is_some()).count(),
+                    );
+                    debug_assert!(self
+                        .q
+                        .queue
+                        .queue
+                        .iter()
+                        .take(i + 1)
+                        .all(|rr| !matches!(rr, Some(Request(_)))));
+
+                    self.q.advance_to_next_message();
+
+                    return Some(request);
+                }
+            }
+            self.q.deadline_range_ends.pop_front();
+        }
+        None
+    }
 }
 
 impl std::iter::Iterator for OutputQueue {
@@ -435,6 +582,16 @@ impl From<&OutputQueue> for pb_queues::InputOutputQueue {
             index: q.index.get(),
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
+            deadline_range_ends: q
+                .deadline_range_ends
+                .iter()
+                .map(
+                    |(deadline, deadline_range_end)| pb_queues::MessageDeadline {
+                        deadline: deadline.as_nanos_since_unix_epoch(),
+                        index: deadline_range_end.get(),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -443,12 +600,61 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        let index: QueueIndex = q.index.into();
+        let queue_front_index: QueueIndex = q.index.into();
+        let deadline_range_ends: VecDeque<(Time, QueueIndex)> = q
+            .deadline_range_ends
+            .iter()
+            .map(|di| {
+                (
+                    Time::from_nanos_since_unix_epoch(di.deadline),
+                    di.index.into(),
+                )
+            })
+            .collect();
         let queue: QueueWithReservation<Option<RequestOrResponse>> = q.try_into()?;
-        match queue.peek() {
-            Some(None) => Err(ProxyDecodeError::MissingField("Front may not be None.")),
-            _ => Ok(Self { index, queue }),
+
+        // Compute the number of messages from queue.
+        let num_messages = queue.queue.iter().filter(|rr| rr.is_some()).count();
+
+        // Sanity check deadlines and indices are strictly sorted (no duplicates).
+        if deadline_range_ends
+            .iter()
+            .zip(deadline_range_ends.iter().skip(1))
+            .any(|(a, b)| a.0 >= b.0 || a.1 >= b.1)
+        {
+            return Err(Self::Error::ValueOutOfRange {
+                typ: "InputOutputQueue::deadline_range_ends",
+                err: "Deadline queue is not sorted.".to_string(),
+            });
         }
+
+        // Sanity check indices are in the interval (index, back_index].
+        let queue_back_index = queue_front_index + (queue.queue.len() as u64).into();
+        if let (Some((_, deadlines_front_index)), Some((_, deadlines_back_index))) =
+            (deadline_range_ends.front(), deadline_range_ends.back())
+        {
+            if *deadlines_front_index <= queue_front_index
+                || *deadlines_back_index > queue_back_index
+            {
+                return Err(Self::Error::ValueOutOfRange {
+                    typ: "InputOutputQueue::index",
+                    err: "Indices out of bounds.".to_string(),
+                });
+            }
+        }
+
+        // Sanity check the front element may not be None.
+        if let Some(None) = queue.peek() {
+            return Err(Self::Error::Other("Front may not be None.".to_string()));
+        }
+
+        Ok(Self {
+            index: queue_front_index,
+            queue,
+            deadline_range_ends,
+            timeout_index: queue_front_index,
+            num_messages,
+        })
     }
 }
 

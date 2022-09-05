@@ -7,16 +7,6 @@ use orchestrator::orchestrator::Orchestrator;
 async fn main() {
     let args = OrchestratorArgs::parse();
 
-    if args.node_id {
-        Orchestrator::node_id(args);
-        return;
-    }
-
-    if args.dc_id {
-        Orchestrator::dc_id(args);
-        return;
-    }
-
     let mut orchestrator = Orchestrator::new(args)
         .await
         .expect("Failed to start orchestrator");

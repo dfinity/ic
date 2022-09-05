@@ -25,6 +25,20 @@ appenders:
         count: 5
         pattern: "log/rosetta-api.{}.log"
 
+  ledger-canister-blocks-synchronizer:
+    kind: rolling_file
+    path: "log/ledger-canister-blocks-synchronizer.log"
+    encoder:
+      pattern: "{d} {h({l})} [{T}] {t} - {m}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 10 mb
+      roller:
+        kind: fixed_window
+        count: 3
+        pattern: "log/ledger-canister-blocks-synchronizer.{}.log"
+
   background_noise:
     kind: rolling_file
     path: "log/background_noise.log"
@@ -52,5 +66,19 @@ loggers:
     level: trace
     appenders:
       - rosetta-api
+      - stdout
+    additive: false
+
+  ic_ledger_canister_blocks_synchronizer::ledger_blocks_sync:
+    level: trace
+    appenders:
+      - rosetta-api
+      - stdout
+    additive: false
+
+  ledger_blocks_synch:
+    level: trace
+    appenders:
+      - ledger-canister-blocks-synchronizer
       - stdout
     additive: false

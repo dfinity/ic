@@ -14,7 +14,7 @@ use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::{
     governance::Governance,
     ledger::Ledger,
-    neuron::NeuronState,
+    neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance,
         governance_error::ErrorType,
@@ -25,6 +25,7 @@ use ic_sns_governance::{
             IncreaseDissolveDelay, RemoveNeuronPermissions,
         },
         manage_neuron_response::Command as CommandResponse,
+        neuron::DissolveState,
         proposal::Action,
         Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, ListNeurons,
         ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters,
@@ -290,6 +291,10 @@ fn test_claim_neuron() {
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         // The neuron's cached_neuron_stake_e8s should equal the 1 token (e8s) that was staked.
         assert_eq!(neuron.cached_neuron_stake_e8s, TOKEN_SUBDIVIDABLE_BY);
+        assert_eq!(
+            neuron.voting_power_percentage_multiplier,
+            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
+        );
 
         Ok(())
     });
@@ -584,7 +589,7 @@ fn test_neuron_action_is_not_authorized() {
 }
 
 #[test]
-fn test_disburse_maturity_a() {
+fn test_disburse_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
@@ -919,10 +924,12 @@ async fn zero_total_reward_shares() {
     // Step 1.3: Craft a governance.
     let root_canister_id = [1; 29];
     let ledger_canister_id = [2; 29];
+    let swap_canister_id = [3; 29];
     let proto = GovernanceProto {
         // These won't be used, so we use garbage values.
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(NervousSystemParameters {
             voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
             ..NervousSystemParameters::with_default_values()
@@ -1060,17 +1067,20 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         Neuron {
             id: Some(NeuronId { id: vec![1, 2, 3] }),
             cached_neuron_stake_e8s: 2,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
         Neuron {
             id: Some(NeuronId { id: vec![4, 5, 6] }),
             cached_neuron_stake_e8s: 3,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
         // A neuron that will not vote.
         Neuron {
             id: Some(NeuronId { id: vec![7, 8, 9] }),
             cached_neuron_stake_e8s: 4,
+            voting_power_percentage_multiplier: 100,
             ..Default::default()
         },
     ];
@@ -1115,10 +1125,12 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     // Step 1.3: Craft a governance.
     let root_canister_id = [1; 29];
     let ledger_canister_id = [2; 29];
+    let swap_canister_id = [3; 29];
     let proto = GovernanceProto {
         // These won't be used, so we use garbage values.
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(nervous_system_parameters),
         mode: governance::Mode::Normal as i32,
 
@@ -1452,7 +1464,7 @@ fn test_neuron_add_all_permissions_to_self() {
 
         // Grant the claimer all permissions
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 Some(user.get_principal_id()),
@@ -1513,7 +1525,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
         assert_eq!(neuron.permissions.len(), 1);
 
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 Some(additional_user.get_principal_id()),
@@ -1532,7 +1544,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
         );
 
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 Some(additional_user.get_principal_id()),
@@ -1773,6 +1785,125 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
 }
 
 #[test]
+fn test_add_neuron_permission_can_add_duplicate_permissions() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let user2 = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let user3 = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
+        let user4 = UserInfo::new(Sender::from_keypair(&TEST_USER4_KEYPAIR));
+
+        let account_identifier = Account {
+            owner: user1.sender.get_principal_id(),
+            subaccount: None,
+        };
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Initially grant user1 with all the permissions so it can setup the test
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        sns_canisters
+            .stake_and_claim_neuron(&user1.sender, None)
+            .await;
+
+        // Grant user2 a subset of permissions, but most notably
+        // do not add the ManagePrincipals permission
+        sns_canisters
+            .add_neuron_permissions_or_panic(
+                &user1.sender,
+                &user1.subaccount,
+                Some(user2.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user2.sender.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32
+            ]
+        );
+
+        // Using user2 (principal with no ManagePrincipal permissions), grant user3 it's exact permissions.
+        // This should succeed even though User2 does not have ManagePrincipals
+        sns_canisters
+            .add_neuron_permissions_or_panic(
+                &user2.sender,
+                &user1.subaccount,
+                Some(user3.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 3);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user3.sender.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32
+            ]
+        );
+
+        // Using user3 (principal with no ManagePrincipal permissions), grant user4 more permissions
+        // than it has. This should fail
+        let error = match sns_canisters
+            .add_neuron_permissions(
+                &user3.sender,
+                &user1.subaccount,
+                Some(user4.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                    NeuronPermissionType::Disburse as i32,
+                ],
+            )
+            .await
+        {
+            Ok(_) => panic!("Expected this call to error"),
+            Err(err) => err,
+        };
+        assert_eq!(error.error_type, ErrorType::NotAuthorized as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
 fn test_neuron_remove_all_permissions_of_self() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -1812,7 +1943,7 @@ fn test_neuron_remove_all_permissions_of_self() {
         );
 
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 &user.get_principal_id(),
@@ -1868,7 +1999,7 @@ fn test_neuron_remove_some_permissions() {
         );
 
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 &user.get_principal_id(),
@@ -2003,7 +2134,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
 
         // Add all the permissions for the additional user to eventually be removed
         sns_canisters
-            .add_neuron_permissions(
+            .add_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 Some(additional_user.get_principal_id()),
@@ -2017,7 +2148,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
 
         // Remove a single permission of a different PrincipalId
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 &additional_user.get_principal_id(),
@@ -2038,7 +2169,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
 
         // Remove the rest of the permissions a user has
         sns_canisters
-            .remove_neuron_permissions(
+            .remove_neuron_permissions_or_panic(
                 &user,
                 &subaccount,
                 &additional_user.get_principal_id(),
@@ -2195,6 +2326,177 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
         };
 
         assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_remove_neuron_permission_can_remove_duplicate_permissions() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let user2 = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let user3 = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
+        let user4 = UserInfo::new(Sender::from_keypair(&TEST_USER4_KEYPAIR));
+
+        let account_identifier = Account {
+            owner: user1.sender.get_principal_id(),
+            subaccount: None,
+        };
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Initially grant user1 with all the permissions so it can setup the test
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        sns_canisters
+            .stake_and_claim_neuron(&user1.sender, None)
+            .await;
+
+        // Grant user2 a subset of permissions, but most notably
+        // do not add the ManagePrincipals permission
+        sns_canisters
+            .add_neuron_permissions_or_panic(
+                &user1.sender,
+                &user1.subaccount,
+                Some(user2.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user2.sender.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32
+            ]
+        );
+
+        // Using user1 (principal with all permissions), grant user3 user2's exact permissions.
+        sns_canisters
+            .add_neuron_permissions_or_panic(
+                &user1.sender,
+                &user1.subaccount,
+                Some(user3.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 3);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user3.sender.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32
+            ]
+        );
+
+        // Using user2 (principal with no ManagePrincipal permissions), remove user3's exact permissions.
+        // This should succeed even though User2 does not have ManagePrincipals
+        let result = sns_canisters
+            .remove_neuron_permissions(
+                &user2.sender,
+                &user1.subaccount,
+                &user3.sender.get_principal_id(),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                ],
+            )
+            .await;
+        // Assert that nothing has errored
+        if result.is_err() {
+            println!("{}", result.as_ref().err().unwrap())
+        }
+        assert!(result.is_ok());
+
+        // Assert the PrincipalId has now been removed
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+        assert!(!neuron
+            .permissions
+            .iter()
+            .any(|permission| permission.principal == Some(user3.sender.get_principal_id())));
+
+        // Using user1 (principal with all permissions), grant user4 more permissions than user2.
+        sns_canisters
+            .add_neuron_permissions_or_panic(
+                &user1.sender,
+                &user1.subaccount,
+                Some(user4.sender.get_principal_id()),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::SubmitProposal as i32,
+                    NeuronPermissionType::Disburse as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 3);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user4.sender.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32,
+                NeuronPermissionType::Disburse as i32,
+            ]
+        );
+
+        // Using user2 (principal with no ManagePrincipal permissions), remove a permission
+        // of user4 that user2 doesn't have. This should fail.
+        let error = match sns_canisters
+            .add_neuron_permissions(
+                &user2.sender,
+                &user1.subaccount,
+                Some(user4.sender.get_principal_id()),
+                vec![NeuronPermissionType::Disburse as i32],
+            )
+            .await
+        {
+            Ok(_) => panic!("Expected this call to error"),
+            Err(err) => err,
+        };
+        assert_eq!(error.error_type, ErrorType::NotAuthorized as i32);
 
         Ok(())
     });
@@ -2905,4 +3207,132 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
 
         Ok(())
     });
+}
+
+/// Tests that multiple neurons (both available at genesis and through claim_or_refresh)
+/// will show up in a proposals ballots with the correct voting power.
+#[test]
+fn test_neuron_voting_power_multiplier_with_ballots() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let user2 = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let user3 = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let dissolve_delay_seconds = *params
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .as_ref()
+            .unwrap();
+
+        let neurons = vec![
+            Neuron {
+                id: Some(user1.neuron_id.clone()),
+                cached_neuron_stake_e8s: 100_000_000,
+                // If created_timestamp_seconds, and aging_since_timestamp_seconds are 0 at genesis,
+                // the fields will be overwritten with the genesis timestamp
+                created_timestamp_seconds: 0,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 50,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                ..Default::default()
+            },
+            Neuron {
+                id: Some(user2.neuron_id.clone()),
+                cached_neuron_stake_e8s: 100_000_000,
+                // If created_timestamp_seconds, and aging_since_timestamp_seconds are 0 at genesis,
+                // the fields will be overwritten with the genesis timestamp
+                created_timestamp_seconds: 0,
+                aging_since_timestamp_seconds: 0,
+                voting_power_percentage_multiplier: 75,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+                ..Default::default()
+            },
+        ];
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            // User3 will have funds available in the ledger for staking a neuron
+            .with_ledger_account(user3.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .with_initial_neurons(neurons)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        // Stake and claim a neuron for user3
+        sns_canisters
+            .stake_and_claim_neuron(&user3.sender, Some(dissolve_delay_seconds as u32))
+            .await;
+
+        let proposal_payload = Proposal {
+            title: "Test Motion proposal".into(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "motion_text".into(),
+            })),
+            ..Default::default()
+        };
+
+        // Submit a motion proposal to examine the ballots
+        let proposal_id = sns_canisters
+            .make_proposal(&user3.sender, &user3.subaccount, proposal_payload)
+            .await
+            .unwrap();
+
+        let proposal_data = sns_canisters.get_proposal(proposal_id).await;
+
+        // Inspect and assert the voting power
+        let neuron1 = sns_canisters.get_neuron(&user1.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron1, &params);
+
+        let neuron2 = sns_canisters.get_neuron(&user2.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron2, &params);
+
+        let neuron3 = sns_canisters.get_neuron(&user3.neuron_id).await;
+        assert_neuron_voting_power(&proposal_data, &neuron3, &params);
+
+        Ok(())
+    });
+}
+
+/// Given a proposal and a neuron, assert that the corresponding ballot on the proposal
+/// matches the expected voting power of the neuron.
+fn assert_neuron_voting_power(
+    proposal_data: &ProposalData,
+    neuron: &Neuron,
+    params: &NervousSystemParameters,
+) {
+    // Compute the stake in the same way as Governance. In a sense this a regression test
+    // that the stake is computed in the way it is expected.
+    let stake = neuron.stake_e8s() as u128;
+    let max_dissolve_delay_seconds = *params.max_dissolve_delay_seconds.as_ref().unwrap();
+    let max_neuron_age_for_age_bonus = *params.max_neuron_age_for_age_bonus.as_ref().unwrap();
+
+    let d = match neuron.dissolve_state.as_ref().unwrap() {
+        DissolveState::DissolveDelaySeconds(amount) => *amount as u128,
+        _ => panic!("Unsupported DissolveState for assert_neuron_voting_power"),
+    };
+
+    let d_stake = stake + ((stake * d) / (max_dissolve_delay_seconds as u128));
+
+    let a = neuron.age_seconds(proposal_data.proposal_creation_timestamp_seconds) as u128;
+    let ad_stake = d_stake + ((d_stake * a) / (4 * max_neuron_age_for_age_bonus as u128));
+
+    let v = neuron.voting_power_percentage_multiplier as u128;
+
+    let vad_state = (ad_stake * v) / 100;
+    let expected_voting_power = vad_state as u64;
+
+    let neuron_ballot = proposal_data
+        .ballots
+        .get(&neuron.id.as_ref().unwrap().to_string())
+        .expect("Expected neuron to have a ballot");
+
+    let actual_voting_power = neuron_ballot.voting_power;
+    // Program in a little flexibility to reduce flakiness as these are u128 calculations
+    assert!(expected_voting_power.abs_diff(actual_voting_power) < 50);
 }

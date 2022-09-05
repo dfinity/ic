@@ -50,7 +50,7 @@ pub async fn main() {
     );
 
     // Create server with https enforcement.
-    let server = AdapterServer::new(config.clone(), logger.clone(), true);
+    let server = AdapterServer::new(config.clone(), logger.clone());
     match config.incoming_source {
         IncomingSource::Path(uds_path) => server
             .serve(incoming_from_path(uds_path))

@@ -54,4 +54,34 @@ pub struct CryptoLogEntry {
     #[prost(message, optional, tag = "18")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dkg_epoch: ::core::option::Option<u32>,
+    #[prost(message, optional, tag = "19")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complainer: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "20")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "21")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opener: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "22")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opening: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "23")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcript_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "24")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signer: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "25")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "26")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_shares: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "27")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_inputs: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "28")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_id: ::core::option::Option<u64>,
 }

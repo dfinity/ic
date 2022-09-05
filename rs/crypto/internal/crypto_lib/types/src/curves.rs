@@ -21,10 +21,8 @@ pub mod bls12_381 {
     /// - bytes [0..32]: A big endian number
     ///
     /// # Interoperability
-    /// - MIRACL uses a big endian 48 byte representation, so the leading 16
-    ///   bytes in the MIRACL representation should zero.  The remaining bytes
-    ///   should be identical to this 32 byte representation.
-    /// - The IETF draft does not specify a serialisation for this: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
+    /// - The IETF draft does not specify a serialisation for this:
+    ///   https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/>
     #[derive(Copy, Clone, PartialEq, Eq, Hash)]
     pub struct Fr(pub [u8; Fr::SIZE]);
     crate::derive_serde!(Fr, Fr::SIZE);
@@ -48,6 +46,17 @@ pub mod bls12_381 {
     }
     impl DefaultIsZeroes for Fr {}
 
+    impl AsRef<[u8]> for Fr {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
+    }
+    impl From<[u8; Fr::SIZE]> for Fr {
+        fn from(b: [u8; Fr::SIZE]) -> Self {
+            Self(b)
+        }
+    }
+
     /// A point in the group "G1" in serialised, library independent form.
     ///
     /// # Content
@@ -64,8 +73,6 @@ pub mod bls12_381 {
     /// - This representation is consistent with IETF draft: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
     ///   which specifies the "compressed serialization formats for E1 and E2
     ///   defined by [ZCash]"
-    /// - This representation is different from the MIRACL library format, which
-    ///   stores the flag bits in a separate leading byte.
     #[derive(Copy, Clone)]
     pub struct G1(pub [u8; G1::SIZE]);
     crate::derive_serde!(G1, G1::SIZE);
@@ -111,6 +118,11 @@ pub mod bls12_381 {
         }
     }
     impl DefaultIsZeroes for G1 {}
+    impl From<[u8; G1::SIZE]> for G1 {
+        fn from(b: [u8; G1::SIZE]) -> Self {
+            Self(b)
+        }
+    }
 
     /// A point in the group "G2".
     ///
@@ -130,10 +142,7 @@ pub mod bls12_381 {
     /// - This representation is consistent with IETF draft: https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/?include_text=1
     ///   which specifies the "compressed serialization formats for E1 and E2
     ///   defined by [ZCash]"
-    /// - This representation is different from the MIRACL library format, which
-    ///   stores the flag bits in a separate leading byte.
     /// - Ordering is by c1, or by c0 if the c1 are identical.
-    /// - Miracl refers to `c0` and `c1` as `a` and `b`.
     #[derive(Copy, Clone)]
     pub struct G2(pub [u8; G2::SIZE]);
     crate::derive_serde!(G2, G2::SIZE);
@@ -181,6 +190,11 @@ pub mod bls12_381 {
         }
     }
     impl DefaultIsZeroes for G2 {}
+    impl From<[u8; G2::SIZE]> for G2 {
+        fn from(b: [u8; G2::SIZE]) -> Self {
+            Self(b)
+        }
+    }
 }
 
 #[cfg(test)]

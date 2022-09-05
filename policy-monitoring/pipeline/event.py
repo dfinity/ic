@@ -69,10 +69,10 @@ class RebootEvent(Event):
         super().__init__(name="reboot", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot():
+        host_addr = self.doc.host_addr()
+        if not host_addr or not self.doc.is_host_reboot():
             return []
         else:
-            host_addr = self.doc.host_addr()
             data_center_prefix = GlobalInfra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 
@@ -84,10 +84,10 @@ class RebootIntentEvent(Event):
         super().__init__(name="reboot_intent", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        if not self.doc.is_host_reboot_intent():
+        host_addr = self.doc.host_addr()
+        if not host_addr or not self.doc.is_host_reboot_intent():
             return []
         else:
-            host_addr = self.doc.host_addr()
             data_center_prefix = GlobalInfra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 
@@ -112,6 +112,21 @@ class OriginalSubnetTypePreambleEvent(InfraEvent):
         return list(subnet_types.items())
 
 
+class OriginallyInIcPreambleEvent(InfraEvent):
+    """Synthetic event"""
+
+    def __init__(self, infra: GlobalInfra):
+        super().__init__(name="originally_in_ic", doc=None, infra=infra)
+
+    def unix_ts(self) -> int:
+        return 0
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        in_ic_nodes = self.infra.get_original_nodes()
+        bla = [(node_id, str(node_addr)) for node_addr, node_id in in_ic_nodes.items()]
+        return bla
+
+
 class OriginallyInSubnetPreambleEvent(InfraEvent):
     """Synthetic event"""
 
@@ -126,12 +141,12 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
         return list(map(lambda p: (p[0], str(self.infra.get_host_ip_addr(p[0])), p[1]), in_subnet_rel.items()))
 
 
-class RegistrySubnetEvent(Event):
+class RegistryEvent(Event):
 
     doc: RegistryDoc
 
-    def __init__(self, doc: EsDoc, verb: str):
-        super().__init__(name=f"registry__subnet_{verb}", doc=doc)
+    def __init__(self, doc: EsDoc, mutation: str):
+        super().__init__(name=f"registry__{mutation}", doc=doc)
 
     def filter(self) -> bool:
         if super().filter() and self.doc.is_registry_canister():
@@ -139,6 +154,26 @@ class RegistrySubnetEvent(Event):
             return True
         else:
             return False
+
+
+class RegistryEventWithInfra(InfraEvent):
+
+    doc: RegistryDoc
+
+    def __init__(self, doc: EsDoc, mutation: str, infra: GlobalInfra):
+        super().__init__(name=f"registry__{mutation}", doc=doc, infra=infra)
+
+    def filter(self) -> bool:
+        if super().filter() and self.doc.is_registry_canister():
+            self.doc = RegistryDoc(self.doc.repr)
+            return True
+        else:
+            return False
+
+
+class RegistrySubnetEvent(RegistryEvent):
+    def __init__(self, doc: EsDoc, verb: str):
+        super().__init__(mutation=f"subnet_{verb}", doc=doc)
 
 
 class RegistrySubnetCreatedEvent(RegistrySubnetEvent):
@@ -165,27 +200,19 @@ class RegistrySubnetUpdatedEvent(RegistrySubnetEvent):
             return [(params.subnet_id, params.subnet_type)]
 
 
-class RegistryNodeEvent(InfraEvent):
-
+class RegistryNodeEvent(RegistryEventWithInfra):
     doc: RegistryDoc
 
     def __init__(self, doc: EsDoc, verb: str, infra: GlobalInfra):
-        super().__init__(name=f"registry__node_{verb}_subnet", doc=doc, infra=infra)
-
-    def filter(self) -> bool:
-        if super().filter() and self.doc.is_registry_canister():
-            self.doc = RegistryDoc(self.doc.repr)
-            return True
-        else:
-            return False
+        super().__init__(mutation=f"node_{verb}_subnet", doc=doc, infra=infra)
 
 
-class RegistryNodeRemovedEvent(RegistryNodeEvent):
+class RegistryNodesRemovedFromSubnetEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="removed_from", infra=infra)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params_iter = self.doc.get_removed_nodes()
+        params_iter = self.doc.get_removed_nodes_from_subnet_params()
         if params_iter is None:
             return []
         else:
@@ -194,12 +221,12 @@ class RegistryNodeRemovedEvent(RegistryNodeEvent):
             )
 
 
-class RegistryNodeAddedEvent(RegistryNodeEvent):
+class RegistryNodeAddedToSubnetEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="added_to", infra=infra)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params_iter = self.doc.get_added_nodes()
+        params_iter = self.doc.get_added_nodes_to_subnet_params()
         if params_iter is None:
             return []
         else:
@@ -213,6 +240,43 @@ class RegistryNodeAddedEvent(RegistryNodeEvent):
                     params_iter,
                 )
             )
+
+
+class RegistryNodesRemovedFromIcEvent(RegistryEventWithInfra):
+    def __init__(self, doc: EsDoc, infra: GlobalInfra):
+        super().__init__(doc=doc, mutation="node_removed_from_ic", infra=infra)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params_iter = self.doc.get_removed_nodes_from_ic_params()
+        if params_iter is None:
+            return []
+        else:
+            return list(
+                map(
+                    lambda params: (
+                        params.node_id,
+                        str(self.infra.get_host_ip_addr(params.node_id)),
+                    ),
+                    params_iter,
+                )
+            )
+
+
+class RegistryNodeAddedToIcEvent(RegistryEventWithInfra):
+    def __init__(self, doc: EsDoc, infra: GlobalInfra):
+        super().__init__(doc=doc, mutation="node_added_to_ic", infra=infra)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params = self.doc.get_added_node_to_ic_params()
+        if params is None:
+            return []
+        else:
+            return [
+                (
+                    params.node_id,
+                    str(self.infra.get_host_ip_addr(params.node_id)),
+                )
+            ]
 
 
 class ReplicaEvent(Event):
@@ -258,11 +322,21 @@ class NodeMembershipEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.node_id),  # NOT the ID of the event reported node
                 )
             ]
+
+
+class NodeAddedEvent(NodeMembershipEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="added")
+
+
+class NodeRemovedEvent(NodeMembershipEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="removed")
 
 
 class ValidatedBlockProposalEvent(ReplicaEvent):
@@ -277,7 +351,17 @@ class ValidatedBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash)]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash)]
+
+
+class ValidatedBlockProposalAddedEvent(ValidatedBlockProposalEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="Added")
+
+
+class ValidatedBlockProposalMovedEvent(ValidatedBlockProposalEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc, verb="Moved")
 
 
 class DeliverBatchEvent(ReplicaEvent):
@@ -291,8 +375,8 @@ class DeliverBatchEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.block_hash),
                 )
             ]
@@ -309,8 +393,8 @@ class ConsensusFinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(int(params.is_state_available)),
                     str(int(params.is_key_available)),
                 )
@@ -326,7 +410,7 @@ class MoveBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash, params.signer)]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash, params.signer)]
 
 
 class ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent(ReplicaEvent):
@@ -360,7 +444,7 @@ class ReplicaDivergedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
 
 
 class CupShareProposedEvent(ReplicaEvent):
@@ -372,7 +456,7 @@ class CupShareProposedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
+            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
 
 
 class FinalizedEvent(ReplicaEvent):
@@ -386,8 +470,8 @@ class FinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
+                    self.doc.get_node_id(),
+                    self.doc.get_subnet_id(),
                     str(params.height),
                     params.hash,
                     params.replica_version,
@@ -395,22 +479,23 @@ class FinalizedEvent(ReplicaEvent):
             ]
 
 
-class GenericLogEvent(ReplicaEvent):
+class GenericLogEvent(Event):
+    doc: EsDoc
+
     def __init__(self, doc: EsDoc):
-        super().__init__(name="log", doc=doc, crate=ReplicaEvent.WILDCARD, module=ReplicaEvent.WILDCARD)
+        super().__init__(name="log", doc=doc)
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
-        params = self.doc.get_unusual_log_level_event_params()
+        params = self.doc.get_generic_params()
         if not params:
             return []
         else:
-            crate, module = self.doc.get_crate_module()
             return [
                 (
-                    self.doc.get_host_principal(),
-                    self.doc.get_subnet_principal(),
-                    crate,
-                    module,
+                    self.doc.host_id(),
+                    params.node_id,
+                    params.subnet_id,
+                    params.component_id,
                     params.level,
                     params.message,
                 )

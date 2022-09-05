@@ -216,6 +216,7 @@ pub struct EcdsaConfig {
     pub quadruples_to_create_in_advance: u32,
     pub key_ids: Vec<EcdsaKeyId>,
     pub max_queue_size: Option<u32>,
+    pub signature_request_timeout_ns: Option<u64>,
 }
 
 impl From<EcdsaConfig> for pb::EcdsaConfig {
@@ -224,6 +225,7 @@ impl From<EcdsaConfig> for pb::EcdsaConfig {
             quadruples_to_create_in_advance: item.quadruples_to_create_in_advance,
             key_ids: item.key_ids.iter().map(|key| key.into()).collect(),
             max_queue_size: item.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: item.signature_request_timeout_ns,
         }
     }
 }
@@ -240,6 +242,7 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
             quadruples_to_create_in_advance: value.quadruples_to_create_in_advance,
             key_ids,
             max_queue_size: Some(value.max_queue_size),
+            signature_request_timeout_ns: value.signature_request_timeout_ns,
         })
     }
 }

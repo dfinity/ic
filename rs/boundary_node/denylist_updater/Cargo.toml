@@ -7,7 +7,9 @@ edition = "2021"
 anyhow = "1.0.58"
 async-trait = "0.1.56"
 axum = "0.5.9"
+chacha20poly1305 = "0.10.0"
 clap = { version = "3.2.6", features = ["derive"] }
+flate2 = "1.0.24"
 futures = "0.3.21"
 humantime = "2.1.0"
 mockall = "0.11.1"
@@ -15,9 +17,13 @@ nix = { version = "0.24.2", features = ["signal"] }
 opentelemetry = "0.17.0"
 opentelemetry-prometheus = "0.10.0"
 prometheus = "0.13.1"
+rand_core = "0.6.3"
 reqwest = { version = "0.11.11", features = ["json"] }
+rsa = "0.6.1"
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_json = "1.0.82"
+sha2 = "0.10.2"
+tar = "0.4.38"
 tempfile = "3.3.0"
 tokio = { version = "1.19.2", features = ["full"] }
 tracing = "0.1.35"

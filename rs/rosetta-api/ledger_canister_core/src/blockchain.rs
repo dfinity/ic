@@ -97,6 +97,19 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         self.num_archived_blocks..self.num_archived_blocks + self.blocks.len() as u64
     }
 
+    /// Returns the slice of blocks stored locally.
+    ///
+    /// # Panic
+    ///
+    /// This function panics if the specified range is not a subset of locally available blocks.
+    pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> &[EncodedBlock] {
+        use crate::range_utils::{is_subrange, offset};
+
+        assert!(is_subrange(&local_blocks, &self.local_block_range()));
+
+        &self.blocks[offset(&local_blocks, self.num_archived_blocks)]
+    }
+
     pub fn chain_length(&self) -> BlockHeight {
         self.num_archived_blocks() + self.num_unarchived_blocks() as BlockHeight
     }

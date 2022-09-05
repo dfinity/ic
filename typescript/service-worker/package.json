@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/service-worker",
   "description": "Service worker to check certification when loading assets from the Internet Computer.",
-  "version": "1.2.4",
+  "version": "1.2.9",
   "license": "Apache-2.0",
   "files": [
     "dist-dev",
@@ -60,7 +60,6 @@
     "lint:fix": "npx eslint --fix src",
     "test:coverage": "jest --verbose --collectCoverage",
     "test": "jest",
-    "prepare": "npm run build && npm run build-dev",
     "prettier:check": "npx prettier --check src",
     "prettier:format": "npx prettier --write src",
     "format:check": "npm run prettier:check",

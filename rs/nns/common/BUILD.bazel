@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,6 +9,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nns/constants",
@@ -27,9 +28,13 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
 ]
 
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nns/common/protobuf_generator:lib",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:serial_test",
+    "@crate_index//:tempfile",
+]
 
 rust_library(
     name = "common",
@@ -37,10 +42,20 @@ rust_library(
         "src/**/*.rs",
         "gen/**/*.rs",
     ]),
-    aliases = ALIASES,
     crate_name = "ic_nns_common",
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "common_test_feature",
+    srcs = glob([
+        "src/**/*.rs",
+        "gen/**/*.rs",
+    ]),
+    crate_features = ["test"],
+    crate_name = "ic_nns_common",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -52,9 +67,11 @@ generated_files_check(
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nns/common",
-    deps = [
-        "//rs/nns/common/protobuf_generator:lib",
-        "//rs/test_utilities/compare_dirs",
-        "@crate_index//:tempfile",
-    ],
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "common_test",
+    crate = ":common",
+    deps = DEV_DEPENDENCIES,
 )

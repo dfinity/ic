@@ -388,6 +388,7 @@ impl CallContextManager {
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
     ) -> CallContextAction {
         enum OutstandingCalls {
@@ -397,6 +398,10 @@ impl CallContextManager {
         enum Responded {
             Yes,
             No,
+        }
+
+        if let Some(callback_id) = callback_id {
+            self.unregister_callback(callback_id);
         }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {
@@ -497,13 +502,6 @@ impl CallContextManager {
         self.callbacks.remove(&callback_id)
     }
 
-    pub fn unregister_call_context(
-        &mut self,
-        call_context_id: CallContextId,
-    ) -> Option<CallContext> {
-        self.call_contexts.remove(&call_context_id)
-    }
-
     /// Returns the call origin, which is either the message id of the ingress
     /// message or the canister id of the canister that sent the initial
     /// request.
@@ -525,6 +523,18 @@ impl CallContextManager {
             .iter()
             .filter(|(_, callback)| callback.call_context_id == call_context_id)
             .count()
+    }
+
+    /// Returns true iff all open call contexts are marked as deleted
+    /// and all outstanding callbacks refer to open call contexts.
+    pub fn canister_ready_to_stop(&self) -> bool {
+        self.call_contexts()
+            .iter()
+            .all(|(_, ctxt)| ctxt.is_deleted())
+            && self
+                .callbacks
+                .iter()
+                .all(|(_, callback)| self.call_contexts.contains_key(&callback.call_context_id))
     }
 
     /// Expose the `next_callback_id` field so that the canister sandbox can

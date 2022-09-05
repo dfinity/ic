@@ -67,8 +67,7 @@ fn test_canisters_are_created_and_installed() {
 
         let sns_wasm = &nns_canisters.sns_wasms;
 
-        let root_wasm =
-            Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
+        let root_wasm = Project::cargo_bin_maybe_from_env("sns-root-canister", &[]);
         let root_hash = Sha256::hash(&root_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -79,11 +78,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "sns/governance",
-            "sns-governance-canister",
-            &[],
-        );
+        let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
         let governance_hash = Sha256::hash(&governance_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -94,11 +89,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-            "rosetta-api/icrc1/ledger",
-            "ic-icrc1-ledger",
-            &[],
-        );
+        let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
         let ledger_hash = Sha256::hash(&ledger_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -109,8 +100,7 @@ fn test_canisters_are_created_and_installed() {
         };
         nns_canisters.add_wasm(request).await;
 
-        let swap_wasm =
-            Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+        let swap_wasm = Project::cargo_bin_maybe_from_env("sns-swap-canister", &[]);
         let swap_hash = Sha256::hash(&swap_wasm.clone().bytes()).to_vec();
         let request = AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -118,6 +108,18 @@ fn test_canisters_are_created_and_installed() {
                 canister_type: SnsCanisterType::Swap.into(),
             }),
             hash: swap_hash.clone(),
+        };
+
+        nns_canisters.add_wasm(request).await;
+
+        let archive_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-archive", &[]);
+        let archive_hash = Sha256::hash(&archive_wasm.clone().bytes()).to_vec();
+        let request = AddWasmRequest {
+            wasm: Some(SnsWasm {
+                wasm: archive_wasm.clone().bytes(),
+                canister_type: SnsCanisterType::Archive.into(),
+            }),
+            hash: archive_hash.clone(),
         };
 
         nns_canisters.add_wasm(request).await;
@@ -171,7 +173,9 @@ fn test_canisters_are_created_and_installed() {
             .update_(
                 "get_sns_canisters_summary",
                 candid_one,
-                GetSnsCanistersSummaryRequest {},
+                GetSnsCanistersSummaryRequest {
+                    update_canister_list: None,
+                },
             )
             .await
             .unwrap();
@@ -285,8 +289,8 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             // Because of the invalid WASM above (i.e. universal canister) which does not understand
             // the governance init payload, this fails.
             error: Some(SnsWasmError {
-                message: "Error installing Governance WASM: Failed to install WASM on canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-                error code 5: Canister qsgjb-riaaa-aaaaa-aaaga-cai trapped explicitly: \
+                message: "Error installing Governance WASM: Failed to install WASM on canister qvhpv-4qaaa-aaaaa-aaagq-cai: \
+                error code 5: Canister qvhpv-4qaaa-aaaaa-aaagq-cai trapped explicitly: \
                 unknown op 68"
                     .to_string()
             })

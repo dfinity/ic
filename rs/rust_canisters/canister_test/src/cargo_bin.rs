@@ -11,7 +11,7 @@ use std::time::SystemTime;
 ///```ignore
 /// use canister_test::*;
 /// canister_test(|r|{
-///     let project = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+///     let project = Project::new();
 ///     let canister_1 =
 ///         project
 ///         .cargo_bin("canister_1", &[])
@@ -33,70 +33,32 @@ pub struct Project {
     pub cargo_manifest_dir: PathBuf,
 }
 
+impl Default for Project {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Project {
-    /// Generally the right way to call this function is
-    /// ```ignore
-    /// # use canister_test::*;
-    /// Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    /// ```
-    /// `cargo_manifest_dir` is the directory where the Cargo.toml of the
-    /// project with the binaries you want to test are
-    pub fn new<P: AsRef<Path>>(cargo_manifest_dir: P) -> Self {
+    pub fn new() -> Self {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+        let mut h = Path::new(&manifest_dir);
+        while !h.ends_with("rs") {
+            h = h
+                .parent()
+                .expect("unable to find `rs` directory while traversing to root");
+        }
         Project {
-            cargo_manifest_dir: PathBuf::from(cargo_manifest_dir.as_ref()),
+            cargo_manifest_dir: h.to_path_buf(),
         }
     }
 
-    /// Wrapper around `new`, where the path to the Cargo.toml of the canister
-    /// to build is given relative to `rs/`.
+    /// On CI, returns the pre-compiled binary, found thanks to an env var.
     ///
-    /// This can be more convenient than using `new` directly, because the path
-    /// given is independent of the location of the Cargo.toml of the
-    /// test/binary that uses it.
-    fn new_from_path_relative_to_rs(relative_path_from_rs: impl AsRef<Path>) -> Self {
-        // This fn should remain private, because it will panic on CI.
-        let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        let canonical = dir.canonicalize().unwrap();
-        let rs = {
-            let mut d = canonical.as_path();
-            // TODO(VER-190) Robustify -- there could be more than one dir called 'rs'
-            while !d.ends_with("rs") {
-                d = d.parent().unwrap_or_else(||
-                    panic!(
-                        "Could not find the rs/ directory while going up from the CARGO_MANIFEST_DIR, \
-                        which is {}, and got canonicalized to {}. \
-                        Are you seeing this on CI? If so, then probably you're missing some \
-                        entries in the canistersForTests map in rs/check.nix.",
-                           dir.as_os_str().to_string_lossy(),
-                           canonical.as_os_str().to_string_lossy()));
-            }
-            d
-        };
-        let crate_dir = rs.join(relative_path_from_rs);
-        Self::new(crate_dir)
-    }
-
-    /// On CI, returns the pre-compiled binary, found thanks to an env var. The
-    /// `relative_path_from_rs` argument is unused in this case.
-    ///
-    /// For local development, compile the canister with cargo, searching for
-    /// the Cargo.toml of the canister to build thanks to its relative path
-    /// from rs/.
-    pub fn cargo_bin_maybe_use_path_relative_to_rs(
-        relative_path_from_rs: impl AsRef<Path>,
-        bin_name: &str,
-        features: &[&str],
-    ) -> Wasm {
-        Wasm::from_location_specified_by_env_var(bin_name, features).unwrap_or_else(|| {
-          if env::var("CARGO_MANIFEST_DIR").is_ok() {
-            Self::new_from_path_relative_to_rs(relative_path_from_rs).cargo_bin(bin_name, features)
-          } else {
-              panic!(
-                  "No CARGO_MANIFEST_DIR set, but also no _CANISTER env var, while searching for {}",
-                  bin_name
-              )
-          }
-        })
+    /// For local development, compile the canister with cargo using the given `bin_name`.
+    pub fn cargo_bin_maybe_from_env(bin_name: &str, features: &[&str]) -> Wasm {
+        Wasm::from_location_specified_by_env_var(bin_name, features)
+            .unwrap_or_else(|| Self::new().cargo_bin(bin_name, features))
     }
 
     /// this is largely equivalent to running
@@ -125,9 +87,9 @@ impl Project {
         };
         eprintln!("Compiling {}...", bin_name);
 
-        let cargo_toml_path = &self.cargo_manifest_dir.clone().join("Cargo.toml");
+        let cargo_toml_path = self.cargo_manifest_dir.join("Cargo.toml");
         let target_dir = MetadataCommand::new()
-            .manifest_path(cargo_toml_path)
+            .manifest_path(&cargo_toml_path)
             .no_deps()
             .exec()
             .expect("Failed to run cargo metadata")

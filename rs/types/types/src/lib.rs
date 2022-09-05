@@ -28,29 +28,38 @@
 // Note [Scheduler and AccumulatedPriority]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Public Specification of IC describes compute allocation. Each canister is
-// initiated with an accumulated priority of 0. The scheduler uses these values
+// Public Specification of IC describes `compute_allocation`. Each canister is
+// initiated with an `accumulated_priority` of 0. The scheduler uses these values
 // while calculating the priority of a canister at each round. The canisters
 // are scheduled at each round in the following way:
 //
-// * For each canister, we compute the round priority of that canister as the
-// sum of its accumulated priority and the multiplication of its compute
-// allocation with the multiplier (see the scheduler).
+// * For each canister, we compute the `round_priority` of that canister as the
+// sum of its `accumulated_priority` and the multiplication of its
+// `compute_allocation` with the `multiplier` (see the scheduler).
 // * We distribute the free capacity equally to all the canisters.
-// * We sort the canisters according to their round priorities in descending
-// order.
-// * The first scheduler_cores many canisters are given the top priority in
+// * For new executions:
+//   - We sort the canisters according to their round priorities in
+//     descending order.
+// * For pending long executions:
+//   - Sort the canisters first according to their execution mode,
+//     and then round priorities.
+//   - Calculate how many scheduler cores we dedicate for long executions
+//     in this round using compute allocations of these long executions.
+//   - The first `long_execution_cores` many canisters are given the top
+//     priority in this round and get into the prioritized long execution mode.
+//   - The rest of the long executions are given an opportunity to be executed
+//     by scheduling them at the very end.
+// * The first `scheduler_cores` many canisters are given the top priority in
 // this round. Therefore, they are expected to be executed as the first of
 // their threads.
-// * As the last step, we update the accumulated priorities of all canisters.
-// Canisters which did not get the top priority in this round, have their
-// accumulated priority replaced with the value of their round_priority. The
-// top scheduler_cores many canisters' accumulated priority is updated with
-// the value of their round priorities subtracted by the sum of compute
-// allocations of all canisters times multiplier divided by the number of
-// canisters that are given top priority in this round.
+// * As the last step, we credit the first `scheduler_cores` canisters
+//   with the sum of compute allocations of all canisters times `multiplier`
+//   divided by the number of canisters that are given top priority in
+//   this round. This `priority_credit` will be subtracted from the
+//   `accumulated_priority` at the end of the execution or at the checkpoint.
 //
-// As a result, at each round, the sum of accumulated priorities remains 0.
+// As a result, at each round, the sum of accumulated priorities minus
+// the sum of priority credits remains 0.
 // Similarly, the sum of all round priorities equals to the multiplication of
 // the sum of all compute allocations with the multiplier.
 
@@ -227,11 +236,6 @@ impl From<i64> for AccumulatedPriority {
         AccumulatedPriority(value)
     }
 }
-
-pub struct NumRoundsTag {}
-/// `NumRounds` is a part of the SchedulerState. The Canisters running
-/// long executions track their progress using `long_execution_progress` filed.
-pub type NumRounds = AmountOf<NumRoundsTag, u32>;
 
 #[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
 /// Type to track how much budget the IC can spend on executing queries on
@@ -422,7 +426,27 @@ fn display_canister_id() {
     );
 }
 
-/// Represents the memory allocaton of a canister.
+/// Represents scheduling strategy for Canisters with long execution in progress.
+/// All long execution start in the Opportunistic mode, and then the scheduler
+/// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
+/// behavior, and guarantee the progress for long executions.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
+pub enum LongExecutionMode {
+    /// The long execution might be opportunistically scheduled on the new execution cores,
+    /// so its progress depends on the number of new messages to execute.
+    Opportunistic = 0,
+    /// The long execution is prioritized to be scheduled on the long execution cores,
+    /// so it's quite likely the execution will be finished with no aborts.
+    Prioritized = 1,
+}
+
+impl Default for LongExecutionMode {
+    fn default() -> Self {
+        LongExecutionMode::Opportunistic
+    }
+}
+
+/// Represents the memory allocation of a canister.
 #[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub enum MemoryAllocation {
     /// A reserved number of bytes between 0 and 2^48 inclusively that is

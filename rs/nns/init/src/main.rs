@@ -1,6 +1,6 @@
 use canister_test::{RemoteTestRuntime, Runtime};
 use clap::Parser;
-use ic_base_types::PrincipalId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::{Agent, Sender};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::Governance as GovernanceProto;
@@ -121,6 +121,10 @@ struct CliArgs {
     /// (ECT) account will be released as neurons (one neuron each month).
     #[clap(long)]
     months_to_release_ect_gtc_neurons: Option<u8>,
+
+    /// The subnets to which SNS may be deployed
+    #[clap(long, multiple_values(true))]
+    sns_subnet: Vec<PrincipalId>,
 }
 
 const LOG_PREFIX: &str = "[ic-nns-init] ";
@@ -277,6 +281,14 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
         .genesis_token
         .forward_whitelisted_unclaimed_accounts_recipient_neuron_id =
         Some(GTC_FORWARD_ALL_UNCLAIMED_ACCOUNTS_RECIPIENT_NEURON_ID);
+
+    init_payloads_builder.sns_wasms.with_sns_subnet_ids(
+        args.sns_subnet
+            .iter()
+            .cloned()
+            .map(SubnetId::from)
+            .collect(),
+    );
 
     println!("{}Initialized governance.", LOG_PREFIX);
 

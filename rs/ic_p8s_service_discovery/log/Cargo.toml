@@ -1,7 +1,7 @@
 [package]
 name = "ic-p8s-service-discovery-log"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 chrono = "0.4.19"

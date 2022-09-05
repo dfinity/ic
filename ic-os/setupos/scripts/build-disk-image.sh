@@ -109,7 +109,7 @@ HOST_OS="${HOST_OS:=${BASE_DIR}/host-os.img.tar.gz}"
 GUEST_OS="${GUEST_OS:=${BASE_DIR}/guest-os.img.tar.gz}"
 LOGGING="${LOGGING:=elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443}"
 MEMORY="${MEMORY:=490}"
-NNS_URL="${NNS_URL:=http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080,http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080,http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080,http://[2604:3fc0:3002:0:5000:acff:fe31:12e8]:8080,http://[2a01:2a8:a13d:1:5000:3eff:fe35:508d]:8080,http://[2a00:fb01:400:100:5000:ceff:fea2:bb0]:8080,http://[2604:3fc0:2001:0:5000:b0ff:fe7b:ff55]:8080,http://[2607:f758:1220:0:5000:12ff:fe0c:8a57]:8080,http://[2600:c02:b002:15:5000:53ff:fef7:d3c0]:8080,http://[2001:4d78:400:10a:5000:c2ff:fe1c:fe4b]:8080,http://[2604:7e00:50:0:5000:20ff:fea7:efee]:8080,http://[2604:3fc0:3002:0:5000:4eff:fec2:4806]:8080,http://[2600:3000:6100:200:5000:cbff:fe4b:b207]:8080,http://[2a02:418:3002:0:5000:c7ff:fe7e:f426]:8080,http://[2a00:fa0:3:0:5000:68ff:fece:922e]:8080,http://[2602:ffe4:801:18:5000:51ff:fe59:50aa]:8080,http://[2a00:fc0:5000:300:5000:abff:fe65:4576]:8080,http://[2a01:138:900a:0:5000:5aff:fece:cf05]:8080,http://[2a00:fb01:400:100:5000:5bff:fe6b:75c6]:8080,http://[2602:ffe4:801:18:5000:3fff:fe77:aac6]:8080,http://[2a01:2a8:a13d:1:5000:69ff:fed2:6979]:8080,http://[2a00:fc0:5000:300:5000:4fff:fe3b:b9ea]:8080,http://[2001:920:401a:1710:5000:d7ff:fe6f:fde7]:8080,http://[2607:f758:1220:0:5000:bfff:feb9:6794]:8080,http://[2001:4d78:400:10a:5000:b0ff:fe49:e427]:8080,http://[2001:4d78:400:10a:5000:32ff:fe53:dcc3]:8080,http://[2600:c02:b002:15:5000:ceff:fecc:d5cd]:8080,http://[2a04:9dc0:0:108:6801:d8ff:feb3:a9f4]:8080,http://[2001:920:401a:1706:5000:87ff:fe11:a9a0]:8080,http://[2a04:9dc0:0:108:6801:96ff:fe8b:8483]:8080,http://[2a01:2a8:a13e:1:5000:e1ff:fe0e:f2a4]:8080,http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080,http://[2a01:138:900a:0:5000:2aff:fef4:c47e]:8080,http://[2401:3f00:1000:24:6801:3bff:fe67:276a]:8080,http://[2401:3f00:1000:23:5000:80ff:fe84:91ad]:8080,http://[2600:3004:1200:1200:5000:59ff:fe54:4c4b]:8080,http://[2001:920:401a:1708:5000:5fff:fec1:9ddb]:8080,http://[2607:f1d0:10:1:5000:a7ff:fe91:44e]:8080,http://[2a00:fa0:3:0:5000:5aff:fe89:b5fc]:8080,http://[2a02:800:2:2003:5000:f7ff:fe79:3d58]:8080}"
+NNS_URL="${NNS_URL:=https://nns.ic0.app}"
 NAME_SERVERS="${NAME_SERVERS:=2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844}"
 
 if [ "${OUT_FILE}" == "" ]; then
@@ -282,21 +282,21 @@ function assemble_and_populate_image() {
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
 
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
+    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 50M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
+    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 50M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
         "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
 
-    "${TOOL_DIR}"/build_fat32_image.py -o "${TMP_DIR}/partition-config.tar" -s 100M -p config/ -l CONFIG -i "${TMP_DIR}/config.tar"
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-data.tar" -s 2G -p data/ -i "${TMP_DIR}/data.tar"
+    "${TOOL_DIR}"/build_fat32_image.py -o "${TMP_DIR}/partition-config.tar" -s 50M -p config/ -l CONFIG -i "${TMP_DIR}/config.tar"
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-data.tar" -s 1750M -p data/ -i "${TMP_DIR}/data.tar"
 
     tar xOf "${TMP_DIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMP_DIR}/file_contexts"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-boot.tar" -s 500M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" -p boot/ \
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-boot.tar" -s 100M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" -p boot/ \
         "${TMP_DIR}/version.txt:/boot/version.txt:0644" \
         "${BASE_DIR}/extra_boot_args:/boot/extra_boot_args:0644"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 2G -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 1750M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
         "${TMP_DIR}/version.txt:/opt/ic/share/version.txt:0644"
 
     "${TOOL_DIR}"/build_disk_image.py -o "${TMP_DIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
@@ -315,7 +315,7 @@ function provide_raw_image() {
     OUT_BASENAME="$(basename "${OUT_FILE}")"
     tar xf "${TMP_DIR}/disk.img.tar" --transform="s/disk.img/${OUT_BASENAME}/" -C "${OUT_DIRNAME}"
     # increase size a bit, for immediate qemu use (legacy)
-    truncate --size 5G "${OUT_FILE}"
+    truncate --size 4G "${OUT_FILE}"
 }
 
 function log_end() {

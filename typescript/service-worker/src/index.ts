@@ -22,7 +22,7 @@ window.addEventListener('load', async () => {
     );
   } else {
     console.log(
-      'Installing a service worker to proxy and validate raw content into the browser...'
+      `Installing a service worker ${process.env.VERSION} to proxy and validate content...`
     );
     // Ok, let's install the service worker...
     // note: if the service worker was already installed, when the browser requested <domain>/, it would have

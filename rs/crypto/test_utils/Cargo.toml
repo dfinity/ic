@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-test-utils"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }

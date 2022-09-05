@@ -6,7 +6,7 @@
 //! reproducable) description of the step, as well as its potential automatic
 //! execution.
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
-use command_helper::{exec_cmd, pipe_all};
+use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
 use ic_base_types::{CanisterId, NodeId};
@@ -389,11 +389,11 @@ impl Recovery {
             version_string
         );
 
-        let upgrade_url_string = format!(
-            "{}update-img{}.tar.gz",
-            url_base,
+        let image_name = format!(
+            "update-img{}.tar.zst",
             if test_version { "-test" } else { "" }
         );
+        let upgrade_url_string = format!("{}{}", url_base, image_name);
         let invalid_url = |url, e| {
             RecoveryError::invalid_output_error(format!("Invalid Url string: {}, {}", url, e))
         };
@@ -403,32 +403,30 @@ impl Recovery {
         let sha_url_string = format!("{}SHA256SUMS", url_base);
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
+        // fetch the `SHA256SUMS` file
         let mut curl = Command::new("curl");
         curl.arg(sha_url.to_string());
-        let mut sed = Command::new("sed");
-        sed.arg("-n");
-        if test_version {
-            sed.arg("1p");
-        } else {
-            sed.arg("2p");
-        }
-        let mut awk = Command::new("awk");
-        awk.arg("{print $1;}");
+        let output = exec_cmd(&mut curl)?.unwrap_or_default();
 
-        if let Some(res) = pipe_all(&mut [curl, sed, awk])? {
-            let sha256 = res.trim().to_string();
-            if !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Err(RecoveryError::invalid_output_error(format!(
-                    "SHA256 malformed: {}",
-                    sha256
-                )));
+        // split the content into lines, then split each line into a pair (<hash>, <image_name>)
+        let hashes = output
+            .split('\n')
+            .map(|line| line.split(" *").collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        // return the hash for the selected image name
+        for pair in hashes.iter() {
+            match pair.as_slice() {
+                &[sha256, name] if name == image_name => {
+                    return Ok((upgrade_url, sha256.to_string()));
+                }
+                _ => {}
             }
-            Ok((upgrade_url, sha256))
-        } else {
-            Err(RecoveryError::invalid_output_error(
-                "Empty output".to_string(),
-            ))
         }
+
+        Err(RecoveryError::invalid_output_error(
+            "No hash found in the SHA256SUMS file".to_string(),
+        ))
     }
 
     /// Return an [AdminStep] step blessing the given [ReplicaVersion].
@@ -483,7 +481,7 @@ impl Recovery {
                 .get_ecdsa_config(subnet_id, version)
                 .map_err(|err| err.to_string())
         })
-        .map_err(|err| RecoveryError::UnexpectedError(err))
+        .map_err(RecoveryError::UnexpectedError)
     }
 
     /// Return an [AdminStep] step updating the recovery CUP of the given
@@ -609,7 +607,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..50 {
+        for i in 0..100 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -864,7 +862,7 @@ pub fn get_member_ips(nns_url: Url, subnet_id: SubnetId) -> RecoveryResult<Vec<I
                 )),
             }
         })
-        .map_err(|err| RecoveryError::UnexpectedError(err))?;
+        .map_err(RecoveryError::UnexpectedError)?;
     result
         .into_iter()
         .filter_map(|node_record| {

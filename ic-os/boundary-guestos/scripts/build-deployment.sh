@@ -28,7 +28,6 @@ Arguments:
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
   -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
-  -d=, --nginx-domainname=              domain name hosted by nginx ic0.dev or ic0.app
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --prober-hosts=                  specify hosts to run the prober on
@@ -61,9 +60,6 @@ Arguments:
         --git-revision=*)
             GIT_REVISION="${argument#*=}"
             shift
-            ;;
-        -d=* | --nginx-domainname=*)
-            NGINX_DOMAIN_NAME="${argument#*=}"
             ;;
         -b=* | --denylist=*)
             DENY_LIST="${argument#*=}"
@@ -98,21 +94,6 @@ CERT_DIR="${CERT_DIR:=""}"
 DENY_LIST="${DENY_LIST:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
-NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
-
-if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
-    echo "malformed domain name $NGINX_DOMAIN_NAME"
-    NGINX_DOMAIN_NAME="ic0.app"
-fi
-
-echo "Using domain name $NGINX_DOMAIN_NAME"
-NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
-NGINX_TLD=${NGINX_DOMAIN_NAME##*.}
-if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
-    echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
-    NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
-    NGINX_TLD="${NGINX_TLD:="app"}"
-fi
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -125,12 +106,13 @@ CONFIG="$(cat ${INPUT})"
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
+    .domain,
     (.name_servers | join(" ")),
     (.name_servers_fallback | join(" ")),
     (.journalbeat_hosts | join(" ")),
     (.journalbeat_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NGINX_DOMAIN_NAME NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -167,6 +149,18 @@ while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_a
     NODES=$((NODES + 1))
 done < <(printf "%s\n" "${VALUES[@]}")
 NODES=${!__RAW_NODE_@}
+
+if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
+    echo "malformed domain name $NGINX_DOMAIN_NAME"
+    exit 1
+fi
+NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
+NGINX_TLD=${NGINX_DOMAIN_NAME##*.}
+if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
+    echo "malformed domain name $NGINX_DOMAIN_NAME"
+    exit 1
+fi
+echo "Using domain name $NGINX_DOMAIN_NAME"
 
 function prepare_build_directories() {
     TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
@@ -279,6 +273,12 @@ function generate_boundary_node_config() {
             echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
             echo DOMAIN=${NGINX_DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
             echo TLD=${NGINX_TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
+            mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
+            cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
+# HELP bn_version_info version information for the boundary node
+# TYPE bn_version_info counter
+bn_version_info{git_revision="${GIT_REVISION}"} 1
+EOF
         done
     done
 }

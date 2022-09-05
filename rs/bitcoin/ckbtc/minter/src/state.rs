@@ -3,17 +3,63 @@
 ///! The state is stored in the global thread-level variable `__STATE`.
 ///! This module provides utility functions to manage the state. Most
 ///! code should use those functions instead of touching `__STATE` directly.
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, VecDeque},
+};
+
+use candid::Principal;
+use ic_base_types::CanisterId;
+use ic_btc_types::Network;
+
+use crate::ECDSAPublicKey;
 
 thread_local! {
     static __STATE: RefCell<Option<CkBtcMinterState>> = RefCell::default();
+}
+
+// A pending retrieve btc request
+#[derive(Clone, Debug, PartialEq)]
+pub struct RetrieveBtcRequest {
+    pub amount: u64,
+    pub address: String,
+    pub fee: u64,
+    pub block_index: u64,
 }
 
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
 #[derive(Clone, Debug)]
-pub struct CkBtcMinterState {}
+pub struct CkBtcMinterState {
+    /// The bitcoin network that the minter will connect to
+    pub btc_network: Network,
+
+    /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
+    /// a testing key for testnet and mainnet
+    pub ecdsa_key_name: String,
+
+    /// The Minter ECDSA public key
+    pub ecdsa_public_key: Option<ECDSAPublicKey>,
+
+    /// Per-principal lock for update_balance
+    pub update_balance_principals: BTreeSet<Principal>,
+
+    /// Per-principal lock for retrieve_btc
+    pub retrieve_btc_principals: BTreeSet<Principal>,
+
+    /// Minimum fee for retrieve_btc bitcoin transactions
+    pub retrieve_btc_min_fee: u64,
+
+    /// Minimum amount of bitcoin that can be retrieved
+    pub retrieve_btc_min_amount: u64,
+
+    /// Retrieve_btc requests that are waiting to be served
+    pub pending_retrieve_btc_requests: VecDeque<RetrieveBtcRequest>,
+
+    /// The CanisterId of the ckBTC Ledger
+    pub ledger_id: CanisterId,
+}
 
 /// Take the current state.
 ///

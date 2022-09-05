@@ -123,6 +123,7 @@ impl Registry {
         update_subnet_record
     }
 
+    /// Retrieve the CUP for a given subnet at a registry version (or latest if not specified).
     pub fn get_subnet_catch_up_package(
         &self,
         subnet_id: SubnetId,
@@ -144,6 +145,8 @@ impl Registry {
         }
     }
 
+    /// Get a map representing EcdsaKeyId => Subnets that hold the key
+    /// but do not need to be enabled for signing.
     pub fn get_ecdsa_keys_to_subnets_map(&self) -> HashMap<EcdsaKeyId, Vec<SubnetId>> {
         let mut key_map: HashMap<EcdsaKeyId, Vec<SubnetId>> = HashMap::new();
 
@@ -171,6 +174,8 @@ impl Registry {
         key_map
     }
 
+    /// Get the initial ECDSA dealings via a call to IC00 for a given EcdsaInitialConfig and a set of
+    /// nodes to receive them.
     pub async fn get_all_initial_ecdsa_dealings_from_ic00(
         &self,
         ecdsa_initial_config: &Option<EcdsaInitialConfig>,
@@ -189,6 +194,8 @@ impl Registry {
         futures::future::join_all(initial_ecdsa_dealings_futures).await
     }
 
+    /// Helper function to build the request objects to send to IC00 for
+    /// `compute_initial_ecdsa_dealings`
     fn get_compute_ecdsa_args_from_initial_config(
         &self,
         ecdsa_initial_config: &EcdsaInitialConfig,
@@ -201,7 +208,10 @@ impl Registry {
             .map(|key_request| {
                 // create requests outside of async move context to avoid ownership problems
                 let key_id = key_request.key_id.clone();
-                let target_subnet = key_request.subnet_id.map(SubnetId::new);
+                let target_subnet = key_request
+                    .subnet_id
+                    .map(SubnetId::new)
+                    .expect("subnet_id is required for EcdsaKeyRequests");
                 ComputeInitialEcdsaDealingsArgs::new(
                     key_id,
                     target_subnet,
@@ -212,6 +222,8 @@ impl Registry {
             .collect()
     }
 
+    /// Helper function to make the request and decode the response for
+    /// `compute_initial_ecdsa_dealings`.
     async fn get_ecdsa_initializations_from_ic00(
         &self,
         dealing_request: ComputeInitialEcdsaDealingsArgs,
@@ -237,6 +249,7 @@ impl Registry {
         }
     }
 
+    /// Get the list of subnets that can sign for a given EcdsaKeyId.
     pub fn get_ecdsa_signing_subnet_list(
         &self,
         key_id: &EcdsaKeyId,
@@ -251,6 +264,7 @@ impl Registry {
         })
     }
 
+    /// Create the mutations that disable subnet signing for a single subnet and set of EcdsaKeyId's.
     pub fn mutations_to_disable_subnet_signing(
         &self,
         subnet_id: SubnetId,
@@ -284,6 +298,7 @@ impl Registry {
         mutations
     }
 
+    /// Get a list of all EcdsaKeyId's held by a given subnet.
     pub fn get_ecdsa_keys_held_by_subnet(&self, subnet_id: SubnetId) -> Vec<EcdsaKeyId> {
         let subnet_record = self.get_subnet_or_panic(subnet_id);
         subnet_record
@@ -297,6 +312,8 @@ impl Registry {
             .unwrap_or_default()
     }
 
+    /// Get a list of keys that will be removed from a subnet given the complete list of keys to be
+    /// held by that subnet.
     pub(crate) fn get_keys_that_will_be_removed_from_subnet(
         &self,
         subnet_id: SubnetId,
@@ -307,6 +324,8 @@ impl Registry {
         current_keys.difference(&requested_keys).cloned().collect()
     }
 
+    /// Get a list of keys that will be added to a subnet given the complete list of keys to be held
+    /// by that subnet.
     pub fn get_keys_that_will_be_added_to_subnet(
         &self,
         subnet_id: SubnetId,
@@ -315,6 +334,61 @@ impl Registry {
         let current_keys = vec_to_set(self.get_ecdsa_keys_held_by_subnet(subnet_id));
         let requested_keys = vec_to_set(updated_key_list);
         requested_keys.difference(&current_keys).cloned().collect()
+    }
+
+    /// Validates EcdsaInitialConfig.  If own_subnet_id is supplied, this also validates that all
+    /// requested keys are available on a different subnet (for the case of recovering a subnet)
+    pub fn validate_ecdsa_initial_config(
+        &self,
+        ecdsa_initial_config: &EcdsaInitialConfig,
+        own_subnet_id: Option<PrincipalId>,
+    ) -> Result<(), String> {
+        let ecdsa_subnet_map = self.get_ecdsa_keys_to_subnets_map();
+
+        for key_request in &ecdsa_initial_config.keys {
+            // Requested key must be a known key.
+            if !ecdsa_subnet_map.contains_key(&key_request.key_id) {
+                return Err(format!(
+                    "The requested ECDSA key '{}' was not found in any subnet.",
+                    key_request.key_id
+                ));
+            }
+
+            let subnets_for_key = ecdsa_subnet_map.get(&key_request.key_id).unwrap();
+
+            // Require that a subnet is targeted.
+            let subnet_id_principal = match key_request.subnet_id.as_ref() {
+                None => {
+                    return Err(format!(
+                        "EcdsaKeyRequest for key '{}' did not specify subnet_id.",
+                        key_request.key_id
+                    ))
+                }
+                Some(id) => id,
+            };
+
+            // Ensure the subnet being targeted is not the same as the subnet being recovered.
+            if let Some(own_subnet_principal) = own_subnet_id {
+                if subnet_id_principal == &own_subnet_principal {
+                    return Err(format!(
+                        "Attempted to recover ECDSA key '{}' by \
+                     requesting it from itself.  Subnets cannot recover ECDSA keys from themselves.",
+                        key_request.key_id
+                    ));
+                }
+            }
+
+            // Ensure that the targeted subnet actually holds the key.
+            let subnet_id = SubnetId::new(*subnet_id_principal);
+            if !subnets_for_key.contains(&subnet_id) {
+                return Err(format!(
+                    "The requested ECDSA key '{}' \
+                     is not available in targeted subnet '{}'.",
+                    key_request.key_id, subnet_id_principal
+                ));
+            }
+        }
+        Ok(())
     }
 }
 

@@ -5,16 +5,19 @@ use candid::{
     types::number::{Int, Nat},
     CandidType,
 };
-use ic_icrc1::endpoints::Value;
+use ic_icrc1::endpoints::{
+    ArchivedTransactionRange, GetTransactionsResponse, QueryArchiveFn, Transaction as Tx, Value,
+};
 use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
     blockchain::Blockchain,
-    ledger::{apply_transaction, LedgerData, TransactionInfo},
+    ledger::{apply_transaction, block_locations, LedgerData, TransactionInfo},
+    range_utils,
 };
 use ic_ledger_core::{
     balances::Balances,
-    block::{BlockHeight, HashOf},
+    block::{BlockHeight, BlockType, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -26,6 +29,9 @@ use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 const MAX_ACCOUNTS: usize = 28_000_000;
+/// The maximum number of transactions the ledger should return for a single
+/// get_transactions request.
+const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
 const ACCOUNTS_OVERFLOW_TRIM_QUANTITY: usize = 100_000;
 const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
@@ -263,5 +269,43 @@ impl Ledger {
             None => T::Empty,
         };
         tree.digest().0
+    }
+
+    /// Returns transactions in the specified range.
+    pub fn get_transactions(&self, start: BlockHeight, length: usize) -> GetTransactionsResponse {
+        let locations = block_locations(self, start, length);
+
+        let local_blocks = range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);
+
+        let local_transactions: Vec<Tx> = self
+            .blockchain
+            .block_slice(local_blocks.clone())
+            .iter()
+            .map(|enc_block| -> Tx {
+                Block::decode(enc_block.clone())
+                    .expect("bug: failed to decode encoded block")
+                    .into()
+            })
+            .collect();
+
+        let archived_transactions = locations
+            .archived_blocks
+            .into_iter()
+            .map(|(canister_id, slice)| ArchivedTransactionRange {
+                start: Nat::from(slice.start),
+                length: Nat::from(range_utils::range_len(&slice)),
+                callback: QueryArchiveFn {
+                    canister_id,
+                    method: "get_transactions".to_string(),
+                },
+            })
+            .collect();
+
+        GetTransactionsResponse {
+            first_index: Nat::from(local_blocks.start),
+            log_length: Nat::from(self.blockchain.chain_length()),
+            transactions: local_transactions,
+            archived_transactions,
+        }
     }
 }

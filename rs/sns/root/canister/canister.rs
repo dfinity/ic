@@ -21,12 +21,14 @@ use ic_sns_root::{
     UpdateSettingsArgs,
 };
 
+use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use prost::Message;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_ic00_types::IC_00;
 use ic_icrc1::endpoints::ArchiveInfo;
+use ic_sns_root::types::Environment;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
@@ -37,6 +39,31 @@ struct RealManagementCanisterClient {}
 impl RealManagementCanisterClient {
     fn new() -> Self {
         Self {}
+    }
+}
+
+struct CanisterEnvironment {}
+
+#[async_trait]
+impl Environment for CanisterEnvironment {
+    fn now(&self) -> u64 {
+        now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration")
+            .as_secs()
+    }
+
+    async fn call_canister(
+        &self,
+        canister_id: CanisterId,
+        method_name: &str,
+        arg: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        call_bytes_with_cleanup(canister_id, method_name, &arg, Funds::zero()).await
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        dfn_core::api::id()
     }
 }
 
@@ -80,6 +107,16 @@ impl LedgerCanisterClient for RealLedgerCanisterClient {
             .await
             .map_err(CanisterCallError::from)
     }
+}
+
+/// Create a RealLedgerCanisterClient with ledger_canister_id from STATE.
+fn create_ledger_client() -> RealLedgerCanisterClient {
+    let ledger_canister_id = STATE
+        .with(|state| state.borrow().ledger_canister_id())
+        .try_into()
+        .expect("Expected the ledger_canister_id to be convertable to a CanisterId");
+
+    RealLedgerCanisterClient::new(ledger_canister_id)
 }
 
 thread_local! {
@@ -165,12 +202,21 @@ fn get_sns_canisters_summary() {
 
 #[candid_method(update, rename = "get_sns_canisters_summary")]
 async fn get_sns_canisters_summary_(
-    _request: GetSnsCanistersSummaryRequest,
+    request: GetSnsCanistersSummaryRequest,
 ) -> GetSnsCanistersSummaryResponse {
+    let update_canister_list = request.update_canister_list.unwrap_or(false);
+    // Only governance can set this parameter to true
+    if update_canister_list {
+        assert_eq_governance_canister_id(dfn_core::api::caller());
+    }
+
+    let canister_env = CanisterEnvironment {};
     SnsRootCanister::get_sns_canisters_summary(
         &STATE,
         &mut RealManagementCanisterClient::new(),
-        dfn_core::api::id(),
+        &mut create_ledger_client(),
+        &canister_env,
+        update_canister_list,
     )
     .await
 }
@@ -312,17 +358,8 @@ fn canister_heartbeat() {
 /// Asynchronous method called for the canister_heartbeat that injects dependencies
 /// to run_periodic_tasks.
 async fn canister_heartbeat_() {
-    let now = now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("Could not get the duration")
-        .as_secs();
-
-    let ledger_canister_id = STATE
-        .with(|state| state.borrow().ledger_canister_id())
-        .try_into()
-        .expect("Expected the ledger_canister_id to be convertable to a CanisterId");
-
-    let mut ledger_client = RealLedgerCanisterClient::new(ledger_canister_id);
+    let now = CanisterEnvironment {}.now();
+    let mut ledger_client = create_ledger_client();
 
     SnsRootCanister::run_periodic_tasks(&STATE, &mut ledger_client, now).await
 }

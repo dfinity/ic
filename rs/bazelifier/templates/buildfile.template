@@ -45,7 +45,6 @@ ALIASES = {{ aliases|json }}
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    edition = "2018",
     version = "{{ crate_version }}",
     deps = BUILD_DEPENDENCIES,
     aliases = ALIASES,
@@ -55,7 +54,7 @@ cargo_build_script(
 
 {{ build_type }}(
     name = "{{ target_name }}",
-    srcs = glob(["src/**"{% if protobufs.is_some() %}, "gen/**"{% endif %}]),
+    srcs = glob(["src/**/*.rs"{% if protobufs.is_some() %}, "gen/**"{% endif %}]),
     crate_name = "{{ crate_name }}",
     edition = "{{ edition }}",
     proc_macro_deps = MACRO_DEPENDENCIES,

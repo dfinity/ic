@@ -17,8 +17,8 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_sns_init_protobuf_generator",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

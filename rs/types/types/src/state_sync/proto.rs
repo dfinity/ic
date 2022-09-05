@@ -31,12 +31,14 @@ impl From<Manifest> for pb::Manifest {
             version: manifest.version,
             file_table: manifest
                 .file_table
-                .into_iter()
+                .iter()
+                .cloned()
                 .map(|entry| entry.into())
                 .collect(),
             chunk_table: manifest
                 .chunk_table
-                .into_iter()
+                .iter()
+                .cloned()
                 .map(|entry| entry.into())
                 .collect(),
         }
@@ -72,19 +74,19 @@ impl TryFrom<pb::Manifest> for Manifest {
     type Error = ProxyDecodeError;
 
     fn try_from(manifest: pb::Manifest) -> Result<Self, ProxyDecodeError> {
-        Ok(Self {
-            version: manifest.version,
-            file_table: manifest
+        Ok(Self::new(
+            manifest.version,
+            manifest
                 .file_table
                 .into_iter()
                 .map(FileInfo::try_from)
                 .collect::<Result<_, _>>()?,
-            chunk_table: manifest
+            manifest
                 .chunk_table
                 .into_iter()
                 .map(ChunkInfo::try_from)
                 .collect::<Result<_, _>>()?,
-        })
+        ))
     }
 }
 

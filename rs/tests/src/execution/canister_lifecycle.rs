@@ -35,11 +35,10 @@ use futures::future::join_all;
 use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet},
-    ic_manager::IcHandle,
+use ic_fondue::ic_manager::IcHandle;
+use ic_ic00_types::{
+    CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob, Payload,
 };
-use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
@@ -636,130 +635,6 @@ pub fn delete_running_canister_fails(handle: IcHandle, ctx: &ic_fondue::pot::Con
     })
 }
 
-/// This test assumes it's being executed using `config_memory_capacity`, which
-/// limits the memory capacity of the subnet to 20MiB.
-pub fn exceeding_memory_capacity_fails_when_memory_allocation_changes(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
-        async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            // Create a canister for the user.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .call_and_wait(delay())
-                .await
-                .expect("Couldn't create canister with provisional API.")
-                .0;
-
-            // Set the memory to 20MiB + 1. Should fail.
-            let res = mgr
-                .update_settings(&canister_id)
-                .with_memory_allocation(20u64 * 1024 * 1024 + 1)
-                .call_and_wait(delay())
-                .await;
-
-            assert_reject(res, RejectCode::SysFatal);
-
-            // Set the memory to exactly 20MiB. Should succeed.
-            mgr.update_settings(&canister_id)
-                .with_memory_allocation(20u64 * 1024 * 1024)
-                .call_and_wait(delay())
-                .await
-                .unwrap();
-        }
-    })
-}
-
-// A special configuration for testing small canister memory size.
-pub fn config_canister_memory_size() -> LegacyInternetComputer {
-    LegacyInternetComputer::new().add_subnet(
-        LegacySubnet::fast_single_node(SubnetType::System)
-            // A small limit on canisters' memory.
-            .with_max_canister_memory_size(10 * 1024 * 1024 /* 10 MiB */),
-    )
-}
-
-/// This test assumes it's being executed with `config_canister_memory_size`.
-pub fn memory_allocation_not_set(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
-        async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            // Create a canister for the user.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .call_and_wait(delay())
-                .await
-                .unwrap()
-                .0;
-
-            let wasm = wabt::wat2wasm(
-                r#"
-                (module
-                    (import "ic0" "stable_size" (func $stable_size (result i32)))
-                    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-                    (import "ic0" "msg_reply" (func $msg_reply))
-
-                    (func $test200
-                        (if (i32.ne (call $stable_grow (i32.const 200)) (i32.const -1))
-                            (then (unreachable))
-                        )
-                        (call $msg_reply)
-                    )
-
-                    (func $test50
-                        (if (i32.eq (call $stable_grow (i32.const 50)) (i32.const -1))
-                            (then (unreachable))
-                        )
-                        (call $msg_reply)
-                    )
-
-                    (export "canister_update test200" (func $test200))
-                    (export "canister_update test50" (func $test50)))"#,
-            )
-            .unwrap();
-
-            // Install code without specifying a memory allocation.
-            mgr.install_code(&canister_id, &wasm)
-                .with_raw_arg(vec![])
-                .call_and_wait(delay())
-                .await
-                .unwrap();
-
-            // Growing the memory by 200 pages exceeds the 10MiB max canister
-            // memory size we set and should fail.
-            agent
-                .update(&canister_id, "test200")
-                .call_and_wait(delay())
-                .await
-                .unwrap();
-
-            // Growing the memory by 50 pages doesn't exceed the 10MiB max canister
-            // memory size we set and should succeed.
-            agent
-                .update(&canister_id, "test50")
-                .call_and_wait(delay())
-                .await
-                .unwrap();
-        }
-    });
-}
-
 /// Try to install a canister with a large wasm but a small memory allocation.
 /// It should be rejected.
 pub fn canister_large_wasm_small_memory_allocation(
@@ -964,10 +839,12 @@ pub fn total_compute_allocation_cannot_be_exceeded(
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     // See the corresponding field in the execution environment config.
     let allocatable_compute_capacity_in_percent = 50;
-    let app_sched_cores = ic_config::subnet_config::SchedulerConfig::application_subnet()
-        .scheduler_cores
-        * allocatable_compute_capacity_in_percent
-        / 100;
+    // Note: the DTS scheduler requires at least 2 scheduler cores
+    assert!(ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores >= 2);
+    let app_sched_cores =
+        (ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores - 1)
+            * allocatable_compute_capacity_in_percent
+            / 100;
     const MAX_COMP_ALLOC: Option<u64> = Some(99);
     rt.block_on(async move {
         let mut canister_principals = Vec::new();
@@ -975,10 +852,14 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-        let cans = join_all(
-            (0..app_sched_cores)
-                .map(|_| UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None)),
-        )
+        let cans = join_all((0..app_sched_cores).map(|_| {
+            UniversalCanister::new_with_params(
+                &agent,
+                MAX_COMP_ALLOC,
+                Some(std::u64::MAX as u128),
+                None,
+            )
+        }))
         .await;
         for can in cans {
             let can_id = can
@@ -988,7 +869,13 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         }
 
         // Installing the app_sched_cores + 1st canister should fail.
-        let can = UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None).await;
+        let can = UniversalCanister::new_with_params(
+            &agent,
+            MAX_COMP_ALLOC,
+            Some(std::u64::MAX as u128),
+            None,
+        )
+        .await;
         assert!(can.is_err());
 
         let mgr = ManagementCanister::create(&agent);
@@ -1025,7 +912,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
                 .update(wasm().call(management::create_canister(
-                    Cycles::from(100_000_000_000_000u128).into_parts(),
+                    Cycles::from(10_000_000_000_000_000u128).into_parts(),
                 )))
                 .await
                 .map(|res| {
@@ -1208,7 +1095,7 @@ fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload
 
 /// Sending no field
 pub fn create_canister_with_no_settings_field(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let payload = EmptyBlob::encode();
+    let payload = EmptyBlob.encode();
     create_canister_test(handle, ctx, payload);
 }
 

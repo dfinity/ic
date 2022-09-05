@@ -1,30 +1,61 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    "//rs/constants",
+    "//rs/crypto",
+    "//rs/cycles_account_manager",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/registry/keys",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/types/types",
+    "//rs/validator",
+    "@crate_index//:bincode",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/registry/client",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+    "//rs/types/ic00_types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:criterion",
+    "@crate_index//:proptest",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "ingress_manager",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
     crate_name = "ic_ingress_manager",
-    edition = "2018",
-    deps = [
-        "//rs/constants",
-        "//rs/crypto",
-        "//rs/cycles_account_manager",
-        "//rs/interfaces",
-        "//rs/interfaces/state_manager",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/registry/helpers",
-        "//rs/registry/keys",
-        "//rs/registry/subnet_type",
-        "//rs/replicated_state",
-        "//rs/types/types",
-        "//rs/validator",
-        "@crate_index//:bincode",
-        "@crate_index//:prometheus",
-        "@crate_index//:slog",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
-# TODO(IC-1207): migrate tests and benches when unblocked dependencies.
+rust_test(
+    name = "ingress_manager_test",
+    aliases = ALIASES,
+    crate = ":ingress_manager",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

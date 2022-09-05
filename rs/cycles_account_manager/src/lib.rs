@@ -327,14 +327,13 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         num_instructions: NumInstructions,
         num_instructions_initially_charged: NumInstructions,
+        subnet_size: usize,
     ) {
         // TODO(EXC-1055): Log an error if `num_instructions` is larger.
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        self.refund_cycles(
-            system_state,
-            self.convert_instructions_to_cycles(num_instructions_to_refund),
-        );
+        let cycles = self.convert_instructions_to_cycles(num_instructions_to_refund);
+        self.refund_cycles(system_state, self.scale_cost(cycles, subnet_size));
     }
 
     /// Charges the canister for its compute allocation
@@ -536,16 +535,15 @@ impl CyclesAccountManager {
         )
     }
 
-    /// Refunds the cycles from the response. In particular, adds leftover
-    /// cycles from the what was reserved when the corresponding `Request` was
-    /// sent earlier.
-    pub fn response_cycles_refund(
+    /// Returns the refund cycles for the response transmission bytes reserved at
+    /// the initial call time.
+    pub fn refund_for_response_transmission(
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        system_state: &mut SystemState,
         response: &Response,
-    ) {
+        subnet_size: usize,
+    ) -> Cycles {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.
         let response_payload_size_bytes = response.payload_size_bytes().get();
@@ -562,11 +560,12 @@ impl CyclesAccountManager {
                     response_payload_size_bytes,
                     max_payload_size_bytes
                 );
+                Cycles::zero()
             }
-            Some(extra_bytes) => {
-                let cycles_to_refund = self.config.xnet_byte_transmission_fee * extra_bytes;
-                self.refund_cycles(system_state, cycles_to_refund);
-            }
+            Some(extra_bytes) => self.scale_cost(
+                self.config.xnet_byte_transmission_fee * extra_bytes,
+                subnet_size,
+            ),
         }
     }
 

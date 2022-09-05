@@ -3,8 +3,7 @@ use clap::Parser;
 use ic_sns_governance::pb::v1::{governance::SnsMetadata, NervousSystemParameters};
 use ic_sns_init::{
     pb::v1::{sns_init_payload::InitialTokenDistribution, SnsInitPayload},
-    MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_PARTICIPANT_ICP_E8S_DEFAULT,
-    MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
+    MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
 };
 use regex::Regex;
 use std::{
@@ -61,38 +60,22 @@ pub struct SnsCliInitConfig {
     /// The minimum amount a neuron needs to have staked.
     neuron_minimum_stake_e8s: Option<u64>,
 
-    /// Amount targeted by the swap, if the amount is reached the swap is triggered.
-    max_icp_e8s: Option<u64>,
+    /// The logo for the SNS project represented as a path to the logo file in the local filesystem.
+    logo: Option<PathBuf>,
 
-    /// Minimum number of participants for the swap to take place.
-    min_participants: Option<u32>,
+    /// The URL to the dapp that is controlled by the SNS project.
+    url: Option<String>,
 
-    /// The minimum amount of ICP that each buyer must contribute to participate.
-    min_participant_icp_e8s: Option<u64>,
+    /// The name of the SNS project. This may differ from the name of the associated token.
+    name: Option<String>,
 
-    /// The maximum amount of ICP that each buyer can contribute.
-    max_participant_icp_e8s: Option<u64>,
-
-    /// The total number of ICP that is required for this token swap to
-    /// take place.
-    min_icp_e8s: Option<u64>,
+    /// A description of the SNS project.
+    description: Option<String>,
 
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
     fallback_controller_principal_ids: Vec<String>,
-
-    /// The logo for the SNS project represented as a path to the logo file in the local filesystem.
-    logo: Option<PathBuf>,
-
-    /// Url to the dapp controlled by the SNS project.
-    url: Option<String>,
-
-    /// Name of the SNS project. This may differ from the name of the associated token.
-    name: Option<String>,
-
-    /// Description of the SNS project.
-    description: Option<String>,
 
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
@@ -110,11 +93,6 @@ impl Default for SnsCliInitConfig {
             token_symbol: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
-            max_icp_e8s: None,
-            min_participants: None,
-            min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_E8S_DEFAULT),
-            max_participant_icp_e8s: None,
-            min_icp_e8s: None,
             fallback_controller_principal_ids: vec![],
             logo: None,
             url: None,
@@ -205,9 +183,10 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
     type Error = anyhow::Error;
 
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
-        let logo_path = sns_cli_init_config
-            .logo
-            .ok_or_else(|| anyhow!("The logo must be specified"))?;
+        let optional_logo = match sns_cli_init_config.logo {
+            None => None,
+            Some(logo_path) => Some(load_logo(&logo_path)?),
+        };
 
         Ok(SnsInitPayload {
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
@@ -215,14 +194,9 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             token_symbol: sns_cli_init_config.token_symbol,
             proposal_reject_cost_e8s: sns_cli_init_config.proposal_reject_cost_e8s,
             neuron_minimum_stake_e8s: sns_cli_init_config.neuron_minimum_stake_e8s,
-            max_icp_e8s: sns_cli_init_config.max_icp_e8s,
-            min_participants: sns_cli_init_config.min_participants,
-            min_participant_icp_e8s: sns_cli_init_config.min_participant_icp_e8s,
-            max_participant_icp_e8s: sns_cli_init_config.max_participant_icp_e8s,
-            min_icp_e8s: sns_cli_init_config.min_icp_e8s,
             fallback_controller_principal_ids: sns_cli_init_config
                 .fallback_controller_principal_ids,
-            logo: Some(load_logo(&logo_path)?),
+            logo: optional_logo,
             url: sns_cli_init_config.url,
             name: sns_cli_init_config.name,
             description: sns_cli_init_config.description,
@@ -262,7 +236,9 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"transaction_fee_e8s.*").unwrap(),
             format!(
                 r##"#
-# Fee of a transaction.
+# SNS LEDGER
+#
+# Fee of a ledger transaction.
 # Default value = {}
 #"##,
                 nervous_system_parameters_default
@@ -274,7 +250,10 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"proposal_reject_cost_e8s.*").unwrap(),
             format!(
                 r##"#
-# Cost of making a proposal that is not adopted.
+#
+# SNS GOVERNANCE
+#
+# The cost of making a proposal that is not adopted in e8s.
 # Default value = {}
 #"##,
                 nervous_system_parameters_default.reject_cost_e8s.unwrap()
@@ -284,9 +263,9 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"token_name.*").unwrap(),
             format!(
                 r##"#
-# The name of the token issued by an SNS Ledger.
+# The name of the token issued by the SNS ledger.
 # This field has no default, a value must be provided by the user.
-# Must be a string length between {} and {} characters
+# Must be a string with a length between {} and {} characters.
 #
 # Example: InternetComputerProtocol
 #"##,
@@ -296,16 +275,25 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
         (
             Regex::new(r"initial_token_distribution.*").unwrap(),
             r##"#
+#
+# SNS INITIAL TOKEN DISTRIBUTION
+#
 # This field sets the initial token distribution. Initially, there is only support for
-# the FractionalDeveloperVotingPower strategy. The FractionalDeveloperVotingPower token
-# distribution strategy configures how tokens and neurons are distributed via four
-# "buckets": developers, treasury, swap, and airdrops. This strategy will distribute
-# all developer tokens at genesis in restricted neurons with an additional voting power
-# multiplier applied. This voting power multiplier is calculated as
+# the FractionalDeveloperVotingPower strategy. This strategy configures how SNS tokens and neurons
+# are distributed in four "buckets": developer tokens that are given to the original developers of
+# the dapp, airdrop tokens that can be given to any other principals that should have tokens at
+# genesis, treasury tokens that are owned by the SNS governance canister, and sale tokens which
+# are sold in an initial decentralization sale but parts of which can also be reserved for future
+# sales.
+# All developer and airdrop tokens are distributed to the defined principals at genesis in a basket
+# of neurons called the developer neurons and the airdrop neurons, respectively.
+# If only parts of the sale tokens are sold in the initial decentralization sale, the developer
+# neurons are restricted by a voting power multiplier. This voting power multiplier is calculated as
 # `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
+
 # As more of the swap funds are swapped in future rounds, the voting power
-# multiplier will approach 1.0. The following preconditions must be met for
-# it to be a valid distribution:
+# multiplier will approach 1.0.
+# The initial token distribution must satisfy the following preconditions to be valid:
 #    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
 #    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
 #    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
@@ -316,21 +304,21 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 # - developer_distribution has one field:
 #    - developer_neurons: A list of NeuronDistributions that specify the neuron's stake and
 #      controlling principal. These neurons will be available at genesis in PreInitializationSwap
-#      mode. The voting power mutliplier will be applied to these neurons.
+#      mode. The voting power multiplier is applied to these neurons.
 #
 # - treasury_distribution has one field:
 #    - total_e8s: The total amount of tokens in the treasury bucket.
 #
 # - swap_distribution has two fields:
-#    - total_e8s: The total amount of tokens in the swap bucket. initial_swap_amount_e8s will be
+#    - total_e8s: The total amount of tokens in the sale bucket. initial_swap_amount_e8s will be
 #      deducted from this total.
-#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the swap canister for
-#      the initial token swap.
+#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the sale canister for
+#      the initial token sale.
 #
 # - aidrop_distribution has one field:
 #    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
 #      controlling principal. These neurons will be available at genesis in PreInitializationSwap
-#      mode. No voting power mutliplier will be applied to these neurons.
+#      mode. No voting power multiplier is applied to these neurons.
 #
 # Example:
 # initial_token_distribution:
@@ -357,12 +345,11 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"token_symbol.*").unwrap(),
             format!(
                 r##"#
-# The symbol of the token issued by an SNS Ledger.
+# The symbol of the token issued by the SNS Ledger.
 # This field has no default, a value must be provided by the user.
-# Must be a string length between {} and {} characters
+# Must be a string with a length between {} and {} characters.
 #
 # Example: ICP
-#
 #"##,
                 MIN_TOKEN_SYMBOL_LENGTH, MAX_TOKEN_SYMBOL_LENGTH
             ),
@@ -371,7 +358,7 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             Regex::new(r"neuron_minimum_stake_e8s*").unwrap(),
             format!(
                 r##"#
-# The minimum amount a neuron needs to have staked.
+# The minimum amount of e8s a neuron needs to have staked.
 # Default value = {}
 #"##,
                 nervous_system_parameters_default
@@ -380,61 +367,11 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
             ),
         ),
         (
-            Regex::new(r"min_icp_e8s*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# The minimum amount of ICP that is required for this token swap to take
-# place. This amount divided by the amount of SNS tokens for swap gives the
-# seller's reserve price for the swap, i.e., the minimum number of ICP per SNS
-# tokens that the seller of SNS tokens is willing to accept. If this amount is
-# not achieved, the swap will be aborted (instead of committed) when the due
-# date/time occurs. Must be smaller than or equal to `max_icp_e8s`.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"max_icp_e8s*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# Amount targeted by the swap, if the amount is reached the swap is triggered.
-# Must be at least min_participants * min_participant_icp_e8.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"min_participant_icp_e8s*").unwrap(),
-            format!(
-                r##"#
-# The minimum amount of ICP that each buyer must contribute to participate in the swap.
-# Default value = {}
-#"##,
-                MIN_PARTICIPANT_ICP_E8S_DEFAULT
-            ),
-        ),
-        (
-            Regex::new(r"min_participants*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# The minimum number of participants for the swap to take place. Must be greater than zero.
-#"##
-            .to_string(),
-        ),
-        (
-            Regex::new(r"max_participant_icp_e8s*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# The maximum amount of ICP that each buyer can contribute. Must be greater than
-# or equal to `min_participant_icp_e8s` and less than or equal to
-# `max_icp_e8s`. Can effectively be disabled by setting it to `max_icp_e8s`.
-#"##
-            .to_string(),
-        ),
-        (
             Regex::new(r"fallback_controller_principal_ids.*").unwrap(),
             r##"#
-# If the swap fails, control of the dapp canister(s) will be set to these
-# principal IDs. In most use-cases, this would be the same as the original set
-# of controller(s). Must not be empty.
+# If the decentralization sale fails, control of the dapp canister(s) is set to these
+# principal IDs. In most use cases, this is set to the original set of controller(s) of the dapp.
+# This field has no default, a value must be provided by the user.
 #"##
             .to_string(),
         ),
@@ -483,7 +420,7 @@ fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
 
     for (i, line) in yaml_payload.lines().enumerate() {
         if i == 1 {
-            yaml_file_string.push_str("# 100_000_000 e8s = 1 token.\n")
+            yaml_file_string.push_str("# It holds that 100000000 e8s = 1 SNS token.\n#\n")
         }
         for (re, comment) in field_comment.iter() {
             if re.is_match(line) {
@@ -530,6 +467,32 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
 
+    impl SnsCliInitConfig {
+        pub fn with_test_values() -> Self {
+            let mut logo_path =
+                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            logo_path.push("test.png");
+
+            Self {
+                transaction_fee_e8s: Some(1),
+                token_name: Some("ServiceNervousSystem".to_string()),
+                token_symbol: Some("SNS".to_string()),
+                proposal_reject_cost_e8s: Some(2),
+                neuron_minimum_stake_e8s: Some(3),
+                fallback_controller_principal_ids: vec![
+                    "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
+                ],
+                logo: Some(logo_path.clone()),
+                url: Some("https://internetcomputer.org".to_string()),
+                name: Some("Name".to_string()),
+                description: Some("Description".to_string()),
+                initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
+                    ..Default::default()
+                })),
+            }
+        }
+    }
+
     /// Tests that the text produced by the "new" command can be read into the default SnsCliInitConfig
     #[test]
     fn test_default_init_config_file() {
@@ -544,7 +507,7 @@ mod test {
     fn test_read_yaml_file() {
         let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
         logo_path.push("test.png");
-        let mut file_contents = format!(
+        let file_contents = format!(
             r#"
 ---
 transaction_fee_e8s: 10000
@@ -568,11 +531,6 @@ initial_token_distribution:
         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
           stake_e8s: 500000000
 
-max_icp_e8s: 200000000
-min_participants: 2
-min_participant_icp_e8s: 100000000
-max_participant_icp_e8s: 100000000
-min_icp_e8s: 200000000
 fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
 logo: {}
 description: Launching an SNS
@@ -584,41 +542,24 @@ url: https://internetcomputer.org/
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         assert!(resulting_payload.validate().is_ok());
 
-        // We add a string repeating the field "min_participants", this should fail
-        file_contents.push_str("\nmin_participants: 21");
+        // We add a string repeating the field "name", this should fail
+        let mut file_contents = file_contents;
+        file_contents.push_str("\nname: ServiceNervousSystemTest");
         assert!(serde_yaml::from_str::<SnsCliInitConfig>(&file_contents).is_err());
     }
 
     #[test]
     fn test_try_from_sns_cli_init_config() {
-        let mut logo_path = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        logo_path.push("test.png");
-        let create_sns_cli_init_config = || SnsCliInitConfig {
-            transaction_fee_e8s: Some(1),
-            token_name: Some("ServiceNervousSystem".to_string()),
-            token_symbol: Some("SNS".to_string()),
-            proposal_reject_cost_e8s: Some(2),
-            neuron_minimum_stake_e8s: Some(3),
-            max_icp_e8s: Some(4),
-            min_participants: Some(5),
-            min_participant_icp_e8s: Some(6),
-            max_participant_icp_e8s: Some(7),
-            min_icp_e8s: Some(8),
-            fallback_controller_principal_ids: vec![
-                "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe".to_string(),
-            ],
-            logo: Some(logo_path.clone()),
-            url: Some("https://internetcomputer.org".to_string()),
-            name: Some("Name".to_string()),
-            description: Some("Description".to_string()),
-            initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
-                ..Default::default()
-            })),
-        };
+        let sns_cli_init_config = SnsCliInitConfig::with_test_values();
+        let try_from_result = SnsInitPayload::try_from(sns_cli_init_config.clone());
 
-        let sns_init_payload = SnsInitPayload::try_from(create_sns_cli_init_config())
-            .expect("Expected to be able to convert");
-        let sns_cli_init_config = create_sns_cli_init_config();
+        let sns_init_payload = match try_from_result {
+            Ok(sns_init_payload) => sns_init_payload,
+            Err(reason) => panic!(
+                "Could not convert SnsCliInitConfig to SnsInitPayload: {}",
+                reason
+            ),
+        };
 
         assert_eq!(
             sns_cli_init_config.transaction_fee_e8s,
@@ -636,26 +577,6 @@ url: https://internetcomputer.org/
         assert_eq!(
             sns_cli_init_config.neuron_minimum_stake_e8s,
             sns_init_payload.neuron_minimum_stake_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.max_icp_e8s,
-            sns_init_payload.max_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.min_participants,
-            sns_init_payload.min_participants
-        );
-        assert_eq!(
-            sns_cli_init_config.min_participant_icp_e8s,
-            sns_init_payload.min_participant_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.max_participant_icp_e8s,
-            sns_init_payload.max_participant_icp_e8s
-        );
-        assert_eq!(
-            sns_cli_init_config.min_icp_e8s,
-            sns_init_payload.min_icp_e8s
         );
         assert_eq!(
             sns_cli_init_config.fallback_controller_principal_ids,
@@ -681,5 +602,25 @@ url: https://internetcomputer.org/
         let encoded_logo = "data:image/png;base64,".to_owned() + &base64::encode(&buffer);
 
         assert_eq!(Some(encoded_logo), sns_init_payload.logo);
+    }
+
+    #[test]
+    fn test_try_from_sns_cli_init_without_logo() {
+        let mut sns_cli_init_config = SnsCliInitConfig::with_test_values();
+
+        // Set the logo to None to indicate the developer hasn't provided it
+        sns_cli_init_config.logo = None;
+
+        let try_from_result = SnsInitPayload::try_from(sns_cli_init_config);
+
+        let sns_init_payload = match try_from_result {
+            Ok(sns_init_payload) => sns_init_payload,
+            Err(reason) => panic!(
+                "Could not convert SnsCliInitConfig to SnsInitPayload: {}",
+                reason
+            ),
+        };
+
+        assert!(sns_init_payload.logo.is_none(), "Expected logo to be None");
     }
 }

@@ -78,12 +78,9 @@ class RcloneUpload:
             self._upload(
                 local_path=local_path,
                 remote_subdir=f"blessed/ic/{version}/{remote_subdir}",
-                other_options=["--ignore-existing"],
             )
 
-        self._upload(
-            local_path=local_path, remote_subdir=f"ic/{version}/{remote_subdir}", other_options=["--ignore-existing"]
-        )
+        self._upload(local_path=local_path, remote_subdir=f"ic/{version}/{remote_subdir}")
 
 
 def main():
@@ -92,7 +89,7 @@ def main():
     parser.add_argument(
         "--timeout",
         action="store",
-        default=120,
+        default=600,
         help="Timeout in seconds for each rclone call.",
     )
 

@@ -31,7 +31,7 @@ async fn get_sig(options: Options) {
         IC_00,
         &Ic00Method::SignWithECDSA.to_string(),
         &Encode!(&SignWithECDSAArgs {
-            message_hash: vec![0; 32],
+            message_hash: [0; 32],
             derivation_path: options.derivation_path,
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
@@ -66,7 +66,11 @@ fn main() {}
 
 #[test]
 fn check_candid_file() {
-    let candid = String::from_utf8(std::fs::read("ecdsa.did").unwrap()).unwrap();
+    let ecdsa_did_path = match std::env::var("ECDSA_DID_PATH") {
+        Ok(v) => v,
+        Err(_e) => "ecdsa.did".to_string(),
+    };
+    let candid = String::from_utf8(std::fs::read(ecdsa_did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();

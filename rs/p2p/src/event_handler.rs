@@ -397,14 +397,25 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                     }
                 }
             }
-            TransportEvent::StateChange(state_change) => {
+            TransportEvent::PeerUp(peer_id) => {
                 let consume_fn = move |item, _peer_id| {
-                    c_gossip.on_transport_state_change(item);
+                    c_gossip.on_peer_up(item);
                 };
                 let node_id = self.node_id;
                 let transport = self.transport.clone();
                 Box::pin(async move {
-                    transport.execute(node_id, state_change, consume_fn).await;
+                    transport.execute(node_id, peer_id, consume_fn).await;
+                    Ok(())
+                })
+            }
+            TransportEvent::PeerDown(peer_id) => {
+                let consume_fn = move |item, _peer_id| {
+                    c_gossip.on_peer_down(item);
+                };
+                let node_id = self.node_id;
+                let transport = self.transport.clone();
+                Box::pin(async move {
+                    transport.execute(node_id, peer_id, consume_fn).await;
                     Ok(())
                 })
             }
@@ -544,7 +555,7 @@ pub mod tests {
         gossip_protocol::{GossipAdvertSendRequest, GossipRetransmissionRequest},
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
-    use ic_interfaces_transport::{TransportPayload, TransportStateChange};
+    use ic_interfaces_transport::TransportPayload;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
     use ic_types::artifact::AdvertClass;
@@ -602,7 +613,7 @@ pub mod tests {
         /// node ID.
         fn get_node_flow_count(map: &ItemCountCollector, node_id: NodeId) -> usize {
             let map_i = &mut map.lock().unwrap();
-            *map_i.get(&node_id).or(Some(&0)).unwrap()
+            *map_i.get(&node_id).unwrap_or(&0)
         }
     }
 
@@ -645,12 +656,11 @@ pub mod tests {
             unimplemented!()
         }
 
-        /// The method is called when a transport state change is received.
-        fn on_transport_state_change(&self, transport_state_change: TransportStateChange) {
-            let peer_id = match transport_state_change {
-                TransportStateChange::PeerFlowUp(x) => x,
-                TransportStateChange::PeerFlowDown(x) => x,
-            };
+        fn on_peer_up(&self, peer_id: NodeId) {
+            TestGossip::increment_or_set(&self.num_changes, peer_id);
+        }
+
+        fn on_peer_down(&self, peer_id: NodeId) {
             TestGossip::increment_or_set(&self.num_changes, peer_id);
         }
 

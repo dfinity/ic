@@ -2,6 +2,7 @@ use std::{
     io::ErrorKind,
     net::SocketAddr,
     path::PathBuf,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -14,7 +15,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use clap::Parser;
+use clap::{ArgEnum, Parser};
 use futures::future::TryFutureExt;
 use mockall::automock;
 use nix::{
@@ -24,7 +25,9 @@ use nix::{
 use opentelemetry::{global, sdk::Resource, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
+use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
+use serde_json as json;
 use tokio::{
     fs::{self, File},
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -35,9 +38,18 @@ use tracing::info;
 mod metrics;
 use metrics::{MetricParams, WithMetrics};
 
+mod decode;
+use decode::{Decode, Decoder, NopDecoder};
+
 const SERVICE_NAME: &str = "denylist-updater";
 
 const MINUTE: Duration = Duration::from_secs(60);
+
+#[derive(Clone, ArgEnum)]
+enum DecodeMode {
+    Nop,
+    Decrypt,
+}
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -45,6 +57,12 @@ const MINUTE: Duration = Duration::from_secs(60);
 struct Cli {
     #[clap(long, default_value = "http://localhost:8000/denylist.json")]
     remote_url: String,
+
+    #[clap(long, arg_enum, default_value = "nop")]
+    decode_mode: DecodeMode,
+
+    #[clap(long, default_value = "key.pem")]
+    private_key_path: PathBuf,
 
     #[clap(long, default_value = "/tmp/denylist.map")]
     local_path: PathBuf,
@@ -79,11 +97,20 @@ async fn main() -> Result<(), Error> {
 
     let http_client = reqwest::Client::builder().build()?;
 
-    let remote_lister = RemoteLister::new(http_client, cli.remote_url.clone());
+    let decoder: Arc<dyn Decode> = match cli.decode_mode {
+        DecodeMode::Nop => Arc::new(NopDecoder),
+        DecodeMode::Decrypt => {
+            let private_key_pem = std::fs::read_to_string(cli.private_key_path)?;
+            let private_key = RsaPrivateKey::from_pkcs8_pem(&private_key_pem)?;
+            Arc::new(Decoder::new(private_key))
+        }
+    };
+
+    let remote_lister = RemoteLister::new(http_client, decoder, cli.remote_url.clone());
     let remote_lister = WithNormalize(remote_lister);
     let remote_lister = WithMetrics(
         remote_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
     );
 
     let local_lister = LocalLister::new(cli.local_path.clone());
@@ -91,7 +118,7 @@ async fn main() -> Result<(), Error> {
     let local_lister = WithNormalize(local_lister);
     let local_lister = WithMetrics(
         local_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
     );
 
     let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
@@ -208,13 +235,15 @@ impl List for LocalLister {
 
 struct RemoteLister {
     http_client: reqwest::Client,
+    decoder: Arc<dyn Decode>,
     remote_url: String,
 }
 
 impl RemoteLister {
-    fn new(http_client: reqwest::Client, remote_url: String) -> Self {
+    fn new(http_client: reqwest::Client, decoder: Arc<dyn Decode>, remote_url: String) -> Self {
         Self {
             http_client,
+            decoder,
             remote_url,
         }
     }
@@ -239,10 +268,20 @@ impl List for RemoteLister {
             return Err(anyhow!("request failed with status {}", response.status()));
         }
 
-        let entries = response
-            .json::<Vec<Entry>>()
+        let data = response
+            .bytes()
             .await
-            .context("failed to deserialize response")?;
+            .context("failed to get response bytes")?
+            .to_vec();
+
+        let data = self
+            .decoder
+            .decode(data)
+            .await
+            .context("failed to decode response")?;
+
+        let entries =
+            json::from_slice::<Vec<Entry>>(&data).context("failed to deserialize json response")?;
 
         Ok(entries)
     }
@@ -305,7 +344,7 @@ impl Reload for Reloader {
         let pid = fs::read_to_string(self.pid_path.clone())
             .await
             .context("failed to read pid file")?;
-        let pid = pid.parse::<i32>().context("failed to parse pid")?;
+        let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
         let pid = Pid::from_raw(pid);
 
         send_signal(pid, self.signal)?;

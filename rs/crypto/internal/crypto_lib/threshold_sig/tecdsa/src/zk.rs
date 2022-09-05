@@ -99,7 +99,7 @@ impl ProofOfEqualOpenings {
 
         // Create the blinding commitment
         let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng)?;
+        let r = EccScalar::random(instance.curve_type, &mut rng);
         let r_com = instance.h.scalar_mul(&r)?;
 
         // Create challenge
@@ -179,8 +179,8 @@ impl ProofOfProductInstance {
         let h = EccPoint::generator_h(curve_type)?;
 
         let lhs_com = g.scalar_mul(lhs)?;
-        let rhs_com = EccPoint::mul_points(&g, rhs, &h, rhs_masking)?;
-        let product_com = EccPoint::mul_points(&g, product, &h, product_masking)?;
+        let rhs_com = EccPoint::mul_2_points(&g, rhs, &h, rhs_masking)?;
+        let product_com = EccPoint::mul_2_points(&g, product, &h, product_masking)?;
 
         Ok(Self {
             curve_type,
@@ -218,7 +218,7 @@ impl ProofOfProductInstance {
             .sub_points(&self.lhs_com.scalar_mul(&proof.challenge)?)?;
 
         let r2_com =
-            EccPoint::mul_points(&self.rhs_com, &proof.response1, &self.h, &proof.response2)?
+            EccPoint::mul_2_points(&self.rhs_com, &proof.response1, &self.h, &proof.response2)?
                 .sub_points(&self.product_com.scalar_mul(&proof.challenge)?)?;
 
         Ok((r1_com, r2_com))
@@ -259,11 +259,11 @@ impl ProofOfProduct {
         // Compute blinding commitments:
         let mut rng = seed.into_rng();
 
-        let r1 = EccScalar::random(instance.curve_type, &mut rng)?;
+        let r1 = EccScalar::random(instance.curve_type, &mut rng);
         let r1_com = instance.g.scalar_mul(&r1)?;
 
-        let r2 = EccScalar::random(instance.curve_type, &mut rng)?;
-        let r2_com = EccPoint::mul_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
+        let r2 = EccScalar::random(instance.curve_type, &mut rng);
+        let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
         let challenge = instance.hash_to_challenge(&r1_com, &r2_com, associated_data)?;
@@ -397,7 +397,7 @@ impl ProofOfDLogEquivalence {
 
         // Compute blinding commitments:
         let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng)?;
+        let r = EccScalar::random(instance.curve_type, &mut rng);
         let r_com_g = g.scalar_mul(&r)?;
         let r_com_h = h.scalar_mul(&r)?;
 

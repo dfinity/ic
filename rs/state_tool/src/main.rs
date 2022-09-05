@@ -49,6 +49,18 @@ enum Opt {
         path: PathBuf,
     },
 
+    /// Verifies whether the textual representation
+    /// of a manifest.
+    #[clap(name = "verify_manifest")]
+    VerifyManifest {
+        /// Path to a manifest.
+        #[clap(long = "file")]
+        file: PathBuf,
+        /// Manifest version; defaults to `CURRENT_STATE_SYNC_VERSION`
+        #[clap(long = "version", default_value_t=ic_state_manager::manifest::CURRENT_STATE_SYNC_VERSION)]
+        version: u32,
+    },
+
     /// Enumerates persisted states.
     #[clap(name = "list")]
     ListStates {
@@ -77,6 +89,9 @@ fn main() {
             height,
         } => commands::import_state::do_import(state, config, height),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
+        Opt::VerifyManifest { file, version } => {
+            commands::verify_manifest::do_verify_manifest(file, version)
+        }
         Opt::ListStates { config } => commands::list::do_list(config),
         Opt::Decode { file } => commands::decode::do_decode(file),
     };

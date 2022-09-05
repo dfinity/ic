@@ -63,12 +63,8 @@ async fn vote_on_root_proposal_from_multiple_voters(
 }
 
 fn governance_canister_sha() -> [u8; 32] {
-    let governance_canister_wasm_bytes = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "nns/governance",
-        "governance-canister",
-        &["test"],
-    )
-    .bytes();
+    let governance_canister_wasm_bytes =
+        Project::cargo_bin_maybe_from_env("governance-canister", &["test"]).bytes();
     ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes)
 }
 

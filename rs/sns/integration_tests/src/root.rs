@@ -5,10 +5,12 @@ use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterSta
 use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, SnsRootCanister,
 };
-use ic_sns_swap::pb::v1::Init;
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, set_up_root_canister, set_up_swap_canister, SnsCanisters,
-    SnsTestsInitPayloadBuilder,
+use ic_sns_test_utils::{
+    itest_helpers::{
+        install_rust_canister_with_memory_allocation, local_test_on_sns_subnet,
+        set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
+    },
+    SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
 };
 
 #[test]
@@ -67,7 +69,7 @@ fn test_get_sns_canisters_summary() {
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
 
         // Assert that all the canisters returned a canister summary
         assert!(response.root.is_some());
@@ -93,12 +95,20 @@ fn test_get_sns_canisters_summary() {
             sns_canisters.swap.canister_id().get()
         );
 
-        // Create a random dapp canister to register with root. Use the swap canister for this purpose
-        let dapp_canister = set_up_swap_canister(&runtime, Init::default()).await;
+        // Create a random dapp canister to register with root.
+        let mut dapp_canister = runtime.create_canister_with_max_cycles().await.unwrap();
+        install_rust_canister_with_memory_allocation(
+            &mut dapp_canister,
+            "ic-nervous-system-common-test-canister",
+            &[],
+            None,
+            SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+        )
+        .await;
         dapp_canister
             .set_controller_with_retries(sns_canisters.root.canister_id().get())
             .await
-            .expect("Error setting the controller of the dapp_canister");
+            .expect("Error setting controller");
 
         // Register the dapp canister with root
         let _response: RegisterDappCanisterResponse = sns_canisters
@@ -114,7 +124,7 @@ fn test_get_sns_canisters_summary() {
             .expect("Error calling the register_dapp_canister API");
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
 
         // Assert that the newly registered dapp is present in the response and that it's canister
         // id matches
@@ -133,7 +143,7 @@ fn test_get_sns_canisters_summary() {
             .expect("Expected the Swap canister to stop");
 
         // Get the status of the SNS using get_sns_canisters_summary
-        let response = sns_canisters.get_sns_canisters_summary().await;
+        let response = sns_canisters.get_sns_canisters_summary(None).await;
         assert!(response.swap.is_some());
         assert!(response.swap_canister_summary().status.is_none());
         assert_eq!(

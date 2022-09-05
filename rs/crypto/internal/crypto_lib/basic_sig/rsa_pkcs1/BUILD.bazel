@@ -1,29 +1,52 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/sha",
+    "//rs/types/types",
+    "@crate_index//:num-bigint",
+    "@crate_index//:num-traits",
+    "@crate_index//:rsa_0_4_0",
+    "@crate_index//:serde",
+    "@crate_index//:simple_asn1",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:hex",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
 
 rust_library(
     name = "rsa_pkcs1",
     srcs = glob(["src/**"]),
+    aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_rsa_pkcs1",
-    edition = "2018",
-    visibility = ["//rs/crypto:__subpackages__"],
-    deps = [
-        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-        "//rs/crypto/sha",
-        "//rs/types/types",
-        "@crate_index//:num-bigint",
-        "@crate_index//:num-traits",
-        "@crate_index//:rsa",
-        "@crate_index//:serde",
-        "@crate_index//:simple_asn1",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic_crypto_internal_basic_sig_rsa_pkcs1_test",
+    name = "rsa_pkcs1_test",
+    aliases = ALIASES,
     crate = ":rsa_pkcs1",
-    deps = [
-        "@crate_index//:hex",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "rsa_pkcs1_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    compile_data = glob(["tests/data/*"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":rsa_pkcs1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

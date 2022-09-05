@@ -1,0 +1,273 @@
+= SetupOS
+
+== Introduction
+
+The term SetupOS is used for the operating system installing the IC-OS stack (hypervisor and virtual machine). This installer enables the node providers/operators to independently install their nodes.
+Instead of installing and relying on a full blown upstream ISO image, we assemble the system based on a minimal Docker image and add the required components ourselves. This approach allows for a minimal, controlled and well understood system - which is key for a secure platform.
+
+== Support
+
+The following vendors and models are currently supported:
+
+|====
+|Manufacturer|Model                |Mainboard|Processor       |Memory                           |Storage
+|Dell        |PowerEdge R6525      |0DMD2T   |2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|10x 3.5 TB NVMe
+|Supermicro  |AS-1023US-TR4-0-BC27G|H11DSU-iN|2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|1x 3.5 TB NVMe, 4x 8 TB SCSI
+|====
+
+== Operating System
+
+The operating system is currently based on the Ubuntu 20.04 Server LTS Docker image:
+
+   FROM ubuntu:20.04
+
+Missing components such as the kernel, bootloader and system service manager are installed during the build process.
+
+=== Build Process
+
+The build process consists of a Shell script and two Dockerfiles, which turn the upstream Ubuntu Docker image into a bootable disk-image containing the system. Please consult the following scripts for details:
+
+  ic/ic-os/setupos/scripts/build-disk-image.sh
+
+=== Docker
+
+We currently split the Docker build process into two Dockerfiles. This split is necessary to ensure a reproducible build.
+
+  ic/ic-os/hostos/rootfs/Dockerfile.base
+  ic/ic-os/hostos/rootfs/Dockerfile
+
+The +Dockerfile.base+ takes care of installing all upstream Ubuntu packages. The version of these packages can change at any given time, as updates are published regularly. We publish the result on our public https://hub.docker.com/u/dfinity[Docker Hub].
+
+The +Dockerfile+ takes care of configuring and assembling the main disk-image. Any instruction in this file needs to be reproducible in itself.
+
+=== System Users
+
+In addition to the regular, built-in Ubuntu user accounts, we add the following users:
+
+|====
+|Username     |Home Directory     |Default Shell    |Description
+|             |                   |                 |
+|====
+
+=== System Configuration
+
+Besides the build instructions in the Docker files (+Dockerfile.base+ and +Dockerfile+), all hard-coded system configurations can be found in the +rootfs/etc+ directory. The full path is:
+
+  ic/ic-os/setupos/rootfs/etc/
+
+=== Network Configuration
+
+In order to simplify the physical cabling of the machine, we utilize Linux's active-backup bonding technique. This operating mode also improves redundancy if more than one 10 gigabit ethernet network interface is hooked up to the switch. A node operator can decide to either just use one or all of the 10GbE network interfaces in the bond. The Linux operating system will take care of handling the uplink and connectivity.
+
+Details can be found in:
+
+  ic/ic-os/setupos/rootfs/opt/ic/bin/generate-network-config.sh
+
+The network configuration in the SetupOS is only required to test the connectivity, i.e. pinging the default gateway and querying multiple NNS nodes. At least 20% of all NNS nodes need to be reachable in order to proceed with the installation.
+
+[NOTE]
+Please note that this mode does not increase the bandwidth/throughput. Only one link will be active at the same time.
+
+==== Deterministic MAC Address
+
+To have unique but deterministic MAC addresses for our nodes, we came up with the following schema:
+
+- The first 8-bits of the MAC address start with 4a for the IPv4 interface and with 6a for the IPv6 interface.
+- The second 8-bits are a consecutive hexadecimal number, starting at 00 and ending at ff. For the HostOS we reserved 00, for the first virtual machine (the ReplicaOS) 01. Any additional virtual machine on the same physical machine gets the next higher hexadecimal number:
+
+  # HostOS
+  6a:00:<deterministically-generated>
+
+  # ReplicaOS
+  6a:01:<deterministically-generated>
+
+  # BoundaryOS
+  6a:02:<deterministically-generated>
+
+  # Next Virtual Machine
+  6a:03:<deterministically-generated>
+
+  # SetupOS
+  6a:0f:<deterministically-generated>
+
+[NOTE]
+Please note that the MAC address is expected to be lower-case and contains colons between the octets.
+
+- The remaining 32-bits are deterministically generated based on the management MAC address (BMC, IPMI, iDRAC…) of the physical machine:
+
+  ipmitool lan print | grep 'MAC Address'
+
+===== Deterministically Generated Part
+
+Additionally, an arbitrary deployment name is added to the MAC address generation to further increase its uniqueness. The deployment name _mainnet_ is reserved for production. Testnets must use other names to avoid any chance of a MAC address collisions in the same data center.
+
+The deployment name is retrieved from the +deployment.json+ configuration file, generated as part of the SetupOS:
+
+  {
+    "deployment": {
+      "name": "mainnet"
+    }
+  }
+
+Based on these two inputs we calculate the sha256 checksum. Please note that there isn’t any white space in-between the two values:
+
+  # Example
+  sha256sum 3c:ec:ef:6b:37:99mainnet
+
+  # Checksum
+  f409d72aa8c98ea40a82ea5a0a437798a67d36e587b2cc49f9dabf2de1cedeeb
+
+The first 32-bit of the sha256 checksum are used as the deterministically generated part of the MAC address.
+
+  # Deterministically Generated Part
+  f409d72a
+
+  # HostOS
+  6a:00:f4:09:d7:2a
+
+  # ReplicaOS
+  6a:01:f4:09:d7:2a
+
+  # BoundaryOS
+  6a:02:f4:09:d7:2a
+
+  # Next Virtual Machine
+  6a:03:f4:09:d7:2a
+
+  # SetupOS
+  6a:0f:f4:09:d7:2a
+
+As every virtual machine ends in the same MAC address, we can derive the IPv6 address of each node on the same physical machine, including the hypervisor itself.
+In other words, swapping the prefix of the EUI-64 formatted IPv6 SLAAC address gets you to the IPv6 address of the next node.
+
+==== IPv6 Address
+
+When assigning the corresponding IPv6 address, we follow the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
+
+The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.json+ configuration file. The host part is the EUI-64 formatted address.
+
+=== Applications
+
+==== Ubuntu Repositories
+
+The following default Ubuntu repositories are active during the Docker image build process:
+
+|====
+|Distribution|Component                                          |URL
+|Focal       |focal main restricted                              |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates main restricted                      |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal universe                                     |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates universe                             |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal multiverse                                   |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-updates multiverse                           |http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-backports main restricted universe multiverse|http://archive.ubuntu.com/ubuntu/
+|Focal       |focal-security main restricted                     |http://security.ubuntu.com/ubuntu/
+|Focal       |focal-security universe                            |http://security.ubuntu.com/ubuntu/
+|Focal       |focal-security multiverse                          |http://security.ubuntu.com/ubuntu/
+|====
+
+==== Upstream Ubuntu Packages
+
+|====
+|Name                         |Description
+|attr                         |utilities for manipulating filesystem extended attributes
+|ca-certificates              |Common CA certificates
+|checkpolicy                  |SELinux policy compiler
+|curl                         |command line tool for transferring data with URL syntax
+|efibootmgr                   |Interact with the EFI Boot Manager
+|ethtool                      |display or change Ethernet device settings
+|faketime                     |Report faked system time to programs (command-line tool)
+|gdisk                        |GPT fdisk text-mode partitioning tool
+|initramfs-tools              |generic modular initramfs generator (automation)
+|ipmitool                     |utility for IPMI control with kernel driver or LAN interface (daemon)
+|iproute2                     |networking and traffic control tools
+|iputils-ping                 |Tools to test the reachability of network hosts
+|isc-dhcp-client              |DHCP client for automatically obtaining an IP address
+|jq                           |lightweight and flexible command-line JSON processor
+|less                         |pager program similar to more
+|linux-image-generic-hwe-20.04|Generic Linux kernel image
+|locales                      |GNU C Library: National Language (locale) data [support]
+|lshw                         |information about hardware configuration
+|lvm2                         |Linux Logical Volume Manager
+|net-tools                    |NET-3 networking toolkit
+|parted                       |disk partition manipulator
+|policycoreutils              |SELinux core policy utilities
+|python-is-python3            |symlinks /usr/bin/python to python3
+|selinux-policy-default       |Strict and Targeted variants of the SELinux policy
+|selinux-policy-dev           |Headers from the SELinux reference policy for building modules
+|selinux-utils                |SELinux utility programs
+|semodule-utils               |SELinux core policy utilities (modules utilities)
+|sudo                         |Provide limited super user privileges to specific users
+|systemd                      |system and service manager
+|systemd-journal-remote       |tools for sending and receiving remote journal logs
+|systemd-sysv                 |system and service manager - SysV links
+|udev                         |/dev/ and hotplug management daemon
+|usbutils                     |Linux USB utilities
+|xfsprogs                     |Utilities for managing the XFS filesystem
+|====
+
+=== Services
+
+In addition to the regular, built-in Ubuntu services, we add or manage the following systemd unit files:
+
+|====
+|Name                           |Type   |State   |Upstream|Description
+|config                         |service|Enabled |No      |Normalize config.ini configuration file
+|generate-network-config        |service|Enabled |No      |Configure physical network interfaces, bonds and bridges
+|setupos                        |service|Enabled |No      |Initiate the SetupOS installation
+|systemd-networkd-wait-online   |service|Enabled |Yes     |Wait for Network to be Configured
+|systemd-networkd               |service|Enabled |Yes     |Network Service
+|systemd-resolved               |service|Enabled |Yes     |Network Name Resolution
+|systemd-timesyncd              |service|Disabled|Yes     |NTP Client
+|====
+
+=== SELinux
+
+SELinux is currently in permissive mode. Eventually, every service is confined into its own policy and SELinux running in enforcing mode.
+
+=== Firewall
+
+Since the SetupOS is not listening on any ports, we do not activate and manage a firewall ruleset.
+
+== Configuration
+
+The configuration of the SetupOS lives on its own partition, the +config+ partition. It is formatted as FAT file system and 100MB in size.
+All files relevant for altering the IC-OS installation can be found on this partition.
+
+The partition is available after burning the SetupOS disk-image on an USB drive. It can be mounted on any operating system supporting FAT file systems.
+
+== config.ini
+
+The +config+ partition holds the following configuration file:
+
+  config.ini  # data center specific network settings
+
+===== config.ini
+
+The +config.ini+ configuration file contains all network related settings. These have to be supplied by the node provider/operator prior running the deployment.
+
+The configuration file expects the following, lower-case key=value pairs:
+
+  ipv6_prefix=2a00:fb01:400:100
+  ipv6_subnet=/64
+  ipv6_gateway=2a00:fb01:400:100::1
+
+[NOTE]
+Please note that the values above are only an example.
+
+== Installation
+
+The SetupOS installation is initiated by the systemd service unit file +setupos.service+. The type of the service is +idle+, which triggers the installation only after every other unit has completed or started.
+
+The actual installation consists of multiple Shell and Python scripts, which can be found in:
+
+  ic-os/setupos/rootfs/opt/ic/bin
+
+The sequence of the scripts is defined in the main installation script +setupos.sh+. The order is:
+
+  hardware.sh  # Verifying the system's hardware components
+  network.sh   # Testing the network connectivity and reachability of the NNS
+  disk.sh      # Purging existing LVM configurations and partitions
+  hostos.sh    # Installing and configuring the HostOS operating system
+  guestos.sh   # Installing and configuring the ReplicaOS operating system
+  devices.sh   # Handling of the HSM

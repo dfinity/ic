@@ -4,17 +4,12 @@
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::too_many_arguments)]
 
-use async_trait::async_trait;
-use ic_crypto_internal_csp::api::tls_errors::{
-    CspTlsClientHandshakeError, CspTlsServerHandshakeError,
-};
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
-    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspThresholdSignError,
-    CspTlsClientHandshake, CspTlsHandshakeSignerProvider, CspTlsServerHandshake, NiDkgCspClient,
-    NodePublicKeyData, ThresholdSignatureCspClient,
+    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker,
+    CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
+    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyData,
+    ThresholdSignatureCspClient,
 };
-use ic_crypto_internal_csp::tls::cert_chain::CspCertificateChain;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -32,7 +27,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
@@ -48,9 +43,8 @@ use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::predicate::*;
 use mockall::*;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use tokio::net::TcpStream;
 
 mock! {
     pub AllCryptoServiceProvider {}
@@ -93,13 +87,22 @@ mock! {
         ) -> CryptoResult<()>;
     }
 
+    pub trait CspSigVerifier{
+        fn verify_batch_vartime(
+            &self,
+            key_signature_pairs: &[(CspPublicKey, CspSignature)],
+            msg: &[u8],
+            algorithm_id: AlgorithmId,
+        ) -> CryptoResult<()>;
+    }
+
     pub trait CspKeyGenerator {
-        fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<(KeyId, CspPublicKey), CryptoError>;
+        fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError>;
 
         fn gen_key_pair_with_pop(
             &self,
             algorithm_id: AlgorithmId,
-        ) -> Result<(KeyId, CspPublicKey, CspPop), CryptoError>;
+        ) -> Result<(CspPublicKey, CspPop), CryptoError>;
 
         fn gen_tls_key_pair(
             &self,
@@ -175,7 +178,6 @@ mock! {
         fn create_resharing_dealing(
             &self,
             algorithm_id: AlgorithmId,
-            dkg_id: NiDkgId,
             dealer_resharing_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,
@@ -242,32 +244,6 @@ mock! {
     pub trait CspSecretKeyStoreChecker {
         fn sks_contains(&self, id: &KeyId) -> Result<bool, CryptoError>;
         fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
-    }
-
-    #[async_trait]
-    pub trait CspTlsServerHandshake {
-        async fn perform_tls_server_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            self_cert: TlsPublicKeyCert,
-            trusted_client_certs: HashSet<TlsPublicKeyCert>,
-        ) -> Result<(TlsStream, Option<CspCertificateChain>), CspTlsServerHandshakeError>;
-
-        async fn perform_tls_server_handshake_without_client_auth(
-            &self,
-            tcp_stream: TcpStream,
-            self_cert: TlsPublicKeyCert,
-        ) -> Result<TlsStream, CspTlsServerHandshakeError>;
-    }
-
-    #[async_trait]
-    pub trait CspTlsClientHandshake {
-        async fn perform_tls_client_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            self_cert: TlsPublicKeyCert,
-            trusted_server_cert: TlsPublicKeyCert,
-        ) -> Result<(TlsStream, TlsPublicKeyCert), CspTlsClientHandshakeError>;
     }
 
     pub trait NodePublicKeyData {

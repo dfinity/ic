@@ -13,6 +13,7 @@ from datetime import datetime
 
 import gflags
 import pybars
+import requests
 from termcolor import colored
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -289,65 +290,47 @@ def find_results(
     return {"plot": plots, "layout": layout, "data": meta_data}
 
 
+def get_application_subnets():
+    req = requests.get("https://ic-api.internetcomputer.org/api/v3/subnets")
+    num_application_subnets = 0
+    num_application_nodes = 0
+    for subnet in req.json()["subnets"]:
+        if subnet["subnet_type_name"] != "system":
+            subnet_id = subnet["subnet_id"]
+            num_application_subnets += 1
+            r = requests.get(
+                "https://ic-api.internetcomputer.org/api/v3/nodes", params={"include_status": "UP", "subnet": subnet_id}
+            )
+            num_application_nodes += len(r.json()["nodes"])
+
+    return (num_application_subnets, num_application_nodes)
+
+
 def get_num_nodes_mainnet():
 
-    sys.path.insert(1, ".")
-    from common.base_experiment import BaseExperiment
+    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/ic-subnet-total")
+    num_subnets = int(req.json()["ic_subnet_total"][1])
 
-    nns_url = BaseExperiment.get_mainnet_nns_url()
+    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/ic-nodes-count")
+    num_nodes = int(req.json()["ic_nodes_count"][0][1])
 
-    # Maybe deduplicate with experiment.py
-    res = subprocess.check_output(
-        ["../artifacts/release/ic-admin", "--nns-url", f"http://[{nns_url}]:8080", "get-topology"],
-        encoding="utf-8",
-    )
-
-    return parse_topo(res)
-
-
-def parse_topo(data):
-
-    data = json.loads(data)
-
-    subnets = data["topology"]["subnets"]
-    num_subnets = 0
-    num_nodes = 0
-
-    num_app_subnets = 0
-    num_app_nodes = 0
-
-    for (_, v) in subnets.items():
-        subnet_type = v["records"][0]["value"]["subnet_type"]
-        print("Subnet type:", subnet_type)
-        num_subnets += 1
-        num_nodes += len(v["records"][0]["value"]["membership"])
-        if subnet_type != "system":
-            num_app_subnets += 1
-            num_app_nodes += len(v["records"][0]["value"]["membership"])
-
-    return (num_nodes, num_subnets, num_app_nodes, num_app_subnets)
+    num_application_subnets, num_application_nodes = get_application_subnets()
+    return (num_nodes, num_subnets, num_application_nodes, num_application_subnets)
 
 
 def get_num_boundary_nodes():
-    sys.path.insert(1, ".")
-    from common import prometheus
-
-    if FLAGS.num_boundary_nodes > 0:
-        return (time.time(), FLAGS.num_boundary_nodes)
-
-    r = prometheus.get_prometheus(
-        {"query": 'count(nginx_up{ic="mercury"})'}, host="http://prometheus.dfinity.systems:9090"
-    )
-    return tuple(prometheus.extract_value(json.loads(r.text))[0])
+    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/boundary-nodes-count")
+    return int(req.json()["boundary_nodes_count"][1])
 
 
 if __name__ == "__main__":
 
+    misc.load_artifacts("../artifacts/release")
     misc.parse_command_line_args()
     num_nodes, num_subnets, num_app_nodes, num_app_subnets = get_num_nodes_mainnet()
-    timestamp, num_boundary_nodes = get_num_boundary_nodes()
+    num_boundary_nodes = get_num_boundary_nodes()
     num_boundary_nodes = int(num_boundary_nodes)
-    print("Boundary nodes at ", datetime.fromtimestamp(timestamp), num_boundary_nodes)
+    print("Boundary nodes: ", num_boundary_nodes)
 
     with open(TEMPLATE_PATH, mode="r") as f:
         compiler = pybars.Compiler()
@@ -441,14 +424,15 @@ if __name__ == "__main__":
             print("🎉 Report written")
 
         # Render the exeternal CD overview
-        with open(f"{FLAGS.asset_root}/index.html", "w") as outfile:
-            data.update(
-                {
-                    "is_external": True,
-                }
-            )
-            outfile.write(template(data))
-            print("🎉 Report written")
+        if len(FLAGS.asset_root) > 0:
+            with open(f"{FLAGS.asset_root}/index.html", "w") as outfile:
+                data.update(
+                    {
+                        "is_external": True,
+                    }
+                )
+                outfile.write(template(data))
+                print("🎉 Report written")
 
         LOGO = "fully_on_chain-default-bg_dark.svg"
         shutil.copy(os.path.join(TEMPLATE_BASEDIR, LOGO), FLAGS.experiment_data)

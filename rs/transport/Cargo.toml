@@ -1,7 +1,7 @@
 [package]
 name = "ic-transport"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
@@ -11,7 +11,6 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
@@ -21,9 +20,13 @@ tokio = { version = "1.15.0", features = ["full"] }
 tower = "0.4.12"
 
 [dev-dependencies]
+async-trait = "0.1.57"
 ic-crypto = { path = "../crypto" }
+ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-types-test-utils = { path = "../types/types_test_utils"}
+mockall = "0.11.2"
+tower-test = "0.4.0"

@@ -21,6 +21,7 @@ Success::
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::driver_setup::{
     IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
@@ -30,9 +31,8 @@ use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
-    can_install_canister, can_read_msg, cannot_store_msg, store_message,
+    can_install_canister_with_retries, can_read_msg, cannot_store_msg, store_message,
 };
-use anyhow::bail;
 use ic_recovery::file_sync_helper;
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
@@ -68,6 +68,9 @@ pub fn setup(env: TestEnv) {
         .with_unassigned_nodes(SUBNET_SIZE as i32)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot_by_name("broken"));
+    install_nns_and_universal_canisters(env.topology_snapshot_by_name("restore"));
 }
 
 pub fn test(env: TestEnv) {
@@ -75,19 +78,6 @@ pub fn test(env: TestEnv) {
 
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
     let topo_restore_ic = env.topology_snapshot_by_name("restore");
-    topo_broken_ic.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    topo_restore_ic.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    topo_restore_ic.unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh().unwrap();
-    });
 
     let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
     let ic_version_str = ic_version.to_string();
@@ -108,11 +98,6 @@ pub fn test(env: TestEnv) {
     let mut orig_nns_nodes = topo_broken_ic.root_subnet().nodes();
     let nns_node = orig_nns_nodes.next().expect("there is no NNS node");
 
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
-
     info!(
         logger,
         "Selected NNS node: {} ({:?})",
@@ -130,10 +115,6 @@ pub fn test(env: TestEnv) {
 
     let mut parent_nns_nodes = topo_restore_ic.root_subnet().nodes();
     let parent_nns_node = parent_nns_nodes.next().expect("No node in parent NNS");
-    parent_nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed to parent NNS");
-    info!(logger, "NNS canisters are installed to parent NNS.");
 
     let upload_node = topo_restore_ic
         .unassigned_nodes()
@@ -275,21 +256,13 @@ pub fn test(env: TestEnv) {
             subnet_recovery.params.registry_url = Some(url);
         }
     }
+    info!(logger, "NNS recovery has finished");
 
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
 
-    // wait until state sync is completed
-    retry(logger.clone(), secs(120), secs(5), || {
-        info!(logger, "Try to install canister...");
-        if can_install_canister(&upload_node.get_public_url()) {
-            info!(logger, "Installing canister is possible.");
-            Ok(())
-        } else {
-            bail!("retry...")
-        }
-    })
-    .expect("Canister instalation should work!");
+    info!(logger, "Wait for state sync to complete");
+    can_install_canister_with_retries(&upload_node.get_public_url(), &logger, secs(600), secs(10));
 
     info!(logger, "Ensure the old message is still readable");
     assert!(can_read_msg(

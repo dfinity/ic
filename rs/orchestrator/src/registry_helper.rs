@@ -7,11 +7,12 @@ use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::consensus::CatchUpPackage;
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -199,5 +200,26 @@ impl RegistryHelper {
                 "No replica version for unassigned nodes found".to_string(),
             )),
         }
+    }
+
+    /// Return the DC ID where the current replica is located.
+    pub fn dc_id(&self) -> Option<String> {
+        let registry_version = self.get_latest_version();
+        let node_record = self
+            .registry_client
+            .get_transport_info(self.node_id, registry_version)
+            .ok()
+            .flatten();
+        let node_operator_id =
+            node_record.and_then(|v| PrincipalId::try_from(v.node_operator_id).ok());
+
+        let node_operator_record = node_operator_id.and_then(|id| {
+            self.registry_client
+                .get_node_operator_record(id, registry_version)
+                .ok()
+                .flatten()
+        });
+
+        node_operator_record.map(|v| v.dc_id)
     }
 }

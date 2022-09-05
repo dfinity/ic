@@ -1,7 +1,7 @@
 (*
   Policy: No node which participates in a subnet logs unauthorized TLS
-  connection attempts (except for connection attempts to nodes in other
-  subnets, e.g., soon after a destination node has been reassigned)
+  connection attempts, except for connection attempts between nodes
+  that were recently (up to 15 min ago) members of the same subnet.
 
   Relevant events
   ---------------
@@ -39,11 +39,21 @@ LET in_subnet(node_id, node_addr, subnet) =
       The node was possibly not originally in this subnet, but it has been assigned to it.
     *)
     (
-      NOT node_removed_from_subnet(node_id, node_addr)
+      (NOT node_removed_from_subnet(node_id, node_addr))
       SINCE node_added_to_subnet(node_id, node_addr, subnet)
     )
   )
 IN
-in_subnet(dest_id, dest_addr, subnet) AND in_subnet(sender_id, sender_addr, subnet)
-AND
-unauthorized_connection_attempt(sender_addr, dest_addr)
+unauthorized_connection_attempt(dest_addr, sender_addr)
+AND in_subnet(dest_id, dest_addr, subnet)
+AND NOT (
+  (
+  EXISTS subneta.
+    in_subnet(_, sender_addr, subneta)
+    AND in_subnet(dest_id, dest_addr, subnet)  (* help monpoly *)
+    AND NOT (subneta = subnet)  (* negated constraint requires all free variables to appears before *)
+  )
+  AND ONCE[0,900000] ((* 900000 ms = 15 m *)
+    in_subnet(_, sender_addr, subnet)
+  )
+)

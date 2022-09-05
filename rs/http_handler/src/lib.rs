@@ -22,7 +22,9 @@ mod validator_executor;
 use crate::{
     call::CallService,
     catch_up_package::CatchUpPackageService,
-    common::{get_cors_headers, make_plaintext_response, map_box_error_to_response},
+    common::{
+        get_cors_headers, get_root_public_key, make_plaintext_response, map_box_error_to_response,
+    },
     dashboard::DashboardService,
     metrics::{
         LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
@@ -38,9 +40,11 @@ use byte_unit::Byte;
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::ObservableCountingSemaphore;
+use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::IngressSigVerifier,
@@ -51,6 +55,7 @@ use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
@@ -152,29 +157,23 @@ pub(crate) type EndpointService = BoxCloneService<Body, Response<Body>, BoxError
 /// This is collection of thread-safe data members.
 #[derive(Clone)]
 struct HttpHandler {
-    log: ReplicaLogger,
-    subnet_id: SubnetId,
-    nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-
     call_service: EndpointService,
     query_service: EndpointService,
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_service: EndpointService,
     read_state_service: EndpointService,
-
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    health_status: Arc<RwLock<ReplicaHealthStatus>>,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    log: ReplicaLogger,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    log: ReplicaLogger,
+    registry_client: Arc<dyn RegistryClient>,
+    state_reader_executor: StateReaderExecutor,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
@@ -184,7 +183,10 @@ fn start_server_initialization(
         // Sleep one second between retries, only log every 10th round.
         info!(log, "Waiting for certified state...");
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForCertifiedState;
-        while common::get_latest_certified_state(state_reader.as_ref()).is_none() {
+        while common::get_latest_certified_state(&state_reader_executor)
+            .await
+            .is_none()
+        {
             info!(every_n_seconds => 10, log, "Certified state is not yet available...");
             sleep(Duration::from_secs(1)).await;
         }
@@ -192,7 +194,15 @@ fn start_server_initialization(
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForRootDelegation;
-        match load_root_delegation(state_reader.as_ref(), subnet_id, nns_subnet_id, &log).await {
+        match load_root_delegation(
+            &log,
+            subnet_id,
+            nns_subnet_id,
+            registry_client,
+            state_reader_executor,
+        )
+        .await
+        {
             Err(err) => {
                 error!(log, "Could not load nns delegation: {}", err);
             }
@@ -288,7 +298,7 @@ pub fn start_server(
     rt_handle.clone().spawn(async move {
         let delegation_from_nns = Arc::new(RwLock::new(None));
         let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
-        let state_reader_executor = StateReaderExecutor::new(state_reader.clone());
+        let state_reader_executor = StateReaderExecutor::new(state_reader);
         let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
 
         let call_service = CallService::new_service(
@@ -336,10 +346,21 @@ pub fn start_server(
         let catchup_service =
             CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache);
 
-        let http_handler = HttpHandler {
-            log: log.clone(),
+        info!(log, "Binding HTTP server to address {}", addr);
+        let tcp_listener = TcpListener::bind(addr).await.unwrap();
+
+        start_server_initialization(
+            log.clone(),
             subnet_id,
             nns_subnet_id,
+            registry_client.clone(),
+            state_reader_executor,
+            Arc::clone(&delegation_from_nns),
+            Arc::clone(&health_status),
+            rt_handle.clone(),
+        );
+
+        let http_handler = HttpHandler {
             registry_client,
             call_service,
             query_service,
@@ -347,11 +368,7 @@ pub fn start_server(
             catchup_service,
             dashboard_service,
             read_state_service,
-            delegation_from_nns,
-            health_status,
         };
-        info!(log, "Binding HTTP server to address {}", addr);
-        let tcp_listener = TcpListener::bind(addr).await.unwrap();
 
         // If addr == 0, then a random port will be assigned. In this case it
         // is useful to report the randomly assigned port by writing it to a file.
@@ -359,16 +376,6 @@ pub fn start_server(
         if let Some(path) = port_file_path {
             create_port_file(path, local_addr.port());
         }
-
-        start_server_initialization(
-            Arc::clone(&state_reader),
-            http_handler.subnet_id,
-            http_handler.nns_subnet_id,
-            http_handler.log.clone(),
-            Arc::clone(&http_handler.delegation_from_nns),
-            Arc::clone(&http_handler.health_status),
-            rt_handle.clone(),
-        );
 
         let outstanding_connections = ObservableCountingSemaphore::new(
             MAX_OUTSTANDING_CONNECTIONS,
@@ -469,6 +476,7 @@ fn create_main_service(
         ServiceBuilder::new()
             // Attach a timer as soon as we see a request.
             .map_request(move |request| {
+                let _ = &metrics_for_map_request;
                 // Start recording request duration.
                 let request_timer = HistogramVecTimer::start_timer(
                     metrics_for_map_request.requests.clone(),
@@ -710,10 +718,11 @@ async fn make_router(
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
 async fn load_root_delegation(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+    log: &ReplicaLogger,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    log: &ReplicaLogger,
+    registry_client: Arc<dyn RegistryClient>,
+    state_reader_executor: StateReaderExecutor,
 ) -> Result<Option<CertificateDelegation>, Error> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -743,16 +752,17 @@ async fn load_root_delegation(
             sleep(backoff).await
         }
 
-        let node = match get_random_node_from_nns_subnet(state_reader, nns_subnet_id) {
-            Ok(node_topology) => node_topology,
-            Err(err) => {
-                fatal!(
-                    log,
-                    "Could not find a node from the root subnet to talk to. Error :{}",
-                    err
-                );
-            }
-        };
+        let node =
+            match get_random_node_from_nns_subnet(&state_reader_executor, nns_subnet_id).await {
+                Ok(node_topology) => node_topology,
+                Err(err) => {
+                    fatal!(
+                        log,
+                        "Could not find a node from the root subnet to talk to. Error :{}",
+                        err
+                    );
+                }
+            };
 
         let envelope = HttpRequestEnvelope {
             content: HttpReadStateContent::ReadState {
@@ -850,15 +860,99 @@ async fn load_root_delegation(
                     }
                 };
 
-                if lookup_path(
+                let registry_version = registry_client.get_latest_version();
+                let own_public_key_from_registry = match registry_client
+                    .get_threshold_signing_public_key_for_subnet(subnet_id, registry_version)
+                {
+                    Ok(Some(pk)) => pk,
+                    Ok(None) => {
+                        log_err_and_backoff(
+                            log,
+                            &format!("subnet {} public key from registry is empty", subnet_id),
+                        )
+                        .await;
+                        continue;
+                    }
+                    Err(err) => {
+                        log_err_and_backoff(
+                            log,
+                            &format!(
+                                "subnet {} public key could not be extracted from registry: {:?}",
+                                subnet_id, err,
+                            ),
+                        )
+                        .await;
+                        continue;
+                    }
+                };
+
+                match lookup_path(
                     &labeled_tree,
                     &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
-                )
-                .is_none()
-                {
+                ) {
+                    Some(LabeledTree::Leaf(pk_bytes)) => {
+                        let public_key_from_certificate =
+                            match parse_threshold_sig_key_from_der(pk_bytes) {
+                                Ok(pk) => pk,
+                                Err(err) => {
+                                    log_err_and_backoff(log, &err).await;
+                                    continue;
+                                }
+                            };
+
+                        if public_key_from_certificate != own_public_key_from_registry {
+                            log_err_and_backoff(
+                                log,
+                                &format!(
+                                    "mismatch of registry and certificate public keys for subnet {}",
+                                    subnet_id
+                                ),
+                            )
+                            .await;
+                            continue;
+                        }
+                    }
+                    _ => {
+                        log_err_and_backoff(
+                            log,
+                            &format!(
+                                "subnet {} public key could not be extracted from certificate",
+                                subnet_id
+                            ),
+                        )
+                        .await;
+                        continue;
+                    }
+                }
+                let root_pk_blob =
+                    match get_root_public_key(log, &state_reader_executor, &nns_subnet_id).await {
+                        Some(public_key) => public_key,
+                        None => {
+                            log_err_and_backoff(
+                                log,
+                                "could not retrieve root public key from replicated state"
+                                    .to_string(),
+                            )
+                            .await;
+                            continue;
+                        }
+                    };
+                let root_threshold_public_key =
+                    match parse_threshold_sig_key_from_der(&root_pk_blob) {
+                        Ok(pk) => pk,
+                        Err(err) => {
+                            log_err_and_backoff(log, &err).await;
+                            continue;
+                        }
+                    };
+                if let Err(err) = validate_subnet_delegation_certificate(
+                    &response.certificate,
+                    &subnet_id,
+                    &root_threshold_public_key,
+                ) {
                     log_err_and_backoff(
                         log,
-                        &format!("delegation does not contain current subnet {}", subnet_id),
+                        &format!("invalid subnet delegation certificate: {:?} ", err),
                     )
                     .await;
                     continue;
@@ -880,18 +974,18 @@ async fn load_root_delegation(
     }
 }
 
-fn get_random_node_from_nns_subnet(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+async fn get_random_node_from_nns_subnet(
+    state_reader_executor: &StateReaderExecutor,
     nns_subnet_id: SubnetId,
 ) -> Result<NodeTopology, String> {
     use rand::seq::IteratorRandom;
 
-    let subnet_topologies = &state_reader
+    let latest_state = state_reader_executor
         .get_latest_state()
-        .take()
-        .metadata
-        .network_topology
-        .subnets;
+        .await
+        .map_err(|_| "Latest state unavailable.".to_string())?;
+
+    let subnet_topologies = &latest_state.take().metadata.network_topology.subnets;
 
     let nns_subnet_topology = subnet_topologies.get(&nns_subnet_id).ok_or_else(|| {
         String::from("NNS subnet not found in network topology. Skipping fetching the delegation.")

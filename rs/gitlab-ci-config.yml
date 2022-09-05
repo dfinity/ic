@@ -80,9 +80,7 @@ ci_jobs_required:
   - pre-commit
   - python-tests
   - dependencies-check
-  - crash-safe-io
   # prod tests
-  - generic-hourly
   - rejoin-nightly
   - rejoin-test-slo
   # finalize stage

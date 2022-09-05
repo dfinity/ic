@@ -38,9 +38,15 @@ repos:
     entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py # TODO: Uncomment (once we figure out how to not cause lots of problems for people): --also-reverse
     # Run against all .did files where the path contains nns or registry.
     files: (nns|registry).+[.]did$
-    # Not sure why this exists (might be a piece of test data, but it should not be checked,
-    # because the intention is clearly to define no service.
-    exclude: ^rs/nns/(empty|sns-wasm/canister/sns-wasm)[.]did$
+    # Warning: Remember to put the pipe operator at the end of all lines except the last.
+    exclude: |
+        (?x)^(
+            rs/nns/empty\.did |  # Is this just test data?
+            rs/nns/sns-wasm/canister/sns-wasm\.did |
+            # TODO: Delete this line. This is temporary, and can be deleted
+            # right away (ideally, in the next commit).
+            rs/nns/governance/canister/governance\.did
+        )$
     language: system
     always_run: true
 
@@ -106,7 +112,7 @@ repos:
   hooks:
   - id: mypy
     entry: "gitlab-ci/tools/run_mypy"
-    additional_dependencies: ['types-PyYAML==6.0.11']
+    additional_dependencies: ['types-PyYAML==6.0.11', 'types-pytz==2022.2.1.0']
     # Print the number of files as a sanity-check
     verbose: true
 

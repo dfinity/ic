@@ -4,7 +4,10 @@ use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{ArchiveInfo, StandardRecord, TransferArg, TransferError, Value},
+    endpoints::{
+        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, StandardRecord, TransferArg,
+        TransferError, Value,
+    },
     Account, Operation, Transaction,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger};
@@ -233,6 +236,15 @@ fn supported_standards() -> Vec<StandardRecord> {
     }]
 }
 
+#[query]
+#[candid_method(query)]
+fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+    Access::with_ledger(|ledger| ledger.get_transactions(start, length))
+}
+
 fn main() {}
 
 #[test]
@@ -244,13 +256,20 @@ fn check_candid_interface() {
 
     let new_interface = __export_service();
 
-    // check the public interface against the actual one
-    let old_interface =
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("icrc1.did");
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
-    service_compatible(
-        CandidSource::Text(&new_interface),
-        CandidSource::File(old_interface.as_path()),
-    )
-    .expect("the ledger interface is not compatible with icrc1.did");
+    for candid_file in ["icrc1.did", "txlog.did"].iter() {
+        let old_interface = manifest_dir.join(candid_file);
+        service_compatible(
+            CandidSource::Text(&new_interface),
+            CandidSource::File(old_interface.as_path()),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not compatible with {}: {:?}",
+                old_interface.display(),
+                e
+            )
+        });
+    }
 }

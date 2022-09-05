@@ -100,7 +100,7 @@ if [[ $PATH0 == *".gz" && $PATH1 == *".gz" ]]; then
         -o "/tmp/$PATH1"
 
     diffoscope_check
-    diffoscope "/tmp/$PATH0" "/tmp/$PATH1"
+    diffoscope --html-dir "diffoscope-${VERSION}" "/tmp/$PATH0" "/tmp/$PATH1"
 
     exit 0
 fi
@@ -124,7 +124,8 @@ echo "$PATH1/SHA256SUMS:"
 cat $SHA256SUMS1
 
 # XXX(marko): we ignore panics and sns-test-dapp-canister
-sed -i -E '/panics.wasm/d' $SHA256SUMS0 $SHA256SUMS1
+# XXX(jude): ic-rosetta-api is not deterministic, but does not get included in the guestos image
+sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' $SHA256SUMS0 $SHA256SUMS1
 
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x

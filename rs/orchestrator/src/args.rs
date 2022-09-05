@@ -1,6 +1,7 @@
 use crate::metrics::PROMETHEUS_HTTP_PORT;
 use clap::Parser;
 use ic_config::{Config, ConfigSource};
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::{
     fs,
@@ -95,7 +96,7 @@ impl OrchestratorArgs {
     /// "0.0.0.0:[`PROMETHEUS_HTTP_PORT`]" if none is set
     pub(crate) fn get_metrics_addr(&self) -> SocketAddr {
         self.metrics_listen_addr.unwrap_or_else(|| {
-            SocketAddrV4::new("0.0.0.0".parse().expect("can't fail"), PROMETHEUS_HTTP_PORT).into()
+            SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), PROMETHEUS_HTTP_PORT).into()
         })
     }
 }

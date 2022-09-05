@@ -4,7 +4,9 @@
 # Anything placed in the /opt directory will be copied to the corresponding location in the /usr directory.
 # If you need to build something from source, this is the place to do it (but you probably don't)
 
-FROM ubuntu@sha256:9d42d0e3e57bc067d10a75ee33bdd1a5298e95e5fc3c5d1fce98b455cb879249
+# focal-20220801
+# https://hub.docker.com/layers/library/ubuntu/focal-20220801/images/sha256-a06ae92523384c2cd182dcfe7f8b2bf09075062e937d5653d7d0db0375ad2221?context=explore
+FROM ubuntu@sha256:a06ae92523384c2cd182dcfe7f8b2bf09075062e937d5653d7d0db0375ad2221
 
 RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git
 
@@ -47,8 +49,8 @@ WORKDIR /tmp/rocksdb
 
 RUN apt -y install libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 
-ARG bazelisk_sha=231ec5ca8115e94c75a1f4fbada1a062b48822ca04f21f26e4cb1cd8973cd458  
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.11.0/bazelisk-linux-amd64 -o /opt/bin/bazel && \
+ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /opt/bin/bazel && \
     echo "$bazelisk_sha /opt/bin/bazel" | sha256sum --check && \
     chmod 777 /opt/bin/bazel
 

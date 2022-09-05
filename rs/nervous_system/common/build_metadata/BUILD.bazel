@@ -6,5 +6,5 @@ rust_proc_macro(
     name = "build_metadata",
     srcs = glob(["src/**"]),
     crate_name = "ic_nervous_system_common_build_metadata",
-    edition = "2018",
+    version = "0.8.0",
 )

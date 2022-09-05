@@ -37,8 +37,6 @@ class tecdsa(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = tecdsa()
-    exp.init()
-    exp.init_experiment()
 
     # exp.start_experiment()
     for i in range(NUM_ITERATIONS):

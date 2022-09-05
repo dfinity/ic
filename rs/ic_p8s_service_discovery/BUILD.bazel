@@ -1,0 +1,94 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/config",
+    "//rs/crypto/utils/threshold_sig",
+    "//rs/elastic_common_schema",
+    "//rs/ic_p8s_service_discovery/log",
+    "//rs/interfaces",
+    "//rs/monitoring/metrics",
+    "//rs/monitoring/metrics_exporter",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/local_registry",
+    "//rs/registry/local_store",
+    "//rs/registry/local_store/artifacts",
+    "//rs/registry/nns_data_provider",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:gflags",
+    "@crate_index//:crossbeam",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:erased-serde",
+    "@crate_index//:futures-util",
+    "@crate_index//:humantime",
+    "@crate_index//:humantime-serde",
+    "@crate_index//:hyper",
+    "@crate_index//:lazy_static",
+    "@crate_index//:parse_int",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:strum",
+    "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:slog_derive",
+    "@crate_index//:strum_macros",
+    "@crate_index//:gflags-derive",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "@crate_index//:itertools",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "ic-p8s-service-discovery",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_p8s_service_discovery",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-p8s-sd",
+    srcs = ["src/titanium/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic-p8s-service-discovery"],
+)
+
+rust_test(
+    name = "ic-p8s-service-discovery-test",
+    aliases = ALIASES,
+    crate = ":ic-p8s-service-discovery",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ic-p8s-service-discovery-integration-tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":ic-p8s-service-discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

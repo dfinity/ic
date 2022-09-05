@@ -1,14 +1,5 @@
 load("//bazel:artifacts.bzl", "upload_artifacts", "urls_test")
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "summary_sha256sum", "tar_extract", "upgrade_image", "vfat_image")
-
-docker_tar(
-    name = "bootloader-tree.tar",
-    src = ":bootloader",
-    dep = glob(["bootloader/**"]),
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "summary_sha256sum", "tar_extract", "upgrade_image")
 
 docker_tar(
     name = "rootfs-tree.tar",
@@ -20,32 +11,9 @@ docker_tar(
         "--build-arg",
         "BASE_IMAGE=dfinity/guestos-base-dev@sha256:e881a9bea411cd5b4035a0e8edfd0108ff674d4336acef9c8fbf51dd7a0c352c",
     ],
-    # This image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
     tags = ["no-remote-cache"],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-vfat_image(
-    name = "partition-esp.tar",
-    src = ":bootloader-tree.tar",
-    partition_size = "100M",
-    subdir = "boot/efi",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-vfat_image(
-    name = "partition-grub.tar",
-    src = ":bootloader-tree.tar",
-    extra_files = {
-        ":grub.cfg": "/boot/grub/grub.cfg:0644",
-        ":grubenv": "/boot/grub/grubenv:0644",
-    },
-    partition_size = "100M",
-    subdir = "boot/grub",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -77,8 +45,13 @@ IC_OS_IMAGE_DEPS = {
         # base layer
         ":rootfs-tree.tar": "/",
 
-        # additional files to install
-        ":extra_boot_args.dev": "/boot/extra_boot_args:0644",
+        # We will install extra_boot_args onto the system, after substuting
+        # the hash of the root filesystem into it. Add the template (before
+        # substitution) as a dependency nevertheless such that changes
+        # to the template file are reflected in the overall version hash
+        # (the root_hash must include the version hash, it cannot be the
+        # other way around).
+        ":extra_boot_args.template": "/boot/extra_boot_args.template:0644",
     },
     "rootfs": {
         # base layer
@@ -116,10 +89,17 @@ ext4_image(
     name = "partition-boot.tar",
     src = ":rootfs-tree.tar",
     # Take the dependency list declared above, and add in the "version.txt"
-    # at the correct place.
+    # as well as the generated extra_boot_args file in the correct place.
     extra_files = {
         k: v
-        for k, v in (IC_OS_IMAGE_DEPS["bootfs"].items() + [(":version.txt", "/boot/version.txt:0644")])
+        for k, v in (
+            IC_OS_IMAGE_DEPS["bootfs"].items() + [
+                (":version.txt", "/boot/version.txt:0644"),
+                (":extra_boot_args", "/boot/extra_boot_args:0644"),
+            ]
+        )
+        if k != ":extra_boot_args.template"
+        # additional files to install
         if v != "/"
     },
     file_contexts = ":file_contexts",
@@ -131,7 +111,7 @@ ext4_image(
 )
 
 ext4_image(
-    name = "partition-root.tar",
+    name = "partition-root-unsigned.tar",
     src = ":rootfs-tree.tar",
     # Take the dependency list declared above, and add in the "version.txt"
     # at the correct place.
@@ -146,49 +126,137 @@ ext4_image(
         "/run",
         "/boot",
     ],
-    # This image currently depends on //:binaries that changes almost always as it depends on //rs:all_sources,
-    # therefore cache hits are very rare. Do not upload it to the remote cache for now as it takes long.
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
     tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
 )
 
+genrule(
+    name = "partition-root-sign",
+    srcs = [":partition-root-unsigned.tar"],
+    outs = [
+        "partition-root.tar",
+        "partition-root-hash",
+    ],
+    cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $(location :partition-root-unsigned.tar) -o $(location partition-root.tar) -r $(location partition-root-hash)",
+    tools = ["//toolchains/sysimage:verity_sign.py"],
+)
+
+genrule(
+    name = "extra_boot_args_root_hash",
+    srcs = [
+        ":extra_boot_args.template",
+        ":partition-root-hash",
+    ],
+    outs = [":extra_boot_args"],
+    cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args.template) > $(location extra_boot_args)",
+)
+
 disk_image(
     name = "disk.img.tar",
     layout = "//ic-os/guestos/scripts:partitions.csv",
     partitions = [
-        ":partition-esp.tar",
-        ":partition-grub.tar",
+        "//ic-os/bootloader:partition-esp.tar",
+        "//ic-os/bootloader:partition-grub.tar",
         ":partition-config.tar",
         ":partition-boot.tar",
         ":partition-root.tar",
     ],
-    # This image is not currently used by anything else - do not upload it to the cache for now as it takes long.
-    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
-    tags = ["no-cache"],
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
 )
 
 upgrade_image(
-    name = "upgrade.tar.gz",
+    name = "upgrade.tar",
     boot_partition = ":partition-boot.tar",
     root_partition = ":partition-root.tar",
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     version_file = ":version.txt",
+)
+
+genrule(
+    name = "disk.img.tar_zstd",
+    srcs = [":disk.img.tar"],
+    outs = [":disk.img.tar.zstd"],
+    cmd = "zstd --threads=0 -10 -f -z $(location disk.img.tar) -o \"$@\"",
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
+)
+
+sha256sum(
+    name = "disk.img.tar.zstd.sha256",
+    srcs = [":disk.img.tar.zstd"],
+)
+
+genrule(
+    name = "upgrade.tar_zstd",
+    srcs = [":upgrade.tar"],
+    outs = [":upgrade.tar.zstd"],
+    cmd = "zstd --threads=0 -10 -f -z $(location upgrade.tar) -o \"$@\"",
+    # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+    tags = ["no-remote-cache"],
 )
 
 upload_artifacts(
     name = "upload_guestos",
     inputs = [
-        ":disk.img.tar",
-        ":upgrade.tar.gz",
+        ":disk.img.tar.zstd",
+        ":upgrade.tar.zstd",
     ],
     remote_subdir = "ic-os/guestos",
 )
 
+exports_files([
+    "rootfs/opt/ic/share/ic.json5.template",
+])
+
 urls_test(
     name = "upload_guestos_test",
     inputs = [":upload_guestos"],
+)
+
+# I have no clue why I cannot use these labels directly in the data section of the
+# python binary below. When I try to, the files simply do not get added to the
+# runfiles of the executable.
+genrule(
+    name = "version_wrap",
+    srcs = [":version.txt"],
+    outs = [":version.txt.wrapped"],
+    cmd = "cat $(location version.txt) > \"$@\"",
+)
+
+genrule(
+    name = "hash_wrap",
+    srcs = [":disk.img.tar.zstd.sha256"],
+    outs = [":disk.img.tar.zstd.sha256.wrapped"],
+    cmd = "cat $(location disk.img.tar.zstd.sha256) > \"$@\"",
+)
+
+py_binary(
+    name = "launch_single_vm",
+    srcs = [
+        "launch_single_vm.py",
+        "//ic-os/guestos/tests:ictools.py",
+    ],
+    data = [
+        ":disk.img.tar.zstd.sha256.wrapped",
+        ":upload_guestos_disk.img.tar.zstd",
+        ":version.txt.wrapped",
+        "//rs/prep:ic-prep",
+    ],
+    tags = ["manual"],
 )

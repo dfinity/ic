@@ -4,6 +4,8 @@ artifact_pool/src/lib.rs:use std::fs;
 bitcoin/adapter/src/cli.rs:use std::{fs::File, io, path::PathBuf};
 boundary_node/control_plane/src/main.rs:    fs::File,
 boundary_node/control_plane/src/main.rs:use std::{
+boundary_node/denylist_updater/src/bin/denylist-encoder.rs:    fs::File,
+boundary_node/denylist_updater/src/bin/denylist-encoder.rs:use std::{
 boundary_node/ic_balance_exporter/src/main.rs:    fs::{self, File},
 boundary_node/ic_balance_exporter/src/main.rs:use std::{
 boundary_node/prober/src/main.rs:    cmp::{max, min},
@@ -79,6 +81,7 @@ replicated_state/src/page_map.rs:use std::fs::{File, OpenOptions};
 replicated_state/src/page_map/checkpoint.rs:use std::fs::{File, OpenOptions};
 replicated_state/src/page_map/tests.rs:use std::fs::OpenOptions;
 rust_canisters/canister_test/src/canister.rs:use std::{convert::AsRef, fs::File, io::Read, path::Path};
+sns/cli/src/deploy.rs:use std::fs::OpenOptions;
 sns/cli/src/init_config_file.rs:    convert::TryFrom,
 sns/cli/src/init_config_file.rs:    fs::File,
 sns/cli/src/init_config_file.rs:use std::{

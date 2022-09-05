@@ -3,11 +3,28 @@
   level.
 
   Relevant events:
-  - log(node_id:string, subnet_id:string, crate:string, module:string, level:string, message:string)
+  - originally_in_ic(node_id:string, node_addr:string)
+  - registry__node_removed_from_ic(node_id:string, node_addr:string)
+  - registry__node_added_to_ic(node_id:string, node_addr:string)
+  - log(internal_host_id:string, node_id:string, subnet_id:string, component:string, level:string, message:string)
 *)
 
+LET in_ic(node_id, node_addr) =
+  ((*
+      The node was originally in the IC, and it has not been removed.
+    *)
+    (ONCE originally_in_ic(node_id, node_addr)) AND NOT ONCE registry__node_removed_from_ic(node_id, node_addr)
+  ) OR (
+    (*
+      The node was possibly not originally in the IC, but it has been added to it.
+    *)
+    ((NOT registry__node_removed_from_ic(node_id, node_addr)) SINCE registry__node_added_to_ic(node_id, node_addr))
+  )
+IN
 LET error_level(level) =
      level = "CRITICAL"
   OR level = "ERROR"
 IN
-log(node_id, subnet_id, crate, module, level, message) AND error_level(level)
+in_ic(node_id, _)
+AND log(internal_host_id, node_id, subnet_id, component, level, message)
+AND error_level(level)

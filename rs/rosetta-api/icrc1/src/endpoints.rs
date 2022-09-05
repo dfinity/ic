@@ -1,12 +1,11 @@
-use crate::Memo;
+use crate::{Account, Block, Memo, Subaccount};
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::CanisterId;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
-
-use crate::{Account, Subaccount};
+use std::convert::TryFrom;
 
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
@@ -59,13 +58,6 @@ pub struct TransferArg {
     #[serde(default)]
     pub memo: Option<Memo>,
     pub amount: NumTokens,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
-pub struct ArchiveInfo {
-    pub canister_id: CanisterId,
-    pub block_range_start: BlockIndex,
-    pub block_range_end: BlockIndex,
 }
 
 /// Variant type for the `metadata` endpoint values.
@@ -135,4 +127,197 @@ impl<'a> From<&'a [u8]> for Value {
 pub struct StandardRecord {
     pub name: String,
     pub url: String,
+}
+
+// Non-standard queries
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct ArchiveInfo {
+    pub canister_id: CanisterId,
+    pub block_range_start: BlockIndex,
+    pub block_range_end: BlockIndex,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct GetTransactionsRequest {
+    pub start: BlockIndex,
+    pub length: Nat,
+}
+
+impl GetTransactionsRequest {
+    pub fn as_start_and_length(&self) -> Result<(u64, usize), String> {
+        use num_traits::cast::ToPrimitive;
+
+        let start = self.start.0.to_u64().ok_or_else(|| {
+            format!(
+                "transaction index {} is too large, max allowed: {}",
+                self.start,
+                u64::MAX
+            )
+        })?;
+        let length = self.length.0.to_u64().ok_or_else(|| {
+            format!(
+                "requested length {} is too large, max allowed: {}",
+                self.length,
+                u64::MAX
+            )
+        })?;
+        Ok((start, length as usize))
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct Mint {
+    pub amount: Nat,
+    pub to: Account,
+    pub memo: Option<Memo>,
+    pub created_at_time: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct Burn {
+    pub amount: Nat,
+    pub from: Account,
+    pub memo: Option<Memo>,
+    pub created_at_time: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct Transfer {
+    pub amount: Nat,
+    pub from: Account,
+    pub to: Account,
+    pub memo: Option<Memo>,
+    pub fee: Option<Nat>,
+    pub created_at_time: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct Transaction {
+    pub kind: String,
+    pub mint: Option<Mint>,
+    pub burn: Option<Burn>,
+    pub transfer: Option<Transfer>,
+    pub timestamp: u64,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct ArchivedTransactionRange {
+    pub start: Nat,
+    pub length: Nat,
+    pub callback: QueryArchiveFn,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct GetTransactionsResponse {
+    pub log_length: Nat,
+    pub first_index: Nat,
+    pub transactions: Vec<Transaction>,
+    pub archived_transactions: Vec<ArchivedTransactionRange>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct TransactionRange {
+    pub transactions: Vec<Transaction>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(try_from = "candid::types::reference::Func")]
+pub struct QueryArchiveFn {
+    pub canister_id: CanisterId,
+    pub method: String,
+}
+
+impl From<QueryArchiveFn> for candid::types::reference::Func {
+    fn from(archive_fn: QueryArchiveFn) -> Self {
+        let p: &ic_base_types::PrincipalId = archive_fn.canister_id.as_ref();
+        Self {
+            principal: p.0,
+            method: archive_fn.method,
+        }
+    }
+}
+
+impl TryFrom<candid::types::reference::Func> for QueryArchiveFn {
+    type Error = String;
+    fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
+        let canister_id = CanisterId::try_from(func.principal.as_slice())
+            .map_err(|e| format!("principal is not a canister id: {}", e))?;
+        Ok(QueryArchiveFn {
+            canister_id,
+            method: func.method,
+        })
+    }
+}
+
+impl CandidType for QueryArchiveFn {
+    fn _ty() -> candid::types::Type {
+        candid::types::Type::Func(candid::types::Function {
+            modes: vec![candid::parser::types::FuncMode::Query],
+            args: vec![GetTransactionsRequest::_ty()],
+            rets: vec![TransactionRange::_ty()],
+        })
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        candid::types::reference::Func::from(self.clone()).idl_serialize(serializer)
+    }
+}
+
+impl From<Block> for Transaction {
+    fn from(b: Block) -> Transaction {
+        use crate::Operation;
+
+        let mut tx = Transaction {
+            kind: "".to_string(),
+            mint: None,
+            burn: None,
+            transfer: None,
+            timestamp: b.timestamp,
+        };
+        let created_at_time = b.transaction.created_at_time;
+        let memo = b.transaction.memo;
+
+        match b.transaction.operation {
+            Operation::Mint { to, amount } => {
+                tx.kind = "mint".to_string();
+                tx.mint = Some(Mint {
+                    to,
+                    amount: Nat::from(amount),
+                    created_at_time,
+                    memo,
+                });
+            }
+            Operation::Burn { from, amount } => {
+                tx.kind = "burn".to_string();
+                tx.burn = Some(Burn {
+                    from,
+                    amount: Nat::from(amount),
+                    created_at_time,
+                    memo,
+                });
+            }
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => {
+                tx.kind = "transfer".to_string();
+                tx.transfer = Some(Transfer {
+                    from,
+                    to,
+                    amount: Nat::from(amount),
+                    fee: Some(Nat::from(fee)),
+                    created_at_time,
+                    memo,
+                });
+            }
+        }
+
+        tx
+    }
 }

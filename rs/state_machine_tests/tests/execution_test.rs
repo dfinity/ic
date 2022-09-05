@@ -1,9 +1,17 @@
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfigs};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfigs},
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    CanisterSettingsArgs, ErrorCode, PrincipalId, StateMachine, SubnetId,
+    CanisterSettingsArgs, ErrorCode, PrincipalId, StateMachine, StateMachineConfig, SubnetId,
+    UserError,
 };
-use ic_types::Cycles;
+use ic_types::{ingress::WasmResult, Cycles, NumBytes};
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use std::convert::TryInto;
+
+const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 /// This is a canister that keeps a counter on the heap and exposes various test
 /// methods. Exposed methods:
@@ -113,6 +121,8 @@ const TEST_CANISTER: &str = r#"
               (export "canister_update grow_page" (func $grow_page))
               (export "canister_update grow_mem" (func $grow_mem)))"#;
 
+const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
+
 /// Converts an integer into the representation expected by the TEST_CANISTER
 /// canister.
 fn from_int(n: i32) -> Vec<u8> {
@@ -121,7 +131,6 @@ fn from_int(n: i32) -> Vec<u8> {
 
 /// Converts a reply of the TEST_CANISTER canister into an integer.
 fn to_int(v: Vec<u8>) -> i32 {
-    use std::convert::TryInto;
     i32::from_le_bytes(v.try_into().unwrap())
 }
 
@@ -290,8 +299,11 @@ fn test_canister_stable_memory_upgrade_restart() {
 #[test]
 fn test_canister_out_of_cycles() {
     // Start a node with a config where all computation/storage is free.
-    let mut config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
-    let env = StateMachine::new_with_config(config.clone());
+    let mut subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config.clone(),
+        HypervisorConfig::default(),
+    ));
     env.set_checkpoints_enabled(true);
 
     let now = std::time::SystemTime::now();
@@ -316,12 +328,15 @@ fn test_canister_out_of_cycles() {
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
 
     // Modify the config so that compute allocations are charged for.
-    config
+    subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee = Cycles::new(1);
 
     // Restart the node to pick up the new node configuration.
-    let env = env.restart_node_with_config(config);
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
 
     // Install a new wasm to trigger making a new checkpoint.
     env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -503,6 +518,7 @@ fn test_state_machine_consumes_instructions() {
 #[test]
 fn test_set_stable_memory() {
     let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
 
     let from_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
@@ -530,6 +546,7 @@ fn test_set_stable_memory() {
 #[test]
 fn can_query_cycle_balance_and_top_up_canisters() {
     let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
 
     let canister_id = env.install_canister_wat(
         r#"
@@ -576,4 +593,195 @@ fn can_query_cycle_balance_and_top_up_canisters() {
             .unwrap()
             .bytes()[..]
     );
+}
+
+#[test]
+fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
+    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(20 * 1024 * 1024), // 20 MiB,
+            ..Default::default()
+        },
+    ));
+    env.set_checkpoints_enabled(true);
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgs {
+                controller: None,
+                controllers: None,
+                compute_allocation: None,
+                memory_allocation: None,
+                freezing_threshold: None,
+            }),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // Set the memory to 20MiB + 1. Should fail.
+    let res = env
+        .update_settings(
+            &canister_id,
+            CanisterSettingsArgs {
+                controller: None,
+                controllers: None,
+                compute_allocation: None,
+                memory_allocation: Some(candid::Nat::from(20u64 * 1024 * 1024 + 1)),
+                freezing_threshold: None,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(res.code(), ErrorCode::SubnetOversubscribed);
+
+    // Set the memory to exactly 20MiB. Should succeed.
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgs {
+            controller: None,
+            controllers: None,
+            compute_allocation: None,
+            memory_allocation: Some(candid::Nat::from(20u64 * 1024 * 1024)),
+            freezing_threshold: None,
+        },
+    )
+    .unwrap();
+}
+
+// Asserts that the canister replied with the given expected number.
+//
+// This function panics if there was an error executing the message or the
+// canister explicitly rejected it.
+fn assert_replied(result: Result<WasmResult, UserError>, expected: i64) {
+    match result {
+        Ok(wasm_result) => match wasm_result {
+            WasmResult::Reply(res) => {
+                assert_eq!(i64::from_le_bytes(res[0..8].try_into().unwrap()), expected)
+            }
+            WasmResult::Reject(reject_message) => {
+                panic!("Got unexpected reject: {}", reject_message)
+            }
+        },
+        Err(err) => panic!("Got unexpected error: {}", err),
+    }
+}
+
+#[test]
+fn exceeding_memory_capacity_fails_during_message_execution() {
+    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(20 * 1024 * 1024), // 20 MiB,
+            ..Default::default()
+        },
+    ));
+    env.set_checkpoints_enabled(true);
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgs {
+                controller: None,
+                controllers: None,
+                compute_allocation: None,
+                memory_allocation: None,
+                freezing_threshold: None,
+            }),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // Subnet has 20MiB memory capacity. There are `NUMBER_OF_EXECUTION_THREADS` ==
+    // 4 running which means that the available subnet capacity would be split
+    // across these many threads. If the canister is trying to allocate
+    // 1MiB of memory, it'll keep succeeding until we reach 16MiB total allocated
+    // capacity and then should fail after that point because the capacity split
+    // over 4 threads will be less than 1MiB (keep in mind the wasm module of the
+    // canister also takes some space).
+    let memory_to_allocate = 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
+    let mut expected_result = 0;
+    for _ in 0..15 {
+        let res = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .stable64_grow(memory_to_allocate)
+                .reply_int64()
+                .build(),
+        );
+        assert_replied(res, expected_result);
+        expected_result += memory_to_allocate as i64;
+    }
+
+    // Canister tries to grow by another `memory_to_allocate` pages, should fail and
+    // the return value will be -1.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .stable64_grow(memory_to_allocate)
+            .reply_int64()
+            .build(),
+    );
+    assert_replied(res, -1);
+}
+
+#[test]
+fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
+    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            max_canister_memory_size: NumBytes::from(10 * 1024 * 1024), // 10 MiB,
+            ..Default::default()
+        },
+    ));
+    env.set_checkpoints_enabled(true);
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgs {
+                controller: None,
+                controllers: None,
+                compute_allocation: None,
+                memory_allocation: None,
+                freezing_threshold: None,
+            }),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // Growing the memory by 200 pages exceeds the 10MiB max canister
+    // memory size we set and should fail.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow(200).reply_int64().build(),
+    );
+    assert_replied(res, -1);
+
+    // Growing the memory by 50 pages doesn't exceed the 10MiB max canister
+    // memory size we set and should succeed.
+    let res = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow(50).reply_int64().build(),
+    );
+    assert_replied(res, 0);
 }

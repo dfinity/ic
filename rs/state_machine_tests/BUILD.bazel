@@ -6,7 +6,6 @@ rust_library(
     name = "state_machine_tests",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_machine_tests",
-    edition = "2018",
     deps = [
         "//rs/config",
         "//rs/crypto/internal/crypto_lib/seed",
@@ -50,13 +49,21 @@ rust_library(
 rust_test(
     name = "execution_test",
     srcs = ["tests/execution_test.rs"],
-    edition = "2018",
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
     deps = [
         ":state_machine_tests",
         "//rs/config",
         "//rs/crypto/sha",
         "//rs/registry/subnet_type",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:libflate",
         "@wabt_rs//:wabt",

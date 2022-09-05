@@ -16,6 +16,8 @@ macro_rules! impl_display_using_debug {
     };
 }
 
+pub(crate) use impl_display_using_debug;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgTranscriptIdError {
     DecreasedBlockHeight {
@@ -206,7 +208,13 @@ impl_display_using_debug!(IDkgCreateDealingError);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyDealingPublicError {
     TranscriptIdMismatch,
-    InvalidDealing { reason: String },
+    InvalidDealing {
+        reason: String,
+    },
+    InvalidSignature {
+        error: String,
+        crypto_error: CryptoError,
+    },
 }
 impl_display_using_debug!(IDkgVerifyDealingPublicError);
 

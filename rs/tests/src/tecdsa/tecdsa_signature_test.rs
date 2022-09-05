@@ -295,14 +295,14 @@ async fn execute_create_subnet_proposal(
 }
 
 pub(crate) async fn get_signature(
-    message_hash: &[u8],
+    message_hash: &[u8; 32],
     cycles: Cycles,
     key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
-        message_hash: message_hash.to_vec(),
+        message_hash: *message_hash,
         derivation_path: Vec::new(),
         key_id,
     };
@@ -353,6 +353,15 @@ pub(crate) async fn enable_ecdsa_signing(
     subnet_id: SubnetId,
     key_id: EcdsaKeyId,
 ) {
+    enable_ecdsa_signing_with_timeout(governance, subnet_id, key_id, None).await
+}
+
+pub(crate) async fn enable_ecdsa_signing_with_timeout(
+    governance: &Canister<'_>,
+    subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
+    timeout: Option<Duration>,
+) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
@@ -362,6 +371,7 @@ pub(crate) async fn enable_ecdsa_signing(
             quadruples_to_create_in_advance: 10,
             key_ids: vec![key_id.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
         }),
         ..empty_subnet_update()
     };
@@ -424,6 +434,7 @@ async fn create_new_subnet_with_keys(
             quadruples_to_create_in_advance: 4,
             keys,
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
         }),
     };
     execute_create_subnet_proposal(governance, payload).await;
@@ -637,7 +648,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
                 .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string()
             }
         );
         assert_eq!(
@@ -652,7 +663,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
             }
         );
 
@@ -760,7 +771,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "No route to canister aaaaa-aa".to_string()
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
             }
         );
 
@@ -795,5 +806,50 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
         .await
         .unwrap();
         verify_signature(&message_hash, &public_key, &new_signature);
+    });
+}
+
+/// Tests whether a call to `sign_with_ecdsa` can be timed out when setting signature_request_timeout_ns.
+pub fn test_threshold_ecdsa_signature_timeout(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        let endpoints = get_endpoints(&handle);
+        let nns_endpoint = endpoints.nns_endpoint;
+        let app_endpoint = endpoints.app_endpoint_1;
+        nns_endpoint.assert_ready(ctx).await;
+        app_endpoint.assert_ready(ctx).await;
+
+        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        enable_ecdsa_signing_with_timeout(
+            &governance,
+            app_endpoint.subnet.as_ref().unwrap().id,
+            make_key(KEY_ID1),
+            Some(Duration::from_secs(1)),
+        )
+        .await;
+        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
+        let uni_can = UniversalCanister::new(&agent).await;
+        let message_hash = [0xabu8; 32];
+        // Get the public key first to make sure ECDSA is working
+        let _public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
+        let error = get_signature(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE,
+            make_key(KEY_ID1),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error,
+            AgentError::ReplicaError {
+                reject_code: 4,
+                reject_message: "Signature request expired".to_string()
+            }
+        )
     });
 }

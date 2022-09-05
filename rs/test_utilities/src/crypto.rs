@@ -268,11 +268,14 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
 
     fn combine_basic_sig(
         &self,
-        _signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+        signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
         _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSignatureBatch<T>> {
         Ok(BasicSignatureBatch {
-            signatures_map: BTreeMap::new(),
+            signatures_map: signatures
+                .iter()
+                .map(|(key, value)| (*key, (*value).clone()))
+                .collect(),
         })
     }
 
@@ -457,6 +460,8 @@ impl KeyManager for CryptoReturningOk {
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 
+    fn collect_and_store_key_count_metrics(&self, _registry_version: RegistryVersion) {}
+
     fn node_public_keys(&self) -> NodePublicKeys {
         unimplemented!()
     }
@@ -477,8 +482,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_dealing_public(
         &self,
         _params: &IDkgTranscriptParams,
-        _dealer_id: NodeId,
-        _dealing: &IDkgDealing,
+        _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
         Ok(())
     }
@@ -486,8 +490,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_dealing_private(
         &self,
         _params: &IDkgTranscriptParams,
-        _dealer_id: NodeId,
-        _dealing: &IDkgDealing,
+        _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         Ok(())
     }
@@ -570,7 +573,7 @@ impl IDkgProtocol for CryptoReturningOk {
 
     fn retain_active_transcripts(
         &self,
-        _active_transcripts: &BTreeSet<IDkgTranscript>,
+        _active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         Ok(())
     }

@@ -505,8 +505,7 @@ mod tests {
     }
 
     fn get_mainnet_delta() -> Changelog {
-        let mainnet_delta_raw = include_bytes!("../artifacts/mainnet_delta_00-6d-c1.pb");
-        compact_delta_to_changelog(&mainnet_delta_raw[..])
+        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
             .expect("")
             .1
     }

@@ -1,6 +1,6 @@
 bazel-test-all:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-docker
     - .bazel-rules-pipeline
   tags:
     - dfinity
@@ -8,15 +8,12 @@ bazel-test-all:
     - ubuntu
     # Run in ZH since BuildFarm is in ZH
     - zh
-  image:
-    # use the docker image without nix-shell as docker-run uses it too.
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:97c45456ea9c071ee12d8ff02ea360c4c0df66519a48c3885103c4645f84eb53"
   stage: test
   needs: []
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json
+      - bazel-build-log*.json*
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
   script:
@@ -30,7 +27,7 @@ bazel-test-all:
       test
       --config ci
       --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})"
-      "${BAZEL_TARGET:-...}"
+      ...
       2>&1 |
       sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
   after_script:
@@ -40,5 +37,6 @@ bazel-test-all:
       echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel **"
       echo -e "*************************************************************"
       echo -e "\033[0m"
-    -  cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
+    - cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
+    - gzip bazel-build-log*.json
     - !reference [after_script]

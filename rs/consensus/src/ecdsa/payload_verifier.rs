@@ -25,7 +25,7 @@ use super::payload_builder::{EcdsaPayloadError, InvalidChainCacheError, Membersh
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::EcdsaBlockReaderImpl;
-use crate::consensus::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use crate::consensus::{crypto::ConsensusCrypto, metrics::timed_call, pool_reader::PoolReader};
 use crate::ecdsa::payload_builder::{
     block_chain_cache, create_data_payload_helper, create_summary_payload,
     get_ecdsa_config_if_enabled,
@@ -51,6 +51,7 @@ use ic_types::{
     registry::RegistryClientError,
     Height, RegistryVersion, SubnetId,
 };
+use prometheus::HistogramVec;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -171,26 +172,40 @@ pub fn validate_payload(
     context: &ValidationContext,
     parent_block: &Block,
     payload: &BlockPayload,
+    metrics: HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
     if payload.is_summary() {
-        validate_summary_payload(
-            subnet_id,
-            registry_client,
-            pool_reader,
-            context,
-            parent_block,
-            payload.as_summary().ecdsa.as_ref(),
+        timed_call(
+            "verify_summary_payload",
+            || {
+                validate_summary_payload(
+                    subnet_id,
+                    registry_client,
+                    pool_reader,
+                    context,
+                    parent_block,
+                    payload.as_summary().ecdsa.as_ref(),
+                )
+            },
+            &metrics,
         )
     } else {
-        validate_data_payload(
-            subnet_id,
-            registry_client,
-            crypto,
-            pool_reader,
-            state_manager,
-            context,
-            parent_block,
-            payload.as_data().ecdsa.as_ref(),
+        timed_call(
+            "verify_data_payload",
+            || {
+                validate_data_payload(
+                    subnet_id,
+                    registry_client,
+                    crypto,
+                    pool_reader,
+                    state_manager,
+                    context,
+                    parent_block,
+                    payload.as_data().ecdsa.as_ref(),
+                    &metrics,
+                )
+            },
+            &metrics,
         )
     }
 }
@@ -261,6 +276,7 @@ pub fn validate_data_payload(
     context: &ValidationContext,
     parent_block: &Block,
     data_payload: Option<&ecdsa::EcdsaPayload>,
+    metrics: &HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
     if parent_block.payload.as_ref().as_ecdsa().is_none() {
         if data_payload.is_some() {
@@ -317,10 +333,21 @@ pub fn validate_data_payload(
         .map_err(PermanentError::from)?;
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
 
-    let transcripts = validate_transcript_refs(crypto, &block_reader, &prev_payload, curr_payload)?;
-    let dealings = validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload)?;
-    let signatures =
-        validate_new_signature_agreements(crypto, &block_reader, &prev_payload, curr_payload)?;
+    let transcripts = timed_call(
+        "validate_transcript_refs",
+        || validate_transcript_refs(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
+    let dealings = timed_call(
+        "validate_reshare_dealings",
+        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
+    let signatures = timed_call(
+        "validate_new_signature_agreements",
+        || validate_new_signature_agreements(crypto, &block_reader, &prev_payload, curr_payload),
+        metrics,
+    )?;
 
     let builder = CachedBuilder {
         transcripts,
@@ -352,7 +379,7 @@ pub fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)>,
+    signatures: BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>,
 }
 
 impl EcdsaTranscriptBuilder for CachedBuilder {
@@ -369,8 +396,11 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
 }
 
 impl EcdsaSignatureBuilder for CachedBuilder {
-    fn get_completed_signatures(&self) -> Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)> {
-        self.signatures.clone()
+    fn get_completed_signature(
+        &self,
+        request_id: &ecdsa::RequestId,
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        self.signatures.get(request_id).cloned()
     }
 }
 
@@ -456,13 +486,9 @@ fn validate_reshare_dealings(
                         InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
                             .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?
                             .dealings();
-                    for dealing in dealings.iter() {
+                    for signed_dealing in dealings.iter() {
                         crypto
-                            .verify_dealing_public(
-                                &param,
-                                dealing.dealer_id(),
-                                dealing.idkg_dealing(),
-                            )
+                            .verify_dealing_public(&param, signed_dealing)
                             .map_err(PermanentError::from)?;
                     }
                     new_dealings.insert(transcript_id, dealings);
@@ -482,9 +508,9 @@ fn validate_new_signature_agreements(
     block_reader: &dyn EcdsaBlockReader,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
-) -> Result<Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)>, EcdsaValidationError> {
+) -> Result<BTreeMap<ecdsa::RequestId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError> {
     use PermanentError::*;
-    let mut new_signatures = Vec::new();
+    let mut new_signatures = BTreeMap::new();
     for (request_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.response_payload {
@@ -507,7 +533,7 @@ fn validate_new_signature_agreements(
                 crypto
                     .verify_combined_sig(&input, &signature)
                     .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                new_signatures.push((*request_id, signature.clone()));
+                new_signatures.insert(*request_id, signature.clone());
             }
         }
     }
@@ -729,13 +755,16 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
         let mut sign_with_ecdsa_contexts = BTreeMap::new();
+        let mut valid_keys = BTreeSet::new();
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        valid_keys.insert(key_id.clone());
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                key_id: key_id.clone(),
                 pseudo_random_id: [1; 32],
-                message_hash: vec![0; 32],
+                message_hash: [0; 32],
                 derivation_path: vec![],
                 batch_time: mock_time(),
             },
@@ -744,9 +773,9 @@ mod test {
             CallbackId::from(2),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                key_id,
                 pseudo_random_id: [2; 32],
-                message_hash: vec![0; 32],
+                message_hash: [0; 32],
                 derivation_path: vec![],
                 batch_time: mock_time(),
             },
@@ -798,8 +827,13 @@ mod test {
             sig_inputs_2.sig_inputs_ref.presig_quadruple_ref,
         );
 
-        let all_requests =
-            get_signing_requests(Height::from(0), &ecdsa_payload, &sign_with_ecdsa_contexts);
+        let all_requests = get_signing_requests(
+            Height::from(0),
+            None,
+            &mut ecdsa_payload,
+            &sign_with_ecdsa_contexts,
+            &valid_keys,
+        );
 
         update_ongoing_signatures(
             all_requests,
@@ -810,31 +844,29 @@ mod test {
         .unwrap();
 
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
-        signature_builder.signatures.push((
+        signature_builder.signatures.insert(
             *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
-        ));
+        );
         update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             &mut ecdsa_payload,
-            no_op_logger(),
         );
 
         let prev_payload = ecdsa_payload.clone();
-        signature_builder.signatures.push((
+        signature_builder.signatures.insert(
             *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
-        ));
+        );
         update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             &mut ecdsa_payload,
-            no_op_logger(),
         );
 
         let res =

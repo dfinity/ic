@@ -39,4 +39,4 @@ tokio = { version = "1.15.0", features = [ "full" ] }
 build-info-build = { version = "0.0.26", default-features = false, features = [] }
 
 [features]
-test = [ "ic-base-types/test" ]
+test = []

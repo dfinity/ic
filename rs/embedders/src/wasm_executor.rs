@@ -8,6 +8,7 @@ use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
+use wasmtime::Module;
 
 use crate::wasm_utils::compile;
 use crate::wasm_utils::instrumentation::Segments;
@@ -130,6 +131,7 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
 }
 
 /// Changes in the canister state after a successul Wasm execution.
+#[derive(Clone, Debug)]
 pub struct CanisterStateChanges {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
@@ -388,7 +390,7 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
-                Some(serialized_module) => {
+                Some(Ok(serialized_module)) => {
                     let module = self
                         .wasm_embedder
                         .deserialize_module(&serialized_module.bytes);
@@ -403,6 +405,11 @@ impl WasmExecutorImpl {
                         Err(err) => Err(err),
                     }
                 }
+                Some(Err(err)) => {
+                    let cache: HypervisorResult<Module> = Err(err.clone());
+                    *guard = Some(EmbedderCache::new(cache));
+                    Err(err)
+                }
                 None => {
                     use std::borrow::Cow;
                     let decoded_wasm: Cow<'_, BinaryEncodedWasm> =
@@ -411,7 +418,8 @@ impl WasmExecutorImpl {
                     *guard = Some(cache.clone());
                     let (compilation_result, serialized_module) = result?;
                     let serialized_module = Arc::new(serialized_module);
-                    compilation_cache.insert(&wasm_binary.binary, Arc::clone(&serialized_module));
+                    compilation_cache
+                        .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
                     Ok(CacheLookup {
                         cache,
                         serialized_module: Some(serialized_module),

@@ -45,7 +45,7 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
 
     let client_cert_from_handshake = single_client_cert_from_handshake(&rustls_stream)?;
     let authenticated_peer = node_id_from_cert_subject_common_name(&client_cert_from_handshake)?;
-    let tls_stream = TlsStream::new_rustls(tokio_rustls::TlsStream::from(rustls_stream));
+    let tls_stream = TlsStream::new(tokio_rustls::TlsStream::from(rustls_stream));
 
     Ok((tls_stream, AuthenticatedPeer::Node(authenticated_peer)))
 }
@@ -66,9 +66,7 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
 
-    Ok(TlsStream::new_rustls(tokio_rustls::TlsStream::from(
-        rustls_stream,
-    )))
+    Ok(TlsStream::new(tokio_rustls::TlsStream::from(rustls_stream)))
 }
 
 fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key<

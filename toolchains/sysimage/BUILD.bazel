@@ -6,4 +6,5 @@ exports_files([
     "build_ext4_image.py",
     "build_disk_image.py",
     "build_upgrade_image.py",
+    "verity_sign.py",
 ])

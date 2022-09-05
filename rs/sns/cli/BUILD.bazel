@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:json-patch",
     "@crate_index//:maplit",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
@@ -47,7 +48,6 @@ rust_binary(
     name = "sns",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -58,7 +58,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "src/main.rs",
     data = ["test.png"],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },

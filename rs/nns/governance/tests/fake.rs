@@ -15,8 +15,8 @@ use ic_nns_governance::{
     },
 };
 use ledger_canister::{AccountIdentifier, Tokens};
-use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ type LedgerMap = HashMap<AccountIdentifier, u64>;
 /// `Ledger`.
 pub struct FakeState {
     pub now: u64,
-    pub rng: StdRng,
+    pub rng: ChaCha20Rng,
     pub accounts: LedgerMap,
 }
 
@@ -63,7 +63,7 @@ impl Default for FakeState {
             // to make the tests deterministic. Make sure this seed is
             // different from other seeds so test data generated from
             // different places doesn't conflict.
-            rng: StdRng::seed_from_u64(9539),
+            rng: ChaCha20Rng::seed_from_u64(9539),
             accounts: HashMap::new(),
         }
     }

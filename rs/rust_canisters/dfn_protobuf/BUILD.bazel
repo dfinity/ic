@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "dfn_protobuf",
     srcs = glob(["src/**"]),
-    edition = "2018",
     deps = [
         "//rs/rust_canisters/dfn_core",
         "//rs/rust_canisters/on_wire",

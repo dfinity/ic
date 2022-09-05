@@ -3,6 +3,7 @@ mod queue;
 mod tests;
 
 use crate::{InputQueueType, NextInputQueue, StateError};
+use ic_ic00_types::IC_00;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -10,11 +11,15 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
     xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, Cycles, QueueIndex,
+    CanisterId, CountBytes, Cycles, QueueIndex, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::{From, TryFrom},
@@ -28,6 +33,10 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 /// generated e.g. when a request cannot be inducted due to a full input queue
 /// (and enqueuing the response into the output queue might also fail).
 pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
+
+/// The default lifetime of a request in OutputQueue from which the deadline
+/// is computed as time + DEFAULT_OUTPUT_REQUEST_LIFETIME.
+pub const DEFAULT_OUTPUT_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
@@ -553,6 +562,7 @@ impl CanisterQueues {
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
+        time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         let (input_queue, output_queue) = self.get_or_insert_queues(&msg.receiver);
 
@@ -568,7 +578,7 @@ impl CanisterQueues {
             OutputQueuesStats::stats_delta(&RequestOrResponse::Request(msg.clone()));
 
         output_queue
-            .push_request(msg)
+            .push_request(msg, time + DEFAULT_OUTPUT_REQUEST_LIFETIME)
             .expect("cannot fail due to checks above");
 
         self.input_queues_stats.reserved_slots += 1;
@@ -577,6 +587,39 @@ impl CanisterQueues {
         debug_assert!(self.stats_ok());
 
         Ok(())
+    }
+
+    /// Immediately reject an output request by pushing a `Response` onto the
+    /// input queue without ever putting the `Request` on an output queue. This
+    /// can only be used for `IC00` requests and will panic if used on a request
+    /// to any other address.
+    ///
+    /// This is expected to be used in cases of `IC00` routing where no
+    /// destination subnet is found that the `Request` could be routed to and
+    /// therefore an immediate (reject) `Response` is added to the relevant
+    /// input queue.
+    pub(crate) fn reject_ic00_output_request(
+        &mut self,
+        request: Request,
+        reject_context: RejectContext,
+    ) -> Result<(), StateError> {
+        assert_eq!(
+            request.receiver, IC_00,
+            "reject_ic00_output_request can only be used to reject management canister requests"
+        );
+        let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
+        input_queue.reserve_slot()?;
+        self.input_queues_stats.reserved_slots += 1;
+        self.memory_usage_stats += MemoryUsageStats::response_slot_delta();
+        let response = RequestOrResponse::Response(Arc::new(Response {
+            originator: request.sender,
+            respondent: IC_00,
+            originator_reply_callback: request.sender_reply_callback,
+            refund: request.payment,
+            response_payload: Payload::Reject(reject_context),
+        }));
+        self.push_input(QUEUE_INDEX_NONE, response, InputQueueType::LocalSubnet)
+            .map_err(|(e, _msg)| e)
     }
 
     /// Returns the number of output requests that can be pushed to each
@@ -686,7 +729,7 @@ impl CanisterQueues {
         self.input_queues_stats.cycles
     }
 
-    /// Returns the number of slots used in output queues.
+    /// Returns the number of actual messages in output queues.
     pub fn output_queues_message_count(&self) -> usize {
         self.output_queues_stats.message_count
     }
@@ -1034,7 +1077,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 /// Running stats across output queues.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputQueuesStats {
-    /// Number of slots used in output queues.
+    /// Number of actual messages in output queues.
     message_count: usize,
 
     /// Total amount of cycles contained in the output queues.
@@ -1162,6 +1205,17 @@ impl MemoryUsageStats {
             transient_stream_responses_size_bytes: 0,
         }
     }
+
+    /// Stats change from reserving a response slot without enqueueing any
+    /// messages.
+    fn response_slot_delta() -> MemoryUsageStats {
+        MemoryUsageStats {
+            responses_size_bytes: 0,
+            reserved_slots: 1,
+            oversized_requests_extra_bytes: 0,
+            transient_stream_responses_size_bytes: 0,
+        }
+    }
 }
 
 impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
@@ -1232,7 +1286,7 @@ pub mod testing {
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
-        CanisterId, QueueIndex,
+        CanisterId, QueueIndex, Time,
     };
     use std::{collections::VecDeque, sync::Arc};
 
@@ -1345,7 +1399,9 @@ pub mod testing {
             req.receiver = CanisterId::from_u64((i % num_receivers) as u64);
             let req = Arc::new(req);
             updated_requests.push_back(RequestOrResponse::Request(Arc::clone(&req)));
-            canister_queues.push_output_request(req).unwrap();
+            canister_queues
+                .push_output_request(req, Time::from_nanos_since_unix_epoch(0))
+                .unwrap();
         });
         (canister_queues, updated_requests)
     }

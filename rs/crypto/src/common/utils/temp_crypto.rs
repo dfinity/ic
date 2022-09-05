@@ -41,7 +41,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams,
+    IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -55,7 +55,7 @@ use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -205,14 +205,14 @@ impl TempCryptoBuilder {
         let mut csp = csp_for_config(&config, None);
         let node_keys_to_generate = self
             .node_keys_to_generate
-            .unwrap_or_else(|| NodeKeysToGenerate::none());
+            .unwrap_or_else(NodeKeysToGenerate::none);
         let node_signing_pk = node_keys_to_generate
             .generate_node_signing_keys
             .then(|| generate_node_signing_keys(&csp));
         let node_id = self.node_id.unwrap_or_else(|| {
             node_signing_pk.as_ref().map_or(
                 NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
-                |nspk| derive_node_id(nspk),
+                derive_node_id,
             )
         });
         let committee_signing_pk = node_keys_to_generate
@@ -321,7 +321,7 @@ impl TempCryptoBuilder {
         let opt_vault_client_runtime_handle = opt_remote_vault_environment
             .as_ref()
             .map(|data| data.vault_client_runtime.handle().clone());
-        let logger = self.logger.unwrap_or_else(|| no_op_logger());
+        let logger = self.logger.unwrap_or_else(no_op_logger);
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             &config,
             opt_vault_client_runtime_handle,
@@ -723,21 +723,19 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
-        dealing_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
         self.crypto_component
-            .verify_dealing_public(params, dealing_id, dealing)
+            .verify_dealing_public(params, signed_dealing)
     }
 
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
-        dealer_id: NodeId,
-        dealing: &IDkgDealing,
+        signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         self.crypto_component
-            .verify_dealing_private(params, dealer_id, dealing)
+            .verify_dealing_private(params, signed_dealing)
     }
 
     fn create_transcript(
@@ -805,7 +803,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
 
     fn retain_active_transcripts(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscript>,
+        active_transcripts: &HashSet<IDkgTranscript>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         self.crypto_component
             .retain_active_transcripts(active_transcripts)
@@ -862,17 +860,6 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
             .await
     }
 
-    async fn perform_tls_server_handshake_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        allowed_clients: AllowedClients,
-        registry_version: RegistryVersion,
-    ) -> Result<(TlsStream, AuthenticatedPeer), TlsServerHandshakeError> {
-        self.crypto_component
-            .perform_tls_server_handshake_with_rustls(tcp_stream, allowed_clients, registry_version)
-            .await
-    }
-
     async fn perform_tls_server_handshake_without_client_auth(
         &self,
         tcp_stream: TcpStream,
@@ -880,19 +867,6 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     ) -> Result<TlsStream, TlsServerHandshakeError> {
         self.crypto_component
             .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-            .await
-    }
-
-    async fn perform_tls_server_handshake_without_client_auth_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsServerHandshakeError> {
-        self.crypto_component
-            .perform_tls_server_handshake_without_client_auth_with_rustls(
-                tcp_stream,
-                registry_version,
-            )
             .await
     }
 
@@ -904,17 +878,6 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     ) -> Result<TlsStream, TlsClientHandshakeError> {
         self.crypto_component
             .perform_tls_client_handshake(tcp_stream, server, registry_version)
-            .await
-    }
-
-    async fn perform_tls_client_handshake_with_rustls(
-        &self,
-        tcp_stream: TcpStream,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<TlsStream, TlsClientHandshakeError> {
-        self.crypto_component
-            .perform_tls_client_handshake_with_rustls(tcp_stream, server, registry_version)
             .await
     }
 }

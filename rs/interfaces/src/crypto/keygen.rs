@@ -21,6 +21,10 @@ pub trait KeyManager {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus>;
 
+    /// Collects key count metrics from the local node and the registry, and stores the information
+    /// in the metrics component.
+    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion);
+
     /// Returns node public keys that were read when this crypto component was
     /// created. Node public keys stay the same throughout the lifetime of
     /// the component.

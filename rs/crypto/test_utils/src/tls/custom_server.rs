@@ -1,12 +1,11 @@
 //! A custom, configurable TLS server that does not rely on the crypto
 //! implementation. It is purely for testing the client.
 #![allow(clippy::unwrap_used)]
-use crate::tls::set_peer_verification_cert_store;
 use crate::tls::x509_certificates::CertWithPrivateKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
+use openssl::ssl;
 use openssl::ssl::{Ssl, SslAcceptor, SslContextBuilder, SslMethod, SslVersion};
-use openssl::x509::X509;
 use std::pin::Pin;
 use tokio::net::TcpListener;
 
@@ -45,22 +44,14 @@ impl CustomServerBuilder {
         self
     }
 
-    pub fn build_with_default_server_cert(
-        self,
-        server_node: NodeId,
-        trusted_client_certs: Vec<X509PublicKeyCert>,
-    ) -> CustomServer {
+    pub fn build_with_default_server_cert(self, server_node: NodeId) -> CustomServer {
         let cert = CertWithPrivateKey::builder()
             .cn(server_node.to_string())
             .build_ed25519();
-        self.build(cert, trusted_client_certs)
+        self.build(cert)
     }
 
-    pub fn build(
-        self,
-        server_cert: CertWithPrivateKey,
-        trusted_client_certs: Vec<X509PublicKeyCert>,
-    ) -> CustomServer {
+    pub fn build(self, server_cert: CertWithPrivateKey) -> CustomServer {
         let max_proto_version = self.max_proto_version.unwrap_or(DEFAULT_MAX_PROTO_VERSION);
         let allowed_cipher_suites = self
             .allowed_cipher_suites
@@ -72,7 +63,6 @@ impl CustomServerBuilder {
         CustomServer {
             listener,
             server_cert,
-            trusted_client_certs,
             max_proto_version,
             allowed_cipher_suites,
             allowed_signature_algorithms,
@@ -86,7 +76,6 @@ impl CustomServerBuilder {
 pub struct CustomServer {
     listener: std::net::TcpListener,
     server_cert: CertWithPrivateKey,
-    trusted_client_certs: Vec<X509PublicKeyCert>,
     max_proto_version: SslVersion,
     allowed_cipher_suites: String,
     allowed_signature_algorithms: String,
@@ -105,7 +94,7 @@ impl CustomServer {
     }
 
     /// Run this client asynchronously. This allows a client to connect.
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Result<(), ssl::Error> {
         self.listener
             .set_nonblocking(true)
             .expect("failed to make listener non-blocking");
@@ -124,19 +113,21 @@ impl CustomServer {
         let result = Pin::new(&mut tls_stream).accept().await;
 
         if let Some(expected_error) = &self.expected_error {
-            let error = result.err().expect("expected error");
+            let error = result.as_ref().err().expect("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the server error to contain \"{}\" but got error: {:?}",
                     expected_error, error
                 )
             }
-        } else if let Some(error) = result.err() {
+        } else if let Some(error) = result.as_ref().err() {
             panic!(
                 "expected the server result to be ok but got error: {}",
                 error
             )
         }
+
+        result
     }
 
     /// Returns the port this server is running on.
@@ -170,12 +161,6 @@ impl CustomServer {
         let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls_server())
             .expect("Failed to initialize the acceptor.");
         self.restrict_tls_version_and_cipher_suites_and_sig_algs(&mut builder);
-        let trusted_client_certs = self
-            .trusted_client_certs
-            .iter()
-            .map(|c| X509::from_der(&c.certificate_der).expect("unable to parse client cert"))
-            .collect();
-        set_peer_verification_cert_store(trusted_client_certs, &mut builder);
         builder.set_verify_depth(0);
         builder
             .set_private_key(&self.server_cert.key_pair())

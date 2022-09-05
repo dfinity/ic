@@ -2,7 +2,7 @@
 
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntCounter};
+use prometheus::{HistogramVec, IntGauge};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::time;
@@ -100,24 +100,14 @@ impl CryptoMetrics {
         }
     }
 
-    /// Observes the key counts of a node.
-    ///
-    /// Parameters:
-    ///  - `num_pub_reg`: The number of node public keys (and TLS x.509 certificates) stored
-    ///    in the registry
-    ///  - `num_pub_local`: The number of node public keys (and TLS x.509 certificates) stored
-    ///    locally
-    ///  - `num_secret_local`: The number of node secret keys stored in the local secret key store
-    pub fn observe_node_key_counts(
-        &self,
-        num_pub_reg: u8,
-        num_pub_local: u8,
-        num_secret_local: u8,
-    ) {
+    /// Observes the key counts of a node. For more information about the types of keys contained
+    /// in the `key_counts` parameter, see the [`KeyCounts`] documentation.
+    pub fn observe_node_key_counts(&self, key_counts: KeyCounts) {
         if let Some(metrics) = &self.metrics {
-            metrics.crypto_key_counts[&KeyType::PublicLocal].inc_by(num_pub_local as u64);
-            metrics.crypto_key_counts[&KeyType::PublicRegistry].inc_by(num_pub_reg as u64);
-            metrics.crypto_key_counts[&KeyType::SecretSKS].inc_by(num_secret_local as u64);
+            metrics.crypto_key_counts[&KeyType::PublicLocal].set(key_counts.get_pk_local() as i64);
+            metrics.crypto_key_counts[&KeyType::PublicRegistry]
+                .set(key_counts.get_pk_registry() as i64);
+            metrics.crypto_key_counts[&KeyType::SecretSKS].set(key_counts.get_sk_local() as i64);
         }
     }
 }
@@ -139,6 +129,41 @@ pub enum MetricsDomain {
     IDkgProtocol,
     ThresholdEcdsa,
     IcCanisterSignature,
+}
+
+/// Keeps track of the number of node keys. This information is collected and provided to the
+/// metrics component. The type of keys for which the key counts are tracked are the following:
+///  - `pk_registry`: The number of node public keys (and TLS x.509 certificates) stored
+///    in the registry
+///  - `pk_local`: The number of node public keys (and TLS x.509 certificates) stored
+///    locally
+///  - `sk_local`: The number of node secret keys stored in the local secret key store
+pub struct KeyCounts {
+    pk_registry: u8,
+    pk_local: u8,
+    sk_local: u8,
+}
+
+impl KeyCounts {
+    pub fn new(pk_registry: u8, pk_local: u8, sk_local: u8) -> Self {
+        KeyCounts {
+            pk_registry,
+            pk_local,
+            sk_local,
+        }
+    }
+
+    pub fn get_pk_registry(&self) -> u8 {
+        self.pk_registry
+    }
+
+    pub fn get_pk_local(&self) -> u8 {
+        self.pk_local
+    }
+
+    pub fn get_sk_local(&self) -> u8 {
+        self.sk_local
+    }
 }
 
 struct Metrics {
@@ -170,7 +195,7 @@ struct Metrics {
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
-    pub crypto_key_counts: BTreeMap<KeyType, IntCounter>,
+    pub crypto_key_counts: BTreeMap<KeyType, IntGauge>,
 }
 
 impl Display for MetricsDomain {
@@ -269,7 +294,7 @@ impl Metrics {
         for key_type in KeyType::iter() {
             key_counts.insert(
                 key_type,
-                r.int_counter(
+                r.int_gauge(
                     key_type.key_count_metric_name(),
                     key_type.key_count_metric_help(),
                 ),

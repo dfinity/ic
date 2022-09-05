@@ -2,16 +2,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-filegroup(
-    name = "artifacts",
-    srcs = glob(["artifacts/**"]),
-)
-
 rust_library(
     name = "local_store",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_store",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/interfaces",
         "//rs/registry/proto",
@@ -26,9 +21,8 @@ rust_library(
 rust_test(
     name = "local_store_test",
     crate = ":local_store",
-    data = glob(["artifacts/**"]),
-    edition = "2018",
     deps = [
+        "//rs/registry/local_store/artifacts",
         "@crate_index//:rand_0_8_4",
         "@crate_index//:tempfile",
     ],

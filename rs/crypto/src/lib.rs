@@ -11,18 +11,17 @@
 
 mod common;
 mod keygen;
-pub mod prng;
 mod sign;
 mod tls;
 
 pub use common::utils;
 pub use ic_crypto_hash::crypto_hash;
+pub use sign::get_tecdsa_master_public_key;
 pub use sign::utils::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
     threshold_sig_public_key_from_der, threshold_sig_public_key_to_der, user_public_key_from_bytes,
     verify_combined_threshold_sig, KeyBytesContentType,
 };
-pub use sign::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 
 use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;
@@ -295,14 +294,17 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
             .as_ref()
             .expect("Missing node signing public key");
         let node_id = derive_node_id(node_signing_pk);
-        CryptoComponentFatClient {
+        let latest_registry_version = registry_client.get_latest_version();
+        let crypto_component = CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             registry_client,
             node_id,
             logger,
             metrics,
-        }
+        };
+        crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
+        crypto_component
     }
 
     /// Creates a crypto component using a fake `node_id`.
@@ -424,5 +426,20 @@ fn key_from_registry(
             key_purpose,
             registry_version,
         }),
+    }
+}
+
+/// Get an identifier to use with logging. If debug logging is not enabled for the caller, a
+/// `log_id` of 0 is returned.
+/// The main criteria for the identifier, and the generation thereof, are:
+///  * Should be fast to generate
+///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
+///  * The generation of the identifier should not block or panic
+///  * The generation of the identifier should not require synchronization between threads
+fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+        ic_types::time::current_time().as_nanos_since_unix_epoch()
+    } else {
+        0
     }
 }

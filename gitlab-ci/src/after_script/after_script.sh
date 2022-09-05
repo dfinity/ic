@@ -12,6 +12,8 @@ end=$(date +%s)
 export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
 
 ENG_OR_CHANNEL="eng-orchestrator"
+ENG_CONS_CHANNEL="eng-consensus-test-failures"
+INGRESS_MNGR_PROPTEST_NAME="ingress-manager-proptests-nightly"
 NNS_STATE_TEST_NAME="nns-state-deployment-test-nightly"
 CARGO_TEST_JSON="${CI_PROJECT_DIR}/rs/ci_output.json"
 CARGO_TEST_JUNIT_XML="${CI_PROJECT_DIR}/test_report.xml"
@@ -40,19 +42,30 @@ if [[ -f "$CARGO_TEST_JUNIT_XML" ]]; then
 fi
 git checkout --detach --force "$CI_COMMIT_SHA"
 
-if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [ -n "$SLACK_CHANNEL" ] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
+# send slack messages
+debug=""
+[ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
+MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
+
+if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
     cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # We support multiple comma separated slack channels in the SLACK_CHANNEL variable.
-    debug=""
-    [ -n "${DEBUG_PIPELINE:-}" ] && debug="DEBUG "
-    IFS=',' read -ra CHANNELS <<<"$SLACK_CHANNEL"
-    MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
+    IFS=',' read -ra CHANNELS <<<"${SLACK_CHANNEL:-}"
     for channel in "${CHANNELS[@]}"; do
         notify_slack/notify_slack.py "$MESSAGE" --channel "$channel" || true
     done
+fi
+
+# send slack messages for specific test signals
+if [[ "$CI_JOB_STATUS" == "failed" ]]; then
+    cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # and old bash-test that was introduced with OR-187, failures are dispatched to OR-team directly
     if [[ "$CI_JOB_NAME" == "$NNS_STATE_TEST_NAME" ]]; then
         notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_OR_CHANNEL" || true
+    fi
+    # test signals for ingress manager proptests are sent to CONS directly
+    if [[ "$CI_JOB_NAME" == "$INGRESS_MNGR_PROPTEST_NAME" ]]; then
+        notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_CONS_CHANNEL" || true
     fi
 fi
 

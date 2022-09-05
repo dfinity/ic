@@ -347,7 +347,7 @@ pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeI
     read_optional_type(logger, prompt, |input| {
         input
             .split(' ')
-            .map(|s| util::node_id_from_str(s))
+            .map(util::node_id_from_str)
             .collect::<Result<Vec<NodeId>, _>>()
     })
 }

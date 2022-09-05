@@ -25,8 +25,8 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::NnsExt;
 use crate::util::{
-    assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_reachability,
-    block_on, delay, get_random_application_node_endpoint, EndpointsStatus,
+    assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_health, block_on,
+    delay, get_random_application_node_endpoint, EndpointsStatus,
 };
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
@@ -108,7 +108,7 @@ fn test(
 
     block_on(async move {
         // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
-        assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
+        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
         info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
     });
 

@@ -23,9 +23,6 @@ use ledger_canister::{
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
-///
-/// This test will be unignored when Governance is updated to set the ICP-XDR
-/// conversion rate in the CMC instead of the Registry
 #[test]
 fn test_set_icp_xdr_conversion_rate() {
     local_test_on_nns_subnet(|runtime| async move {

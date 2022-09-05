@@ -13,6 +13,8 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
+use super::utils::rw_message::install_nns_and_universal_canisters;
+use super::utils::ssh_access::execute_bash_command;
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::UpdateImageType;
@@ -31,7 +33,6 @@ use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use ssh2::Session;
 use std::convert::TryFrom;
-use std::io::{Read, Write};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -44,7 +45,9 @@ pub fn config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test")
+        .expect("failed to setup IC under test");
+
+    install_nns_and_universal_canisters(env.topology_snapshot());
 }
 
 pub fn test(test_env: TestEnv) {
@@ -52,23 +55,14 @@ pub fn test(test_env: TestEnv) {
     let mut all_nodes = test_env.topology_snapshot().root_subnet().nodes();
 
     let nns_node = all_nodes.next().unwrap();
-    nns_node.await_status_is_healthy().unwrap();
     info!(logger, "node0: {:?}", nns_node.get_ip_addr());
     let nodes = all_nodes.collect::<Vec<IcNodeSnapshot>>();
-    for n in &nodes {
-        n.await_status_is_healthy().unwrap();
-    }
     info!(logger, "node1: {:?}", nodes[0].get_ip_addr());
     info!(logger, "node2: {:?}", nodes[1].get_ip_addr());
     info!(logger, "node3: {:?}", nodes[2].get_ip_addr());
 
-    info!(logger, "Installing NNS canisters...");
-    nns_node
-        .install_nns_canisters()
-        .expect("NNS canisters not installed");
-    info!(logger, "NNS canisters are installed.");
-
-    let target_version = get_assigned_replica_version(&nns_node).unwrap();
+    let target_version =
+        get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
     block_on(bless_replica_version(
@@ -88,7 +82,9 @@ pub fn test(test_env: TestEnv) {
     ));
     info!(logger, "Upgrade started");
 
-    let sess = nns_node.get_ssh_session(ADMIN).unwrap();
+    let sess = nns_node
+        .block_on_ssh_session(ADMIN)
+        .expect("Failed to establish SSH session");
 
     info!(logger, "Wait for 'hash mismatch' in the replica's log.");
     retry(test_env.logger(), secs(600), secs(20), || {
@@ -101,8 +97,8 @@ pub fn test(test_env: TestEnv) {
     .expect("No hash missmatch in the logs");
 
     info!(logger, "Check that creation of canisters is impossible...");
-    retry(test_env.logger(), secs(60), secs(5), || {
-        if can_install_canister(&nns_node.get_public_url()) {
+    retry(test_env.logger(), secs(600), secs(10), || {
+        if can_install_canister(&nns_node.get_public_url()).is_ok() {
             bail!("Waiting for a failure creating a canister!")
         } else {
             Ok(())
@@ -112,31 +108,40 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Stopping orchestrator...");
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
-        execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string());
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
+        execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string()).unwrap();
     }
 
     info!(logger, "Download and save the proper image file...");
     let command = format!(
-        r#"sudo chmod 777 /var/lib/ic/data/images
+        r#"set -e
+        sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
-        sudo mv guest-os.tar.gz old-guest-os.tar.gz
-        sudo curl https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz -o guest-os.tar.gz
-        sudo chmod --reference=old-guest-os.tar.gz guest-os.tar.gz
-        sudo chown --reference=old-guest-os.tar.gz guest-os.tar.gz
-        sudo rm old-guest-os.tar.gz
+        sudo mv image.bin old-image.bin
+        sudo curl http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500
+        sudo chmod --reference=old-image.bin image.bin
+        sudo chown --reference=old-image.bin image.bin
+        sudo rm old-image.bin
         "#,
         target_version,
     );
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
-        execute_bash_command(&s, command.clone());
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
+        if let Err(err) = execute_bash_command(&s, command.clone()) {
+            panic!("{}", err)
+        }
     }
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
-        let s = n.get_ssh_session(ADMIN).unwrap();
-        execute_bash_command(&s, "sudo systemctl start ic-replica".to_string());
+        let s = n
+            .block_on_ssh_session(ADMIN)
+            .expect("Failed to establish SSH session");
+        execute_bash_command(&s, "sudo systemctl start ic-replica".to_string()).unwrap();
     }
 
     info!(logger, "Waiting for update to finish on all 3 nodes...");
@@ -175,18 +180,6 @@ pub fn test(test_env: TestEnv) {
 }
 
 fn have_sha_errors(sess: &Session) -> bool {
-    let search_str = "FileHashMismatchError";
-    let check_log_script = format!("journalctl | grep \"{}\"", search_str);
-    execute_bash_command(sess, check_log_script).lines().count() != 0
-}
-
-fn execute_bash_command(sess: &Session, command: String) -> String {
-    let mut channel = sess.channel_session().unwrap();
-    channel.exec("bash").unwrap();
-    channel.write_all(command.as_bytes()).unwrap();
-    channel.flush().unwrap();
-    channel.send_eof().unwrap();
-    let mut out = String::new();
-    channel.read_to_string(&mut out).unwrap();
-    out
+    let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
+    execute_bash_command(sess, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
 }

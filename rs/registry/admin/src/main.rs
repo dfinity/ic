@@ -86,6 +86,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -350,6 +351,9 @@ enum SubCommand {
     ProposeToCompleteCanisterMigration(ProposeToCompleteCanisterMigrationCmd),
     /// Get the latest canister migrations.
     GetCanisterMigrations,
+    /// Submits a proposal to add an SNS wasm (e.g. Governance, Ledger, etc) to the SNS-WASM NNS
+    /// canister.
+    ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -996,6 +1000,11 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
 
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
+
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
     #[clap(long, multiple_values(true))]
@@ -1019,6 +1028,7 @@ fn parse_initial_ecdsa_config_options(
     ecdsa_quadruples_to_create_in_advance: &Option<u32>,
     ecdsa_keys_to_request: &Option<String>,
     max_ecdsa_queue_size: &Option<u32>,
+    signature_request_timeout_ns: &Option<u64>,
 ) -> Option<EcdsaInitialConfig> {
     if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
         return None;
@@ -1049,13 +1059,14 @@ fn parse_initial_ecdsa_config_options(
                         let subnet_id = btree
                             .get("subnet_id")
                             .map(|x| Some(PrincipalId::from_str(x).unwrap()))
-                            .unwrap_or_default();
+                            .expect("subnet_id is required in EcdsaKeyRequest.");
 
                         EcdsaKeyRequest { key_id, subnet_id }
                     })
                     .collect()
             }),
         max_queue_size: Some(max_ecdsa_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)),
+        signature_request_timeout_ns: *signature_request_timeout_ns,
     })
 }
 
@@ -1083,6 +1094,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
             &self.max_ecdsa_queue_size,
+            &self.signature_request_timeout_ns,
         );
 
         let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
@@ -1252,6 +1264,11 @@ struct ProposeToUpdateRecoveryCupCmd {
     /// time. Requests will be rejected if the queue is full.
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
+
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
 }
 
 #[async_trait]
@@ -1286,6 +1303,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
             &self.max_ecdsa_queue_size,
+            &self.signature_request_timeout_ns,
         );
         RecoverSubnetPayload {
             subnet_id,
@@ -1486,6 +1504,12 @@ struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     pub max_ecdsa_queue_size: Option<u32>,
 
+    /// Configuration for ECDSA:
+    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// If none is specified, no request will time out.
+    #[clap(long)]
+    pub signature_request_timeout_ns: Option<u64>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
@@ -1553,6 +1577,10 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 .map(|c| c.quadruples_to_create_in_advance);
             let current_max_queue_size =
                 subnet.ecdsa_config.as_ref().and_then(|c| c.max_queue_size);
+            let signature_request_timeout_ns = subnet
+                .ecdsa_config
+                .as_ref()
+                .and_then(|c| c.signature_request_timeout_ns);
 
             let keys_to_remove = parse_ecdsa_keys_option(&self.ecdsa_keys_to_remove);
             let mut keys_to_add = parse_ecdsa_keys_option(&self.ecdsa_keys_to_generate);
@@ -1574,6 +1602,9 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 max_queue_size: Some(self.max_ecdsa_queue_size.unwrap_or_else(|| {
                     current_max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)
                 })),
+                signature_request_timeout_ns: self
+                    .signature_request_timeout_ns
+                    .or(signature_request_timeout_ns),
             })
         };
 
@@ -1855,6 +1886,61 @@ impl ProposalTitleAndPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
             query_allocation: self.query_allocation.map(candid::Nat::from),
             authz_changes: vec![],
+        }
+    }
+}
+
+/// A command to propose to add an SNS wasm to the SNS-WASM canister
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddWasmToSnsWasmCmd {
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
+    #[clap(long, required = true)]
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
+
+    #[clap(long, required = true)]
+    /// The Canister type, one of: Root, Governance, Ledger, Swap, Archive
+    canister_type: String,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Add {} SNS canister wasm to SNS-WASM", self.canister_type),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> AddWasmRequest {
+        let wasm = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
+
+        let canister_type = SnsCanisterType::from_str(&*self.canister_type).expect(
+            "Invalid canister_type, expected one of: \
+                        Root, Governance, Ledger, Swap, Archive",
+        ) as i32;
+
+        let sns_wasm = SnsWasm {
+            wasm,
+            canister_type,
+        };
+
+        AddWasmRequest {
+            wasm: Some(sns_wasm),
+            hash: hex::decode(&self.wasm_module_sha256).unwrap(),
         }
     }
 }
@@ -2808,6 +2894,7 @@ async fn main() {
             SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
+            SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3443,6 +3530,15 @@ async fn main() {
             print_and_get_last_value::<CanisterMigrations>(
                 make_canister_migrations_record_key().as_bytes().to_vec(),
                 &registry_canister,
+            )
+            .await;
+        }
+        SubCommand::ProposeToAddWasmToSnsWasm(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::AddSnsWasm,
+                opts.nns_url,
+                sender,
             )
             .await;
         }

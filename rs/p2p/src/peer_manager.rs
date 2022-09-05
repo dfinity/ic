@@ -7,6 +7,9 @@ use ic_types::{
 };
 use std::{
     collections::{HashMap, HashSet},
+    convert::TryInto,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
     sync::{Arc, Mutex},
     time::{Instant, SystemTime},
 };
@@ -180,15 +183,18 @@ impl PeerManager for PeerManagerImpl {
             }?;
         }
 
-        // If starting a transport connection failed, remove the
-        // node from current peer list. This removal makes it possible to attempt a
-        // re-connection on the next registry refresh.
-        //
-        // TODO: P2P-511 transport.start_connection() should be non-fallible.
-        // Instead, connection failures should be retried internally in
-        // transport.
+        // If getting the peer socket fails, remove the node from current peer list.
+        // This removal makes it possible to attempt a re-connection on the next registry refresh.
+        let peer_addr = get_peer_addr(node_record).map_err(|e| {
+            let mut current_peers = self.current_peers.lock().unwrap();
+            current_peers.remove(&node_id);
+            warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
+            P2PError {
+                p2p_error_code: P2PErrorCode::InitFailed,
+            }
+        })?;
         self.transport
-            .start_connections(&node_id, node_record, registry_version)
+            .start_connection(&node_id, peer_addr, registry_version)
             .map_err(|e| {
                 let mut current_peers = self.current_peers.lock().unwrap();
                 current_peers.remove(&node_id);
@@ -202,8 +208,8 @@ impl PeerManager for PeerManagerImpl {
     /// The method removes the given peer from the list of current peers.
     fn remove_peer(&self, node_id: NodeId) {
         let mut current_peers = self.current_peers.lock().unwrap();
-        self.transport.stop_connections(&node_id);
-        // Remove the peer irrespective of the result of the stop_connections() call.
+        self.transport.stop_connection(&node_id);
+        // Remove the peer irrespective of the result of the stop_connection() call.
         current_peers.remove(&node_id);
         info!(self.log, "Nodes {:0} removed", node_id);
     }
@@ -212,5 +218,80 @@ impl PeerManager for PeerManagerImpl {
     // this given the code compiles.
     fn current_peers(&self) -> &Arc<Mutex<PeerContextDictionary>> {
         &self.current_peers
+    }
+}
+
+fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
+    let socket_addr: (IpAddr, u16) = node_record
+        .p2p_flow_endpoints
+        .get(0)
+        .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
+        .and_then(|endpoint| {
+            Some((
+                IpAddr::from_str(&endpoint.ip_addr).ok()?,
+                endpoint.port.try_into().ok()?,
+            ))
+        })
+        .ok_or("Failed to parse NodeRecord to (IpAddr,u16) tuple")?;
+
+    Ok(SocketAddr::from(socket_addr))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_protobuf::registry::node::v1::{
+        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
+    };
+
+    #[test]
+    fn test_get_peer_addr() {
+        {
+            let node_record: NodeRecord = Default::default();
+            let peer_addr = get_peer_addr(&node_record);
+            assert!(peer_addr.is_err());
+        }
+        {
+            let mut node_record: NodeRecord = Default::default();
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 2000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                    port: 200,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+
+            let peer_addr = get_peer_addr(&node_record).unwrap();
+            assert_eq!(
+                peer_addr.to_string(),
+                "[2001:db8:0:1:1:1:1:1]:200".to_string()
+            );
+        }
+        {
+            let mut node_record: NodeRecord = Default::default();
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 1000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                    port: 100,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+            node_record.p2p_flow_endpoints.push(FlowEndpoint {
+                flow_tag: 2000,
+                endpoint: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
+                    port: 200,
+                    protocol: Protocol::P2p1Tls13 as i32,
+                }),
+            });
+
+            let peer_addr = get_peer_addr(&node_record).unwrap();
+            assert_eq!(
+                peer_addr.to_string(),
+                "[2001:db8:0:1:1:1:1:1]:100".to_string()
+            );
+        }
     }
 }

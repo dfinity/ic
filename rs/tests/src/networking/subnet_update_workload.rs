@@ -124,14 +124,15 @@ pub fn large_config(env: TestEnv) {
 }
 
 // Run a long test (6h) with the max rps we bring across a boundary node
+// TODO: change test to use boundary node when BOUN-425 has been resolved
 pub fn long_duration_test(env: TestEnv) {
     test(
         env,
         100,  //rps
         1000, //payload size bytes
         Duration::from_secs(6 * 60 * 60),
-        true, //use boundary nodes
-        0.90, //min_success_ratio
+        false, //do not use boundary nodes
+        0.90,  //min_success_ratio
     );
 }
 
@@ -143,7 +144,7 @@ pub fn large_payload_test(env: TestEnv) {
         5,       //rps
         100_000, //payload size bytes
         Duration::from_secs(6 * 60 * 60),
-        false, //use boundary nodes
+        false, //do not use boundary nodes
         0.95,  //min_success_ratio
     );
 }
@@ -156,7 +157,7 @@ pub fn large_subnet_test(env: TestEnv) {
         280,  //rps
         1000, //payload size bytes
         Duration::from_secs(2 * 60 * 60),
-        false, //use boundary nodes
+        false, //do not use boundary nodes
         0.95,  //min_success_ratio
     );
 }
@@ -221,7 +222,7 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, Duration::from_secs(11), RETRY_BACKOFF, || async {
+            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &nns_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),

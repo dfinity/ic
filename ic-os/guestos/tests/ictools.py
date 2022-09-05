@@ -10,7 +10,6 @@ import time
 import cbor
 import gflags
 import requests
-import vmtools
 
 FLAGS = gflags.FLAGS
 
@@ -114,6 +113,7 @@ def ic_prep(subnets, version, root_subnet=0):
             workdir,
             "--replica-version",
             version,
+            "--allow-empty-update-image",
             "--dkg-interval-length",
             "10",
             "--p2p-flows",
@@ -129,11 +129,8 @@ def ic_prep(subnets, version, root_subnet=0):
     return ICConfig(workdir, nns_ips, node_subnet_index, root_subnet)
 
 
-def build_ic_prep_inject_config(machine, ic_config, index, extra_config={}):
-    ipv6 = machine.get_ips(6)[0]
+def build_ic_prep_inject_config(ic_config, index, extra_config={}):
     args = {
-        "ipv6_address": "%s/%d" % (ipv6["address"], ipv6["mask_length"]),
-        "ipv6_gateway": ipv6["gateway"],
         "nns_url": "http://[%s]:8080" % ic_config.nns_ips[0],
         "nns_public_key": os.path.join(ic_config.workdir, "nns_public_key.pem"),
         "ic_crypto": os.path.join(ic_config.workdir, "node-%d" % index, "crypto"),
@@ -142,7 +139,7 @@ def build_ic_prep_inject_config(machine, ic_config, index, extra_config={}):
         args["ic_registry_local_store"] = os.path.join(ic_config.workdir, "ic_registry_local_store")
     args.update(extra_config)
 
-    return build_bootstrap_config_image(machine.get_name(), **args)
+    return build_bootstrap_config_image("foo", **args)
 
 
 def nns_install(ic_config, ic_url):
@@ -182,7 +179,7 @@ def wait_http_up(url, timeout=FLAGS.timeout):
 
 
 def _get_artifact_version(artifact, kind):
-    if isinstance(artifact, vmtools.SystemImage):
+    if hasattr(artifact, "local_path"):
         artifact = artifact.local_path
 
     get_artifact_version = os.path.join(

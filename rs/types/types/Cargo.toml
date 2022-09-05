@@ -1,14 +1,13 @@
 [package]
 name = "ic-types"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 base32 = "0.4.0"
 base64 = "0.11.0"
 bincode = "1.2.1"
 candid = "0.7.14"
-chrono = "0.4"
 derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
 hex = "0.4.2"
 http = "0.2.5"
@@ -37,6 +36,9 @@ strum = "0.23.0"
 strum_macros = "0.23.0"
 thiserror = "1.0"
 url = { version = "2", features = ["serde"] }
+
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+chrono = "0.4"
 
 [dev-dependencies]
 anyhow = "1"

@@ -2,7 +2,7 @@
 name = "ic-artifact-pool"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bincode = "1.2.1"
@@ -35,6 +35,7 @@ nix = "0.23.0"
 [dev-dependencies]
 criterion = "0.3"
 ic-constants = { path = "../constants" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }

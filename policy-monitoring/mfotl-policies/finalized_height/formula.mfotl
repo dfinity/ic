@@ -23,16 +23,87 @@
     approximation of the time at which the block became finalized.
 *)
 
-LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
-LET subnet_changing(subnet) =
-  ( EXISTS node1, node2.
-    (
-      registry_subnet_map(node1, subnet)
-      AND registry_subnet_map(node2, subnet)
-      AND NOT node1 = node2
-      AND NOT ((NOT p2p__node_removed(node1, subnet, node2)) SINCE p2p__node_added(node1, subnet, node2))
+LET node_added_to_subnet(node_id, node_addr, subnet) =
+  registry__node_added_to_subnet(node_id, node_addr, subnet)
+IN
+LET node_removed_from_subnet(node_id, node_addr) =
+  registry__node_removed_from_subnet(node_id, node_addr)
+IN
+LET in_subnet(node_id, node_addr, subnet) =
+  ((*
+      The node was originally in this subnet, and it has not been unassigned from it.
+    *)
+    (ONCE originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
+      ONCE node_removed_from_subnet(node_id, node_addr)
     )
   )
+  OR
+  ((*
+      The node was possibly not originally in this subnet, but it has been assigned to it.
+    *)
+    (
+      (NOT node_removed_from_subnet(node_id, node_addr))
+      SINCE node_added_to_subnet(node_id, node_addr, subnet)
+    )
+  )
+IN
+LET subnet_increasing(subnet) =
+  ( EXISTS node1, node2.
+    (
+      in_subnet(node1, _, subnet)
+      AND in_subnet(node2, _, subnet)
+      AND NOT node1 = node2
+      AND NOT (
+        (NOT p2p__node_removed(node1, subnet, node2)) SINCE (
+          (*
+            In case we never observe p2p__node_added, assume that the subnet is, indeed, changing.
+            Here, we conservatively assume the "worst", i.e., that the subnet may have been changing
+            at the point when the log stream has started.
+          *)
+          p2p__node_added(node1, subnet, node2)
+        )
+      )
+    )
+  )
+IN
+LET subnet_decreasing(subnet) =
+  ( EXISTS node1, node2.
+    (
+      in_subnet(node1, _, subnet)
+      AND (
+        ((NOT p2p__node_removed(node1, subnet, node2)) SINCE p2p__node_added(node1, subnet, node2))
+        OR (
+          in_subnet(node1, _, subnet)  (* Mathematically redundant; added to help Monpoly *)
+          AND (
+            (*
+              Even though we don't whether node1 knows about node2's subnet membership, it could
+              know that it had been a member of this subnet. Thus, we conservatively assume that
+              the subnet is changing. Unless -- see (~) below
+            *)
+            in_subnet(node1, _, subnet)  (* Mathematically redundant; added to help Monpoly *)
+            AND (ONCE originally_in_subnet(node2, _, subnet))
+            AND NOT (ONCE p2p__node_removed(node1, subnet, node2))
+            AND NOT (
+              (* (~)
+                If node1 thinks that node2 has been added to _some_ "subneta". Then we conclude that
+                node1 does not think that node2 belongs to "subnet"; thus, node2 is not a witness of
+                the fact that "subnet" is decreasing.
+              *)
+              (EXISTS subneta.
+                (p2p__node_removed(node1, subneta, node2)
+                  SINCE p2p__node_added(node1, subneta, node2))
+              )
+            )
+          )
+        )
+      )
+      AND NOT in_subnet(node2, _, subnet)
+    )
+  )
+IN
+LET subnet_is_changing(subnet) =
+  subnet_increasing(subnet)
+  OR subnet_decreasing(subnet)
 IN
 LET fin(node, subnet, height, hash, replica_version) =
   finalized(node, subnet, height, hash, replica_version)
@@ -40,6 +111,10 @@ LET fin(node, subnet, height, hash, replica_version) =
     PREVIOUS ONCE EXISTS nodea. finalized(nodea, subnet, height, hash, replica_version)
   )
 IN
-((NOT subnet_changing(subnet)) SINCE[80001,*] fin(n1, subnet, height1, hash1, replica_version))
+(
+  (NOT subnet_is_changing(subnet))
+  SINCE[80001,*]  (* 80_001 ms = 80 s + delta *)
+    fin(n1, subnet, height1, hash1, replica_version)
+)
 AND fin(n2, subnet, height2, hash2, replica_version)
 AND height2 = height1 + 1

@@ -6,7 +6,7 @@ rust_library(
     name = "canister_http_adapter_client",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_canister_http_adapter_client",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/types/types",
     ],

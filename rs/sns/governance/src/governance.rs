@@ -48,7 +48,10 @@ use strum::IntoEnumIterator;
 use dfn_core::println;
 
 use crate::ledger::Ledger;
-use crate::neuron::{NeuronState, RemovePermissionsStatus, MAX_LIST_NEURONS_RESULTS};
+use crate::neuron::{
+    NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    MAX_LIST_NEURONS_RESULTS,
+};
 use crate::pb::v1::{
     manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions},
     manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
@@ -60,9 +63,9 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
+use crate::pb::v1::governance::{UpgradeInProgress, Version};
 use crate::sns_upgrade::{
-    get_all_sns_canisters, get_current_version, get_next_version,
-    get_upgrade_target_canister_id_and_wasm,
+    get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
@@ -316,6 +319,14 @@ impl GovernanceProto {
 
         result
     }
+
+    /// Gets the current deployed version of the SNS or panics.
+    pub fn deployed_version_or_panic(&self) -> Version {
+        self.deployed_version
+            .as_ref()
+            .cloned()
+            .expect("No version set in Governance.")
+    }
 }
 
 /// This follows the following pattern:
@@ -409,18 +420,19 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
             *Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
         let ledger_canister_id =
             *Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
+        let swap_canister_id =
+            *Self::validate_required_field("swap_canister_id", &base.swap_canister_id)?;
 
         Self::validate_canister_id_field("root", root_canister_id)?;
         Self::validate_canister_id_field("ledger", ledger_canister_id)?;
-        if let Some(swap_canister_id) = &base.swap_canister_id {
-            Self::validate_canister_id_field("swap", *swap_canister_id)?;
-        }
+        Self::validate_canister_id_field("swap", swap_canister_id)?;
 
         Self::valid_mode_or_err(&base)?;
         Self::validate_required_field("parameters", &base.parameters)?.validate(base.get_mode())?;
         Self::validate_required_field("sns_metadata", &base.sns_metadata)?.validate()?;
         validate_id_to_nervous_system_functions(&base.id_to_nervous_system_functions)?;
         validate_default_followees(&base)?;
+        validate_neurons(&base)?;
 
         Ok(Self(base))
     }
@@ -478,6 +490,28 @@ pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> 
                     followee, neuron_id_to_neuron,
                 ));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Requires that the neurons identified in base.parameters.neurons have their
+/// voting_power_percentage_multiplier within the expected range of 0 to 100.
+///
+/// Assumes that base.parameters is Some.
+///
+/// If the validation fails, an Err is returned containing a string that explains why
+/// base is invalid.
+pub fn validate_neurons(base: &GovernanceProto) -> Result<(), String> {
+    for (neuron_id, neuron) in base.neurons.iter() {
+        // Since voting_power_percentage_multiplier, only check the upper bound.
+        if neuron.voting_power_percentage_multiplier > 100 {
+            return Err(format!(
+                "Neuron {} has an invalid voting_power_percentage_multiplier ({}). \
+                 Expected range is 0 to 100",
+                neuron_id, neuron.voting_power_percentage_multiplier
+            ));
         }
     }
 
@@ -637,10 +671,10 @@ impl Governance {
     }
 
     /// Returns the initial voting period of proposals.
-    fn initial_voting_period(&self) -> u64 {
+    fn initial_voting_period_seconds(&self) -> u64 {
         self.nervous_system_parameters()
-            .initial_voting_period
-            .expect("NervousSystemParameters must have initial_voting_period")
+            .initial_voting_period_seconds
+            .expect("NervousSystemParameters must have initial_voting_period_seconds")
     }
 
     /// Returns the wait for quiet deadline extension period for proposals.
@@ -1158,6 +1192,7 @@ impl Governance {
             followees: parent_neuron.followees.clone(),
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state.clone(),
+            voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -1366,7 +1401,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Tried to merge {} e8s, but can't merge an amount\
+                    "Tried to merge {} e8s, but can't merge an amount \
                      less than the transaction fee of {} e8s.",
                     maturity_to_disburse, transaction_fee_e8s
                 ),
@@ -1725,7 +1760,7 @@ impl Governance {
                     .unwrap_or_else(|| {
                         proposal_data
                             .proposal_creation_timestamp_seconds
-                            .saturating_add(proposal_data.initial_voting_period)
+                            .saturating_add(proposal_data.initial_voting_period_seconds)
                     })
             })
             .min()
@@ -1932,7 +1967,14 @@ impl Governance {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
         let sns_canisters =
-            get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic()).await;
+            get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic())
+                .await
+                .map_err(|e| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Could not get list of SNS canisters from root: {}", e),
+                    )
+                })?;
 
         let dapp_canisters: Vec<CanisterId> = sns_canisters
             .dapps
@@ -2010,37 +2052,61 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
-        let current_version =
-            get_current_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
+        let current_version = self.proto.deployed_version_or_panic();
+        let root_canister_id = self.proto.root_canister_id_or_panic();
 
-        let next_version = get_next_version(&*self.env, &current_version)
+        let UpgradeSnsParams {
+            next_version,
+            canister_type_to_upgrade,
+            new_wasm_hash,
+            canister_ids_to_upgrade,
+        } = get_upgrade_params(&*self.env, root_canister_id, &current_version)
             .await
-            .expect("There is no next version for the current version of the SNS.");
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Could not execute proposal: {}", e),
+                )
+            })?;
 
-        let sns_canisters =
-            get_all_sns_canisters(&*self.env, self.proto.root_canister_id_or_panic()).await;
+        let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
+            .await
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Could not execute proposal: {}", e),
+                )
+            })?
+            .wasm;
 
-        let (target_canister_id, target_wasm) = get_upgrade_target_canister_id_and_wasm(
-            &*self.env,
-            &sns_canisters,
-            &current_version,
-            &next_version,
-        )
-        .await?;
-
-        let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
+        let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
         println!(
-            "{}target_is_root: {} (target_canister_id = {})",
+            "{}target_is_root: {} (target_canister_ids = {:?})",
             log_prefix(),
             target_is_root,
-            target_canister_id
+            canister_ids_to_upgrade
         );
+
+        self.proto.pending_version = Some(UpgradeInProgress {
+            target_version: Some(next_version),
+            mark_failed_at_seconds: self.env.now() + 5 * 60,
+            checking_upgrade_lock: 0,
+        });
+
         if target_is_root {
-            return upgrade_canister_directly(&*self.env, target_canister_id, target_wasm).await;
+            // There is only one root canister, so there is no need to do more than one of these.
+            if let Some(target_canister_id) = canister_ids_to_upgrade.into_iter().next() {
+                return upgrade_canister_directly(&*self.env, target_canister_id, target_wasm)
+                    .await;
+            }
+        } else {
+            for target_canister_id in canister_ids_to_upgrade {
+                self.upgrade_non_root_canister(target_canister_id, target_wasm.clone())
+                    .await?;
+            }
         }
 
-        self.upgrade_non_root_canister(target_canister_id, target_wasm)
-            .await
+        Ok(())
     }
 
     /// Returns the nervous system parameters
@@ -2075,10 +2141,10 @@ impl Governance {
     ///
     /// This is a low-level function that makes no verification whatsoever.
     fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let initial_voting_period = data.initial_voting_period;
+        let initial_voting_period_seconds = data.initial_voting_period_seconds;
 
         self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            data.proposal_creation_timestamp_seconds + initial_voting_period,
+            data.proposal_creation_timestamp_seconds + initial_voting_period_seconds,
             self.closest_proposal_deadline_timestamp_seconds,
         );
         self.proto.proposals.insert(pid, data);
@@ -2108,19 +2174,9 @@ impl Governance {
             self.check_heap_can_grow()?;
         }
 
-        validate_and_render_proposal(
-            proposal,
-            &*self.env,
-            self.proto.get_mode(),
-            self.proto
-                .parameters
-                .as_ref()
-                .expect("Governance must have NervousSystemParameters."),
-            &self.proto.id_to_nervous_system_functions,
-            self.proto.root_canister_id_or_panic(),
-        )
-        .await
-        .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
+        validate_and_render_proposal(proposal, &*self.env, &self.proto)
+            .await
+            .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
 
     /// Makes a new proposal with the given proposer neuron ID and proposal.
@@ -2249,7 +2305,7 @@ impl Governance {
             .nervous_system_parameters()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
-        let initial_voting_period = self.initial_voting_period();
+        let initial_voting_period_seconds = self.initial_voting_period_seconds();
         let wait_for_quiet_deadline_increase_seconds =
             self.wait_for_quiet_deadline_increase_seconds();
 
@@ -2306,7 +2362,7 @@ impl Governance {
             ballots: electoral_roll,
             payload_text_rendering: Some(rendering),
             is_eligible_for_rewards,
-            initial_voting_period,
+            initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             // Writing these explicitly so that we have to make a consious decision
             // about what to do when adding a new field to `ProposalData`.
@@ -2320,7 +2376,8 @@ impl Governance {
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: now_seconds.saturating_add(initial_voting_period),
+            current_deadline_timestamp_seconds: now_seconds
+                .saturating_add(initial_voting_period_seconds),
         });
 
         // Charge the cost of rejection upfront.
@@ -2835,6 +2892,9 @@ impl Governance {
             followees: self.default_followees().followees,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
+            // A neuron created through the `claim_or_refresh` ManageNeuron command will
+            // have the default voting power multiplier applied.
+            voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -2896,9 +2956,10 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`)
+    ///   (permission `ManagePrincipals`), or already has the permissions that
+    ///   are being added.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
-    ///   as defined in the nervous system paramters. To see what the current parameters are
+    ///   as defined in the nervous system parameters. To see what the current parameters are
     ///   for an SNS see `get_nervous_system_parameters`.
     /// - adding the new permissions for the principal does not exceed the limit of principals
     ///   that a neuron can have in its access control list, which is defined by the nervous
@@ -2910,8 +2971,6 @@ impl Governance {
         add_neuron_permissions: &AddNeuronPermissions,
     ) -> Result<(), GovernanceError> {
         let neuron = self.get_neuron_result(neuron_id)?;
-
-        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
 
         let permissions_to_add = add_neuron_permissions
             .permissions_to_add
@@ -2929,6 +2988,13 @@ impl Governance {
                 ErrorType::InvalidCommand,
                 "AddNeuronPermissions command provided more permissions than exist in the system",
             ));
+        }
+
+        // Check if the caller has the same permissions that the request is requesting to add.
+        // If so, allow the caller to add the permissions to the principal_id, which the security
+        // policy allows. If not, check if the caller can manage other principals
+        if !neuron.is_authorized_with_permissions(caller, permissions_to_add) {
+            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
         }
 
         self.nervous_system_parameters()
@@ -2987,7 +3053,8 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`)
+    ///   (permission `ManagePrincipals`), or already has the permissions that
+    ///   are being removed.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
     fn remove_neuron_permissions(
@@ -2997,8 +3064,6 @@ impl Governance {
         remove_neuron_permissions: &RemoveNeuronPermissions,
     ) -> Result<(), GovernanceError> {
         let neuron = self.get_neuron_result(neuron_id)?;
-
-        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
 
         let permissions_to_remove = remove_neuron_permissions
             .permissions_to_remove
@@ -3016,6 +3081,13 @@ impl Governance {
                 ErrorType::InvalidCommand,
                 "RemoveNeuronPermissions command provided more permissions than exist in the system",
             ));
+        }
+
+        // Check if the caller has the same permissions that the request is requesting to remove.
+        // If so, allow the caller to remove the permissions of the principal_id, which the security
+        // policy allows. If not, check if the caller can manage other principals
+        if !neuron.is_authorized_with_permissions(caller, permissions_to_remove) {
+            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
         }
 
         let principal_id = remove_neuron_permissions
@@ -3283,6 +3355,8 @@ impl Governance {
                     GovernanceError::from(e)
                 ),
             }
+        } else if self.should_check_upgrade_status() {
+            self.check_upgrade_status().await;
         }
 
         self.maybe_gc();
@@ -3569,6 +3643,113 @@ impl Governance {
         })
     }
 
+    /// Checks if there is a pending upgrade.
+    fn should_check_upgrade_status(&self) -> bool {
+        self.proto.pending_version.is_some()
+    }
+
+    /// Checks if pending upgrade is complete and either updates deployed_version
+    /// or clears pending_upgrade if beyond the limit.
+    async fn check_upgrade_status(&mut self) {
+        let upgrade_in_progress =
+            self.proto.pending_version.as_ref().expect(
+                "There must be pending_version or should_check_upgrade_status returns false",
+            );
+
+        if upgrade_in_progress.target_version.is_none() {
+            // If we have an upgrade_in_progress with no target_version, we are in an unexpected
+            // situation. We recover to workable state by marking upgrade as failed.
+            println!(
+                "{}No target_version set for upgrade_in_progress. Clearing upgrade_in_progress state...",
+                log_prefix()
+            );
+            self.proto.pending_version = None;
+            return;
+        }
+
+        // Pre-checks finished, we now extract needed variables.
+        let target_version = upgrade_in_progress.target_version.as_ref().unwrap().clone();
+        let mark_failed_at = upgrade_in_progress.mark_failed_at_seconds;
+
+        // Mark the check as active before async call.
+        self.proto
+            .pending_version
+            .as_mut()
+            .unwrap()
+            .checking_upgrade_lock += 1;
+
+        let lock = self
+            .proto
+            .pending_version
+            .as_ref()
+            .unwrap()
+            .checking_upgrade_lock;
+
+        if lock > 1000 {
+            println!(
+                "{} Too many attempts to check upgrade without success.  Marking upgrade failed.",
+                log_prefix()
+            );
+            self.proto.pending_version = None;
+            return;
+        }
+
+        if lock > 1 {
+            return;
+        }
+
+        let running_version: Result<Version, String> =
+            get_running_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
+
+        // Mark the check as inactive after async call.
+        self.proto
+            .pending_version
+            .as_mut()
+            .unwrap()
+            .checking_upgrade_lock = 0;
+        // We cannot panic or we will get stuck with "checking_upgrade_lock" set to true.  We log
+        // the issue and return so the next check can be performed.
+        let mut running_version = match running_version {
+            Ok(r) => r,
+            Err(message) => {
+                println!(
+                    "{}Could not get running version of SNS: {}",
+                    log_prefix(),
+                    message
+                );
+                return;
+            }
+        };
+
+        // In this case, we do not have a running archive, so we just clone the value so the check
+        // does not fail on that account.
+        if running_version.archive_wasm_hash.is_empty() {
+            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+        }
+
+        if target_version != running_version {
+            // We are past mark_failed_at_seconds.
+            if self.env.now() > mark_failed_at {
+                println!(
+                    "{}Upgrade marked as failed at {} seconds from genesis.  Running system version \
+                        does not match expected state.",
+                    log_prefix(),
+                    self.env.now()
+                );
+                self.proto.pending_version = None;
+            }
+        } else {
+            println!(
+                "{}Upgrade marked successful at {} from genesis.  New Version: {:?}",
+                log_prefix(),
+                self.env.now(),
+                target_version
+            );
+            self.proto.deployed_version = Some(target_version);
+            self.proto.pending_version = None;
+        }
+    }
+
     /// Checks whether the heap can grow.
     fn check_heap_can_grow(&self) -> Result<(), GovernanceError> {
         match self.env.heap_growth_potential() {
@@ -3733,8 +3914,7 @@ mod tests {
     use crate::sns_upgrade::{
         CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
         GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-        GetWasmResponse, ListSnsCanistersRequest, ListSnsCanistersResponse, SnsCanisterType,
-        SnsVersion, SnsWasm,
+        GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
     };
     use crate::{
         pb::v1::{
@@ -3749,6 +3929,7 @@ mod tests {
         types::test_helpers::NativeEnvironment,
     };
     use async_trait::async_trait;
+    use futures::FutureExt;
     use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
     use ic_ic00_types::{
@@ -4051,6 +4232,13 @@ mod tests {
     }
 
     #[test]
+    fn test_governance_proto_must_have_swap_canister_ids() {
+        let mut proto = basic_governance_proto();
+        proto.swap_canister_id = None;
+        assert!(ValidGovernanceProto::try_from(proto).is_err());
+    }
+
+    #[test]
     fn test_governance_proto_must_have_parameters() {
         let mut proto = basic_governance_proto();
         proto.parameters = None;
@@ -4146,6 +4334,34 @@ mod tests {
     }
 
     #[test]
+    fn test_governance_proto_neurons_voting_power_multiplier_in_expected_range() {
+        let mut proto = basic_governance_proto();
+        proto.neurons = btreemap! {
+            "A".to_string() => Neuron {
+                voting_power_percentage_multiplier: 0,
+                ..Default::default()
+            },
+            "B".to_string() => Neuron {
+                voting_power_percentage_multiplier: 50,
+                ..Default::default()
+            },
+            "C".to_string() => Neuron {
+                voting_power_percentage_multiplier: 100,
+                ..Default::default()
+            },
+        };
+        assert!(ValidGovernanceProto::try_from(proto.clone()).is_ok());
+        proto.neurons.insert(
+            "D".to_string(),
+            Neuron {
+                voting_power_percentage_multiplier: 101,
+                ..Default::default()
+            },
+        );
+        assert!(ValidGovernanceProto::try_from(proto).is_err());
+    }
+
+    #[test]
     fn test_time_warp() {
         let w = TimeWarp { delta_s: 0_i64 };
         assert_eq!(w.apply(100_u64), 100);
@@ -4162,7 +4378,7 @@ mod tests {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         now_seconds in 0u64..1_000_000,
                                         old_yes in 0u64..1_000_000,
@@ -4176,9 +4392,9 @@ mod tests {
                 id: Some(ProposalId { id: 0 }),
                 proposal_creation_timestamp_seconds,
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4203,7 +4419,7 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            prop_assert!(new_deadline >= initial_voting_period);
+            prop_assert!(new_deadline >= initial_voting_period_seconds);
         }
     }
 
@@ -4212,19 +4428,19 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at the end of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip_at_end(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_flip_at_end(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         no_votes in 0u64..1_000_000,
                                         yes_votes_margin in 1u64..1_000_000,
                                         total in 10_000_000u64..100_000_000,
     ) {
-            let now_seconds = initial_voting_period;
+            let now_seconds = initial_voting_period_seconds;
             let mut proposal = ProposalData {
                 id: Some(ProposalId { id: 0 }),
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4249,7 +4465,7 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            prop_assert!(new_deadline == initial_voting_period + wait_for_quiet_deadline_increase_seconds);
+            prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds);
         }
     }
 
@@ -4258,7 +4474,7 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at any point during of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip(initial_voting_period in 3600u64..604_800,
+        fn test_evaluate_wait_for_quiet_flip(initial_voting_period_seconds in 3600u64..604_800,
                                         wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
                                         no_votes in 0u64..1_000_000,
                                         yes_votes_margin in 1u64..1_000_000,
@@ -4267,15 +4483,15 @@ mod tests {
     ) {
             // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
             // by the smallest time where any flip in the vote will cause a deadline increase.
-            let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period + 1) / 2;
-            // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period` to test at.
-            let now_seconds = (time * initial_voting_period as f32) as u64;
+            let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+            // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
+            let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
             let mut proposal = ProposalData {
                 id: Some(ProposalId { id: 0 }),
                 wait_for_quiet_state: Some(WaitForQuietState {
-                    current_deadline_timestamp_seconds: initial_voting_period,
+                    current_deadline_timestamp_seconds: initial_voting_period_seconds,
                 }),
-                initial_voting_period,
+                initial_voting_period_seconds,
                 wait_for_quiet_deadline_increase_seconds: adjusted_wait_for_quiet_deadline_increase_seconds,
                 ..Default::default()
             };
@@ -4300,8 +4516,8 @@ mod tests {
                 .wait_for_quiet_state
                 .unwrap()
                 .current_deadline_timestamp_seconds;
-            dbg!(new_deadline , initial_voting_period + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-            prop_assert!(new_deadline == initial_voting_period + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+            dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+            prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
         }
     }
 
@@ -4598,6 +4814,7 @@ mod tests {
             governance_wasm_hash: vec![2, 3, 4],
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
@@ -4613,6 +4830,7 @@ mod tests {
             governance_wasm_hash: vec![2, 3, 4, 5],
             ledger_wasm_hash: vec![3, 4, 5],
             swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
@@ -4628,10 +4846,28 @@ mod tests {
             governance_wasm_hash: vec![2, 3, 4],
             ledger_wasm_hash: vec![3, 4, 5, 6],
             swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
         };
         test_upgrade_sns_to_next_version_upgrades_correct_canister(
             next_version,
             vec![3, 4, 5, 6],
+            expected_canister_to_upgrade,
+        );
+    }
+
+    #[test]
+    fn test_upgrade_sns_to_next_version_for_archive() {
+        let expected_canister_to_upgrade = SnsCanisterType::Archive;
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7, 8],
+        };
+        test_upgrade_sns_to_next_version_upgrades_correct_canister(
+            next_version,
+            vec![5, 6, 7, 8],
             expected_canister_to_upgrade,
         );
     }
@@ -4642,6 +4878,7 @@ mod tests {
     ///     governance_wasm_hash: vec![2, 3, 4],
     ///     ledger_wasm_hash: vec![3, 4, 5],
     ///     swap_wasm_hash: vec![4, 5, 6],
+    ///     archive_wasm_hash: vec![5, 6, 7],
     /// }
     /// Any test inputs should only change one canister to a new version
     ///
@@ -4680,10 +4917,15 @@ mod tests {
         let root_canister_id = canister_test_id(500);
         let governance_canister_id = canister_test_id(501);
         let ledger_canister_id = canister_test_id(502);
-        let swap_canister_id = canister_test_id(503);
-        let ledger_archive_ids = vec![canister_test_id(504)];
+        let ledger_archive_ids = vec![canister_test_id(504), canister_test_id(505)];
 
-        let dapp_canisters = vec![canister_test_id(600)];
+        let current_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+        };
 
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
         env.default_canister_call_response =
@@ -4691,69 +4933,22 @@ mod tests {
         env.set_call_canister_response(
             root_canister_id,
             "get_sns_canisters_summary",
-            Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
-            Ok(Encode!(&GetSnsCanistersSummaryResponse {
-                root: Some(CanisterSummary {
-                    status: Some(canister_status_for_test(
-                        vec![1, 2, 3],
-                        CanisterStatusType::Running
-                    )),
-                    canister_id: Some(root_canister_id.get())
-                }),
-                governance: Some(CanisterSummary {
-                    status: Some(canister_status_for_test(
-                        vec![2, 3, 4],
-                        CanisterStatusType::Running
-                    )),
-                    canister_id: Some(governance_canister_id.get())
-                }),
-                ledger: Some(CanisterSummary {
-                    status: Some(canister_status_for_test(
-                        vec![3, 4, 5],
-                        CanisterStatusType::Running
-                    )),
-                    canister_id: Some(ledger_canister_id.get())
-                }),
-                swap: Some(CanisterSummary {
-                    status: Some(canister_status_for_test(
-                        vec![4, 5, 6],
-                        CanisterStatusType::Running
-                    )),
-                    canister_id: Some(swap_canister_id.get())
-                }),
-                dapps: vec![],
-                archives: vec![],
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
             })
-            .unwrap()),
+            .unwrap(),
+            Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
         );
-        env.set_call_canister_response(
-            root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(governance_canister_id.get()),
-                ledger: Some(ledger_canister_id.get()),
-                swap: Some(swap_canister_id.get()),
-                dapps: dapp_canisters.iter().map(|id| id.get()).collect(),
-                archives: ledger_archive_ids.iter().map(|id| id.get()).collect()
-            })
-            .unwrap()),
-        );
+
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
             "get_next_sns_version",
             Encode!(&GetNextSnsVersionRequest {
-                current_version: Some(SnsVersion {
-                    root_wasm_hash: vec![1, 2, 3],
-                    governance_wasm_hash: vec![2, 3, 4],
-                    ledger_wasm_hash: vec![3, 4, 5],
-                    swap_wasm_hash: vec![4, 5, 6],
-                })
+                current_version: Some(current_version.clone())
             })
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse {
-                next_version: Some(next_version)
+                next_version: Some(next_version.clone())
             })
             .unwrap()),
         );
@@ -4773,76 +4968,87 @@ mod tests {
             .unwrap()),
         );
 
-        let canister_to_be_upgraded = match expected_canister_to_be_upgraded {
+        let canisters_to_be_upgraded = match expected_canister_to_be_upgraded {
             SnsCanisterType::Unspecified => {
                 panic!("Cannot be unspecified")
             }
-            SnsCanisterType::Root => root_canister_id,
-            SnsCanisterType::Governance => governance_canister_id,
-            SnsCanisterType::Ledger => ledger_canister_id,
+            SnsCanisterType::Root => vec![root_canister_id],
+            SnsCanisterType::Governance => vec![governance_canister_id],
+            SnsCanisterType::Ledger => vec![ledger_canister_id],
+            SnsCanisterType::Archive => ledger_archive_ids,
             SnsCanisterType::Swap => {
                 panic!("Swap upgrade not supported via SNS (ownership)")
             }
         };
 
+        assert!(!canisters_to_be_upgraded.is_empty());
+
         if expected_canister_to_be_upgraded != SnsCanisterType::Root {
             // This is the essential call we need to happen in order to know that the correct canister
             // was upgraded.
-            env.require_call_canister_invocation(
-                root_canister_id,
-                "change_canister",
-                Encode!(&ChangeCanisterProposal::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_to_be_upgraded
-                )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2]))
-                .unwrap(),
-                // We don't actually look at the response from this call anywhere
-                Some(Ok(Encode!().unwrap())),
-            );
+            for canister_id in canisters_to_be_upgraded {
+                env.require_call_canister_invocation(
+                    root_canister_id,
+                    "change_canister",
+                    Encode!(&ChangeCanisterProposal::new(
+                        true,
+                        CanisterInstallMode::Upgrade,
+                        canister_id
+                    )
+                    .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2]))
+                    .unwrap(),
+                    // We don't actually look at the response from this call anywhere
+                    Some(Ok(Encode!().unwrap())),
+                );
+            }
         } else {
             // These three are needed for the request to function, but we aren't interested in re-testing
             // canister_control methods here.
-            env.set_call_canister_response(
-                CanisterId::ic_00(),
-                "stop_canister",
-                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
-                Ok(vec![]),
-            );
-            env.set_call_canister_response(
-                CanisterId::ic_00(),
-                "canister_status",
-                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
-                Ok(Encode!(&canister_status_for_test(
-                    vec![],
-                    CanisterStatusType::Stopped
-                ))
-                .unwrap()),
-            );
-            env.set_call_canister_response(
-                CanisterId::ic_00(),
-                "start_canister",
-                Encode!(&CanisterIdRecord::from(canister_to_be_upgraded)).unwrap(),
-                Ok(vec![]),
-            );
-            // For root canister, this is the required call that ensures our wiring was correct.
-            env.require_call_canister_invocation(
-                CanisterId::ic_00(),
-                "install_code",
-                Encode!(&ic_ic00_types::InstallCodeArgs {
-                    mode: ic_ic00_types::CanisterInstallMode::Upgrade,
-                    canister_id: canister_to_be_upgraded.get(),
-                    wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
-                    query_allocation: None,
-                })
-                .unwrap(),
-                Some(Ok(vec![])),
-            );
+            for canister_id in canisters_to_be_upgraded {
+                env.set_call_canister_response(
+                    CanisterId::ic_00(),
+                    "stop_canister",
+                    Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+                    Ok(vec![]),
+                );
+                env.set_call_canister_response(
+                    CanisterId::ic_00(),
+                    "canister_status",
+                    Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+                    Ok(Encode!(&canister_status_for_test(
+                        vec![],
+                        CanisterStatusType::Stopped
+                    ))
+                    .unwrap()),
+                );
+                env.set_call_canister_response(
+                    CanisterId::ic_00(),
+                    "start_canister",
+                    Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+                    Ok(vec![]),
+                );
+                // For root canister, this is the required call that ensures our wiring was correct.
+                env.require_call_canister_invocation(
+                    CanisterId::ic_00(),
+                    "install_code",
+                    Encode!(&ic_ic00_types::InstallCodeArgs {
+                        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                        canister_id: canister_id.get(),
+                        wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
+                        arg: vec![],
+                        compute_allocation: None,
+                        memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
+                        query_allocation: None,
+                    })
+                    .unwrap(),
+                    Some(Ok(vec![])),
+                );
+            }
         }
+
+        let assert_required_calls = env.get_assert_required_calls_fn();
+
+        let now = env.now();
         // Init Governance.
         let mut governance = Governance::new(
             GovernanceProto {
@@ -4851,6 +5057,7 @@ mod tests {
                 },
                 root_canister_id: Some(root_canister_id.get()),
                 ledger_canister_id: Some(ledger_canister_id.get()),
+                deployed_version: Some(current_version.into()),
                 ..basic_governance_proto()
             }
             .try_into()
@@ -4860,12 +5067,302 @@ mod tests {
         );
 
         // When we execute the proposal
-        let dapp_upgrade_result = execute_proposal(&mut governance, 1);
+        let upgrade_result = execute_proposal(&mut governance, 1);
         // Then we check things happened as expected
-        assert_eq!(dapp_upgrade_result.status(), Status::Executed);
-        // See `impl Drop for NativeEnvironment` which asserts that required calls were in fact made.
+        assert_required_calls();
+        assert_eq!(upgrade_result.status(), Status::Executed);
+        assert_eq!(
+            governance.proto.pending_version.clone().unwrap(),
+            UpgradeInProgress {
+                target_version: Some(next_version.into()),
+                mark_failed_at_seconds: now + 5 * 60,
+                checking_upgrade_lock: 0
+            }
+        );
+        // We do not check the upgrade completion in this test because of limitations
+        // with the test infrastructure for Environment
     }
 
+    fn std_sns_canisters_summary_response() -> GetSnsCanistersSummaryResponse {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let ledger_canister_id = canister_test_id(502);
+        let swap_canister_id = canister_test_id(503);
+        let ledger_archive_ids = vec![canister_test_id(504), canister_test_id(505)];
+        let dapp_canisters = vec![canister_test_id(600)];
+
+        GetSnsCanistersSummaryResponse {
+            root: Some(CanisterSummary {
+                status: Some(canister_status_for_test(
+                    vec![1, 2, 3],
+                    CanisterStatusType::Running,
+                )),
+                canister_id: Some(root_canister_id.get()),
+            }),
+            governance: Some(CanisterSummary {
+                status: Some(canister_status_for_test(
+                    vec![2, 3, 4],
+                    CanisterStatusType::Running,
+                )),
+                canister_id: Some(governance_canister_id.get()),
+            }),
+            ledger: Some(CanisterSummary {
+                status: Some(canister_status_for_test(
+                    vec![3, 4, 5],
+                    CanisterStatusType::Running,
+                )),
+                canister_id: Some(ledger_canister_id.get()),
+            }),
+            swap: Some(CanisterSummary {
+                status: Some(canister_status_for_test(
+                    vec![4, 5, 6],
+                    CanisterStatusType::Running,
+                )),
+                canister_id: Some(swap_canister_id.get()),
+            }),
+            dapps: dapp_canisters
+                .iter()
+                .map(|id| CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![0, 0, 0],
+                        CanisterStatusType::Running,
+                    )),
+                    canister_id: Some(id.get()),
+                })
+                .collect(),
+            archives: ledger_archive_ids
+                .iter()
+                .map(|id| CanisterSummary {
+                    status: Some(canister_status_for_test(
+                        vec![5, 6, 7],
+                        CanisterStatusType::Running,
+                    )),
+                    canister_id: Some(id.get()),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn test_check_upgrade_status_fails_if_upgrade_not_finished_in_time() {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+        };
+
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        // We set a status that matches our pending version
+        let mut canisters_summary_response = std_sns_canisters_summary_response();
+        for summary in canisters_summary_response.archives.iter_mut() {
+            summary.status = Some(canister_status_for_test(
+                vec![1, 1, 1],
+                CanisterStatusType::Running,
+            ));
+        }
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&canisters_summary_response).unwrap()),
+        );
+
+        let current_version = {
+            let mut version = next_version.clone();
+            version.archive_wasm_hash = vec![1, 1, 1];
+            version
+        };
+
+        let now = env.now();
+        let mut governance = Governance::new(
+            GovernanceProto {
+                root_canister_id: Some(root_canister_id.get()),
+                deployed_version: Some(current_version.clone().into()),
+                pending_version: Some(UpgradeInProgress {
+                    target_version: Some(next_version.clone().into()),
+                    mark_failed_at_seconds: now - 1,
+                    checking_upgrade_lock: 0,
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        assert_eq!(
+            governance.proto.pending_version.clone().unwrap(),
+            UpgradeInProgress {
+                target_version: Some(next_version.into()),
+                mark_failed_at_seconds: now - 1,
+                checking_upgrade_lock: 0
+            }
+        );
+        assert_eq!(
+            governance.proto.deployed_version.clone().unwrap(),
+            current_version.clone().into()
+        );
+        // After we run our periodic tasks, the version should be marked as failed because of time
+        // constraint.
+        governance.run_periodic_tasks().now_or_never();
+
+        // A failed deployment is when pending is erased but depoyed_version is not updated.
+        assert!(governance.proto.pending_version.is_none());
+        assert_eq!(
+            governance.proto.deployed_version.unwrap(),
+            current_version.into()
+        );
+    }
+
+    #[test]
+    fn test_check_upgrade_status_succeeds() {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+        };
+
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        // We set a status that matches our pending version
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
+        );
+
+        let current_version = {
+            let mut version = next_version.clone();
+            version.archive_wasm_hash = vec![1, 1, 1];
+            version
+        };
+
+        let now = env.now();
+        let mut governance = Governance::new(
+            GovernanceProto {
+                root_canister_id: Some(root_canister_id.get()),
+                deployed_version: Some(current_version.clone().into()),
+                pending_version: Some(UpgradeInProgress {
+                    target_version: Some(next_version.clone().into()),
+                    mark_failed_at_seconds: now + 5 * 60,
+                    checking_upgrade_lock: 0,
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        assert_eq!(
+            governance.proto.pending_version.clone().unwrap(),
+            UpgradeInProgress {
+                target_version: Some(next_version.clone().into()),
+                mark_failed_at_seconds: now + 5 * 60,
+                checking_upgrade_lock: 0
+            }
+        );
+        assert_eq!(
+            governance.proto.deployed_version.clone().unwrap(),
+            current_version.into()
+        );
+        // After we run our periodic tasks, the version should be marked as successful
+        governance.run_periodic_tasks().now_or_never();
+
+        assert!(governance.proto.pending_version.is_none());
+        assert_eq!(
+            governance.proto.deployed_version.unwrap(),
+            next_version.into()
+        );
+    }
+
+    #[test]
+    fn test_check_upgrade_status_succeeds_if_no_archives_present() {
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+        };
+
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        let mut canisters_summary_response = std_sns_canisters_summary_response();
+        canisters_summary_response.archives = vec![];
+        // We set a status that matches our pending version
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&canisters_summary_response).unwrap()),
+        );
+
+        let current_version = {
+            let mut version = next_version.clone();
+            version.archive_wasm_hash = vec![1, 1, 1];
+            version
+        };
+
+        let now = env.now();
+        let mut governance = Governance::new(
+            GovernanceProto {
+                root_canister_id: Some(root_canister_id.get()),
+                deployed_version: Some(current_version.clone().into()),
+                pending_version: Some(UpgradeInProgress {
+                    target_version: Some(next_version.clone().into()),
+                    mark_failed_at_seconds: now + 5 * 60,
+                    checking_upgrade_lock: 0,
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+        );
+
+        assert_eq!(
+            governance.proto.pending_version.clone().unwrap(),
+            UpgradeInProgress {
+                target_version: Some(next_version.clone().into()),
+                mark_failed_at_seconds: now + 5 * 60,
+                checking_upgrade_lock: 0
+            }
+        );
+        assert_eq!(
+            governance.proto.deployed_version.clone().unwrap(),
+            current_version.into()
+        );
+        // After we run our periodic tasks, the version should be marked as successful
+        governance.run_periodic_tasks().now_or_never();
+
+        assert!(governance.proto.pending_version.is_none());
+        assert_eq!(
+            governance.proto.deployed_version.unwrap(),
+            next_version.into()
+        );
+    }
     #[test]
     fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
         // Helper to let us create a lot of proposals to test.
@@ -4914,19 +5411,13 @@ mod tests {
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
         env.set_call_canister_response(
             root_canister_id,
-            "list_sns_canisters",
-            Encode!(&ListSnsCanistersRequest {}).unwrap(),
-            Ok(Encode!(&ListSnsCanistersResponse {
-                root: Some(root_canister_id.get()),
-                governance: Some(governance_canister_id.get()),
-                ledger: Some(ledger_canister_id.get()),
-                swap: Some(swap_canister_id.get()),
-                dapps: dapp_canisters.iter().map(|id| id.get()).collect(),
-                archives: ledger_archive_ids.iter().map(|id| id.get()).collect()
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
             })
-            .unwrap()),
+            .unwrap(),
+            Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
         );
-
         // Make all of our proposals and initialize them in Governance
         let dapp_proposal = create_upgrade_proposal(1, dapp_canisters[0]);
         let root_proposal = create_upgrade_proposal(2, root_canister_id);

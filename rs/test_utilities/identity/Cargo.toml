@@ -1,7 +1,7 @@
 [package]
 name = "ic-test-identity"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ic-types = { path = "../../types/types" }

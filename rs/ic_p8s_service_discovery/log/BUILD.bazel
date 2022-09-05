@@ -22,7 +22,6 @@ rust_library(
     name = "log",
     srcs = glob(["src/**"]),
     crate_name = "ic_p8s_service_discovery_log",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

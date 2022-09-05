@@ -169,7 +169,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             .await?
                         }
                         None => Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: adapter_response.status as u64,
+                            status: adapter_response.status as u128,
                             headers: adapter_response
                                 .headers
                                 .into_iter()
@@ -250,7 +250,7 @@ async fn transform_adapter_response(
     // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
     // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
     let method_payload = Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-        status: adapter_response.status as u64,
+        status: adapter_response.status as u128,
         headers: adapter_response
             .headers
             .into_iter()
@@ -316,46 +316,13 @@ mod tests {
         Time,
     };
     use std::convert::TryFrom;
-    use std::{
-        convert::Infallible,
-        future::Future,
-        pin::Pin,
-        task::{Context, Poll},
-        time::Duration,
-    };
+    use std::time::Duration;
     use tonic::{
         transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
     };
-    use tower::{service_fn, util::BoxCloneService, Service, ServiceBuilder};
-
-    #[derive(Clone)]
-    struct SingleResponseAnonymousQueryService {
-        response: AnonymousQueryResponse,
-    }
-
-    // Can specify anonymous query response at creation.
-    impl SingleResponseAnonymousQueryService {
-        fn new(resp: AnonymousQueryResponse) -> Self {
-            Self { response: resp }
-        }
-    }
-
-    impl Service<AnonymousQuery> for SingleResponseAnonymousQueryService {
-        type Response = AnonymousQueryResponse;
-        type Error = Infallible;
-        #[allow(clippy::type_complexity)]
-        type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-            Poll::Ready(Ok(()))
-        }
-
-        fn call(&mut self, _anonymous_query: AnonymousQuery) -> Self::Future {
-            let response = self.response.clone();
-            Box::pin(async move { Ok(response) })
-        }
-    }
+    use tower::{service_fn, util::BoxCloneService, Service, ServiceExt};
+    use tower_test::mock::Handle;
 
     #[derive(Clone)]
     pub struct SingleResponseAdapter {
@@ -458,7 +425,7 @@ mod tests {
     fn build_mock_canister_http_response_success(
         request_id: u64,
         request_timeout: Time,
-        status: u64,
+        status: u128,
         headers: Vec<HttpHeader>,
         body: Vec<u8>,
     ) -> CanisterHttpResponse {
@@ -480,6 +447,34 @@ mod tests {
                 .unwrap(),
             ),
         }
+    }
+
+    fn setup_anonymous_query_mock() -> (
+        AnonymousQueryService,
+        Handle<AnonymousQuery, AnonymousQueryResponse>,
+    ) {
+        let (service, handle) = tower_test::mock::pair::<AnonymousQuery, AnonymousQueryResponse>();
+
+        let infallible_service = tower::service_fn(move |request: AnonymousQuery| {
+            let mut service_clone = service.clone();
+            async move {
+                Ok::<AnonymousQueryResponse, std::convert::Infallible>({
+                    service_clone
+                        .ready()
+                        .await
+                        .expect("Mocking Infallible service. Waiting for readiness failed.")
+                        .call(request)
+                        .await
+                        .expect("Mocking Infallible service and can therefore not return an error.")
+                })
+            }
+        });
+        (
+            tower::ServiceBuilder::new()
+                .concurrency_limit(1)
+                .service(BoxCloneService::new(infallible_service)),
+            handle,
+        )
     }
 
     /// Test canister http client send/receive without transform.  
@@ -506,16 +501,17 @@ mod tests {
             content: adapter_body.clone(),
         }))
         .await;
+
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -530,7 +526,6 @@ mod tests {
             client.send(build_mock_canister_http_request(420, mock_time(), None)),
             Ok(())
         );
-
         // Yield to execute the request on the client.
         loop {
             match client.try_receive() {
@@ -561,15 +556,15 @@ mod tests {
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -613,16 +608,17 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (req, rsp) = handle.next_request().await.unwrap();
+            println!("{:?}", req);
+            rsp.send_response(AnonymousQueryResponse::Replied {
                 reply: ic_types::messages::AnonymousQueryResponseReply {
                     arg: Blob(vec![0; CANISTER_HTTP_RESPONSE_LIMIT + 1]),
                 },
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -673,15 +669,15 @@ mod tests {
         )))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -738,30 +734,32 @@ mod tests {
             content: adapter_body.clone(),
         }))
         .await;
-        // Asynchronous query handler mock setup. Return unmodified adapter reponse but encoded in 'http_response' candid.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
+        // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        let adapter_h = adapter_headers.clone();
+        let adapter_b = adapter_body.clone();
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Replied {
                 reply: ic_types::messages::AnonymousQueryResponseReply {
                     arg: Blob(
                         Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: 200_u64,
-                            headers: adapter_headers
+                            status: 200_u128,
+                            headers: adapter_h
                                 .clone()
                                 .into_iter()
                                 .map(|HttpHeader { name, value }| {
                                     ic_ic00_types::HttpHeader { name, value }
                                 })
                                 .collect(),
-                            body: adapter_body.clone(),
+                            body: adapter_b.clone(),
                         })
                         .unwrap(),
                     ),
                 },
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -825,16 +823,16 @@ mod tests {
             content: adapter_body.clone(),
         }))
         .await;
-        // Asynchronous query handler mock setup. Returns a rejection with some reason.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
+        // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "test fail".to_string(),
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -879,16 +877,16 @@ mod tests {
         // Adapter mock setup. Not relevant for client response in this test case.
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
-        // Asynchronous query handler mock setup. No relevance in this test case.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
+        // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
+        let (svc, mut handle) = setup_anonymous_query_mock();
+
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
-                reject_message: "dsf".to_string(),
+                reject_message: "test fail".to_string(),
             });
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(base_service);
+        });
 
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(

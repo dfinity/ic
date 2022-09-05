@@ -37,31 +37,6 @@ message SnsInitPayload {
     FractionalDeveloperVotingPower fractional_developer_voting_power = 6;
   };
 
-  // Amount targeted by the swap, if the amount is reached the swap is triggered. Must be at least
-  // min_participants * min_participant_icp_e8.
-  optional uint64 max_icp_e8s = 7;
-
-  // Minimum number of participants for the swap to take place. Must be greater than zero.
-  optional uint32 min_participants = 8;
-
-  // The minimum amount of icp that each buyer must contribute to participate.
-  optional uint64 min_participant_icp_e8s = 9;
-
-  // The maximum amount of ICP that each buyer can contribute. Must be
-  // greater than or equal to `min_participant_icp_e8s` and less than
-  // or equal to `max_icp_e8s`. Can effectively be disabled by
-  // setting it to `max_icp_e8s`.
-  optional uint64 max_participant_icp_e8s = 10;
-
-  // The total number of ICP that is required for this token swap to
-  // take place. This number divided by the number of SNS tokens being
-  // offered gives the seller's reserve price for the swap, i.e., the
-  // minimum number of ICP per SNS tokens that the seller of SNS
-  // tokens is willing to accept. If this amount is not achieved, the
-  // swap will be aborted (instead of committed) when the due date/time
-  // occurs. Must be smaller than or equal to `max_icp_e8s`.
-  optional uint64 min_icp_e8s = 11;
-
   // If the swap fails, control of the dapp canister(s) will be set to these
   // principal IDs. In most use-cases, this would be the same as the original
   // set of controller(s). Must not be empty.

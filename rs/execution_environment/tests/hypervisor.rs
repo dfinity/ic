@@ -1740,14 +1740,19 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
-    assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+    assert!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_total_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
-    )
+    );
+    let memory_used = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        initial_subnet_available_memory.get_total_memory() - memory_used
+    );
 }
 
 #[test]
@@ -1763,19 +1768,25 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
-    assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+    assert!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_total_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
+    let mem_before_upgrade = test.subnet_available_memory().get_total_memory();
     let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 20 * WASM_PAGE_SIZE as i64,
+        mem_before_upgrade,
         test.subnet_available_memory().get_total_memory()
+    );
+    let memory_used = test.state().total_memory_taken().get() as i64;
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        initial_subnet_available_memory.get_total_memory() - memory_used
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -1883,6 +1894,39 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     )
+}
+
+#[test]
+fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_update test")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let binary = wabt::wat2wasm(wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
+
+    test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
+        .unwrap();
+    let initial_memory_used = test.state().total_memory_taken();
+    assert_eq!(initial_memory_used.get(), memory_allocation.get());
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    // memory taken should not change
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory(),
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    );
+    assert_eq!(initial_memory_used, test.state().total_memory_taken());
 }
 
 #[test]
@@ -4145,11 +4189,16 @@ fn dts_resume_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
         );
         test.execute_slice(canister_id);
     }
@@ -4157,9 +4206,13 @@ fn dts_resume_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
@@ -4182,11 +4235,16 @@ fn dts_abort_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..3 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
         );
         test.execute_slice(canister_id);
     }
@@ -4198,6 +4256,10 @@ fn dts_abort_works_in_install_code() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
         test.execute_slice(canister_id);
     }
 
@@ -4205,10 +4267,14 @@ fn dts_abort_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
     );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    );
 
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
@@ -4322,4 +4388,277 @@ fn system_state_apply_change_fails() {
             );
         }
     };
+}
+
+#[test]
+fn dts_abort_works_in_response_callback() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(1000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, 1000),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Start executing the response callback.
+    let original_system_state: ic_replicated_state::SystemState =
+        test.canister_state(a_id).system_state.clone();
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // The canister state should be clean. Specifically, no changes in the
+    // cycles balance and call contexts.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        original_system_state.balance()
+    );
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .call_context_manager(),
+        original_system_state.call_context_manager()
+    );
+
+    // Aborting doesn't change the clean canister state.
+    test.abort_paused_executions();
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        original_system_state.balance()
+    );
+    assert_eq!(
+        test.canister_state(a_id)
+            .system_state
+            .call_context_manager(),
+        original_system_state.call_context_manager()
+    );
+
+    // Execute the response callback again and it should succeeed.
+    test.execute_message(a_id);
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(b));
+}
+
+#[test]
+fn dts_abort_works_in_cleanup_callback() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(1000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_cleanup(wasm().stable_grow(1).stable64_write(0, 0, 1000)),
+            (0, 1000),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Start executing the response callback.
+    let original_system_state = test.canister_state(a_id).system_state.clone();
+
+    // For a DTS execution that takes `N` rounds, try aborting after each round
+    // `i` for `i` in `0..N`. To avoid hardcoding `N`, we just try each `i`
+    // until there are no more slices.
+    let mut i = 0;
+    'outer: loop {
+        for _ in 0..i {
+            test.execute_slice(a_id);
+            if test.canister_state(a_id).next_execution() == NextExecution::None {
+                break 'outer;
+            }
+            // The canister state should be clean. Specifically, no changes in the
+            // cycles balance and call contexts.
+            assert_eq!(
+                test.canister_state(a_id).system_state.balance(),
+                original_system_state.balance()
+            );
+            assert_eq!(
+                test.canister_state(a_id)
+                    .system_state
+                    .call_context_manager(),
+                original_system_state.call_context_manager()
+            );
+        }
+        // Aborting doesn't change the clean canister state.
+        test.abort_paused_executions();
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            original_system_state.balance()
+        );
+        assert_eq!(
+            test.canister_state(a_id)
+                .system_state
+                .call_context_manager(),
+            original_system_state.call_context_manager()
+        );
+        i += 1;
+    }
+    let ingress_status = test.ingress_status(ingress_id);
+    let err = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
+fn cycles_correct_if_response_fails() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(wasm().reply_data_append().trap()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+    );
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
+fn cycles_correct_if_cleanup_fails() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Traps in the response callback.
+    // 3. Traps in the cleanup callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reply(wasm().reply_data_append().trap())
+                .on_cleanup(wasm().trap()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+    );
+    let ingress_status = test.ingress_status(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
 }

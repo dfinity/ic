@@ -36,11 +36,9 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "ic_balance_exporter",
+    name = "ic-balance-exporter",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_balance_exporter",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -48,8 +46,7 @@ rust_binary(
 rust_test(
     name = "ic_balance_exporter_test",
     aliases = ALIASES,
-    crate = ":ic_balance_exporter",
-    edition = "2021",
+    crate = ":ic-balance-exporter",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

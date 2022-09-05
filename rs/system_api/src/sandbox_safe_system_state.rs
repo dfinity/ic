@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
+use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
@@ -12,7 +13,7 @@ use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, Request},
+    messages::{CallContextId, CallbackId, RejectContext, Request},
     methods::Callback,
     nominal_cycles::NominalCycles,
     ComputeAllocation, Cycles, MemoryAllocation, Time,
@@ -148,27 +149,49 @@ impl SystemStateChanges {
             if msg.receiver == IC_00 {
                 // This is a request to ic:00. Update the receiver to be the appropriate
                 // subnet and also update the corresponding callback.
-                let destination_subnet = routing::resolve_destination(
-                        network_topology,
-                        msg.method_name.as_str(),
-                        msg.method_payload.as_slice(),
-                        own_subnet_id,
-                    )
-                    .map(|id| CanisterId::new(id.get()).unwrap())
-                    .unwrap_or_else(|err|{
+                match routing::resolve_destination(
+                    network_topology,
+                    msg.method_name.as_str(),
+                    msg.method_payload.as_slice(),
+                    own_subnet_id,
+                )
+                .map(|id| CanisterId::new(id.get()).unwrap())
+                {
+                    Ok(destination_subnet) => {
+                        msg.receiver = destination_subnet;
+                        callback_changes.insert(msg.sender_reply_callback, destination_subnet);
+                        system_state
+                            .push_output_request(msg.into(), time)
+                            .map_err(|e| {
+                                error(format!("Failed to push output request: {:?}", e))
+                            })?;
+                    }
+                    Err(err) => {
                         info!(
-                            logger,
-                            "Under construction request: Couldn't find the right subnet. Send it to the management canister which will cause the request to be rejected during routing: sender id {}, receiver id {}, method_name {}, resolve error: {:?}.",
-                            msg.sender, msg.receiver, msg.method_name, err
-                        );
-                        IC_00
-                    });
-                msg.receiver = destination_subnet;
-                callback_changes.insert(msg.sender_reply_callback, destination_subnet);
+                                logger,
+                                "Error routing IC00 message: sender id {}, method_name {}, resolve error: {:?}.",
+                                msg.sender, msg.method_name, err
+                            );
+
+                        let reject_context = RejectContext {
+                            code: RejectCode::DestinationInvalid,
+                            message: format!(
+                                "Unable to route management canister request {}: {:?}",
+                                msg.method_name, err
+                            ),
+                        };
+                        system_state
+                            .reject_ic00_output_request(msg, reject_context)
+                            .map_err(|e| {
+                                error(format!("Failed to push IC00 reject response: {:?}", e))
+                            })?;
+                    }
+                }
+            } else {
+                system_state
+                    .push_output_request(msg.into(), time)
+                    .map_err(|e| error(format!("Failed to push output request: {:?}", e)))?;
             }
-            system_state
-                .push_output_request(msg.into(), time)
-                .map_err(|_| error("Failed to push output request"))?;
         }
 
         // Verify callback ids and register new callbacks.

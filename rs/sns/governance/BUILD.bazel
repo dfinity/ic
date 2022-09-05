@@ -1,6 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -37,7 +38,6 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
-    "@crate_index//:num",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rust_decimal",
@@ -58,6 +58,24 @@ BUILD_DEPENDENCIES = [
     "@crate_index//:prost-build",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/config",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/sns/governance/protobuf_generator:lib",
+    "//rs/sns/test_utils",
+    "//rs/test_utilities",
+    "//rs/test_utilities/compare_dirs",
+    "@crate_index//:criterion",
+    "@crate_index//:futures",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:proptest",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 cargo_build_script(
@@ -65,7 +83,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -78,19 +95,80 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
+rust_library(
+    name = "governance_test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
 rust_canister(
-    name = "sns-governance-canister",
+    name = "sns-governance-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    edition = "2018",
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
+)
+
+optimized_canister(
+    name = "sns-governance-canister",
+    wasm = ":sns-governance-canister-raw",
+)
+
+rust_test(
+    name = "governance_test",
+    aliases = ALIASES,
+    crate = ":governance",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test(
+    name = "canister_test",
+    srcs = glob(["canister/*.rs"]),
+    aliases = ALIASES,
+    crate_root = "canister/canister.rs",
+    data = ["canister/governance.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/sns/governance",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "governance_integration_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = [
+            "tests/check_generated_files.rs",
+            "tests/fixtures/mod.rs",
+            "tests/interleaving/mod.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    extra_srcs = [
+        "tests/fixtures/mod.rs",
+        "tests/interleaving/mod.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

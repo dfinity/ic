@@ -24,7 +24,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_image_upgrader",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -39,7 +38,6 @@ rust_test(
     name = "image_upgrader_test",
     aliases = ALIASES,
     crate = ":image_upgrader",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

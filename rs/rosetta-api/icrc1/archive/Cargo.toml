@@ -3,7 +3,7 @@ name = "ic-icrc1-archive"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
 description = "An archive canister for the ICRC-1 ledger"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 candid = "0.7.10"

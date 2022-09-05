@@ -55,6 +55,10 @@ allow mount_t ic_data_t : filesystem { getattr };
 # Allow to mount /var/lib/ic/backup using correct label.
 allow mount_t ic_data_t : filesystem { relabelfrom };
 
+# Allow to mount the old var partition overriding all stored labels.
+require { type var_t; }
+allow mount_t var_t : filesystem { relabelfrom };
+
 ###############################################################################
 # Orchestrator, basic process stuff
 

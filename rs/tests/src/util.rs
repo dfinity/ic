@@ -2,17 +2,16 @@ use crate::driver::test_env_api::*;
 use crate::types::*;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
+use dfn_protobuf::{protobuf, ProtoBuf};
+use futures::FutureExt;
+use ic_agent::export::Principal;
 use ic_agent::{Agent, AgentError, Identity, RequestId};
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
-use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use slog::{debug, info};
-
-use dfn_protobuf::{protobuf, ProtoBuf};
-use ic_agent::export::Principal;
 use ic_constants::MAX_INGRESS_TTL;
+use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
@@ -28,8 +27,10 @@ use ledger_canister::{
 };
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
+use slog::{debug, info};
 use std::{
     convert::{TryFrom, TryInto},
+    fmt::Debug,
     future::Future,
     net::IpAddr,
     sync::Arc,
@@ -697,33 +698,59 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
 
 #[derive(Clone, Copy, Debug)]
 pub enum EndpointsStatus {
-    AllReachable,
-    AllUnreachable,
+    AllHealthy,
+    AllUnhealthy,
 }
 
-pub(crate) async fn assert_endpoints_reachability(
-    endpoints: &[&IcEndpoint],
-    status: EndpointsStatus,
-) {
+pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: EndpointsStatus) {
     // Returns true if: either all endpoints are reachable or all unreachable (depending on the desired input status).
     let check_reachability = || async move {
-        let hs = futures::future::join_all(endpoints.iter().map(|e| e.healthy())).await;
+        let hs = futures::future::join_all(endpoints.iter().map(|e| {
+            let e_ = (*e).clone();
+            e.healthy().map(|healthy| (e_, healthy))
+        }))
+        .await;
         match status {
             // For AllReachable status, we return the result of healthy().
-            EndpointsStatus::AllReachable => hs.iter().all(|x| x.as_ref().map_or(false, |x| x.0)),
+            EndpointsStatus::AllHealthy => hs
+                .into_iter()
+                .filter_map(|(e, h)| {
+                    if h.as_ref().map_or(true, |h| !h.0) {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
             // For AllUnreachable status, we return the NOT result of healthy().
-            EndpointsStatus::AllUnreachable => hs.iter().all(|x| x.as_ref().map_or(true, |x| !x.0)),
+            EndpointsStatus::AllUnhealthy => hs
+                .into_iter()
+                .filter_map(|(e, h)| {
+                    if h.as_ref().map_or(false, |h| h.0) {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
         }
     };
 
     let start = Instant::now();
+    let mut es: Vec<IcEndpoint> = vec![];
     while start.elapsed() < RETRY_TIMEOUT {
-        if check_reachability().await {
+        es = check_reachability().await;
+        if es.is_empty() {
             return;
         }
         tokio::time::sleep(RETRY_BACKOFF).await;
     }
-    panic!("Not all endpoints have reached the desired reachability status {:?} within timeout {} sec.", status, RETRY_TIMEOUT.as_secs());
+    panic!(
+      "The following endpoints have not reached the desired health status {:?} within timeout {} sec:\n{:?}",
+      status,
+      RETRY_TIMEOUT.as_secs(),
+      es.iter().map(|e|format!("{:?}",e)).collect::<Vec<String>>().join("\n")
+    );
 }
 
 pub(crate) fn assert_http_submit_fails(
@@ -846,7 +873,7 @@ pub(crate) async fn create_canister_via_canister_with_cycles(
         .forward_with_cycles_to(
             &Principal::management_canister(),
             "create_canister",
-            EmptyBlob::encode(),
+            EmptyBlob.encode(),
             cycles,
         )
         .await

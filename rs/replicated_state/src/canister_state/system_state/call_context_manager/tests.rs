@@ -45,7 +45,7 @@ fn call_context_handling() {
     // Call context 3 was not responded and does not have outstanding calls,
     // so we should generate the response ourselves.
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id3, Ok(None)),
+        call_context_manager.on_canister_result(call_context_id3, None, Ok(None)),
         CallContextAction::NoResponse {
             refund: Cycles::zero(),
         }
@@ -123,8 +123,9 @@ fn call_context_handling() {
 
     // One outstanding call is closed
     let callback = call_context_manager
-        .unregister_callback(callback_id1)
-        .unwrap();
+        .peek_callback(callback_id1)
+        .unwrap()
+        .clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
@@ -139,18 +140,23 @@ fn call_context_handling() {
             env: 3
         }
     );
-    assert_eq!(call_context_manager.callbacks().len(), 2);
-    // There is 1 outstanding call left
-    assert_eq!(call_context_manager.outstanding_calls(call_context_id1), 1);
+    assert_eq!(call_context_manager.callbacks().len(), 3);
 
     assert_eq!(
-        call_context_manager
-            .on_canister_result(call_context_id1, Ok(Some(WasmResult::Reply(vec![1])))),
+        call_context_manager.on_canister_result(
+            call_context_id1,
+            Some(callback_id1),
+            Ok(Some(WasmResult::Reply(vec![1])))
+        ),
         CallContextAction::Reply {
             payload: vec![1],
             refund: Cycles::zero(),
         }
     );
+
+    assert_eq!(call_context_manager.callbacks().len(), 2);
+    // There is 1 outstanding call left
+    assert_eq!(call_context_manager.outstanding_calls(call_context_id1), 1);
 
     // CallContext 1 is answered, CallContext 2 is not
     assert!(
@@ -170,8 +176,9 @@ fn call_context_handling() {
 
     // The outstanding call of CallContext 2 is back
     let callback = call_context_manager
-        .unregister_callback(callback_id3)
-        .unwrap();
+        .peek_callback(callback_id3)
+        .unwrap()
+        .clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
@@ -187,28 +194,30 @@ fn call_context_handling() {
         }
     );
 
-    // Only one outstanding call left
-    assert_eq!(call_context_manager.callbacks().len(), 1);
-
     // Since we didn't mark CallContext 2 as answered we still have two
     assert_eq!(call_context_manager.call_contexts().len(), 2);
 
     // We mark the CallContext 2 as responded and it is deleted as it has no
     // outstanding calls
     assert_eq!(
-        call_context_manager
-            .on_canister_result(call_context_id2, Ok(Some(WasmResult::Reply(vec![])))),
+        call_context_manager.on_canister_result(
+            call_context_id2,
+            Some(callback_id3),
+            Ok(Some(WasmResult::Reply(vec![])))
+        ),
         CallContextAction::Reply {
             payload: vec![],
             refund: Cycles::zero(),
         }
     );
+    assert_eq!(call_context_manager.callbacks().len(), 1);
     assert_eq!(call_context_manager.call_contexts().len(), 1);
 
     // the last outstanding call of CallContext 1 is finished
     let callback = call_context_manager
-        .unregister_callback(callback_id2)
-        .unwrap();
+        .peek_callback(callback_id2)
+        .unwrap()
+        .clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
@@ -224,7 +233,7 @@ fn call_context_handling() {
         }
     );
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id1, Ok(None)),
+        call_context_manager.on_canister_result(call_context_id1, Some(callback_id2), Ok(None)),
         CallContextAction::AlreadyResponded
     );
 

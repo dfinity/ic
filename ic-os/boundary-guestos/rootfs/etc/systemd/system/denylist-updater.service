@@ -1,0 +1,14 @@
+[Unit]
+Description=Boundary Node Denylist Updater
+
+[Service]
+Restart=always
+ExecStart=/opt/ic/bin/denylist-updater \
+    --remote-url   "${REMOTE_URL}"     \
+    --decode-mode  "${DECODE_MODE}"    \
+    --local-path   "${LOCAL_PATH}"     \
+    --pid-path     "${PID_PATH}"       \
+    --metrics-addr "${METRICS_ADDR}"
+
+[Install]
+WantedBy=multi-user.target

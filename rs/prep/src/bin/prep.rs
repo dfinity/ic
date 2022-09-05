@@ -10,10 +10,12 @@ use std::{
     net::{SocketAddr, SocketAddrV4},
     path::{Path, PathBuf},
     str::FromStr,
+    time::Duration,
 };
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use reqwest::blocking::ClientBuilder;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -29,6 +31,22 @@ use ic_types::{
     registry::connection_endpoint::ConnectionEndpoint, Height, PrincipalId, ReplicaVersion,
 };
 
+/// the filename of the update disk image, as published on the cdn
+const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
+/// in case the replica version id is specified on the command line, but not the
+/// release package url and hash, the following url-template will be used to
+/// fetch the sha256 of the corresponding image.
+const UPD_IMG_DEFAULT_SHA256_URL: &str =
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS";
+/// in case the replica version id is specified on the command line, but not the
+/// release package url and hash, the following url-template will be used to
+/// specify the update image.
+const UPD_IMG_DEFAULT_URL: &str =
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz";
+const CDN_HTTP_ATTEMPTS: usize = 3;
+const RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
+
 #[derive(Parser)]
 #[clap(name = "ic-prep")]
 /// Prepare initial files for an Internet Computer instance.
@@ -40,29 +58,47 @@ struct CliArgs {
     pub replica_version: Option<ReplicaVersion>,
 
     /// URL from which to download the replica binary
+    ///
+    /// deprecated.
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub replica_download_url: Option<Url>,
 
     /// sha256-hash of the replica binary in hex.
+    ///
+    /// deprecated.
     #[clap(long)]
     pub replica_hash: Option<String>,
 
     /// URL from which to download the orchestrator binary
+    ///
+    /// deprecated.
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub orchestrator_download_url: Option<Url>,
 
     /// sha256-hash of the orchestrator binary in hex.
+    ///
+    /// deprecated.
     #[clap(long)]
     pub orchestrator_hash: Option<String>,
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version.
+    ///
+    /// If replica-version is specified and both release-package-download-url
+    /// and release-package-sha256-hex are unspecified, the
+    /// release-package-download-url will default to
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_url'. Must be present if release_package_url is
     /// present.
+    ///
+    /// If replica-version is specified and both release-package-download-url
+    /// and release-package-sha256-hex are unspecified, the
+    /// release-package-download-url will downloaded from
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS
     #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
 
@@ -140,10 +176,29 @@ struct CliArgs {
     /// Negative integer means the default should be used.
     #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
+
+    /// if release-package-download-url is not specified and this option is
+    /// specified, the corresponding update image field in the blessed replica
+    /// version record is left empty.
+    #[clap(long)]
+    pub allow_empty_update_image: bool,
 }
 
 fn main() -> Result<()> {
-    let valid_args = CliArgs::parse().validate()?;
+    let mut valid_args = CliArgs::parse().validate()?;
+
+    // set replica update image if necessary
+    if let Some(ref replica_version_id) = valid_args.replica_version_id {
+        if !valid_args.allow_empty_update_image && valid_args.release_package_download_url.is_none()
+        {
+            let url = Url::parse(
+                &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
+            )?;
+            valid_args.release_package_download_url = Some(url);
+            valid_args.release_package_sha256_hex =
+                Some(fetch_replica_version_sha256(replica_version_id.clone())?);
+        }
+    }
 
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
@@ -202,8 +257,7 @@ fn main() -> Result<()> {
         None => ic_config0,
     };
 
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async { ic_config.initialize().await })?;
+    let _ = ic_config.initialize()?;
     Ok(())
 }
 
@@ -230,6 +284,7 @@ struct ValidatedArgs {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub allow_empty_update_image: bool,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -664,6 +719,7 @@ impl CliArgs {
                     None
                 }
             }),
+            allow_empty_update_image: self.allow_empty_update_image,
         })
     }
 }
@@ -698,6 +754,40 @@ fn load_json<T: DeserializeOwned, P: AsRef<Path> + Copy>(path: P) -> Result<T> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct ProvisionalWhitelistFile {
     pub provisional_whitelist: Vec<String>,
+}
+
+fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
+    let url = UPD_IMG_DEFAULT_SHA256_URL.replace("<REPLICA_VERSION>", &version_id.to_string());
+    let url = Url::parse(&url)?;
+    let c = ClientBuilder::new().timeout(REQUEST_TIMEOUT).build()?;
+
+    let send_req = || c.get(url.clone()).send();
+
+    let mut attempts = CDN_HTTP_ATTEMPTS;
+    let resp = loop {
+        match send_req() {
+            Ok(resp) => break resp,
+            Err(e) if attempts < 1 => {
+                bail!(
+                    "timed out fetching SHA256 value for version id: {}. error: {:?}",
+                    version_id,
+                    e
+                )
+            }
+            _ => std::thread::sleep(RETRY_BACKOFF),
+        }
+        attempts -= 1;
+    };
+
+    let contents = resp.text()?;
+    for line in contents.lines() {
+        let words: Vec<&str> = line.split(char::is_whitespace).collect();
+        if words.len() == 2 && words[1].ends_with(UPD_IMG_FILENAME) {
+            return Ok(words[0].to_string());
+        }
+    }
+
+    bail!("SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}", url, UPD_IMG_FILENAME);
 }
 
 #[cfg(test)]
@@ -856,5 +946,16 @@ mod test_flag_node_parser {
         let new_node: Node = node_flag.parse().unwrap();
 
         assert_eq!(node, new_node);
+    }
+
+    #[test]
+    #[ignore] // side-effectful unit tests are ignored
+    fn can_fetch_sha256() {
+        let version_id =
+            ReplicaVersion::try_from("963c47c0179fb302cb02b1e4712f51b14ea738b6").unwrap();
+        assert_eq!(
+            fetch_replica_version_sha256(version_id).unwrap(),
+            "d081ffe20488380b4cf90069f3fc23e2fa4a904e4103d6f175c85ea87b2634b5"
+        );
     }
 }

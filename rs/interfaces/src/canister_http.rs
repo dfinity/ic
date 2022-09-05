@@ -10,17 +10,19 @@ use ic_types::{
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseShare,
     },
-    consensus::Payload,
+    consensus::{Payload, Threshold},
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
     registry::RegistryClientError,
-    Height, Time,
+    Height, NodeId, Time,
 };
 
 #[derive(Debug)]
 pub enum CanisterHttpPermanentValidationError {
     /// The [`CanisterHttpPayload`] is too large
     PayloadTooBig { expected: usize, received: usize },
+    /// There are too many responses in the payload
+    TooManyResponses { expected: usize, received: usize },
     /// The signed metadata does not match the metadata of the content
     InvalidMetadata {
         metadata_id: CallbackId,
@@ -49,6 +51,19 @@ pub enum CanisterHttpPermanentValidationError {
     },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
+    /// Some of the signatures in the canister http proof were not members of
+    /// the canister http committee.
+    SignersNotMembers {
+        committee: Vec<NodeId>,
+        invalid_signers: Vec<NodeId>,
+        valid_signers: Vec<NodeId>,
+    },
+    /// There were not enough signers in the canister http response proof
+    NotEnoughSigners {
+        committee: Vec<NodeId>,
+        signers: Vec<NodeId>,
+        expected_threshold: Threshold,
+    },
     /// The payload contains a duplicate response
     DuplicateResponse(CallbackId),
 }
@@ -64,6 +79,8 @@ pub enum CanisterHttpTransientValidationError {
     ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,
+    /// Membership Issue
+    Membership,
 }
 
 pub type CanisterHttpPayloadValidationError =

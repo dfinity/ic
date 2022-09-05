@@ -2095,6 +2095,7 @@ pub enum NeuronState {
     Dissolved,
 }
 
+/// Response for neuron public information.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NeuronInfoResponse {

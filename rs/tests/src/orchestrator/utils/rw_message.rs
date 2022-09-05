@@ -4,6 +4,7 @@ use anyhow::bail;
 use candid::Principal;
 use reqwest::Url;
 use slog::{debug, info, Logger};
+use std::time::Duration;
 
 pub(crate) fn store_message(url: &Url, msg: &str) -> Principal {
     block_on(async {
@@ -102,9 +103,71 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn can_install_canister(url: &url::Url) -> bool {
+pub(crate) fn can_install_canister(url: &url::Url) -> Result<(), String> {
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent).await.is_ok()
+        UniversalCanister::try_new(&agent).await.map(|_| ())
     })
+}
+
+pub(crate) fn can_install_canister_with_retries(
+    url: &url::Url,
+    logger: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+) {
+    retry(logger.clone(), timeout, backoff, || {
+        info!(logger, "Try to install canister...");
+        if let Err(e) = can_install_canister(url) {
+            bail!("Cannot install canister: {}", e);
+        } else {
+            info!(logger, "Installing canister is possible.");
+            Ok(())
+        }
+    })
+    .expect("Canister installation should work!");
+}
+
+pub(crate) fn install_nns_and_universal_canisters(topology: TopologySnapshot) {
+    check_or_init_ic(topology, true)
+}
+
+fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
+    let logger = topology.test_env().logger();
+
+    if install_canisters {
+        topology
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .install_nns_canisters()
+            .expect("NNS canisters not installed");
+        info!(logger, "NNS canisters are installed.");
+    }
+
+    topology.subnets().for_each(|subnet| {
+        if subnet.subnet_id != topology.root_subnet_id() {
+            subnet.nodes().for_each(|node| {
+                // make sure node is healty
+                node.await_status_is_healthy()
+                    .expect("Timeout while waiting for all subnets to be healthy");
+                // make sure the node is participating in a subnet
+                if install_canisters {
+                    can_install_canister_with_retries(
+                        &node.get_public_url(),
+                        &logger,
+                        secs(600),
+                        secs(10),
+                    );
+                }
+            });
+        }
+    });
+
+    topology.unassigned_nodes().for_each(|node| {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Timeout while waiting for all unassigned nodes to be healthy");
+    });
+    info!(logger, "IC is healthy and ready.");
 }

@@ -74,6 +74,10 @@ pub struct DeployArgs {
     /// deploying locally.
     #[structopt(long)]
     initial_cycles_per_canister: Option<u64>,
+
+    /// Saves the returned canister IDs in canister_ids.json
+    #[structopt(long)]
+    save: bool,
 }
 
 /// The arguments used to display the account balance of a user
@@ -218,6 +222,7 @@ fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
     };
 
     let sns_canister_type = match args.canister_type.as_str() {
+        "archive" => SnsCanisterType::Archive,
         "root" => SnsCanisterType::Root,
         "governance" => SnsCanisterType::Governance,
         "ledger" => SnsCanisterType::Ledger,

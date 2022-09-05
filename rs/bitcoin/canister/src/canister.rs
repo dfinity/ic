@@ -119,7 +119,7 @@ mod test {
     use bitcoin::util::psbt::serialize::Serialize;
     use bitcoin::{blockdata::constants::genesis_block, Address, Block, Network, PublicKey};
     use ic_btc_test_utils::{random_p2tr_address, BlockBuilder, TransactionBuilder};
-    use ic_btc_types::{Network as BtcTypesNetwork, OutPoint, Utxo};
+    use ic_btc_types::{NetworkInRequest as BtcTypesNetwork, OutPoint, Utxo};
 
     // A default state to use for tests.
     fn default_state() -> State {

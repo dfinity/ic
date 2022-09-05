@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nns/governance",
     "//rs/nns/handlers/root",
     "//rs/nns/init",
+    "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",
@@ -72,7 +73,6 @@ rust_binary(
     name = "ic-admin",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

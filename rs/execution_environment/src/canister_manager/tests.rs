@@ -238,7 +238,9 @@ fn canister_manager_config(
         subnet_id,
         subnet_type,
         MAX_CONTROLLERS,
-        1,
+        // Compute capacity for 2-core scheduler is 100%
+        // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
+        100,
         rate_limiting_of_instructions,
         100,
     )
@@ -263,25 +265,13 @@ fn install_code(
     canister_manager: &CanisterManager,
     context: InstallCodeContext,
     state: &mut ReplicatedState,
+    round_limits: &mut RoundLimits,
 ) -> (
     NumInstructions,
     Result<InstallCodeResult, CanisterManagerError>,
     Option<CanisterState>,
 ) {
-    let instruction_limit = (*EXECUTION_PARAMETERS).instruction_limits.message();
-    install_code_with_instruction_limit(canister_manager, context, state, instruction_limit)
-}
-
-fn install_code_with_instruction_limit(
-    canister_manager: &CanisterManager,
-    context: InstallCodeContext,
-    state: &mut ReplicatedState,
-    instruction_limit: NumInstructions,
-) -> (
-    NumInstructions,
-    Result<InstallCodeResult, CanisterManagerError>,
-    Option<CanisterState>,
-) {
+    let instruction_limit = NumInstructions::new(round_limits.instructions.get() as u64);
     let execution_parameters = ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -289,10 +279,6 @@ fn install_code_with_instruction_limit(
             instruction_limit,
         ),
         ..EXECUTION_PARAMETERS.clone()
-    };
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
     };
 
     let args = InstallCodeArgs::new(
@@ -316,7 +302,7 @@ fn install_code_with_instruction_limit(
         RequestOrIngress::Ingress(Arc::new(ingress)),
         state,
         execution_parameters,
-        &mut round_limits,
+        round_limits,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
     let instructions_after = round_limits.instructions;
@@ -346,6 +332,14 @@ fn install_canister_makes_subnet_oversubscribed() {
     with_setup(|canister_manager, mut state, _| {
         let sender = canister_test_id(42).get();
         let sender_subnet_id = subnet_test_id(1);
+        let compute_allocation_used = state.total_compute_allocation();
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used,
+        };
         let canister_id1 = canister_manager
             .create_canister(
                 sender,
@@ -355,6 +349,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -367,6 +362,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -379,6 +375,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -391,6 +388,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(50).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -403,9 +401,12 @@ fn install_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(25).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
+
+        let instructions_left = as_num_instructions(round_limits.instructions);
         let (num_instructions, res, canister) = install_code(
             &canister_manager,
             InstallCodeContextBuilder::default()
@@ -417,11 +418,12 @@ fn install_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(30).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert_eq!(
             (num_instructions, res),
             (
-                MAX_NUM_INSTRUCTIONS,
+                instructions_left,
                 Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
                     requested: ComputeAllocation::try_from(30).unwrap(),
                     available: 24
@@ -437,6 +439,13 @@ fn install_canister_makes_subnet_oversubscribed() {
 #[test]
 fn upgrade_non_existing_canister_fails() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_test_id(0);
         assert_eq!(
             install_code(
@@ -448,6 +457,7 @@ fn upgrade_non_existing_canister_fails() {
                     )
                     .build(),
                 &mut state,
+                &mut round_limits,
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
@@ -463,6 +473,13 @@ fn upgrade_canister_with_no_wasm_fails() {
     with_setup(|canister_manager, mut state, _| {
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -472,6 +489,7 @@ fn upgrade_canister_with_no_wasm_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -486,6 +504,7 @@ fn upgrade_canister_with_no_wasm_fails() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert_eq!(
             (res.0, res.1),
@@ -506,15 +525,23 @@ fn can_update_compute_allocation_during_upgrade() {
         // Create a new canister.
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id1 = canister_manager
             .create_canister(
                 sender,
                 sender_subnet_id,
-                *INITIAL_CYCLES,
+                Cycles::new(2_000_000_000_000_000),
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -528,6 +555,7 @@ fn can_update_compute_allocation_during_upgrade() {
                 .compute_allocation(ComputeAllocation::try_from(60).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -550,6 +578,7 @@ fn can_update_compute_allocation_during_upgrade() {
                 .mode(CanisterInstallMode::Upgrade)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         // Upgrade the canister to allocation of 80%.
         assert!(res.1.is_ok());
@@ -567,6 +596,13 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
     with_setup(|canister_manager, mut state, _| {
         let sender = canister_test_id(27).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id1 = canister_manager
             .create_canister(
                 sender,
@@ -576,6 +612,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -588,6 +625,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -600,6 +638,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -612,6 +651,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(50).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         state.put_canister_state(res.2.unwrap());
         assert!(res.1.is_ok());
@@ -624,6 +664,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(25).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         state.put_canister_state(res.2.unwrap());
         assert!(res.1.is_ok());
@@ -636,11 +677,12 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 .compute_allocation(ComputeAllocation::try_from(20).unwrap())
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
-        println!("Total used3: {}", state.total_compute_allocation());
 
+        let instructions_left = as_num_instructions(round_limits.instructions);
         let res = install_code(
             &canister_manager,
             InstallCodeContextBuilder::default()
@@ -653,11 +695,12 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 .mode(CanisterInstallMode::Upgrade)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert_eq!(
             (res.0, res.1),
             (
-                MAX_NUM_INSTRUCTIONS,
+                instructions_left,
                 Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
                     requested: ComputeAllocation::try_from(30).unwrap(),
                     available: 24,
@@ -696,103 +739,58 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
 
 #[test]
 fn install_canister_fails_if_memory_capacity_exceeded() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(13).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id1 = canister_manager
-            .create_canister(
-                sender,
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let mb = 1 << 20;
+    let memory_capacity = 1000 * mb;
+    let memory_used = memory_capacity - 10 * mb;
+
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 160)))
             )
-            .0
-            .unwrap();
+            (memory 0)
+        )"#;
 
-        let canister_id2 = canister_manager
-            .create_canister(
-                sender,
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_total_memory(memory_capacity as i64)
+        .build();
 
-        let canister_id3 = canister_manager
-            .create_canister(
-                sender,
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .0
-            .unwrap();
+    let wasm = wabt::wat2wasm(wat).unwrap();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id1)
-                .memory_allocation(
-                    MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
-                )
-                .build(),
-            &mut state,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let canister1 = test.create_canister(initial_cycles);
+    let canister2 = test.create_canister(initial_cycles);
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id2)
-                .memory_allocation(
-                    MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
-                )
-                .build(),
-            &mut state,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    test.install_canister_with_allocation(canister1, wasm.clone(), None, Some(memory_used))
+        .unwrap();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id3)
-                .wasm_module(
-                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                )
-                .memory_allocation(MemoryAllocation::try_from(NumBytes::from(1)).unwrap())
-                .build(),
-            &mut state,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert_eq!(
-            (res.0, res.1),
-            (
-                MAX_NUM_INSTRUCTIONS,
-                Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested: NumBytes::from(1),
-                    available: NumBytes::from(0),
-                })
-            )
-        );
+    let err = test
+        .install_canister_with_allocation(canister2, wasm.clone(), None, Some(11 * mb))
+        .unwrap_err();
 
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id3).is_some());
-    });
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert_eq!(err.description(), "Canister with memory allocation 11MiB cannot be installed because the Subnet's remaining memory capacity is 10MiB");
+    // The memory allocation is validated first before charging the fee.
+    assert_eq!(
+        test.canister_state(canister2).system_state.balance(),
+        initial_cycles,
+    );
+
+    // Try installing without any memory allocation.
+    let execution_cost_before = test.canister_execution_cost(canister2);
+    let err = test
+        .install_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .unwrap_err();
+    let execution_cost_after = test.canister_execution_cost(canister2);
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert_eq!(err.description(), "Canister with memory allocation 10MiB cannot be installed because the Subnet's remaining memory capacity is 10MiB");
+
+    assert_eq!(
+        test.canister_state(canister2).system_state.balance(),
+        initial_cycles
+            - (execution_cost_after - execution_cost_before)
+            - test.reduced_wasm_compilation_fee(&wasm)
+    );
 }
 
 #[test]
@@ -800,6 +798,17 @@ fn can_update_memory_allocation_during_upgrade() {
     with_setup(|canister_manager, mut state, _| {
         let sender = canister_test_id(13).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: AvailableMemory::new(
+                MEMORY_CAPACITY.get() as i64,
+                MEMORY_CAPACITY.get() as i64,
+            )
+            .into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -809,6 +818,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -823,6 +833,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 .memory_allocation(initial_memory_allocation)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -845,6 +856,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 .mode(CanisterInstallMode::Upgrade)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -862,6 +874,13 @@ fn can_update_memory_allocation_during_upgrade() {
 #[test]
 fn install_code_preserves_messages() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = 0;
         let num_messages = 10;
         let sender = canister_test_id(1).get();
@@ -897,6 +916,7 @@ fn install_code_preserves_messages() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -919,7 +939,13 @@ fn can_create_canister() {
         let sender_subnet_id = subnet_test_id(1);
         let expected_generated_id1 = CanisterId::from(0);
         let expected_generated_id2 = CanisterId::from(1);
-
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         assert_eq!(
             canister_manager
                 .create_canister(
@@ -929,7 +955,8 @@ fn can_create_canister() {
                     CanisterSettings::default(),
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
-                    SMALL_APP_SUBNET_MAX_SIZE
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    &mut round_limits,
                 )
                 .0
                 .unwrap(),
@@ -945,6 +972,7 @@ fn can_create_canister() {
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
                     SMALL_APP_SUBNET_MAX_SIZE,
+                    &mut round_limits,
                 )
                 .0
                 .unwrap(),
@@ -959,6 +987,13 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
     with_setup(|canister_manager, mut state, _| {
         let canister = canister_test_id(50).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
 
         assert_eq!(
             canister_manager.create_canister(
@@ -968,7 +1003,8 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE
+                SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             ),
             (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -989,7 +1025,13 @@ fn can_create_canister_with_extra_cycles() {
         let sender_subnet_id = subnet_test_id(1);
         let expected_generated_id1 = CanisterId::from(0);
         let cycles: u64 = 1_000_000_000_200;
-
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         assert_eq!(
             canister_manager
                 .create_canister(
@@ -999,7 +1041,8 @@ fn can_create_canister_with_extra_cycles() {
                     CanisterSettings::default(),
                     MAX_NUMBER_OF_CANISTERS,
                     &mut state,
-                    SMALL_APP_SUBNET_MAX_SIZE
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    &mut round_limits,
                 )
                 .0
                 .unwrap(),
@@ -1014,6 +1057,13 @@ fn cannot_install_non_empty_canister() {
     with_setup(|canister_manager, mut state, _| {
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -1023,6 +1073,7 @@ fn cannot_install_non_empty_canister() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1035,10 +1086,12 @@ fn cannot_install_non_empty_canister() {
                 .canister_id(canister_id)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
 
+        let instructions_left = as_num_instructions(round_limits.instructions);
         // Install again. Should fail.
         let res = install_code(
             &canister_manager,
@@ -1050,12 +1103,13 @@ fn cannot_install_non_empty_canister() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         state.put_canister_state(res.2.unwrap());
         assert_eq!(
             (res.0, res.1),
             (
-                MAX_NUM_INSTRUCTIONS,
+                instructions_left,
                 Err(CanisterManagerError::CanisterNonEmpty(canister_id))
             )
         );
@@ -1068,6 +1122,13 @@ fn cannot_install_non_empty_canister() {
 #[test]
 fn install_code_with_wrong_controller_fails() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         // Create a canister with canister_test_id 1 as controller.
         let canister_id = canister_manager
             .create_canister(
@@ -1078,6 +1139,7 @@ fn install_code_with_wrong_controller_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1095,6 +1157,7 @@ fn install_code_with_wrong_controller_fails() {
                     .mode(*mode)
                     .build(),
                 &mut state,
+                &mut round_limits,
             );
             state.put_canister_state(res.2.unwrap());
             assert_eq!(
@@ -1118,31 +1181,51 @@ fn install_code_with_wrong_controller_fails() {
 #[test]
 fn create_canister_sets_correct_allocations() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
+
+        let mem_alloc = MemoryAllocation::Reserved(NumBytes::new(1024 * 1024 * 1024));
+        let compute_alloc = ComputeAllocation::try_from(50).unwrap();
+        let settings = CanisterSettings {
+            compute_allocation: Some(compute_alloc),
+            memory_allocation: Some(mem_alloc),
+            ..Default::default()
+        };
         let canister_id = canister_manager
             .create_canister(
                 canister_test_id(1).get(),
                 subnet_test_id(1),
                 *INITIAL_CYCLES,
-                CanisterSettings::default(),
+                settings,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
 
         let canister = state.canister_state(&canister_id).unwrap();
-        assert_eq!(canister.memory_allocation(), MemoryAllocation::default());
-        assert_eq!(
-            canister.scheduler_state.compute_allocation,
-            ComputeAllocation::try_from(0).unwrap()
-        );
+        assert_eq!(canister.memory_allocation(), mem_alloc);
+        assert_eq!(canister.scheduler_state.compute_allocation, compute_alloc);
     });
 }
 
 #[test]
 fn create_canister_updates_consumed_cycles_metric_correctly() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_manager
             .create_canister(
                 canister_test_id(1).get(),
@@ -1152,6 +1235,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1177,6 +1261,13 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
 #[test]
 fn provisional_create_canister_has_no_creation_fee() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_manager
             .create_canister_with_cycles(
                 canister_test_id(1).get(),
@@ -1185,6 +1276,7 @@ fn provisional_create_canister_has_no_creation_fee() {
                 &mut state,
                 &ProvisionalWhitelist::All,
                 MAX_NUMBER_OF_CANISTERS,
+                &mut round_limits,
             )
             .unwrap();
 
@@ -1204,6 +1296,13 @@ fn provisional_create_canister_has_no_creation_fee() {
 #[test]
 fn reinstall_on_empty_canister_succeeds() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(42).get();
         let canister_id = canister_manager
             .create_canister(
@@ -1214,6 +1313,7 @@ fn reinstall_on_empty_canister_succeeds() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1227,6 +1327,7 @@ fn reinstall_on_empty_canister_succeeds() {
                 .mode(CanisterInstallMode::Reinstall)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -1298,6 +1399,13 @@ fn install_calls_canister_start_and_canister_init() {
 #[test]
 fn install_puts_canister_back_after_invalid_wasm() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         // Use an invalid wasm code (import memory from an invalid module).
         let wasm =
             wabt::wat2wasm(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
@@ -1314,6 +1422,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1327,6 +1436,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
                 .wasm_module(wasm)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         state.put_canister_state(res.2.unwrap());
         assert_eq!(
@@ -1351,6 +1461,13 @@ fn install_puts_canister_back_after_invalid_wasm() {
 #[test]
 fn reinstall_clears_stable_memory() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(42).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1362,6 +1479,7 @@ fn reinstall_clears_stable_memory() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1373,6 +1491,7 @@ fn reinstall_clears_stable_memory() {
                 .canister_id(canister_id)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -1415,6 +1534,7 @@ fn reinstall_clears_stable_memory() {
                 .mode(CanisterInstallMode::Reinstall)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -1436,6 +1556,13 @@ fn reinstall_clears_stable_memory() {
 #[test]
 fn stop_a_running_canister() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1);
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1447,6 +1574,7 @@ fn stop_a_running_canister() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1561,6 +1689,13 @@ fn stop_a_stopped_canister_from_another_canister() {
 #[test]
 fn stop_a_canister_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let msg_id = message_test_id(0);
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
@@ -1573,6 +1708,7 @@ fn stop_a_canister_with_incorrect_controller() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1629,6 +1765,13 @@ fn stop_a_non_existing_canister() {
 #[test]
 fn start_a_canister_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1640,6 +1783,7 @@ fn start_a_canister_with_incorrect_controller() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1661,6 +1805,13 @@ fn start_a_canister_with_incorrect_controller() {
 #[test]
 fn starting_an_already_running_canister_keeps_it_running() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(42).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1672,6 +1823,7 @@ fn starting_an_already_running_canister_keeps_it_running() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1762,6 +1914,13 @@ fn start_a_stopping_canister_with_stop_contexts() {
 #[test]
 fn get_canister_status_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1773,6 +1932,7 @@ fn get_canister_status_with_incorrect_controller() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1794,6 +1954,13 @@ fn get_canister_status_with_incorrect_controller() {
 #[test]
 fn get_canister_status_of_running_canister() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -1805,6 +1972,7 @@ fn get_canister_status_of_running_canister() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -1855,6 +2023,13 @@ fn get_canister_status_of_stopping_canister() {
 #[test]
 fn set_controller_with_incorrect_controller() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
 
@@ -1870,7 +2045,8 @@ fn set_controller_with_incorrect_controller() {
                 wrong_controller,
                 canister_id,
                 new_controller,
-                &mut state
+                &mut state,
+                &mut round_limits,
             ),
             Err(CanisterManagerError::CanisterInvalidController {
                 canister_id,
@@ -1894,6 +2070,13 @@ fn set_controller_with_incorrect_controller() {
 #[test]
 fn set_controller_with_correct_controller() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
         state.put_canister_state(canister);
@@ -1903,7 +2086,13 @@ fn set_controller_with_correct_controller() {
 
         // Set the controller from the correct controller. Should succeed.
         assert!(canister_manager
-            .set_controller(controller, canister_id, new_controller, &mut state,)
+            .set_controller(
+                controller,
+                canister_id,
+                new_controller,
+                &mut state,
+                &mut round_limits
+            )
             .is_ok());
 
         // Controller is now the new controller.
@@ -2036,6 +2225,13 @@ fn delete_stopped_canister_succeeds() {
 #[test]
 fn install_canister_with_query_allocation() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -2047,6 +2243,7 @@ fn install_canister_with_query_allocation() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2059,6 +2256,7 @@ fn install_canister_with_query_allocation() {
                 .query_allocation(query_allocation)
                 .build(),
             &mut state,
+            &mut round_limits,
         )
         .1
         .is_ok());
@@ -2102,6 +2300,11 @@ fn create_canister_with_cycles_sender_in_whitelist() {
 
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
     let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
     let sender = canister_test_id(1).get();
     let canister_id = canister_manager
         .create_canister_with_cycles(
@@ -2111,6 +2314,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
             &mut state,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
             MAX_NUMBER_OF_CANISTERS,
+            &mut round_limits,
         )
         .unwrap();
 
@@ -2204,6 +2408,13 @@ fn add_cycles_sender_not_in_whitelist() {
 #[test]
 fn installing_a_canister_with_not_enough_memory_allocation_fails() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -2215,6 +2426,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2232,6 +2444,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 .memory_allocation(memory_allocation)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert_eq!(
             res.0,
@@ -2257,11 +2470,13 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
 
         // Attempt to re-install with low memory allocation should fail.
+        let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
         let memory_allocation = MemoryAllocation::try_from(NumBytes::from(50)).unwrap();
         let res = install_code(
             &canister_manager,
@@ -2275,8 +2490,9 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 .memory_allocation(memory_allocation)
                 .build(),
             &mut state,
+            &mut round_limits,
         );
-        assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
+        assert_eq!(res.0, instructions_before_reinstall);
         assert_matches!(
             res.1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2285,8 +2501,15 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
 }
 
 #[test]
-fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
+fn upgrading_canister_with_not_enough_memory_allocation_fails() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -2298,6 +2521,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2312,6 +2536,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -2331,6 +2556,7 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
                     .mode(CanisterInstallMode::Upgrade)
                     .build(),
                 &mut state,
+                &mut round_limits,
             )
             .1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2339,8 +2565,79 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
 }
 
 #[test]
+fn upgrading_canister_fails_if_memory_capacity_exceeded() {
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let mb = 1 << 20;
+    let memory_capacity = 1000 * mb;
+    let memory_used = memory_capacity - 10 * mb;
+
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (func (export "canister_pre_upgrade")
+                (drop (call $stable64_grow (i64.const 80)))
+            )
+            (func (export "canister_post_upgrade")
+                (drop (call $stable64_grow (i64.const 80)))
+            )
+            (memory 0)
+        )"#;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_total_memory(memory_capacity as i64)
+        .build();
+
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let canister1 = test.create_canister(initial_cycles);
+    let canister2 = test.create_canister(initial_cycles);
+
+    test.install_canister_with_allocation(canister1, wasm.clone(), None, Some(memory_used))
+        .unwrap();
+
+    test.install_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .unwrap();
+
+    let cycles_before = test.canister_state(canister2).system_state.balance();
+    let err = test
+        .upgrade_canister_with_allocation(canister2, wasm.clone(), None, Some(11 * mb))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert_eq!(err.description(), "Canister with memory allocation 11MiB cannot be installed because the Subnet's remaining memory capacity is 9MiB");
+    // The memory allocation is validated first before charging the fee.
+    assert_eq!(
+        test.canister_state(canister2).system_state.balance(),
+        cycles_before,
+    );
+
+    // Try upgrading without any memory allocation.
+    let execution_cost_before = test.canister_execution_cost(canister2);
+    let err = test
+        .upgrade_canister_with_allocation(canister2, wasm.clone(), None, None)
+        .unwrap_err();
+    let execution_cost_after = test.canister_execution_cost(canister2);
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert_eq!(err.description(), "Canister with memory allocation 10MiB cannot be installed because the Subnet's remaining memory capacity is 9MiB");
+
+    assert_eq!(
+        test.canister_state(canister2).system_state.balance(),
+        cycles_before
+            - (execution_cost_after - execution_cost_before)
+            - test.reduced_wasm_compilation_fee(&wasm)
+    );
+}
+
+#[test]
 fn installing_a_canister_with_not_enough_cycles_fails() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
         let canister_id = canister_manager
@@ -2354,6 +2651,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2368,6 +2666,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 )
                 .build(),
             &mut state,
+            &mut round_limits,
         );
         assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
         assert_matches!(
@@ -2447,6 +2746,13 @@ fn failed_upgrade_hooks_consume_instructions() {
 
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
             .create_canister(
@@ -2457,6 +2763,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2474,10 +2781,19 @@ fn failed_upgrade_hooks_consume_instructions() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
 
+        // reset instruction limit to investigate costs of just the following install
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
         let (instructions_left, result, _) = install_code(
             &canister_manager,
@@ -2492,6 +2808,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         let expected = NumInstructions::from(1)
             + if fails_before_compiling_upgrade_wasm {
@@ -2576,6 +2893,13 @@ fn failed_install_hooks_consume_instructions() {
 
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let mut state = initial_state(tmpdir.path(), subnet_id);
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
             .create_canister(
@@ -2586,6 +2910,7 @@ fn failed_install_hooks_consume_instructions() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2604,6 +2929,7 @@ fn failed_install_hooks_consume_instructions() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
         assert_eq!(
@@ -2654,6 +2980,11 @@ fn install_code_respects_instruction_limit() {
 
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
     let mut state = initial_state(tmpdir.path(), subnet_id);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
     let sender = canister_test_id(100).get();
     let canister_id = canister_manager
         .create_canister(
@@ -2664,6 +2995,7 @@ fn install_code_respects_instruction_limit() {
             MAX_NUMBER_OF_CANISTERS,
             &mut state,
             SMALL_APP_SUBNET_MAX_SIZE,
+            &mut round_limits,
         )
         .0
         .unwrap();
@@ -2696,7 +3028,12 @@ fn install_code_respects_instruction_limit() {
     let wasm = wabt::wat2wasm(wasm).unwrap();
 
     // Too few instructions result in failed installation.
-    let (instructions_left, result, canister) = install_code_with_instruction_limit(
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(NumInstructions::from(3)),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+    let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
             sender,
@@ -2709,7 +3046,7 @@ fn install_code_respects_instruction_limit() {
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
-        NumInstructions::from(3),
+        &mut round_limits,
     );
     state.put_canister_state(canister.unwrap());
     assert_matches!(
@@ -2722,7 +3059,12 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful installation.
-    let (instructions_left, result, canister) = install_code_with_instruction_limit(
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(NumInstructions::from(5) + compilation_cost),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+    let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
             sender,
@@ -2735,14 +3077,19 @@ fn install_code_respects_instruction_limit() {
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
-        NumInstructions::from(5) + compilation_cost,
+        &mut round_limits,
     );
     assert!(result.is_ok());
     assert_eq!(instructions_left, NumInstructions::from(1));
     state.put_canister_state(canister.unwrap());
 
     // Too few instructions result in failed upgrade.
-    let (instructions_left, result, canister) = install_code_with_instruction_limit(
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(NumInstructions::from(5)),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+    let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
             sender,
@@ -2755,7 +3102,7 @@ fn install_code_respects_instruction_limit() {
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
-        NumInstructions::from(5),
+        &mut round_limits,
     );
     state.put_canister_state(canister.unwrap());
     assert_matches!(
@@ -2768,7 +3115,12 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful upgrade.
-    let (instructions_left, result, _) = install_code_with_instruction_limit(
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(NumInstructions::from(10) + compilation_cost),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
+    let (instructions_left, result, _) = install_code(
         &canister_manager,
         InstallCodeContext {
             sender,
@@ -2781,7 +3133,7 @@ fn install_code_respects_instruction_limit() {
             query_allocation: QueryAllocation::default(),
         },
         &mut state,
-        NumInstructions::from(10) + compilation_cost,
+        &mut round_limits,
     );
     assert!(result.is_ok());
     assert_eq!(instructions_left, NumInstructions::from(4));
@@ -2820,6 +3172,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let mut state = ReplicatedStateBuilder::new()
         .with_canister(original_canister.clone())
         .build();
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions((*EXECUTION_PARAMETERS).instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        compute_allocation_used: state.total_compute_allocation(),
+    };
 
     // 1. INSTALL
     let install_code_context = InstallCodeContextBuilder::default()
@@ -2837,6 +3194,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
+        &mut round_limits,
     );
     state.put_canister_state(canister.unwrap());
 
@@ -2860,6 +3218,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 2. REINSTALL
 
+    let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
     let (instructions_left, res, canister) = install_code(
         &canister_manager,
         InstallCodeContextBuilder::default()
@@ -2868,11 +3227,15 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
+        &mut round_limits,
     );
     state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
-    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
+    assert_eq!(
+        instructions_left,
+        instructions_before_reinstall - compilation_cost
+    );
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2890,7 +3253,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     );
 
     // 3. UPGRADE
-
+    let instructions_before_upgrade = as_num_instructions(round_limits.instructions);
     let (instructions_left, res, canister) = install_code(
         &canister_manager,
         InstallCodeContextBuilder::default()
@@ -2899,11 +3262,15 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             .canister_id(canister_id)
             .build(),
         &mut state,
+        &mut round_limits,
     );
     state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `canister_pre/post_upgrade`
-    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
+    assert_eq!(
+        instructions_left,
+        instructions_before_upgrade - compilation_cost
+    );
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2924,6 +3291,13 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 #[test]
 fn lower_memory_allocation_than_usage_fails() {
     with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let wasm = r#"
         (module
             (memory $memory 1)
@@ -2940,6 +3314,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -2957,6 +3332,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -2970,7 +3346,6 @@ fn lower_memory_allocation_than_usage_fails() {
         );
 
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         assert_matches!(
@@ -2979,7 +3354,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used
+                &mut round_limits,
             ),
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
@@ -2989,6 +3364,13 @@ fn lower_memory_allocation_than_usage_fails() {
 #[test]
 fn test_install_when_updating_memory_allocation_via_canister_settings() {
     with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
@@ -3008,6 +3390,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3026,6 +3409,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         state.put_canister_state(res.2.unwrap());
         assert_matches!(
@@ -3044,7 +3428,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
         );
 
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
@@ -3053,7 +3436,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                &mut round_limits,
             )
             .unwrap();
 
@@ -3070,6 +3453,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         )
         .1
         .unwrap();
@@ -3079,6 +3463,13 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
 #[test]
 fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(100).get();
         let settings = CanisterSettings::new(
             None,
@@ -3103,6 +3494,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3120,6 +3512,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -3145,6 +3538,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert_matches!(
             res.1,
@@ -3166,7 +3560,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         );
 
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
@@ -3175,7 +3568,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                &mut round_limits,
             )
             .unwrap();
 
@@ -3192,6 +3585,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         )
         .1
         .unwrap();
@@ -3241,6 +3635,13 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
 #[test]
 fn test_install_when_setting_memory_allocation_to_zero() {
     with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
@@ -3254,6 +3655,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3268,7 +3670,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
         );
 
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
@@ -3277,7 +3678,8 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                //memory_allocation_used,
+                &mut round_limits,
             )
             .unwrap();
 
@@ -3294,6 +3696,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         )
         .1
         .unwrap();
@@ -3303,6 +3706,13 @@ fn test_install_when_setting_memory_allocation_to_zero() {
 #[test]
 fn test_upgrade_when_setting_memory_allocation_to_zero() {
     with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
@@ -3322,6 +3732,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3339,6 +3750,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         );
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
@@ -3353,7 +3765,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         );
 
         let compute_allocation_used = state.total_compute_allocation();
-        let memory_allocation_used = state.total_memory_taken();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
@@ -3362,7 +3773,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 settings,
                 canister,
                 compute_allocation_used,
-                memory_allocation_used,
+                &mut round_limits,
             )
             .unwrap();
 
@@ -3379,6 +3790,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 query_allocation: QueryAllocation::default(),
             },
             &mut state,
+            &mut round_limits,
         )
         .1
         .unwrap();
@@ -3388,6 +3800,13 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
 #[test]
 fn max_number_of_canisters_is_respected_when_creating_canisters() {
     with_setup(|canister_manager, mut state, _| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(
+                (*EXECUTION_PARAMETERS).instruction_limits.message(),
+            ),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+            compute_allocation_used: state.total_compute_allocation(),
+        };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
 
@@ -3401,6 +3820,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 3, /* max_number_of_canisters */
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3413,6 +3833,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 3, /* max_number_of_canisters */
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3425,6 +3846,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 3, /* max_number_of_canisters */
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3440,6 +3862,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
             3, /* max_number_of_canisters */
             &mut state,
             SMALL_APP_SUBNET_MAX_SIZE,
+            &mut round_limits,
         );
         assert_matches!(
             res,
@@ -3457,6 +3880,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 10, /* max_number_of_canisters */
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
             )
             .0
             .unwrap();
@@ -3518,7 +3942,7 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
     for _ in 0..1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
-            EmptyBlob::encode(),
+            EmptyBlob.encode(),
             test.canister_creation_fee(),
         );
         test.execute_all();
@@ -3707,6 +4131,68 @@ fn unfreezing_of_frozen_canister() {
 }
 
 #[test]
+fn create_canister_fails_if_memory_capacity_exceeded() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_total_memory(MEMORY_CAPACITY.get() as i64)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+
+    let settings = CanisterSettingsArgs {
+        memory_allocation: Some(candid::Nat::from(MEMORY_CAPACITY.get() / 2)),
+        ..Default::default()
+    };
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee().into_parts(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // There should be not enough memory for CAPACITY/2 because universal
+    // canister already consumed some
+    let settings = CanisterSettingsArgs {
+        memory_allocation: Some(candid::Nat::from(MEMORY_CAPACITY.get() / 2)),
+        ..Default::default()
+    };
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee().into_parts(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+    match result {
+        WasmResult::Reject(msg) => {
+            assert!(
+                msg.contains("memory allocation"),
+                "actual reject message: {}",
+                msg
+            )
+        }
+        _ => panic!("Expected WasmResult::Reject"),
+    }
+}
+
+#[test]
 fn create_canister_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
@@ -3786,8 +4272,10 @@ fn create_canister_makes_subnet_oversubscribed() {
 
 #[test]
 fn update_settings_makes_subnet_oversubscribed() {
+    // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
+        .with_subnet_total_memory(100 * 1024 * 1024) // 100 MiB
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let c2 = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -3814,11 +4302,45 @@ fn update_settings_makes_subnet_oversubscribed() {
     test.subnet_message(Method::UpdateSettings, args.encode())
         .unwrap();
 
-    // Go over the limit.
+    // Go over the compute capacity.
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgs {
             compute_allocation: Some(candid::Nat::from(30_u32)),
+            ..Default::default()
+        },
+    };
+    let err = test
+        .subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+
+    // Updating the memory allocation.
+    let args = UpdateSettingsArgs {
+        canister_id: c1.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(10 * 1024 * 1024)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    let args = UpdateSettingsArgs {
+        canister_id: c2.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(30 * 1024 * 1024)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Go over the memory capacity.
+    let args = UpdateSettingsArgs {
+        canister_id: c3.get(),
+        settings: CanisterSettingsArgs {
+            memory_allocation: Some(candid::Nat::from(65 * 1024 * 1024)),
             ..Default::default()
         },
     };
@@ -3840,7 +4362,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     test.canister_state_mut(uc)
         .scheduler_state
         .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(2_000_000_000_000_000);
 
     // Create a canister with default settings.
     let args = CreateCanisterArgs::default();
@@ -3914,7 +4436,7 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(0)
         .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(2_000_000_000_000_000));
 
     // Manually set the compute allocation higher to emulate the state after
     // replica upgrade that decreased compute capacity.
@@ -4036,5 +4558,435 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
         test.canister_state(canister_id)
             .scheduler_state
             .compute_allocation
+    );
+}
+
+#[test]
+fn cycles_correct_if_upgrade_succeeds() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (i32.const 1))
+            )
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(6 + 14) + wasm_compilation_cost(&wasm),
+            test.subnet_size()
+        )
+    );
+
+    let cycles_before = test.canister_state(id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(id);
+    test.upgrade_canister(id, wasm.clone()).unwrap();
+    let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        cycles_before - execution_cost - test.reduced_wasm_compilation_fee(&wasm),
+    );
+    assert_eq!(
+        execution_cost,
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(18 + 24) + wasm_compilation_cost(&wasm),
+            test.subnet_size()
+        ) - test.reduced_wasm_compilation_fee(&wasm)
+    );
+}
+
+#[test]
+fn cycles_correct_if_upgrade_fails_at_validation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(50)
+        .build();
+
+    let wat = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager()
+            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+    );
+
+    let cycles_before = test.canister_state(id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(id);
+    test.upgrade_canister_with_allocation(id, wasm, Some(100), None)
+        .unwrap_err();
+    let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        cycles_before,
+    );
+    assert_eq!(
+        execution_cost,
+        test.cycles_account_manager()
+            .execution_cost(NumInstructions::from(0), test.subnet_size())
+    );
+}
+
+#[test]
+fn cycles_correct_if_upgrade_fails_at_start() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat1 = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 1)))
+            )
+            (memory 0)
+        )"#;
+    let wat2 = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (unreachable)
+            )
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm1 = wabt::wat2wasm(wat1).unwrap();
+    let wasm2 = wabt::wat2wasm(wat2).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm1).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+
+    let cycles_before = test.canister_state(id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(id);
+    test.upgrade_canister(id, wasm2.clone()).unwrap_err();
+    let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        cycles_before - execution_cost,
+    );
+    assert_eq!(
+        execution_cost,
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(1 + 9) + wasm_compilation_cost(&wasm2),
+            test.subnet_size()
+        )
+    );
+}
+
+#[test]
+fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (unreachable)
+            )
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager()
+            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+    );
+
+    let cycles_before = test.canister_state(id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(id);
+    test.upgrade_canister(id, wasm).unwrap_err();
+    let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        cycles_before - execution_cost,
+    );
+    assert_eq!(
+        execution_cost,
+        test.cycles_account_manager()
+            .execution_cost(NumInstructions::from(10), test.subnet_size())
+    );
+}
+
+#[test]
+fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat1 = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (memory 0)
+        )"#;
+    let wat2 = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_post_upgrade")
+                (unreachable)
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm1 = wabt::wat2wasm(wat1).unwrap();
+    let wasm2 = wabt::wat2wasm(wat2).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm1).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+
+    let cycles_before = test.canister_state(id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(id);
+    test.upgrade_canister(id, wasm2.clone()).unwrap_err();
+    let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        cycles_before - execution_cost,
+    );
+    assert_eq!(
+        execution_cost,
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(6 + 3 + 1) + wasm_compilation_cost(&wasm2),
+            test.subnet_size()
+        )
+    );
+}
+
+#[test]
+fn cycles_correct_if_install_succeeds() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (i32.const 1))
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(6 + 14) + wasm_compilation_cost(&wasm),
+            test.subnet_size()
+        )
+    );
+}
+
+#[test]
+fn cycles_correct_if_install_fails_at_validation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(50)
+        .build();
+
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister_with_allocation(id, wasm, Some(100), None)
+        .unwrap_err();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles,
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager()
+            .execution_cost(NumInstructions::from(0), test.subnet_size())
+    );
+}
+
+#[test]
+fn cycles_correct_if_install_fails_at_start() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (unreachable)
+            )
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap_err();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(10) + wasm_compilation_cost(&wasm),
+            test.subnet_size()
+        )
+    );
+}
+
+#[test]
+fn cycles_correct_if_install_fails_at_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 1)))
+            )
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 1)))
+                (unreachable)
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wabt::wat2wasm(wat).unwrap();
+
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let id = test.create_canister(initial_cycles);
+
+    test.install_canister(id, wasm.clone()).unwrap_err();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    assert_eq!(
+        test.canister_execution_cost(id),
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(1 + 9) + wasm_compilation_cost(&wasm),
+            test.subnet_size()
+        )
     );
 }

@@ -1,13 +1,15 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/monitoring/metrics_exporter",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -16,16 +18,30 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
+    "@crate_index//:clap",
+    "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:slog",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
 rust_library(
     name = "registry_replicator",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
-    edition = "2018",
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-registry-replicator",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":registry_replicator"],
 )

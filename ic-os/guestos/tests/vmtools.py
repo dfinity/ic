@@ -137,6 +137,12 @@ class Machine(object):
                     addrs.append(nic_addr)
         return addrs
 
+    def get_static_network_config(self):
+        return {
+            "ipv6_address": self.get_ips(6)[0]["address"],
+            "ipv6_gateway": self.get_ips(6)[0]["gateway"],
+        }
+
     def get_ipv6(self):
         """Return machine's ipv6 address."""
         return self.get_ips(6)[0]["address"]

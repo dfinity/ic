@@ -1,4 +1,5 @@
 use ic_crypto_internal_bls12_381_type::*;
+use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -209,6 +210,47 @@ fn test_scalar_from_integer_type() {
 }
 
 #[test]
+fn test_scalar_small_random() {
+    let mut rng = seeded_rng();
+
+    for bit_size in 1..32 {
+        let n = u64::MAX >> (64 - bit_size);
+        assert_eq!(bit_size, 64 - n.leading_zeros());
+        let s = Scalar::random_within_range(&mut rng, n);
+        assert!(s < Scalar::from_u64(n));
+    }
+
+    for n in 1..1024 {
+        let s = Scalar::random_within_range(&mut rng, n);
+        assert!(s < Scalar::from_u64(n));
+    }
+
+    let range = 1039; // small prime
+
+    /*
+    This upper bound is arbitrary and as the test is probabalistic it
+    might occasionally fail. However over 10000 iterations the largest
+    number of attempts required was range*15, so using range*30 if the
+    test fails it probably does indicate a problem.
+    */
+    let max_attempts = range * 30;
+
+    let mut seen = std::collections::HashSet::new();
+
+    for _ in 0..max_attempts {
+        let s = Scalar::random_within_range(&mut rng, range);
+        assert!(s < Scalar::from_u64(range));
+        seen.insert(s.serialize());
+
+        if seen.len() == range as usize {
+            break;
+        }
+    }
+
+    assert_eq!(seen.len(), range as usize);
+}
+
+#[test]
 fn test_scalar_is_zero() {
     assert!(Scalar::zero().is_zero());
     assert!(!Scalar::one().is_zero());
@@ -266,10 +308,23 @@ fn test_scalar_inverse() {
 }
 
 #[test]
+fn test_impl_debugs() {
+    assert_eq!(
+        format!("{:?}", Scalar::one().neg()),
+        "Scalar(73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000)"
+    );
+
+    assert_eq!(format!("{:?}", G1Affine::generator()),
+               "G1Affine(97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb)");
+    assert_eq!(format!("{:?}", G2Affine::generator()),
+               "G2Affine(93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8)");
+}
+
+#[test]
 fn test_gt_generator_is_expected_value() {
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
-    assert_eq!(Gt::pairing(&g1, &g2), Gt::generator());
+    assert_eq!(Gt::pairing(g1, g2), *Gt::generator());
 }
 
 #[test]
@@ -299,6 +354,14 @@ fn test_pairing_bilinearity() {
         assert_eq!(mul_231, mul_gt);
         assert_eq!(mul_312, mul_gt);
         assert_eq!(mul_321, mul_gt);
+
+        // test that the tag is identical no matter how the Gt was derived
+        assert_eq!(mul_123.tag(), mul_gt.tag());
+        assert_eq!(mul_132.tag(), mul_gt.tag());
+        assert_eq!(mul_213.tag(), mul_gt.tag());
+        assert_eq!(mul_231.tag(), mul_gt.tag());
+        assert_eq!(mul_312.tag(), mul_gt.tag());
+        assert_eq!(mul_321.tag(), mul_gt.tag());
     }
 }
 
@@ -363,6 +426,45 @@ fn test_gt_addition() {
 }
 
 #[test]
+fn test_g1_generator_is_expected_value() {
+    /*
+    The generators of G1 and and G2 are computed by finding the
+    lexicographically smallest valid x-coordinate, and its
+    lexicographically smallest y-coordinate and scaling it by the
+    cofactor such that the result is not the point at infinity.
+
+    For G1 x = 4
+    */
+    let g1_cofactor = Scalar::deserialize(
+        &hex::decode("00000000000000000000000000000000396c8c005555e1568c00aaab0000aaab").unwrap(),
+    )
+    .unwrap();
+
+    fn x4() -> [u8; 48] {
+        let mut x4 = [0u8; 48];
+        x4[0] = 0x80; // set compressed bit
+        x4[47] = 4;
+        x4
+    }
+
+    let x4 = G1Affine::deserialize_unchecked(&x4()).unwrap();
+
+    let g1 = x4 * g1_cofactor;
+
+    assert_eq!(g1, *G1Projective::generator());
+    assert_eq!(G1Affine::from(g1), *G1Affine::generator());
+
+    assert_eq!(hex::encode(G1Affine::generator().serialize()),
+               "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
+}
+
+#[test]
+fn test_g2_generator_is_expected_value() {
+    assert_eq!(hex::encode(G2Affine::generator().serialize()),
+               "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8");
+}
+
+#[test]
 fn test_identity_is_identity() {
     assert!(G1Affine::identity().is_identity());
     assert!(G1Projective::identity().is_identity());
@@ -381,10 +483,10 @@ fn test_identity_is_identity() {
 
 #[test]
 fn test_point_neg() {
-    assert_eq!(G1Affine::identity(), G1Affine::identity().neg());
-    assert_eq!(G1Projective::identity(), G1Projective::identity().neg());
-    assert_eq!(G2Affine::identity(), G2Affine::identity().neg());
-    assert_eq!(G2Projective::identity(), G2Projective::identity().neg());
+    assert_eq!(G1Affine::identity(), &G1Affine::identity().neg());
+    assert_eq!(G1Projective::identity(), &G1Projective::identity().neg());
+    assert_eq!(G2Affine::identity(), &G2Affine::identity().neg());
+    assert_eq!(G2Projective::identity(), &G2Projective::identity().neg());
 
     let pt_pos = G1Projective::generator() * Scalar::from_u32(42);
     let pt_neg = G1Projective::generator() * Scalar::from_i32(-42);
@@ -408,15 +510,15 @@ fn test_multipairing() {
     let g2p = G2Prepared::generator();
     let g2pn = G2Prepared::neg_generator();
 
-    assert_eq!(Gt::multipairing(&[]), Gt::identity());
+    assert_eq!(Gt::multipairing(&[]), *Gt::identity());
 
-    assert_eq!(Gt::multipairing(&[(&g1, &g2p)]), Gt::generator());
+    assert_eq!(Gt::multipairing(&[(g1, g2p)]), *Gt::generator());
 
-    assert_eq!(Gt::multipairing(&[(&g1n, &g2pn)]), Gt::generator());
+    assert_eq!(Gt::multipairing(&[(&g1n, g2pn)]), *Gt::generator());
 
-    assert_eq!(Gt::multipairing(&[(&g1, &g2pn)]), Gt::generator().neg());
+    assert_eq!(Gt::multipairing(&[(g1, g2pn)]), Gt::generator().neg());
 
-    assert_eq!(Gt::multipairing(&[(&g1n, &g2p)]), Gt::generator().neg());
+    assert_eq!(Gt::multipairing(&[(&g1n, g2p)]), Gt::generator().neg());
 
     let mut rng = seeded_rng();
 
@@ -436,8 +538,8 @@ fn test_multipairing() {
         let g2 = G2Prepared::generator();
 
         assert_eq!(
-            Gt::multipairing(&[(&g1a, &g2), (&g1b, &g2), (&g1c, &g2)]),
-            Gt::multipairing(&[(&g1, &g2a), (&g1, &g2b), (&g1, &g2c)]),
+            Gt::multipairing(&[(&g1a, g2), (&g1b, g2), (&g1c, g2)]),
+            Gt::multipairing(&[(g1, &g2a), (g1, &g2b), (g1, &g2c)]),
         );
     }
 }
@@ -508,6 +610,62 @@ fn test_g2_is_torsion_free() {
             }
         }
     }
+}
+
+#[test]
+fn test_g1_deserialize_rejects_infinity_bit_with_nonzero_x() {
+    let g1 = G1Affine::generator();
+
+    let mut g1_bytes = g1.serialize();
+    g1_bytes[G1Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::INFINITY_FLAG;
+
+    assert!(G1Affine::deserialize(&g1_bytes).is_err());
+    assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
+}
+
+#[test]
+fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
+    let g2 = G2Affine::generator();
+
+    let mut g2_bytes = g2.serialize();
+    g2_bytes[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::INFINITY_FLAG;
+
+    assert!(G2Affine::deserialize(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+}
+
+#[test]
+fn test_g1_deserialize_rejects_out_of_range_x_value() {
+    // This point has an x coordinate equal to the size of the G1 field
+    let g1_x_eq_mod =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
+
+    assert!(G1Affine::deserialize_unchecked(&g1_x_eq_mod).is_err());
+
+    // This point has an x coordinate equal to the size of the G1 field + 2
+    let g1_x_eq_mod =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaad").unwrap();
+
+    assert!(G1Affine::deserialize_unchecked(&g1_x_eq_mod).is_err());
+
+    // This point has an x coordinate equal 2 (smallest valid x coordinate)
+    let g1_x_eq_mod =
+        hex::decode("800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002").unwrap();
+
+    assert!(G1Affine::deserialize(&g1_x_eq_mod).is_err());
+}
+
+#[test]
+fn test_g2_deserialize_rejects_out_of_range_x_value() {
+    let invalid_x0 =
+        hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+
+    assert!(G2Affine::deserialize_unchecked(&invalid_x0).is_err());
+
+    let invalid_x1 =
+        hex::decode("8000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
+
+    assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
 }
 
 fn g1_from_u64(i: &u64) -> G1Projective {
@@ -645,10 +803,14 @@ fn test_g2_serialization_round_trips() {
 
 #[test]
 fn test_g1_test_vectors() {
-    g1_test_encoding(G1Affine::identity(), test_vectors::g1::INFINITY);
-    g1_test_encoding(G1Affine::generator(), test_vectors::g1::GENERATOR);
-
     let g = G1Affine::generator();
+    let identity = G1Affine::identity();
+
+    g1_test_encoding(*identity, test_vectors::g1::INFINITY);
+    g1_test_encoding(*g, test_vectors::g1::GENERATOR);
+
+    assert_eq!(identity, &G1Affine::from(G1Projective::identity()));
+    assert_eq!(g, &G1Affine::from(G1Projective::generator()));
 
     for (i, expected) in test_vectors::g1::POSITIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64);
@@ -668,10 +830,14 @@ fn test_g1_test_vectors() {
 
 #[test]
 fn test_g2_test_vectors() {
-    g2_test_encoding(G2Affine::identity(), test_vectors::g2::INFINITY);
-    g2_test_encoding(G2Affine::generator(), test_vectors::g2::GENERATOR);
-
     let g = G2Affine::generator();
+    let identity = G2Affine::identity();
+
+    g2_test_encoding(*identity, test_vectors::g2::INFINITY);
+    g2_test_encoding(*g, test_vectors::g2::GENERATOR);
+
+    assert_eq!(identity, &G2Affine::from(G2Projective::identity()));
+    assert_eq!(g, &G2Affine::from(G2Projective::generator()));
 
     for (i, expected) in test_vectors::g2::POSITIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64);
@@ -707,13 +873,27 @@ fn biased_g1<R: RngCore + CryptoRng>(rng: &mut R) -> G1Projective {
     let coin = rng.gen::<u8>();
 
     if coin < 10 {
-        G1Projective::identity()
+        *G1Projective::identity()
     } else if coin < 20 {
-        G1Projective::generator()
+        *G1Projective::generator()
     } else if coin < 30 {
         G1Projective::generator().neg()
     } else {
         G1Projective::hash(b"random-g1-for-testing", &rng.gen::<[u8; 32]>())
+    }
+}
+
+fn biased_g2<R: RngCore + CryptoRng>(rng: &mut R) -> G2Projective {
+    let coin = rng.gen::<u8>();
+
+    if coin < 10 {
+        *G2Projective::identity()
+    } else if coin < 20 {
+        *G2Projective::generator()
+    } else if coin < 30 {
+        G2Projective::generator().neg()
+    } else {
+        G2Projective::hash(b"random-g2-for-testing", &rng.gen::<[u8; 32]>())
     }
 }
 
@@ -726,11 +906,11 @@ fn test_g1_mul2() {
     let one = Scalar::one();
 
     assert_eq!(
-        G1Projective::mul2(&g, &zero, &g, &zero),
-        G1Projective::identity()
+        G1Projective::mul2(g, &zero, g, &zero),
+        *G1Projective::identity()
     );
-    assert_eq!(G1Projective::mul2(&g, &one, &g, &zero), g);
-    assert_eq!(G1Projective::mul2(&g, &zero, &g, &one), g);
+    assert_eq!(G1Projective::mul2(g, &one, g, &zero), *g);
+    assert_eq!(G1Projective::mul2(g, &zero, g, &one), *g);
 
     for _ in 0..1000 {
         let s1 = biased_scalar(&mut rng);
@@ -747,10 +927,63 @@ fn test_g1_mul2() {
 }
 
 #[test]
+fn test_g2_mul2() {
+    let mut rng = seeded_rng();
+
+    let g = G2Projective::generator();
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert_eq!(
+        G2Projective::mul2(g, &zero, g, &zero),
+        *G2Projective::identity()
+    );
+    assert_eq!(G2Projective::mul2(g, &one, g, &zero), *g);
+    assert_eq!(G2Projective::mul2(g, &zero, g, &one), *g);
+
+    for _ in 0..1000 {
+        let s1 = biased_scalar(&mut rng);
+        let s2 = biased_scalar(&mut rng);
+
+        let p1 = biased_g2(&mut rng);
+        let p2 = biased_g2(&mut rng);
+
+        let reference = p1 * s1 + p2 * s2;
+
+        assert_eq!(G2Projective::mul2(&p1, &s1, &p2, &s2), reference);
+        assert_eq!(G2Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+}
+
+#[test]
+fn test_scalar_muln() {
+    let mut rng = seeded_rng();
+
+    assert_eq!(Scalar::muln_vartime(&[]), Scalar::zero());
+
+    for t in 1..100 {
+        let mut terms = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            terms.push((biased_scalar(&mut rng), biased_scalar(&mut rng)));
+        }
+
+        let mut reference_val = Scalar::zero();
+        for (p, s) in &terms {
+            reference_val += *p * *s;
+        }
+
+        let computed = Scalar::muln_vartime(&terms);
+
+        assert_eq!(computed, reference_val);
+    }
+}
+
+#[test]
 fn test_g1_muln() {
     let mut rng = seeded_rng();
 
-    assert_eq!(G1Projective::muln_vartime(&[]), G1Projective::identity());
+    assert_eq!(G1Projective::muln_vartime(&[]), *G1Projective::identity());
 
     for t in 1..100 {
         let mut terms = Vec::with_capacity(t);
@@ -759,12 +992,36 @@ fn test_g1_muln() {
             terms.push((biased_g1(&mut rng), biased_scalar(&mut rng)));
         }
 
-        let mut reference_val = G1Projective::identity();
+        let mut reference_val = *G1Projective::identity();
         for (p, s) in &terms {
             reference_val += *p * *s;
         }
 
         let computed = G1Projective::muln_vartime(&terms);
+
+        assert_eq!(computed, reference_val);
+    }
+}
+
+#[test]
+fn test_g2_muln() {
+    let mut rng = seeded_rng();
+
+    assert_eq!(G2Projective::muln_vartime(&[]), *G2Projective::identity());
+
+    for t in 1..100 {
+        let mut terms = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            terms.push((biased_g2(&mut rng), biased_scalar(&mut rng)));
+        }
+
+        let mut reference_val = *G2Projective::identity();
+        for (p, s) in &terms {
+            reference_val += *p * *s;
+        }
+
+        let computed = G2Projective::muln_vartime(&terms);
 
         assert_eq!(computed, reference_val);
     }

@@ -42,7 +42,7 @@ async fn send_request(
                 response_headers.push((header.name, header.value));
             }
             let response = RemoteHttpResponse::new(
-                decoded.status as u8,
+                decoded.status as u128,
                 response_headers,
                 String::from_utf8_lossy(&decoded.body).to_string(),
             );
@@ -89,6 +89,17 @@ async fn check_response(
 fn transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
     let mut transformed = raw;
     transformed.headers = vec![];
+    transformed
+}
+
+#[ic_cdk_macros::query(name = "bloat_transform")]
+#[candid_method(query, rename = "bloat_transform")]
+fn bloat_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
+    let mut transformed = raw;
+    transformed.headers = vec![];
+    // Return response that is bigger than allowed limit.
+    transformed.body = vec![0; 2 * 1024 * 1024 + 1024];
+
     transformed
 }
 

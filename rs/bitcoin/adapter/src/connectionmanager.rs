@@ -762,6 +762,7 @@ mod test {
 
     fn simple_handle(config: StreamConfig) -> JoinHandle<()> {
         tokio::task::spawn(async move {
+            let _ = &config;
             let StreamConfig {
                 address,
                 mut network_message_receiver,

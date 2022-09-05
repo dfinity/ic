@@ -34,10 +34,10 @@ class ArtifactManager:
         return self.artifacts_location.joinpath(self.sig)
 
     def event_stream_file(self, group: Group, pre_proc_name: str) -> Path:
-        return self.artifacts_prefix().joinpath(f"{group.gid}.{pre_proc_name}.log")
+        return self.artifacts_prefix().joinpath(f"{group.safe_name()}.{pre_proc_name}.log")
 
     def raw_logs_file(self, group: Group) -> Path:
-        return self.artifacts_prefix().joinpath(f"{group.gid}.raw.log")
+        return self.artifacts_prefix().joinpath(f"{group.safe_name()}.raw.log")
 
     def stat_file(self, type: str) -> Path:
         return self.artifacts_prefix().joinpath(f"stat.{type}")
@@ -67,8 +67,12 @@ class ArtifactManager:
         eprint(f"Pretty-printing raw logs into '{output_file}' ...")
 
         with open(output_file, "w") as fout:
-            pp = pprint.PrettyPrinter(indent=2, stream=fout)
-            pp.pprint(group.logs)
+            fout.write("[")  # the entire output should respresent a syntactically correct python object, e.g., a list
+            pp = pprint.PrettyPrinter(indent=2)
+            for log in group.logs:
+                raw = pp.pformat(log).strip()  # avoid the \n after the comma
+                fout.write(f"{raw},\n")
+            fout.write("]")
 
         eprint(f"Pretty-printing raw logs completed; results written into '{output_file}'.")
 
@@ -105,7 +109,7 @@ class ArtifactManager:
         assert group.global_infra is not None
         self._save(
             group.global_infra.to_dict(),
-            out_file_builder=lambda t: self.global_infra_file(t, group.gid),
+            out_file_builder=lambda t: self.global_infra_file(t, group.safe_name()),
             yaml_format=True,
         )
 

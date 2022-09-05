@@ -2,7 +2,7 @@
 name = "ic-ledger-canister-blocks-synchronizer"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 description = "Synchronizes a local copy of the ledger blocks with the ledger"
 
 [dependencies]
@@ -11,12 +11,13 @@ candid = "0.7.4"
 clap = { version = "3.1.6", features = ["derive"] }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 ic-canister-client = { path = "../../canister_client" }
-ic-certified-vars = { path = "../../certified_vars" }
+ic-certification = { path = "../../certification" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-types = { path = "../../types/types" }
 ledger-canister = { path = "../ledger_canister" }
 log = "0.4.14"
+log4rs = "1.1.1"
 on_wire = {path = "../../rust_canisters/on_wire"}
 rusqlite = "~0.25.4"
 serde = "1.0"

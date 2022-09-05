@@ -22,6 +22,8 @@ use ic_sns_wasm::pb::v1::{
     ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::StateMachine;
+use maplit::hashmap;
+use std::collections::HashMap;
 use std::time::Duration;
 
 /// Get an SnsWasm with the smallest valid WASM
@@ -217,31 +219,47 @@ pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
     let swap_wasm = test_wasm(SnsCanisterType::Swap);
     let swap_hash = swap_wasm.sha256_hash();
     add_wasm_via_proposal(machine, swap_wasm, &swap_hash);
+
+    let archive_wasm = test_wasm(SnsCanisterType::Archive);
+    let archive_hash = archive_wasm.sha256_hash();
+    add_wasm_via_proposal(machine, archive_wasm, &archive_hash);
 }
 
-/// Adds real SNS wasms to the SNS-WASM canister for more robust tests
-pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) {
+/// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
+/// a map of those wasms for use in further tests.
+pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> HashMap<SnsCanisterType, SnsWasm> {
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, root_wasm, &root_hash);
+    add_wasm_via_proposal(machine, root_wasm.clone(), &root_hash);
 
     let gov_wasm = build_governance_sns_wasm();
     let gov_hash = gov_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, gov_wasm, &gov_hash);
+    add_wasm_via_proposal(machine, gov_wasm.clone(), &gov_hash);
 
     let ledger_wasm = build_ledger_sns_wasm();
     let ledger_hash = ledger_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, ledger_wasm, &ledger_hash);
+    add_wasm_via_proposal(machine, ledger_wasm.clone(), &ledger_hash);
 
     let swap_wasm = build_swap_sns_wasm();
     let swap_hash = swap_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, swap_wasm, &swap_hash);
+    add_wasm_via_proposal(machine, swap_wasm.clone(), &swap_hash);
+
+    let archive_wasm = build_archive_sns_wasm();
+    let archive_hash = archive_wasm.sha256_hash();
+    add_wasm_via_proposal(machine, archive_wasm.clone(), &archive_hash);
+
+    hashmap! {
+        SnsCanisterType::Root => root_wasm,
+        SnsCanisterType::Governance => gov_wasm,
+        SnsCanisterType::Ledger => ledger_wasm,
+        SnsCanisterType::Swap => swap_wasm,
+        SnsCanisterType::Archive => archive_wasm
+    }
 }
 
 /// Builds the SnsWasm for the root canister.
 pub fn build_root_sns_wasm() -> SnsWasm {
-    let root_wasm =
-        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
+    let root_wasm = Project::cargo_bin_maybe_from_env("sns-root-canister", &[]);
     SnsWasm {
         wasm: root_wasm.bytes(),
         canister_type: SnsCanisterType::Root.into(),
@@ -250,11 +268,7 @@ pub fn build_root_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the governance canister.
 pub fn build_governance_sns_wasm() -> SnsWasm {
-    let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "sns/governance",
-        "sns-governance-canister",
-        &[],
-    );
+    let governance_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
     SnsWasm {
         wasm: governance_wasm.bytes(),
         canister_type: SnsCanisterType::Governance.into(),
@@ -263,11 +277,7 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the ledger canister.
 pub fn build_ledger_sns_wasm() -> SnsWasm {
-    let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rosetta-api/icrc1/ledger",
-        "ic-icrc1-ledger",
-        &[],
-    );
+    let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
     SnsWasm {
         wasm: ledger_wasm.bytes(),
         canister_type: SnsCanisterType::Ledger.into(),
@@ -276,10 +286,18 @@ pub fn build_ledger_sns_wasm() -> SnsWasm {
 
 /// Builds the SnsWasm for the Swap Canister
 pub fn build_swap_sns_wasm() -> SnsWasm {
-    let swap_wasm =
-        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/swap", "sns-swap-canister", &[]);
+    let swap_wasm = Project::cargo_bin_maybe_from_env("sns-swap-canister", &[]);
     SnsWasm {
         wasm: swap_wasm.bytes(),
         canister_type: SnsCanisterType::Swap.into(),
+    }
+}
+
+/// Builds the SnsWasm for the Ledger Archive Canister
+pub fn build_archive_sns_wasm() -> SnsWasm {
+    let archive_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-archive", &[]);
+    SnsWasm {
+        wasm: archive_wasm.bytes(),
+        canister_type: SnsCanisterType::Archive.into(),
     }
 }
