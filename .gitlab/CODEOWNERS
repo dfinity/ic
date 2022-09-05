@@ -171,8 +171,11 @@
 /rs/state_manager/                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                         @dfinity-lab/teams/execution-owners
+/rs/test_utilities/src/cycles_account_manager.rs         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/src/crypto.rs        @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/crypto/          @dfinity-lab/teams/crypto-owners
+/rs/test_utilities/src/execution_environment.rs         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
+/rs/test_utilities/src/wasm_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/prod_test_driver.rs       @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
