@@ -13,8 +13,8 @@ use ic_nns_governance::{
     governance::{TimeWarp, CMC},
     pb::v1::{manage_neuron::NeuronIdOrSubaccount, NetworkEconomics, RewardNodeProviders},
 };
-use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::boxed::Box;
 use std::time::SystemTime;
 
@@ -101,7 +101,7 @@ fn governance_mut() -> &'static mut Governance {
 }
 
 struct CanisterEnv {
-    rng: StdRng,
+    rng: ChaCha20Rng,
     time_warp: TimeWarp,
 }
 
@@ -125,7 +125,7 @@ impl CanisterEnv {
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
-                StdRng::from_seed(seed)
+                ChaCha20Rng::from_seed(seed)
             },
 
             time_warp: TimeWarp { delta_s: 0 },

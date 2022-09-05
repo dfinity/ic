@@ -63,8 +63,8 @@ use ic_nns_governance::{
 };
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
-use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
@@ -377,7 +377,7 @@ impl NeuronBuilder {
 
 pub struct NNSFixtureState {
     now: u64,
-    rng: StdRng,
+    rng: ChaCha20Rng,
     ledger: LedgerFixture,
 }
 
@@ -925,7 +925,7 @@ impl NNSBuilder {
     pub fn create(self) -> NNS {
         let fixture = NNSFixture::new(NNSFixtureState {
             now: self.start_time,
-            rng: StdRng::seed_from_u64(9539),
+            rng: ChaCha20Rng::seed_from_u64(9539),
             ledger: self.ledger_builder.create(),
         });
         let cmc: Box<dyn CMC> = Box::new(fixture.clone());
