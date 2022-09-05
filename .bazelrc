@@ -3,7 +3,7 @@ build --incompatible_strict_action_env # use an environment with a static value 
 
 # default to optimized and stripped binaries. These greatly optimized rust test runtimes.
 build --compilation_mode=opt
-build --strip=always
+build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
 
