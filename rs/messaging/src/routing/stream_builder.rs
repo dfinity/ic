@@ -436,7 +436,7 @@ impl StreamBuilderImpl {
                             // Increase cycle sum
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    let cycles_in_msg = msg.cycles();
+                                    let cycles_in_msg = rep.refund;
                                     let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
                                     stream.set_sum_cycles_out(new_cycles_sum);
                                 }
@@ -459,6 +459,10 @@ impl StreamBuilderImpl {
                                     let cycles_in_msg = msg.cycles();
                                     let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
                                     stream.set_sum_cycles_out(new_cycles_sum);
+                                    self.metrics
+                                        .out_cycles
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(new_cycles_sum.get() as f64);
                                 }
                                 None => {}
                             }
@@ -523,10 +527,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
-                    stream.sum_cycles_out(),
+                    // stream.sum_cycles_out(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin, cycles_transferred)| {
+            .for_each(|(subnet, len, size_bytes, begin/*, cycles_transferred*/)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -539,10 +543,10 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
-                self.metrics
-                    .out_cycles
-                    .with_label_values(&[&subnet.to_string()])
-                    .set(cycles_transferred.get() as f64);
+                // self.metrics
+                //     .out_cycles
+                //     .with_label_values(&[&subnet])
+                //     .set(cycles_transferred.get() as f64);
             });
 
         {
