@@ -436,9 +436,7 @@ impl StreamBuilderImpl {
                             // Increase cycle sum
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    let cycles_in_msg = rep.refund;
-                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
-                                    stream.set_sum_cycles_out(new_cycles_sum);
+                                    stream.set_sum_cycles_out(stream.sum_cycles_out().add(rep.refund));
                                 }
                                 None => {}
                             }
@@ -456,13 +454,11 @@ impl StreamBuilderImpl {
                             // Increase cycle sum
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    let cycles_in_msg = msg.cycles();
-                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
-                                    stream.set_sum_cycles_out(new_cycles_sum);
+                                    stream.set_sum_cycles_out(stream.sum_cycles_out().add(msg.cycles()));
                                     self.metrics
                                         .out_cycles
                                         .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(new_cycles_sum.get() as f64);
+                                        .set(stream.sum_cycles_out().get() as f64);
                                 }
                                 None => {}
                             }
