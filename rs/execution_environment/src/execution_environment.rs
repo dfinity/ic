@@ -5,8 +5,10 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        call::execute_call, heartbeat::execute_heartbeat, inspect_message,
-        nonreplicated_query::execute_non_replicated_query, response::execute_response,
+        heartbeat::execute_heartbeat, inspect_message,
+        nonreplicated_query::execute_non_replicated_query,
+        replicated_query::execute_replicated_query, response::execute_response,
+        update::execute_update,
     },
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
@@ -960,18 +962,38 @@ impl ExecutionEnvironment {
             time,
         };
 
-        let execution_parameters =
-            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-
-        execute_call(
-            canister,
-            req,
-            execution_parameters,
-            time,
-            round,
-            round_limits,
-            subnet_size,
-        )
+        if canister.exports_query_method(req.method_name().to_string()) {
+            // A query call is expected to finish quickly, so DTS is not supported for it.
+            let slice_instruction_limit = instruction_limits.slice();
+            let instruction_limits = InstructionLimits::new(
+                FlagStatus::Disabled,
+                slice_instruction_limit,
+                slice_instruction_limit,
+            );
+            let execution_parameters =
+                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+            execute_replicated_query(
+                canister,
+                req,
+                execution_parameters,
+                time,
+                round,
+                round_limits,
+                subnet_size,
+            )
+        } else {
+            let execution_parameters =
+                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+            execute_update(
+                canister,
+                req,
+                execution_parameters,
+                time,
+                round,
+                round_limits,
+                subnet_size,
+            )
+        }
     }
 
     /// Executes a heartbeat of a given canister.
