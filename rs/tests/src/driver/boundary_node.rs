@@ -22,7 +22,7 @@ use super::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-        SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
+        SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
 };
 use anyhow::{bail, Result};
@@ -384,7 +384,7 @@ impl SshSession for BoundaryNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session(user)
         })
     }

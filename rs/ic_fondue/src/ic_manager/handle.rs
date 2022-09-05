@@ -17,7 +17,7 @@ use std::{
 };
 use tokio::{net::TcpStream, time};
 
-pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(120);
+pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// A handle used by tests to interact with the IC.
