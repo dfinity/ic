@@ -206,20 +206,20 @@ mod tests {
         hasher.write(&chunk_0_hash[..]);
         let file_0_hash = hasher.finish();
 
-        let manifest = Manifest {
-            version: CURRENT_STATE_SYNC_VERSION,
-            file_table: vec![FileInfo {
+        let manifest = Manifest::new(
+            CURRENT_STATE_SYNC_VERSION,
+            vec![FileInfo {
                 relative_path: "root.bin".into(),
                 size_bytes: 1024,
                 hash: file_0_hash,
             }],
-            chunk_table: vec![ChunkInfo {
+            vec![ChunkInfo {
                 file_index: 0,
                 size_bytes: 1024,
                 offset: 0,
                 hash: chunk_0_hash,
             }],
-        };
+        );
 
         (manifest.clone(), hex::encode(manifest_hash(&manifest)))
     }

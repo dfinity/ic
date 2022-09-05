@@ -73,9 +73,9 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
     );
     let file_3_hash = hash_concat!(13u8, b"ic-state-file", 0u32);
 
-    let manifest = Manifest {
-        version: STATE_SYNC_V1,
-        file_table: vec![
+    let manifest = Manifest::new(
+        STATE_SYNC_V1,
+        vec![
             FileInfo {
                 relative_path: "root.bin".into(),
                 size_bytes: 1000,
@@ -97,7 +97,7 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
                 hash: file_3_hash,
             },
         ],
-        chunk_table: vec![
+        vec![
             ChunkInfo {
                 file_index: 0,
                 size_bytes: 1000,
@@ -129,7 +129,7 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
                 hash: chunk_4_hash,
             },
         ],
-    };
+    );
 
     let expected_hash = hash_concat!(
         17u8,
@@ -247,9 +247,15 @@ fn bad_root_hash_detected() {
 
 #[test]
 fn bad_file_hash_detected() {
-    let (manifest_hash, mut manifest) = simple_manifest();
+    let (manifest_hash, manifest) = simple_manifest();
     let actual_hash = manifest.file_table[0].hash.to_vec();
-    manifest.file_table[0].hash = [1u8; 32];
+    let mut file_table = manifest.file_table.to_owned();
+    file_table[0].hash = [1u8; 32];
+    let manifest = Manifest::new(
+        manifest.version,
+        file_table,
+        manifest.chunk_table.to_owned(),
+    );
     let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
     assert_eq!(
         validate_manifest(&manifest, &root_hash),
@@ -301,13 +307,19 @@ fn bad_chunk_hash_detected() {
 
 #[test]
 fn orphan_chunk_detected() {
-    let (manifest_hash, mut manifest) = simple_manifest();
-    manifest.chunk_table.push(ChunkInfo {
+    let (manifest_hash, manifest) = simple_manifest();
+    let mut chunk_table = manifest.chunk_table.to_owned();
+    chunk_table.push(ChunkInfo {
         file_index: 100,
         size_bytes: 100,
         offset: 0,
         hash: [0; 32],
     });
+    let manifest = Manifest::new(
+        manifest.version,
+        manifest.file_table.to_owned(),
+        chunk_table,
+    );
     let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
     match validate_manifest(&manifest, &root_hash) {
         Err(ManifestValidationError::InvalidRootHash { .. }) => (),
@@ -321,7 +333,7 @@ fn orphan_chunk_detected() {
 #[test]
 fn test_diff_simple_manifest() {
     let (_, manifest_old) = simple_manifest();
-    let mut manifest_new = manifest_old.clone();
+    let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
     let copy_files: HashMap<_, _> = indices
@@ -356,18 +368,22 @@ fn test_diff_simple_manifest() {
         &chunk_2_hash[..]
     );
 
-    manifest_new.file_table[1] = FileInfo {
+    let mut file_table = manifest_new.file_table.to_owned();
+    file_table[1] = FileInfo {
         relative_path: "subdir/memory".into(),
         size_bytes: 2048,
         hash: file_1_hash,
     };
 
-    manifest_new.chunk_table[2] = ChunkInfo {
+    let mut chunk_table = manifest_new.chunk_table.to_owned();
+    chunk_table[2] = ChunkInfo {
         file_index: 1,
         size_bytes: 1024,
         offset: 1024,
         hash: chunk_2_hash,
     };
+
+    let manifest_new = Manifest::new(manifest_new.version, file_table, chunk_table);
 
     let copy_files: HashMap<usize, usize> = maplit::hashmap! {
         0 => 0,
@@ -649,11 +665,7 @@ fn test_hash_plan() {
             hash_plan,
         );
 
-        Manifest {
-            version: CURRENT_STATE_SYNC_VERSION,
-            file_table,
-            chunk_table,
-        }
+        Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table)
     };
 
     // Hash plan with recompute_period == 1
