@@ -61,7 +61,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "ic_p8s_service_discovery",
+    name = "ic-p8s-service-discovery",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_p8s_service_discovery",
@@ -74,21 +74,21 @@ rust_binary(
     srcs = ["src/titanium/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":ic_p8s_service_discovery"],
+    deps = DEPENDENCIES + [":ic-p8s-service-discovery"],
 )
 
 rust_test(
-    name = "ic_p8s_service_discovery_test",
+    name = "ic-p8s-service-discovery-test",
     aliases = ALIASES,
-    crate = ":ic_p8s_service_discovery",
+    crate = ":ic-p8s-service-discovery",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "ic_p8s_service_discovery_integration_tests",
+    name = "ic-p8s-service-discovery-integration-tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ic_p8s_service_discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-p8s-service-discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
