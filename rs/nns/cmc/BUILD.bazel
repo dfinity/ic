@@ -5,6 +5,7 @@ load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
     "//rs/monitoring/metrics_encoder",
     "//rs/nns/common",
@@ -26,7 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-certified-map",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
