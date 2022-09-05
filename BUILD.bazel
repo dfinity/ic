@@ -73,6 +73,7 @@ BINARIES = {
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
+    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
     "ic-prep": "//rs/prep:ic-prep",
     "ic-recovery": "//rs/recovery:ic-recovery",
     "ic-replay": "//rs/replay:ic-replay",
