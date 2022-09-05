@@ -11,7 +11,7 @@ use openssl::hash::MessageDigest;
 use openssl::x509::X509;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::io;
@@ -552,26 +552,21 @@ pub trait TlsHandshake {
 }
 
 #[derive(Clone, Debug)]
-/// A list of allowed TLS peers (and their trusted certificates),
-/// which can be `All` to allow any node to connect.
+/// A list of allowed TLS peers, which can be `All` to allow any node to connect.
 pub struct AllowedClients {
     nodes: SomeOrAllNodes,
-    certs: HashSet<TlsPublicKeyCert>,
 }
 
 impl AllowedClients {
-    pub fn new(
-        nodes: SomeOrAllNodes,
-        certs: HashSet<TlsPublicKeyCert>,
-    ) -> Result<Self, AllowedClientsError> {
-        let allowed_clients = Self { nodes, certs };
+    pub fn new(nodes: SomeOrAllNodes) -> Result<Self, AllowedClientsError> {
+        let allowed_clients = Self { nodes };
         Self::ensure_clients_not_empty(&allowed_clients)?;
         Ok(allowed_clients)
     }
 
-    /// Create an `AllowedClients` with a set of nodes, but no certificates.
+    /// Create an `AllowedClients` with a set of nodes.
     pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Result<Self, AllowedClientsError> {
-        Self::new(SomeOrAllNodes::Some(node_ids), HashSet::new())
+        Self::new(SomeOrAllNodes::Some(node_ids))
     }
 
     /// Access the allowed nodes.
@@ -579,15 +574,10 @@ impl AllowedClients {
         &self.nodes
     }
 
-    /// Access the allowed certificates.
-    pub fn certs(&self) -> &HashSet<TlsPublicKeyCert> {
-        &self.certs
-    }
-
     fn ensure_clients_not_empty(candidate: &Self) -> Result<(), AllowedClientsError> {
         match &candidate.nodes {
             SomeOrAllNodes::Some(node_ids) => {
-                if node_ids.is_empty() && candidate.certs.is_empty() {
+                if node_ids.is_empty() {
                     return Err(AllowedClientsError::ClientsEmpty);
                 }
             }

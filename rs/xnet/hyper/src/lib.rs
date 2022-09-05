@@ -14,7 +14,6 @@ use ic_crypto_tls_interfaces::{
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
-use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -216,7 +215,7 @@ impl Accept for TlsAccept {
                         let future = async move {
                             tls.perform_tls_server_handshake(
                                 conn.into_inner(),
-                                AllowedClients::new(SomeOrAllNodes::All, HashSet::new()).unwrap(),
+                                AllowedClients::new(SomeOrAllNodes::All).unwrap(),
                                 registry_version,
                             )
                             .await
