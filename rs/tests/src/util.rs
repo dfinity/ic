@@ -738,7 +738,7 @@ pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: E
 
     let start = Instant::now();
     let mut es: Vec<IcEndpoint> = vec![];
-    while start.elapsed() < RETRY_TIMEOUT {
+    while start.elapsed() < READY_WAIT_TIMEOUT {
         es = check_reachability().await;
         if es.is_empty() {
             return;
@@ -748,7 +748,7 @@ pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: E
     panic!(
       "The following endpoints have not reached the desired health status {:?} within timeout {} sec:\n{:?}",
       status,
-      RETRY_TIMEOUT.as_secs(),
+      READY_WAIT_TIMEOUT.as_secs(),
       es.iter().map(|e|format!("{:?}",e)).collect::<Vec<String>>().join("\n")
     );
 }

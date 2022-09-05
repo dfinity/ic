@@ -18,7 +18,7 @@ end::catalog[] */
 use crate::canister_http::lib::*;
 use crate::driver::{
     test_env::TestEnv,
-    test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT},
+    test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
 use crate::util::block_on;
 use anyhow::bail;
@@ -48,7 +48,7 @@ pub fn test(env: TestEnv) {
 }
 
 async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
-    retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+    retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let res =
             proxy_canister
                 .update_(

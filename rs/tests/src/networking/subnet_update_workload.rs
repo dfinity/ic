@@ -25,7 +25,7 @@ use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT};
+use crate::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
     SubnetSnapshot,
@@ -240,7 +240,7 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &nns_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),
@@ -250,7 +250,7 @@ pub fn test(
             .unwrap();
         }
         for agent in app_agents.iter() {
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &app_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),

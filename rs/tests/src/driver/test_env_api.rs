@@ -171,7 +171,8 @@ use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime as Rt;
 use url::Url;
 
-pub const RETRY_TIMEOUT: Duration = Duration::from_secs(500);
+pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
+pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -394,7 +395,7 @@ impl IcNodeSnapshot {
 
     /// Waits until the [can_login_as_admin_via_ssh] returns `true`.
     pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
             self.can_login_as_admin_via_ssh().and_then(|s| {
                 if !s {
                     bail!("Not ready!")
@@ -771,7 +772,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn await_status_is_healthy(&self) -> Result<()> {
         retry(
             self.test_env().logger(),
-            RETRY_TIMEOUT,
+            READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || {
                 self.status_is_healthy()
@@ -784,7 +785,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn await_status_is_unavailable(&self) -> Result<()> {
         retry(
             self.test_env().logger(),
-            RETRY_TIMEOUT,
+            READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || match self.status_is_healthy() {
                 Err(_) => Ok(()),
@@ -1053,7 +1054,7 @@ impl SshSession for IcNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session(user)
         })
     }

@@ -24,7 +24,8 @@ use crate::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
             retry_async, HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{assert_create_agent, delay},
@@ -192,7 +193,7 @@ pub fn config(env: TestEnv) {
 
     info!(&logger, "Polling registry");
     let registry = RegistryCanister::new(nns_urls);
-    let (latest, routes) = rt.block_on(retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+    let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
             .context("Failed to `get_value` from registry")?;
         let routes = PbRoutingTable::decode(bytes.as_slice())
@@ -286,7 +287,7 @@ pub fn canister_test(env: TestEnv) {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         info!(&logger, "Creating BN agent...");
-        let agent = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        let agent = retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             Ok(boundary_node_vm.try_build_default_agent_async().await?)
         })
         .await
@@ -295,7 +296,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "Calling read...");
         // We must retry the first request to a canister.
         // This is because a new canister might take a few seconds to show up in the BN's routing tables
-        let read_result = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        let read_result = retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             Ok(agent.query(&canister_id, "read").call().await?)
         })
         .await
@@ -373,7 +374,7 @@ pub fn http_canister_test(env: TestEnv) {
             .build()
             .unwrap();
 
-        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
                 .get(format!("https://{}/", host))
                 .send()
@@ -390,7 +391,7 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
                 .get(format!("https://{}/stream", host))
                 .send()
@@ -408,7 +409,7 @@ pub fn http_canister_test(env: TestEnv) {
         .unwrap();
 
         // Check that `canisterId` parameters go unused
-        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
                 .get(format!(
                     "https://invalid-canister-id.raw.ic0.app/?canisterId={}",
@@ -545,7 +546,7 @@ pub fn denylist_test(env: TestEnv) {
             .unwrap();
 
         // Probe the blocked canister, we should get a 451
-        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = client
                 .get(format!("https://{}.raw.ic0.app/", canister_id))
                 .send()

@@ -18,7 +18,7 @@ end::catalog[] */
 
 use crate::canister_http::lib::*;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT};
+use crate::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::util::*;
 use anyhow::bail;
 use dfn_candid::candid_one;
@@ -57,7 +57,7 @@ pub fn test(env: TestEnv) {
         let p = proxy_canister.clone();
         let r = request.clone();
         // Retry till we get success response
-        retry_async(&env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let succeeded = p
                 .update_(
                     "send_request",
@@ -82,7 +82,7 @@ pub fn test(env: TestEnv) {
         request.request.url = url_to_fail.clone();
         let r = request.clone();
         let p = proxy_canister.clone();
-        retry_async(&env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+        retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let failure_update = p
                 .update_(
                     "send_request",
