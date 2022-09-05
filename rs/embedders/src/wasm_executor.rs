@@ -131,6 +131,7 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
 }
 
 /// Changes in the canister state after a successul Wasm execution.
+#[derive(Clone, Debug)]
 pub struct CanisterStateChanges {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
