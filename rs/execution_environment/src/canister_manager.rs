@@ -674,7 +674,7 @@ impl CanisterManager {
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
         let original = OriginalContext {
-            message_instruction_limit: execution_parameters.instruction_limits.message(),
+            execution_parameters,
             mode: context.mode,
             canister_layout_path,
             config: self.config.clone(),
@@ -682,6 +682,9 @@ impl CanisterManager {
             time,
             compilation_cost_handling,
             subnet_size,
+            requested_compute_allocation: context.compute_allocation,
+            requested_memory_allocation: context.memory_allocation,
+            sender: context.sender,
         };
 
         let round = RoundContext {
@@ -693,22 +696,12 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => execute_install(
-                context,
-                canister,
-                execution_parameters,
-                original,
-                round.clone(),
-                round_limits,
-            ),
-            CanisterInstallMode::Upgrade => execute_upgrade(
-                context,
-                canister,
-                execution_parameters,
-                original,
-                round.clone(),
-                round_limits,
-            ),
+            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
+                execute_install(context, canister, original, round.clone(), round_limits)
+            }
+            CanisterInstallMode::Upgrade => {
+                execute_upgrade(context, canister, original, round.clone(), round_limits)
+            }
         }
     }
 

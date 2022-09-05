@@ -4189,17 +4189,26 @@ fn dts_resume_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
         test.execute_slice(canister_id);
     }
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
+    );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -4226,11 +4235,16 @@ fn dts_abort_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..3 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
         );
         test.execute_slice(canister_id);
     }
@@ -4242,12 +4256,20 @@ fn dts_abort_works_in_install_code() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
         test.execute_slice(canister_id);
     }
 
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
+    );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
 
     let ingress_status = test.ingress_status(ingress_id);

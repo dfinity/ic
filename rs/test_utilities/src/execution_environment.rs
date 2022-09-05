@@ -268,6 +268,14 @@ impl ExecutionTest {
         )
     }
 
+    pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
+        let cost = wasm_compilation_cost(wasm);
+        self.cycles_account_manager()
+            .convert_instructions_to_cycles(
+                cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+            )
+    }
+
     pub fn subnet_available_memory(&self) -> AvailableMemory {
         self.subnet_available_memory.get()
     }
@@ -530,6 +538,27 @@ impl ExecutionTest {
             vec![],
             None,
             None,
+            None,
+        );
+        let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
+    pub fn upgrade_canister_with_allocation(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister_id,
+            wasm_binary,
+            vec![],
+            compute_allocation,
+            memory_allocation,
             None,
         );
         let result = self.install_code(args)?;
