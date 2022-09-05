@@ -177,7 +177,7 @@ pub fn config(env: TestEnv) {
         .with_nns_urls(nns_urls.clone())
         .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
         .start(&env)
-        .expect("failed to setup universal VM");
+        .expect("failed to setup BoundaryNode VM");
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
