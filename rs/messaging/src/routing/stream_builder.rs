@@ -390,15 +390,6 @@ impl StreamBuilderImpl {
                                 LABEL_VALUE_TYPE_REQUEST,
                                 LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE,
                             );
-                            // Increase cycle sum
-                            match streams.get_mut(&dst_net_id) {
-                                Some(mut stream) => {
-                                    let cycles_in_msg = msg.cycles();
-                                    let new_cycles_sum = stream.sum_cycles_out().add(cycles_in_msg);
-                                    stream.set_sum_cycles_out(new_cycles_sum);
-                                }
-                                None => {}
-                            }
                             oversized_requests.push(req);
                         }
 
@@ -473,7 +464,6 @@ impl StreamBuilderImpl {
                             }
                             streams.push(dst_net_id, msg);
                         }
-                        
                     };
                 }
 

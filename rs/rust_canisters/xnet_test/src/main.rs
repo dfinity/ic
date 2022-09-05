@@ -118,7 +118,7 @@ fn time_nanos() -> u64 {
 
 /// Callback for handling replies from "handle_request".
 fn on_reply(_env: *mut ()) {
-    //api::msg_cycles_accept(1);
+    api::msg_cycles_accept(3);
     let (reply, _) =
         candid::Decode!(&api::arg_data()[..], Reply, Vec<u8>).expect("failed to decode response");
     let elapsed = Duration::from_nanos((time_nanos() - reply.time_nanos) as u64);
@@ -248,7 +248,7 @@ fn fanout() {
 /// Endpoint that handles requests from canisters located on remote subnets.
 #[export_name = "canister_update handle_request"]
 fn handle_request() {
-    api::msg_cycles_accept(7);
+    api::msg_cycles_accept(10);
     let (req, _) =
         candid::Decode!(&api::arg_data()[..], Request, Vec<u8>).expect("failed to decode request");
     let caller = api::caller();

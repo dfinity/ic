@@ -647,12 +647,12 @@ impl StreamHandlerImpl {
                     Err((err, msg)) => {
                         self.observe_inducted_message_status(msg_type, err.to_label_value());
                         // #### XNet cycle transfer monitoring
-                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                        stream.set_sum_cycles_inc(new_cycles_sum);
-                        self.metrics
-                            .inc_cycles
-                            .with_label_values(&[&remote_subnet_id.to_string()])
-                            .set(new_cycles_sum.get() as f64);
+                        // let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
+                        // stream.set_sum_cycles_inc(new_cycles_sum);
+                        // self.metrics
+                        //     .inc_cycles
+                        //     .with_label_values(&[&remote_subnet_id.to_string()])
+                        //     .set(new_cycles_sum.get() as f64);
                         match msg {
                             RequestOrResponse::Request(_) => {
                                 debug!(
@@ -682,13 +682,6 @@ impl StreamHandlerImpl {
                 // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
-                    // #### XNet cycle transfer monitoring
-                    let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                    stream.set_sum_cycles_inc(new_cycles_sum);
-                    self.metrics
-                        .inc_cycles
-                        .with_label_values(&[&remote_subnet_id.to_string()])
-                        .set(new_cycles_sum.get() as f64);
                     match &msg {
                         RequestOrResponse::Request(_) => {
                             debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
@@ -700,6 +693,13 @@ impl StreamHandlerImpl {
                                     host_subnet
                                 ),
                             );
+                            // #### XNet cycle transfer monitoring
+                            let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
+                            stream.set_sum_cycles_inc(new_cycles_sum);
+                            self.metrics
+                                .inc_cycles
+                                .with_label_values(&[&remote_subnet_id.to_string()])
+                                .set(new_cycles_sum.get() as f64);
                             stream.push(generate_reject_response(msg, context));
                         }
 
