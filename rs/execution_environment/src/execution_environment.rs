@@ -304,6 +304,12 @@ impl ExecutionEnvironment {
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
+        // Assert the flag implication: DTS => sandboxing.
+        assert!(
+            config.deterministic_time_slicing == FlagStatus::Disabled
+                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            "Deterministic time slicing works only with canister sandboxing."
+        );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
             config.subnet_memory_capacity,
             config.default_provisional_cycles_balance,
