@@ -164,11 +164,6 @@ pub enum TlsServerHandshakeError {
         internal_error: String,
     },
     MalformedClientCertificate(MalformedPeerCertificateError),
-    CreateAcceptorError {
-        description: String,
-        cert_der: Option<Vec<u8>>,
-        internal_error: Option<String>,
-    },
     HandshakeError {
         internal_error: String,
     },
@@ -410,17 +405,12 @@ pub trait TlsHandshake {
     /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
     ///    the certificate C_handshake that the peer presented during the
     ///    handshake (and for which the peer therefore knows the private key).
-    ///    If N_claimed is contained in the nodes in `allowed_clients`,
-    ///    determine the certificate C_registry by querying the registry for the
+    ///    Return an error if N_claimed is not contained in the nodes
+    ///    in `allowed_clients`.
+    /// 2. Determine the certificate C_registry by querying the registry for the
     ///    TLS certificate of node with ID N_claimed, and if C_registry is equal
     ///    to C_handshake, then the peer successfully authenticated as node
-    ///    N_claimed. Otherwise, step 2 is taken.
-    /// 2. Compare the root of the certificate chain that the peer presented
-    ///    during the handshake (and for which the peer therefore knows the
-    ///    private key of the chain's leaf certificate) to all the (explicitly
-    ///    allowed) certificates in `allowed_clients`. If there is a match,
-    ///    then the peer represented by the chain's leaf certificate
-    ///    successfully authenticated.
+    ///    N_claimed.
     ///
     /// The given `tcp_stream` is consumed. If an error is returned, the TCP
     /// connection is therefore dropped.
@@ -438,8 +428,6 @@ pub trait TlsHandshake {
     /// * TlsServerHandshakeError::MalformedClientCertificate if a client
     ///   certificate corresponding to an client in `allowed_clients` is
     ///   malformed.
-    /// * TlsServerHandshakeError::CreateAcceptorError if there is a problem
-    ///   configuring the server for accepting connections from clients.
     /// * TlsServerHandshakeError::HandshakeError if there is an error during
     ///   the TLS handshake, or the handshake fails.
     /// * TlsServerHandshakeError::ClientNotAllowed if the node_id in the
@@ -482,8 +470,6 @@ pub trait TlsHandshake {
     ///   that is expected to be in the registry is not found.
     /// * TlsServerHandshakeError::MalformedSelfCertificate if the node's own
     ///   server certificate is malformed.
-    /// * TlsServerHandshakeError::CreateAcceptorError if there is a problem
-    ///   configuring the server for accepting connections from clients.
     /// * TlsServerHandshakeError::HandshakeError if there is an error during
     ///   the TLS handshake, or the handshake fails.
     ///
