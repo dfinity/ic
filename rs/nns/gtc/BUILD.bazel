@@ -11,6 +11,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -26,8 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_7_3",
-    "@crate_index//:rand_core",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:sha3",
     "@crate_index//:simple_asn1",
