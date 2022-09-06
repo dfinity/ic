@@ -44,6 +44,7 @@ import traceback
 from contextlib import contextmanager
 from copy import deepcopy
 from io import TextIOWrapper
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -73,6 +74,8 @@ CI_JOB_URL = os.getenv("CI_JOB_URL", default=None)
 CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="master")
 file_full_path = os.path.realpath(__file__)
 root_index = file_full_path.find("/rs/")
+HOST_MACHINE = socket.gethostname()
+MAX_PARALLELIZATION_DEGREE = 7  # degree of parallelization >= 1
 GITLAB_LINK = f"https://gitlab.com/dfinity-lab/public/ic/-/blob/{CI_COMMIT_SHA}{file_full_path[root_index:]}"
 TMP_DIR_PREFIX = "smoke_test_artifacts_"
 SLACK_ALERTS_FILE = "slack_alerts.json"
@@ -146,6 +149,14 @@ class VM:
         self.ipv6 = ipv6
         self.hostname = hostname
 
+    def __str__(self) -> str:
+        """Informal string representation of an object"""
+        return f"VM: (name={self.name}, ipv6={self.ipv6}, hostname={self.hostname})"
+
+    def __repr__(self) -> str:
+        """Official string representation of an object"""
+        return str(self)
+
 
 class NetworkingException(Exception):
     def __init__(self, message: str) -> None:
@@ -154,13 +165,16 @@ class NetworkingException(Exception):
 
 class HttpWithRetriesException(Exception):
     def __init__(self, url: str, retries: int, status_code: int, last_error_message: str):
+        # To rectify the issue with exceptions in case of multiprocessing (https://bugs.python.org/issue1692335).
+        super(Exception, self).__init__(url, retries, status_code, last_error_message)
         self.url = url
         self.retries = retries
         self.status_code = status_code
         self.last_error_message = last_error_message
-        super().__init__(
-            f"Request to {self.url} failed {self.retries} times. Last failure code={status_code}, message={last_error_message}."
-        )
+
+    def __str__(self):
+        """Informal string representation of an object"""
+        return f"Request to {self.url} failed {self.retries} times. Last failure code={self.status_code}, message={self.last_error_message}."
 
 
 def send_slack_alert(webhook_url: str, channel: str, message: str) -> requests.Response:
@@ -259,6 +273,33 @@ def http_with_retries(
     return response
 
 
+def is_vm_reachable(vm: VM) -> bool:
+    logger.debug(f"Process with pid={os.getpid()} is checking {vm} reachability.")
+    url = f"http://[{vm.ipv6}]/random"
+    try:
+        _ = http_with_retries(
+            func=head_request_to_url,
+            expected_code=200,
+            timeout=VM_BOOT_READINESS_TIMEOUT_SEC,
+            url=url,
+        )
+    except Exception:
+        logger.error(f"url={url} of {vm} is unreachable from {HOST_MACHINE}")
+        return False
+    logger.debug(f"url={url} of {vm} is reachable from {HOST_MACHINE}")
+    return True
+
+
+def create_vm(group_name: str, vm_name: str) -> VM:
+    pid = os.getpid()
+    logger.debug(f"Process with pid={pid} is creating VM with name={vm_name}.")
+    response = http_with_retries(func=farm_create_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
+    resp_body = response.json()
+    vm = VM(vm_name, resp_body["hostname"], resp_body["ipv6"])
+    logger.debug(f"{vm} created by pid={pid} successfully.")
+    return vm
+
+
 def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM], is_colored: bool) -> str:
     def to_colored_digit(x: int):
         return f"{BOLD + GREEN}{x}{NC}" if x == 1 else f"{BOLD + RED}{x}{NC}"
@@ -286,7 +327,7 @@ def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM], is_c
 
 
 def generate_default_group() -> str:
-    return f"{FARM_GROUP_PREFIX}-{socket.gethostname()}-{int(time.time())}"
+    return f"{FARM_GROUP_PREFIX}-{HOST_MACHINE}-{int(time.time())}"
 
 
 def head_request_to_url(url: str) -> requests.Response:
@@ -413,45 +454,53 @@ def generate_config_and_ssh_keys(artifacts_dir: str) -> Tuple[str, str]:
     return config_dir, ssh_dir
 
 
-def boot_vm(group_name: str, vm_name: str, image_id: str) -> requests.Response:
+def boot_vm(group_name: str, vm: VM, image_id: str):
+    pid = os.getpid()
+    logger.debug(f"Process with pid={pid} is booting {vm}.")
     response = http_with_retries(
         func=farm_mount_usb_drives,
         expected_code=200,
         group_name=group_name,
-        vm_name=vm_name,
+        vm_name=vm.name,
         images=[{"_tag": "imageViaId", "id": image_id}],
     )
-    logger.debug(f"Mount image response {response.status_code}.")
-    response = http_with_retries(func=farm_start_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
-    logger.debug(f"Start VM response {response.status_code}")
-    print_console_link(group_name, vm_name)
-    return response
+    logger.debug(f"Mount image of {vm} finished with status_code={response.status_code}, by pid={pid}.")
+    response = http_with_retries(func=farm_start_vm, expected_code=200, group_name=group_name, vm_name=vm.name)
+    logger.debug(f"Start of {vm} finished with status_code={response.status_code}, by  pid={pid}.")
+    print_console_link(group_name, vm.name)
+
+
+def generate_connectivity_from_vm_to_vms(vm: VM, key_filename: str, VMs: List[VM]) -> List[int]:
+    logger.debug(f"Process with pid={os.getpid()} is generating inter-VM file-download array for {vm}")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(vm.ipv6, username="admin", key_filename=key_filename)
+    file_download_array = [-1 for _ in range(len(VMs))]
+    for col in range(len(VMs)):
+        # Get 1M file download result.
+        channel = client.get_transport().open_session()
+        channel.exec_command(
+            f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
+            f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
+            f"sha256sum -c SHA256SUMS"
+        )
+        exit_status = channel.recv_exit_status()
+        if exit_status != 0:
+            logger.error(
+                f"Failure: curl from {vm.ipv6} ({vm.hostname[:3]}) to {VMs[col].ipv6} ({VMs[col].hostname[:3]}) (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES).decode('utf-8')}"
+            )
+        file_download_array[col] = int(exit_status == 0)
+    return file_download_array
 
 
 def generate_connectivity_matrices(VMs: List[VM], key_filename: str) -> List[List[int]]:
-    N = len(VMs)
-    # 1: success, 0: failure.
-    file_download_matrix = [[0 for _ in range(N)] for _ in range(N)]
-    for row in range(N):
-        logger.debug(f"Running iteration {row+1} of {N} ...")
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(VMs[row].ipv6, username="admin", key_filename=key_filename)
-        for col in range(N):
-            # Get 1M file download result.
-            channel = client.get_transport().open_session()
-            channel.exec_command(
-                f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
-                f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
-                f"sha256sum -c SHA256SUMS"
-            )
-            exit_status = channel.recv_exit_status()
-            if exit_status != 0:
-                logger.error(
-                    f"Failure: curl from {VMs[row].ipv6} ({VMs[row].hostname[:3]}) to {VMs[col].ipv6} ({VMs[col].hostname[:3]}) (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES).decode('utf-8')}"
-                )
-            file_download_matrix[row][col] = int(exit_status == 0)
-        client.close()
+    # Binary inter-VMs file-download matrix.
+    # 1: success (file download succeeded), 0: failure (download failed).
+    file_download_matrix = []
+    with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+        args = [(vm, key_filename, VMs) for vm in VMs]
+        connectivity_results = p.starmap(func=generate_connectivity_from_vm_to_vms, iterable=args)
+        [file_download_matrix.append(r) for r in connectivity_results]
     return file_download_matrix
 
 
@@ -510,15 +559,9 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
                 logger.debug(f"Existing {FARM_GROUP_PREFIX} groups: {g['name']} expires_at: {g['expiresAt']}")
 
     with step_span("creating VMs in Farm", step_idx) as step_idx:
-        VMs = []
-        for idx in range(len(dc_names)):
-            vm_name = f"{VM_NAME_BASE}{idx}"
-            response = http_with_retries(func=farm_create_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
-            resp_body = response.json()
-            VMs.append(VM(vm_name, resp_body["hostname"], resp_body["ipv6"]))
-            logger.debug(
-                f"VM name={VMs[-1].name}, hostname={VMs[-1].hostname}, ipv6={VMs[-1].ipv6} created successfully."
-            )
+        create_vm_args = [(group_name, f"{VM_NAME_BASE}{idx}") for idx in range(len(dc_names))]
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            VMs = p.starmap(func=create_vm, iterable=create_vm_args)
         # Sort VMs by hostname, so that networking matrices computed below always have the same ordering.
         VMs.sort(key=lambda x: x.hostname)
         logger.info(f"All {len(VMs)} VMs created successfully.")
@@ -530,24 +573,19 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
         logger.info(f"All {len(dc_names)} DCs contain a VM.")
 
     with step_span("booting all VMs", step_idx) as step_idx:
-        for vm in VMs:
-            boot_vm(group_name, vm.name, image_id)
-        logger.info(f"All {len(VMs)} VMs were booted successfully.")
+        boot_vm_args = [(group_name, vm, image_id) for vm in VMs]
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            p.starmap(func=boot_vm, iterable=boot_vm_args)
 
-    with step_span(f"verifying {socket.gethostname()} can reach all VMs", step_idx) as step_idx:
+    with step_span(f"verifying {HOST_MACHINE} can reach all VMs", step_idx) as step_idx:
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            vms_reachability = p.map(is_vm_reachable, VMs)
+            unreachable_vms = [VMs[idx] for (idx, is_reachable) in enumerate(vms_reachability) if not is_reachable]
+        if unreachable_vms:
+            raise NetworkingException(
+                f"Host {HOST_MACHINE} can't reach the following VMs after their boot: {[unreachable_vms]}"
+            )
         for vm in VMs:
-            try:
-                http_with_retries(
-                    func=head_request_to_url,
-                    expected_code=200,
-                    timeout=VM_BOOT_READINESS_TIMEOUT_SEC,
-                    url=f"http://[{vm.ipv6}]/random",
-                )
-            except Exception:
-                raise NetworkingException(
-                    f"VM name={vm.name}, hostname={vm.hostname} can't be reached from the host {socket.gethostname()} after booting."
-                )
-            logger.debug(f"vm={vm.name} ipv6 is reachable.")
             logger.debug(f"ssh admin@{vm.ipv6} -i {ssh_dir}/admin")
 
     with step_span("generating inter-vms networking matrices", step_idx) as step_idx:
