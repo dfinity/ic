@@ -99,18 +99,10 @@ rust_binary(
         "src/main.rs",
     ],
     aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":replica_lib"],
-)
-
-rust_binary(
-    name = "replica_malicious",
-    srcs = [
-        "src/jemalloc_metrics.rs",
-        "src/main.rs",
-    ],
-    aliases = ALIASES,
-    features = ["malicious_code"],
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":replica_lib"],
 )

@@ -24,6 +24,10 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "validator",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_validator",
     deps = DEPENDENCIES,
 )

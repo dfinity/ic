@@ -72,6 +72,10 @@ rust_library(
     name = "http_handler",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_http_handler",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":build_script"],

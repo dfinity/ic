@@ -40,3 +40,31 @@ opt_debug_binary = rule(
         "binary": attr.label(mandatory = True, cfg = opt_debug_transition, allow_single_file = True),
     },
 )
+
+def _malicious_code_transition(_settings, _attr):
+    return {
+        "//bazel:enable_malicious_code": True,
+        "//command_line_option:compilation_mode": "opt",
+        "//command_line_option:strip": "never",
+    }
+
+malicious_code_enabled_transition = transition(
+    implementation = _malicious_code_transition,
+    inputs = [],
+    outputs = [
+        "//bazel:enable_malicious_code",
+        "//command_line_option:compilation_mode",
+        "//command_line_option:strip",
+    ],
+)
+
+malicious_binary = rule(
+    implementation = _opt_debug_impl,
+    executable = True,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "binary": attr.label(mandatory = True, cfg = malicious_code_enabled_transition, allow_single_file = True),
+    },
+)
