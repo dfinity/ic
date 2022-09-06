@@ -109,7 +109,7 @@ impl Client {
         wh: &mut TlsWriteHalf,
     ) {
         if let Some(msg_expected_from_server) = &self.msg_expected_from_server {
-            let mut reader = BufReader::new(rh);
+            let reader = BufReader::new(rh);
             let msg = reader.lines().next_line().await.unwrap().unwrap();
             assert_eq!(&msg, msg_expected_from_server);
 

@@ -30,7 +30,6 @@ impl TlsRegistry {
         self
     }
 
-    #[allow(unused)]
     pub fn with_cert_from_x509(self, node_id: NodeId, cert: X509) -> TlsRegistry {
         let cert = X509PublicKeyCert {
             certificate_der: cert.to_der().expect("could not DER encode certificate"),

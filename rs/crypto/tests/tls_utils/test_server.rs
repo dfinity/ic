@@ -3,14 +3,13 @@ use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, Peer, SomeOrAllNodes, TlsHandshake, TlsReadHalf,
+    AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsReadHalf,
     TlsServerHandshakeError, TlsWriteHalf,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use proptest::std_facade::BTreeSet;
-use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -158,7 +157,7 @@ impl Server {
         wh: &mut TlsWriteHalf,
     ) {
         if let Some(msg_expected_from_client) = &self.msg_expected_from_client {
-            let mut reader = BufReader::new(rh);
+            let reader = BufReader::new(rh);
             let msg = reader.lines().next_line().await.unwrap().unwrap();
             assert_eq!(&msg, msg_expected_from_client);
 
