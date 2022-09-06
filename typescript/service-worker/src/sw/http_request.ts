@@ -35,6 +35,8 @@ const [, swDomains] = (() => {
   }
 })() as [Principal | null, string];
 
+const CANISTER_API_REQUEST_REGEX = new RegExp("^\/api/v[0-9]/canister/([A-Za-z0-9-]+)");
+
 /**
  * Split a hostname up-to the first valid canister ID from the right.
  * @param hostname The hostname to analyze.
@@ -61,6 +63,18 @@ function splitHostnameForCanisterId(
   }
 
   return null;
+}
+
+/**
+ * Try to resolve the Canister ID to contact in the pathname.
+ * @param pathname The pathname to look up.
+ * @returns A Canister ID or null if none were found.
+ */
+function maybeResolveCanisterIdFromPathname(
+  pathname: string
+): Principal | null {
+  const matches = pathname.match(CANISTER_API_REQUEST_REGEX);
+  return matches ? Principal.fromText(matches[1]) : null;
 }
 
 /**
@@ -120,6 +134,7 @@ function resolveCanisterIdFromUrl(
   try {
     const url = new URL(urlString);
     return (
+      maybeResolveCanisterIdFromPathname(url.pathname) ||
       maybeResolveCanisterIdFromHostName(url.hostname) ||
       maybeResolveCanisterIdFromSearchParam(url.searchParams, isLocal)
     );
