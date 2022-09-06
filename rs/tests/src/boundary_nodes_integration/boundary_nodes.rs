@@ -1353,6 +1353,156 @@ pub fn direct_to_replica_test(env: TestEnv) {
     panic_handler.disable();
 }
 
+pub fn direct_to_replica_options_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .expect("failed to get BN snapshot");
+
+    let vm_addr = SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0);
+
+    let client = reqwest::ClientBuilder::new()
+        .danger_accept_invalid_certs(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve("ic0.app", vm_addr.into())
+        .build()
+        .expect("failed to build http client");
+
+    let install_url = get_install_url(&env).expect("failed to get install url");
+
+    let rt = Runtime::new().expect("failed to create tokio runtime");
+
+    let cid = rt
+        .block_on(async {
+            info!(&logger, "creating management agent");
+            let agent = assert_create_agent(install_url.as_str()).await;
+
+            info!(&logger, "loading wasm");
+            let wasm = env.load_wasm("counter.wat");
+
+            info!(&logger, "creating canister");
+            let cid = create_canister(&agent, &wasm, None)
+                .await
+                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+            // Wait for the canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            let out: Result<Principal, Error> = Ok(cid);
+            out
+        })
+        .expect("failed to initialize test");
+
+    let futs = FuturesUnordered::new();
+
+    struct TestCase {
+        name: String,
+        path: String,
+        allowed_methods: String,
+    }
+
+    let test_cases = [
+        TestCase {
+            name: "status OPTIONS".into(),
+            path: "/api/v2/status".into(),
+            allowed_methods: "HEAD, GET".into(),
+        },
+        TestCase {
+            name: "query OPTIONS".into(),
+            path: format!("/api/v2/canister/{cid}/query"),
+            allowed_methods: "HEAD, POST".into(),
+        },
+        TestCase {
+            name: "call OPTIONS".into(),
+            path: format!("/api/v2/canister/{cid}/call"),
+            allowed_methods: "HEAD, POST".into(),
+        },
+        TestCase {
+            name: "read_status OPTIONS".into(),
+            path: format!("/api/v2/canister/{cid}/read_state"),
+            allowed_methods: "HEAD, POST".into(),
+        },
+    ];
+
+    for tc in test_cases {
+        let client = client.clone();
+        let logger = logger.clone();
+
+        let TestCase {
+            name,
+            path,
+            allowed_methods,
+        } = tc;
+
+        futs.push(rt.spawn(async move {
+            info!(&logger, "Starting subtest {}", name);
+
+            let mut url = reqwest::Url::parse("https://ic0.app")?;
+            url.set_path(&path);
+
+            let req = reqwest::Request::new(reqwest::Method::OPTIONS, url);
+
+            let res = client.execute(req).await?;
+
+            if res.status() != reqwest::StatusCode::NO_CONTENT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            for (k, v) in [
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", &allowed_methods),
+                ("Access-Control-Allow-Credentials", "true"),
+                ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie"),
+                ("Access-Control-Expose-Headers", "Content-Length,Content-Range"),
+                ("Access-Control-Max-Age", "600"),
+            ] {
+                let hdr = res
+                    .headers()
+                    .get(k)
+                    .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
+
+                if hdr != v {
+                    bail!("wrong {k} header: {hdr}, expected {v}")
+                }
+            }
+
+            Ok(())
+        }));
+    }
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test paniced: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+
+    panic_handler.disable();
+}
+
 pub fn direct_to_replica_rosetta_test(env: TestEnv) {
     let logger = env.logger();
 
