@@ -352,12 +352,15 @@ impl PartialEq for OutputQueue {
     fn eq(&self, other: &Self) -> bool {
         // Ensure there are no requests in front of the timeout_index.
         // If this is the case, timeout_index can be dropped safely here.
-        debug_assert!(self
-            .queue
-            .queue
-            .iter()
-            .take((self.timeout_index - self.index).get() as usize)
-            .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+        #[cfg(debug_assertions)]
+        if self.timeout_index > self.index {
+            debug_assert!(self
+                .queue
+                .queue
+                .iter()
+                .take((self.timeout_index - self.index).get() as usize)
+                .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+        }
 
         // Compare everything except timeout_index.
         (self.index == other.index)
@@ -372,12 +375,15 @@ impl Hash for OutputQueue {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Ensure there are no requests in front of the timeout_index.
         // If this is the case, timeout_index can be dropped safely here.
-        debug_assert!(self
-            .queue
-            .queue
-            .iter()
-            .take((self.timeout_index - self.index).get() as usize)
-            .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+        #[cfg(debug_assertions)]
+        if self.timeout_index > self.index {
+            debug_assert!(self
+                .queue
+                .queue
+                .iter()
+                .take((self.timeout_index - self.index).get() as usize)
+                .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+        }
 
         // Hash everything except timeout_index.
         self.index.hash(state);
