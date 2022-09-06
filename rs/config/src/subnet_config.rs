@@ -174,7 +174,7 @@ impl SchedulerConfig {
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
-            install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
+            install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
         }
     }
 
@@ -217,7 +217,7 @@ impl SchedulerConfig {
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
-            install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
+            install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
         }
     }
 
