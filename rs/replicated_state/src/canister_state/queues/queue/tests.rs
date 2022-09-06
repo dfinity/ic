@@ -926,7 +926,9 @@ proptest! {
         let requests = q.time_out_requests(time).collect::<Vec<Arc<Request>>>();
 
         // Make sure the two queues are the same.
+        prop_assert!(q.timeout_index <= ref_q.timeout_index);
         prop_assert_eq!(ref_q, q);
+
         // Make sure the timed out requests for the second step are the same.
         prop_assert_eq!(ref_requests, requests);
     }
