@@ -97,6 +97,11 @@ impl CyclesAccountManager {
         }
     }
 
+    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
+    pub fn use_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
+        self.use_cost_scaling_flag = use_cost_scaling_flag;
+    }
+
     /// Returns the subnet type of this [`CyclesAccountManager`].
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
