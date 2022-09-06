@@ -1417,34 +1417,12 @@ impl ExecutionTestBuilder {
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
         subnets.extend(self.caller_subnet_id.iter().copied());
-
-        for subnet in subnets {
-            let mut subnet_type = SubnetType::System;
-            let mut nodes = btreemap! {};
-            if subnet == self.own_subnet_id {
-                subnet_type = self.subnet_type;
-                // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
-                for i in 0..self.registry_settings.subnet_size {
-                    nodes.insert(
-                        node_test_id(i as u64),
-                        NodeTopology {
-                            ip_address: "fake-ip-address".to_string(),
-                            http_port: 1234,
-                        },
-                    );
-                }
-            }
-            state.metadata.network_topology.subnets.insert(
-                subnet,
-                SubnetTopology {
-                    public_key: vec![1, 2, 3, 4],
-                    nodes,
-                    subnet_type,
-                    subnet_features: SubnetFeatures::default(),
-                    ecdsa_keys_held: BTreeSet::new(),
-                },
-            );
-        }
+        state.metadata.network_topology.subnets = generate_subnets(
+            subnets,
+            self.own_subnet_id,
+            self.subnet_type,
+            self.registry_settings.subnet_size,
+        );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.init_allocation_ranges_if_empty().unwrap();
@@ -1586,6 +1564,44 @@ impl ExecutionTestBuilder {
             ecdsa_subnet_public_keys,
         }
     }
+}
+
+/// A helper to create subnets.
+pub fn generate_subnets(
+    subnet_ids: Vec<SubnetId>,
+    own_subnet_id: SubnetId,
+    own_subnet_type: SubnetType,
+    own_subnet_size: usize,
+) -> BTreeMap<SubnetId, SubnetTopology> {
+    let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
+    for subnet_id in subnet_ids {
+        let mut subnet_type = SubnetType::System;
+        let mut nodes = btreemap! {};
+        if subnet_id == own_subnet_id {
+            subnet_type = own_subnet_type;
+            // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
+            for i in 0..own_subnet_size {
+                nodes.insert(
+                    node_test_id(i as u64),
+                    NodeTopology {
+                        ip_address: "fake-ip-address".to_string(),
+                        http_port: 1234,
+                    },
+                );
+            }
+        }
+        result.insert(
+            subnet_id,
+            SubnetTopology {
+                public_key: vec![1, 2, 3, 4],
+                nodes,
+                subnet_type,
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
+    }
+    result
 }
 
 /// A helper to extract the reply from an execution result.
