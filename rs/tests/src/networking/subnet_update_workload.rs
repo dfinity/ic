@@ -25,7 +25,7 @@ use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{retry_async, RETRY_BACKOFF, RETRY_TIMEOUT};
+use crate::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
     SubnetSnapshot,
@@ -123,6 +123,12 @@ pub fn large_config(env: TestEnv) {
     )
 }
 
+// Create IC with two subnets, a system subnet and app subnet with 4 nodes each
+// and one boundary node
+pub fn boundary_config(env: TestEnv) {
+    config(env, 4, 4, true)
+}
+
 // Run a long test (6h) with the max rps we bring across a boundary node
 // TODO: change test to use boundary node when BOUN-425 has been resolved
 pub fn long_duration_test(env: TestEnv) {
@@ -159,6 +165,18 @@ pub fn large_subnet_test(env: TestEnv) {
         Duration::from_secs(2 * 60 * 60),
         false, //do not use boundary nodes
         0.95,  //min_success_ratio
+    );
+}
+
+// Run a short test (5min) with the max rps we bring across a boundary node
+pub fn boundary_test(env: TestEnv) {
+    test(
+        env,
+        100,  //rps
+        1000, //payload size bytes
+        Duration::from_secs(5 * 60),
+        true, //use boundary nodes
+        0.95, //min_success_ratio
     );
 }
 
@@ -222,7 +240,7 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &nns_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),
@@ -232,7 +250,7 @@ pub fn test(
             .unwrap();
         }
         for agent in app_agents.iter() {
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
                 match agent_observes_canister_module(agent, &app_canister).await {
                     true => Ok(()),
                     false => bail!("Canister module not available yet"),

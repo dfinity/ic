@@ -651,6 +651,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot_with_setup(
+                    "boundary_subnet_workload_pot",
+                    networking::subnet_update_workload::boundary_config,
+                    seq(vec![
+                        sys_t(
+                            "boundary_subnet_update_workload_test",
+                            networking::subnet_update_workload::boundary_test,
+                        ),
+                    ]),
+                ),
+                pot_with_setup(
                     "large_subnet_workload_pot",
                     networking::subnet_update_workload::large_config,
                     seq(vec![

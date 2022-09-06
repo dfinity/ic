@@ -1,13 +1,14 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
+use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -20,7 +21,7 @@ use ic_types::methods::{Callback, WasmMethod};
 use ic_types::{Cycles, MemoryAllocation, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, RoundLimits};
+use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
 
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
@@ -277,6 +278,31 @@ pub(crate) fn validate_method(
     Ok(())
 }
 
+pub(crate) fn validate_message(
+    canister: &CanisterState,
+    req: &RequestOrIngress,
+    wasm_method: &WasmMethod,
+    time: Time,
+    log: &ReplicaLogger,
+) -> Result<(), UserError> {
+    validate_canister(canister)?;
+
+    if let RequestOrIngress::Ingress(ingress) = req {
+        if ingress.expiry_time < time {
+            error!(log, "[EXC-BUG] Executing expired ingress message.");
+            return Err(UserError::new(
+                ErrorCode::IngressMessageTimeout,
+                "Ingress message timed out waiting to start executing.",
+            ));
+        }
+    }
+
+    validate_method(wasm_method, canister)
+        .map_err(|err| err.into_user_error(&canister.canister_id()))?;
+
+    Ok(())
+}
+
 // Helper function that extracts the corresponding callback and call context
 // from the `CallContextManager` without changing its state.
 pub fn get_call_context_and_callback(
@@ -438,5 +464,39 @@ pub fn apply_canister_state_changes(
                 output.wasm_result = Err(err);
             }
         }
+    }
+}
+
+pub(crate) fn finish_call_with_error(
+    user_error: UserError,
+    canister: CanisterState,
+    req: RequestOrIngress,
+    time: Time,
+) -> ExecuteMessageResult {
+    let result = match req {
+        RequestOrIngress::Request(request) => {
+            let response = Response {
+                originator: request.sender,
+                respondent: canister.canister_id(),
+                originator_reply_callback: request.sender_reply_callback,
+                refund: request.payment,
+                response_payload: Payload::from(Err(user_error)),
+            };
+            ExecutionResponse::Request(response)
+        }
+        RequestOrIngress::Ingress(ingress) => {
+            let status = IngressStatus::Known {
+                receiver: canister.canister_id().get(),
+                user_id: ingress.source,
+                time,
+                state: IngressState::Failed(user_error),
+            };
+            ExecutionResponse::Ingress((ingress.message_id.clone(), status))
+        }
+    };
+    ExecuteMessageResult::Finished {
+        canister,
+        response: result,
+        heap_delta: NumBytes::from(0),
     }
 }

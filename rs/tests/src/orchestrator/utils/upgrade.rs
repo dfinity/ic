@@ -57,7 +57,7 @@ pub(crate) async fn fetch_update_file_sha256_with_retry(
     version_str: &str,
     is_test_img: bool,
 ) -> String {
-    retry_async(log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+    retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         match fetch_update_file_sha256(version_str, is_test_img).await {
             Err(err) => bail!(err),
             Ok(sha) => Ok(sha),

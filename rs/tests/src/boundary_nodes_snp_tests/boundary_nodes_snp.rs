@@ -50,7 +50,7 @@ pub fn config(env: TestEnv) {
         .enable_sev()
         .with_snp_boot_img(&env)
         .start(&env)
-        .expect("failed to setup universal VM");
+        .expect("failed to setup BoundaryNode VM");
 }
 
 /* tag::catalog[]

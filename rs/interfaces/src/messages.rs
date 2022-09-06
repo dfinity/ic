@@ -58,6 +58,14 @@ impl RequestOrIngress {
         }
     }
 
+    /// Returns the cycles received with this message.
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            RequestOrIngress::Request(request) => request.payment,
+            RequestOrIngress::Ingress(_) => Cycles::zero(),
+        }
+    }
+
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {

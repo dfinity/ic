@@ -306,6 +306,7 @@ impl StateMachine {
 
         if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
+            hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(

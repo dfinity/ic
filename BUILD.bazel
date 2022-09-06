@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
-load("//bazel:transitions.bzl", "opt_stripped_binary")
+load("//bazel:transitions.bzl", "opt_debug_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("//bazel:buildifier.bzl", "buildifier_test")
 
@@ -91,7 +91,7 @@ BINARIES = {
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
 }
 
-[opt_stripped_binary(
+[opt_debug_binary(
     name = name,
     binary = BINARIES[name],
 ) for name in BINARIES]

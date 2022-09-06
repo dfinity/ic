@@ -79,7 +79,7 @@ pub fn test(env: TestEnv) {
                 let ucan = UniversalCanister::new_with_retries(
                     &agent,
                     &inner_log,
-                    RETRY_TIMEOUT,
+                    READY_WAIT_TIMEOUT,
                     RETRY_BACKOFF,
                 )
                 .await;
@@ -151,7 +151,7 @@ pub fn test(env: TestEnv) {
         node.with_default_agent(move |agent| async move {
             let ucan = UniversalCanister::from_canister_id(&agent, ucan_id);
             // NOTE: retries are important here, 1/3 of the nodes might not observe changes immediately.
-            retry_async(&log, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
                 let current_msg = ucan
                     .try_read_stable_with_retries(
                         &log,
