@@ -1794,17 +1794,44 @@ impl StateManagerImpl {
             .tip(height)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
 
+        let get_path = |entry: PageMapType, path_cache: &mut Option<PathBuf>| match path_cache {
+            Some(path) => path.clone(),
+            None => {
+                let path = entry.path(&tip_layout).unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to access layout @TIP {}: {}",
+                        tip_layout.raw_path().display(),
+                        err
+                    )
+                });
+                *path_cache = Some(path.clone());
+                path
+            }
+        };
+
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
+                // Accessing the path has some overhead to ensure that
+                // the path exists, so we don't want to do it twice
+                let mut path_cache = None;
+
+                // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
+                // created one. In these cases, we also need to wipe the data from the file on disk.
+                // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
+                // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
+                // disk before applying any round deltas of that PageMap. We detect this case by looking at
+                // has_stripped_round_deltas, which will be false at the beginning, but true as soon as we strip round
+                // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
+                // we have not persisted round deltas before, then there are no relevant pages beyond the ones in the
+                // round delta, and we truncate the file on disk to size 0.
+                if page_map.base_height.is_none() && !page_map.has_stripped_round_deltas() {
+                    let path = &get_path(entry, &mut path_cache);
+                    truncate_path(&self.log, path);
+                }
+
                 if !page_map.round_delta_is_empty() {
-                    let path = &entry.path(&tip_layout).unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to access layout @TIP {}: {}",
-                            tip_layout.raw_path().display(),
-                            err
-                        )
-                    });
+                    let path = &get_path(entry, &mut path_cache);
 
                     page_map.persist_round_delta(path).unwrap_or_else(|err| {
                         fatal!(
@@ -1814,8 +1841,10 @@ impl StateManagerImpl {
                             err
                         )
                     });
-                    page_map.strip_round_delta();
                 }
+
+                // We strip empty round deltas to keep has_stripped_round_deltas() correct
+                page_map.strip_round_delta();
             }
         }
     }
@@ -3053,6 +3082,20 @@ impl CertifiedStreamStore for StateManagerImpl {
         self.get_latest_state()
             .get_ref()
             .subnets_with_available_streams()
+    }
+}
+
+fn truncate_path(log: &ReplicaLogger, path: &Path) {
+    if let Err(err) = nix::unistd::truncate(path, 0) {
+        // It's OK if the file doesn't exist, everything else is a fatal error.
+        if err != nix::errno::Errno::ENOENT {
+            fatal!(
+                log,
+                "failed to truncate page map stored at {}: {}",
+                path.display(),
+                err
+            )
+        }
     }
 }
 

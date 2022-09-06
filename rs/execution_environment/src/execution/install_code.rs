@@ -14,7 +14,7 @@ use ic_interfaces::{
     },
     messages::RequestOrIngress,
 };
-use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_logger::{error, fatal, warn};
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_sys::PAGE_SIZE;
@@ -157,7 +157,6 @@ impl InstallCodeHelper {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
-        let canister_id = clean_canister.canister_id();
         let message_instruction_limit = original.execution_parameters.instruction_limits.message();
         let instructions_left = self.instructions_left();
         let mut subnet_available_memory = round_limits.subnet_available_memory.clone();
@@ -230,23 +229,6 @@ impl InstallCodeHelper {
 
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
-        }
-
-        // We managed to create a new canister and will be dropping the
-        // older one. So we get rid of the previous heap to make sure it
-        // doesn't interfere with the new deltas and replace the old
-        // canister with the new one.
-        truncate_canister_heap(
-            round.log,
-            original.canister_layout_path.as_path(),
-            canister_id,
-        );
-        if original.mode != CanisterInstallMode::Upgrade {
-            truncate_canister_stable_memory(
-                round.log,
-                original.canister_layout_path.as_path(),
-                canister_id,
-            );
         }
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
@@ -655,48 +637,6 @@ pub(crate) fn canister_layout(
     CheckpointLayout::<RwPolicy>::new(state_path.into(), Height::from(0))
         .and_then(|layout| layout.canister(canister_id))
         .expect("failed to obtain canister layout")
-}
-
-pub(crate) fn truncate_canister_heap(
-    log: &ReplicaLogger,
-    state_path: &Path,
-    canister_id: CanisterId,
-) {
-    let layout = canister_layout(state_path, &canister_id);
-    let heap_file = layout.vmemory_0();
-    if let Err(err) = nix::unistd::truncate(&heap_file, 0) {
-        // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err != nix::errno::Errno::ENOENT {
-            fatal!(
-                log,
-                "failed to truncate heap of canister {} stored at {}: {}",
-                canister_id,
-                heap_file.display(),
-                err
-            )
-        }
-    }
-}
-
-pub(crate) fn truncate_canister_stable_memory(
-    log: &ReplicaLogger,
-    state_path: &Path,
-    canister_id: CanisterId,
-) {
-    let layout = canister_layout(state_path, &canister_id);
-    let stable_memory_file = layout.stable_memory_blob();
-    if let Err(err) = nix::unistd::truncate(&stable_memory_file, 0) {
-        // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err != nix::errno::Errno::ENOENT {
-            fatal!(
-                log,
-                "failed to truncate stable memory of canister {} stored at {}: {}",
-                canister_id,
-                stable_memory_file.display(),
-                err
-            )
-        }
-    }
 }
 
 /// Finishes an `install_code` execution early due to an error. The only state
