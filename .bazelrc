@@ -46,7 +46,6 @@ test --test_env=RUST_BACKTRACE=full
 
 build:ci --noremote_local_fallback
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
-build:ci --repository_cache=/cache/bazel
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
