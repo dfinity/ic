@@ -12,6 +12,7 @@ use ic_types::{CountBytes, Cycles, Time};
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
+    hash::{Hash, Hasher},
     mem::size_of,
     sync::Arc,
 };
@@ -325,7 +326,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// Additionally, an invariant is imposed such that there is always 'Some' at the
 /// front. This is ensured when a message is popped off the queue by also popping
 /// any subsequent 'None' items.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq)]
 pub(crate) struct OutputQueue {
     queue: QueueWithReservation<Option<RequestOrResponse>>,
     index: QueueIndex,
@@ -342,6 +343,47 @@ pub(crate) struct OutputQueue {
     timeout_index: QueueIndex,
     /// The number of actual messages in the queue.
     num_messages: usize,
+}
+
+/// Since timeout_index can be different under certain conditions (specifically after
+/// deserializing since it is not persisted) for queues that are otherwise equal,
+/// it should be excluded from comparisons.
+impl PartialEq for OutputQueue {
+    fn eq(&self, other: &Self) -> bool {
+        // Ensure there are no requests in front of the timeout_index.
+        // If this is the case, timeout_index can be dropped safely here.
+        debug_assert!(self
+            .queue
+            .queue
+            .iter()
+            .take((self.timeout_index - self.index).get() as usize)
+            .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+
+        // Compare everything except timeout_index.
+        (self.index == other.index)
+            && (self.deadline_range_ends == other.deadline_range_ends)
+            && (self.queue == other.queue)
+    }
+}
+
+/// If PartialEq is implemented manually, Hash must also be implemented manually to
+/// guarantee queue1 == queue2 -> hash(queue1) == hash(queue2).
+impl Hash for OutputQueue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Ensure there are no requests in front of the timeout_index.
+        // If this is the case, timeout_index can be dropped safely here.
+        debug_assert!(self
+            .queue
+            .queue
+            .iter()
+            .take((self.timeout_index - self.index).get() as usize)
+            .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))));
+
+        // Hash everything except timeout_index.
+        self.index.hash(state);
+        self.deadline_range_ends.hash(state);
+        self.queue.hash(state);
+    }
 }
 
 impl OutputQueue {
