@@ -82,7 +82,6 @@ pub struct CustomServer {
     expected_error: Option<String>,
 }
 
-#[allow(unused)]
 impl CustomServer {
     pub fn builder() -> CustomServerBuilder {
         CustomServerBuilder {
@@ -98,7 +97,7 @@ impl CustomServer {
         self.listener
             .set_nonblocking(true)
             .expect("failed to make listener non-blocking");
-        let mut tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
+        let tokio_tcp_listener = TcpListener::from_std(self.listener.try_clone().unwrap())
             .expect("failed to create tokio TcpListener");
         let (tcp_stream, _peer_address) = tokio_tcp_listener
             .accept()

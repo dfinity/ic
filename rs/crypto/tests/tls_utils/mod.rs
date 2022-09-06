@@ -5,17 +5,9 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
 
-// Cargo complains about this being unused even though it is used:
-#[allow(unused)]
 pub mod test_client;
-// Cargo complains about this being unused even though it is used:
-#[allow(unused)]
 pub mod test_client_openssl;
-// Cargo complains about this being unused even though it is used:
-#[allow(unused)]
 pub mod test_server;
-// Cargo complains about this being unused even though it is used:
-#[allow(unused)]
 pub mod test_server_openssl;
 
 pub use ic_crypto_test_utils::tls::registry::REG_V1;
