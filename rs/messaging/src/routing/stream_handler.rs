@@ -694,12 +694,12 @@ impl StreamHandlerImpl {
                                 ),
                             );
                             // #### XNet cycle transfer monitoring
-                            let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                            stream.set_sum_cycles_inc(new_cycles_sum);
-                            self.metrics
-                                .inc_cycles
-                                .with_label_values(&[&remote_subnet_id.to_string()])
-                                .set(new_cycles_sum.get() as f64);
+                            // let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
+                            // stream.set_sum_cycles_inc(new_cycles_sum);
+                            // self.metrics
+                            //     .inc_cycles
+                            //     .with_label_values(&[&remote_subnet_id.to_string()])
+                            //     .set(new_cycles_sum.get() as f64);
                             stream.push(generate_reject_response(msg, context));
                         }
 
