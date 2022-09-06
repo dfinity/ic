@@ -63,6 +63,10 @@ rust_library(
     name = "p2p",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_p2p",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
