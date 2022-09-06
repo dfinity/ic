@@ -66,6 +66,10 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "consensus",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_consensus",
     proc_macro_deps = [
         "@crate_index//:strum_macros",

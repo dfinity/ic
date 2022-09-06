@@ -6,6 +6,10 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "state_manager",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_state_manager",
     deps = [
         "//rs/canonical_state",

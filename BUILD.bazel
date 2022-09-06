@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
-load("//bazel:transitions.bzl", "opt_debug_binary")
+load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("//bazel:buildifier.bzl", "buildifier_test")
 
@@ -90,6 +90,11 @@ BINARIES = {
     "system-tests": "//rs/tests:system-tests",
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
 }
+
+malicious_binary(
+    name = "malicious_replica",
+    binary = "//rs/replica",
+)
 
 [opt_debug_binary(
     name = name,
