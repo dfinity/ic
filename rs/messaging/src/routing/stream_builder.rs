@@ -455,13 +455,19 @@ impl StreamBuilderImpl {
                             // Increase cycle sum
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
-                                    stream.set_sum_cycles_out(stream.sum_cycles_out().add(msg.cycles()));
+                                    stream.set_sum_cycles_out(
+                                        stream.sum_cycles_out().add(msg.cycles()),
+                                    );
                                     self.metrics
                                         .out_cycles
                                         .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(self.metrics
+                                        .set(
+                                            self.metrics
                                                 .out_cycles
-                                                .with_label_values(&[&dst_net_id.to_string()]).get() + cycles_in_msg.get() as f64);
+                                                .with_label_values(&[&dst_net_id.to_string()])
+                                                .get() 
+                                                + cycles_in_msg.get() as f64,
+                                            );
                                 }
                                 None => {}
                             }
@@ -529,24 +535,26 @@ impl StreamBuilderImpl {
                     // stream.sum_cycles_out(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin/*, cycles_transferred*/)| {
-                self.metrics
-                    .stream_messages
-                    .with_label_values(&[&subnet])
-                    .set(len as i64);
-                self.metrics
-                    .stream_bytes
-                    .with_label_values(&[&subnet])
-                    .set(size_bytes as i64);
-                self.metrics
-                    .stream_begin
-                    .with_label_values(&[&subnet])
-                    .set(begin.get() as i64);
-                // self.metrics
-                //     .out_cycles
-                //     .with_label_values(&[&subnet])
-                //     .set(cycles_transferred.get() as f64);
-            });
+            .for_each(
+                |(subnet, len, size_bytes, begin/*, cycles_transferred*/)| {
+                    self.metrics
+                        .stream_messages
+                        .with_label_values(&[&subnet])
+                        .set(len as i64);
+                    self.metrics
+                        .stream_bytes
+                        .with_label_values(&[&subnet])
+                        .set(size_bytes as i64);
+                    self.metrics
+                        .stream_begin
+                        .with_label_values(&[&subnet])
+                        .set(begin.get() as i64);
+                    // self.metrics
+                    //     .out_cycles
+                    //     .with_label_values(&[&subnet])
+                    //     .set(cycles_transferred.get() as f64);
+                },
+            );
 
         {
             // Record the enqueuing time of any messages newly enqueued into `streams`.

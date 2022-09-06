@@ -644,9 +644,13 @@ impl StreamHandlerImpl {
                         self.metrics
                             .inc_cycles
                             .with_label_values(&[&remote_subnet_id.to_string()])
-                            .set(self.metrics
-                                .inc_cycles
-                                .with_label_values(&[&remote_subnet_id.to_string()]).get() + cycles_in_msg.get() as f64);
+                            .set(
+                                self.metrics
+                                    .inc_cycles
+                                    .with_label_values(&[&remote_subnet_id.to_string()])
+                                    .get() 
+                                    + cycles_in_msg.get() as f64,
+                            );
                     }
 
                     // Message not inducted.
