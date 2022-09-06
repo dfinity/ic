@@ -262,6 +262,19 @@ message UpgradeSnsControlledCanister {
   bytes new_canister_wasm = 2;
 }
 
+// A proposal function to change the values of SNS metadata.
+// Fields with None values will remain unchanged.
+message ManageSnsMetadata {
+  // Base64 representation of the logo. Max length is 341334 characters, roughly 256 Kb.
+  optional string logo = 1;
+  // Url string, must be between 10 and 256 characters.
+  optional string url = 2;
+  // Name string, must be between 4 and 255 characters.
+  optional string name = 3;
+  // Description string, must be between 10 and 10000 characters.
+  optional string description = 4;
+}
+
 // A proposal function to upgrade the SNS to the next version.  The versions are such that only
 // one kind of canister will update at the same time.
 // This returns an error if the canister cannot be upgraded or no upgrades are available.
@@ -340,6 +353,11 @@ message Proposal {
     //
     // Id = 7.
     UpgradeSnsToNextVersion upgrade_sns_to_next_version = 11;
+
+    // Modify values of SnsMetada.
+    //
+    // Id = 8
+    ManageSnsMetadata manage_sns_metadata = 12;
   }
 }
 

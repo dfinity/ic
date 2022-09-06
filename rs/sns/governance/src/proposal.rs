@@ -1,12 +1,13 @@
 use crate::canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call;
 use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
-use crate::pb::v1::governance::Version;
+use crate::pb::v1::governance::{SnsMetadata, Version};
 use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    governance, proposal, ExecuteGenericNervousSystemFunction, Governance, Motion,
-    NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
-    ProposalRewardStatus, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    governance, proposal, ExecuteGenericNervousSystemFunction, Governance, ManageSnsMetadata,
+    Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+    ProposalDecisionStatus, ProposalRewardStatus, Tally, UpgradeSnsControlledCanister,
+    UpgradeSnsToNextVersion, Vote,
 };
 use crate::sns_upgrade::{get_upgrade_params, UpgradeSnsParams};
 use crate::types::Environment;
@@ -178,6 +179,9 @@ pub async fn validate_and_render_action(
         proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
+        }
+        proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+            validate_and_render_manage_sns_metadata(manage_sns_metadata)
         }
     }
 }
@@ -550,6 +554,42 @@ pub async fn validate_and_render_execute_nervous_system_function(
                 ))
             }
         }
+    }
+}
+
+// Validates and renders a proposal with action ManageSnsMetadata.
+pub fn validate_and_render_manage_sns_metadata(
+    manage_sns_metadata: &ManageSnsMetadata,
+) -> Result<String, String> {
+    let mut no_change = true;
+    let mut render = "# Proposal to upgrade sns metadata:\n".to_string();
+    if let Some(new_url) = &manage_sns_metadata.url {
+        SnsMetadata::validate_url(new_url)?;
+        render += &format!("# New url: {} \n", new_url);
+        no_change = false;
+    }
+    if let Some(new_name) = &manage_sns_metadata.name {
+        SnsMetadata::validate_name(new_name)?;
+        render += &format!("# New name: {} \n", new_name);
+        no_change = false;
+    }
+    if let Some(new_description) = &manage_sns_metadata.description {
+        SnsMetadata::validate_description(new_description)?;
+        render += &format!("# New description: {} \n", new_description);
+        no_change = false;
+    }
+    if let Some(new_logo) = &manage_sns_metadata.logo {
+        SnsMetadata::validate_logo(new_logo)?;
+        render += &format!("# New logo (base64 encoding): \n {}", new_logo);
+        no_change = false;
+    }
+    if no_change {
+        Err(
+            "Error: ManageSnsMetadata must change at least one value, all values are None"
+                .to_string(),
+        )
+    } else {
+        Ok(render)
     }
 }
 
@@ -1677,5 +1717,32 @@ Version {
             .unwrap_err();
 
         assert!(err.contains("Did not receive Root CanisterId from list_sns_canisters call"))
+    }
+
+    #[test]
+    fn fail_validate_manage_sns_metadata() {
+        let manage_sns_metadata = ManageSnsMetadata {
+            url: None,
+            name: None,
+            description: None,
+            logo: None,
+        };
+
+        let err = validate_and_render_manage_sns_metadata(&manage_sns_metadata).unwrap_err();
+
+        assert!(err.contains(
+            "Error: ManageSnsMetadata must change at least one value, all values are None"
+        ));
+
+        let manage_sns_metadata = ManageSnsMetadata {
+            url: Some("X".repeat(SnsMetadata::MAX_URL_LENGTH + 1)),
+            name: None,
+            description: None,
+            logo: None,
+        };
+
+        let err = validate_and_render_manage_sns_metadata(&manage_sns_metadata).unwrap_err();
+
+        assert!(err.contains("SnsMetadata.url must be less than"));
     }
 }
