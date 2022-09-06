@@ -637,10 +637,16 @@ impl StreamHandlerImpl {
                         // #### XNet cycle transfer monitoring
                         let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
                         stream.set_sum_cycles_inc(new_cycles_sum);
+                        // self.metrics
+                        //     .inc_cycles
+                        //     .with_label_values(&[&remote_subnet_id.to_string()])
+                        //     .set(new_cycles_sum.get() as f64);
                         self.metrics
                             .inc_cycles
                             .with_label_values(&[&remote_subnet_id.to_string()])
-                            .set(new_cycles_sum.get() as f64);
+                            .set(self.metrics
+                                .inc_cycles
+                                .with_label_values(&[&remote_subnet_id.to_string()]).get() + cycles_in_msg.get() as f64);
                     }
 
                     // Message not inducted.

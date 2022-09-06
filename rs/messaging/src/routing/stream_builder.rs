@@ -351,6 +351,7 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
+            let cycles_in_msg = msg.cycles();
             match routing_table.route(queue_id.dst_canister.get()) {
                 // Destination subnet found.
                 Some(dst_net_id) => {
@@ -434,12 +435,12 @@ impl StreamBuilderImpl {
                                 }
                             }
                             // Increase cycle sum
-                            match streams.get_mut(&dst_net_id) {
-                                Some(mut stream) => {
-                                    stream.set_sum_cycles_out(stream.sum_cycles_out().add(rep.refund));
-                                }
-                                None => {}
-                            }
+                            // match streams.get_mut(&dst_net_id) {
+                            //     Some(mut stream) => {
+                            //         stream.set_sum_cycles_out(stream.sum_cycles_out().add(rep.refund));
+                            //     }
+                            //     None => {}
+                            // }
                             streams.push(dst_net_id, msg);
                         }
 
@@ -458,7 +459,9 @@ impl StreamBuilderImpl {
                                     self.metrics
                                         .out_cycles
                                         .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(stream.sum_cycles_out().get() as f64);
+                                        .set(self.metrics
+                                                .out_cycles
+                                                .with_label_values(&[&dst_net_id.to_string()]).get() + cycles_in_msg.get() as f64);
                                 }
                                 None => {}
                             }
