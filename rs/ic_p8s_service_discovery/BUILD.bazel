@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/elastic_common_schema",
     "//rs/ic_p8s_service_discovery/log",
     "//rs/interfaces",
@@ -61,7 +62,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "ic-p8s-service-discovery",
+    name = "ic_p8s_service_discovery",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_p8s_service_discovery",
@@ -74,21 +75,35 @@ rust_binary(
     srcs = ["src/titanium/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":ic-p8s-service-discovery"],
+    deps = DEPENDENCIES + [":ic_p8s_service_discovery"],
+)
+
+rust_binary(
+    name = "ic-p8s-service-discovery",
+    srcs = [
+        "src/config/mod.rs",
+        "src/config/nns.rs",
+        "src/main.rs",
+        "src/metrics.rs",
+        "src/service_discovery.rs",
+    ],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic_p8s_service_discovery"],
 )
 
 rust_test(
-    name = "ic-p8s-service-discovery-test",
+    name = "ic_p8s_service_discovery_test",
     aliases = ALIASES,
-    crate = ":ic-p8s-service-discovery",
+    crate = ":ic_p8s_service_discovery",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "ic-p8s-service-discovery-integration-tests",
+    name = "ic_p8s_service_discovery_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ic-p8s-service-discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic_p8s_service_discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
