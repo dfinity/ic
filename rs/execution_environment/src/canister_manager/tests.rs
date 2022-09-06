@@ -1,8 +1,8 @@
 use crate::{
     as_num_instructions,
     canister_manager::{
-        canister_layout, uninstall_canister, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
+        uninstall_canister, CanisterManager, CanisterManagerError, CanisterMgrConfig,
+        InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
     execution_environment::as_round_instructions,
@@ -2145,7 +2145,6 @@ fn delete_canister_with_incorrect_controller_fails() {
 
         // Canister should still be there.
         assert_matches!(state.canister_state(&canister_id), Some(_));
-        assert!(!canister_layout(state.path(), &canister_id).is_marked_deleted())
     });
 }
 
@@ -2169,7 +2168,6 @@ fn delete_running_canister_fails() {
 
         // Canister should still be there.
         assert_matches!(state.canister_state(&canister_id), Some(_));
-        assert!(!canister_layout(state.path(), &canister_id).is_marked_deleted())
     });
 }
 
@@ -2193,7 +2191,6 @@ fn delete_stopping_canister_fails() {
 
         // Canister should still be there.
         assert_matches!(state.canister_state(&canister_id), Some(_));
-        assert!(!canister_layout(state.path(), &canister_id).is_marked_deleted())
     });
 }
 
@@ -2218,7 +2215,6 @@ fn delete_stopped_canister_succeeds() {
 
         // Canister should no longer be there.
         assert_eq!(state.canister_state(&canister_id), None);
-        assert!(canister_layout(state.path(), &canister_id).is_marked_deleted())
     });
 }
 
@@ -2684,7 +2680,6 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
-            Path::new(""),
             mock_time(),
         ),
         Vec::new()
@@ -2708,7 +2703,6 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                         .build()
                 )
                 .build(),
-            Path::new(""),
             mock_time(),
         )[0],
         Response::Ingress(IngressResponse {

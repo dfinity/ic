@@ -796,7 +796,6 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let state_path = state.root.clone();
         let state_time = state.time();
         let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
@@ -836,12 +835,7 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                all_rejects.push(uninstall_canister(
-                    &self.log,
-                    canister,
-                    &state_path,
-                    state_time,
-                ));
+                all_rejects.push(uninstall_canister(&self.log, canister, state_time));
                 canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
 
