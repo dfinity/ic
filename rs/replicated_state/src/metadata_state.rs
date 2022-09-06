@@ -25,15 +25,14 @@ use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFe
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
-    Cycles,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, RequestOrResponse},
+    node_id_into_protobuf, node_id_try_from_protobuf,
     nominal_cycles::NominalCycles,
-    node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
-    subnet_id_try_from_protobuf,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Cycles, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
