@@ -200,64 +200,74 @@ impl RegistryReplicator {
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) {
-        if self
+        // If the local registry store is not empty, exit.
+        if !self
             .local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
-            let nns_pub_key = nns_pub_key
-                .expect("Registry Local Store is empty and no NNS Public Key is provided.");
+            return;
+        }
 
-            let registry_canister = RegistryCanister::new(nns_urls);
+        let nns_pub_key =
+            nns_pub_key.expect("Registry Local Store is empty and no NNS Public Key is provided.");
+        let mut registry_version = ZERO_REGISTRY_VERSION;
+        let mut timeout = 1;
 
-            // While the local registry changelog is empty, fill it by polling the registry
-            // canister. Retry every 30 seconds
-            while self
-                .local_store
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .expect("Could not read registry local store.")
-                .is_empty()
+        let registry_canister = RegistryCanister::new(nns_urls);
+
+        // Fill the local registry store by polling the registry canister until we get no
+        // more changes.
+        loop {
+            // Note, code duplicate in internal_state.rs poll()
+            match registry_canister
+                .get_certified_changes_since(registry_version.get(), &nns_pub_key)
+                .await
             {
-                // Note, code duplicate in internal_state.rs poll()
-                match registry_canister
-                    .get_certified_changes_since(0, &nns_pub_key)
-                    .await
-                {
-                    Ok((mut records, _, t)) if !records.is_empty() => {
-                        records.sort_by_key(|tr| tr.version);
-                        let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
-                            let rel_version = (r.version - ZERO_REGISTRY_VERSION).get();
-                            if cl.len() < rel_version as usize {
-                                cl.push(ChangelogEntry::default());
-                            }
-                            cl.last_mut().unwrap().push(KeyMutation {
-                                key: r.key.clone(),
-                                value: r.value.clone(),
-                            });
-                            cl
-                        });
-
-                        changelog
-                            .into_iter()
-                            .enumerate()
-                            .try_for_each(|(i, cle)| {
-                                let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
-                                self.local_store.store(v, cle)
-                            })
-                            .expect("Could not write to local store.");
-                        self.local_store
-                            .update_certified_time(t.as_nanos_since_unix_epoch())
-                            .expect("Could not store certified time");
+                Ok((mut records, _, t)) => {
+                    // We fetched the latest version.
+                    if records.is_empty() {
                         return;
                     }
-                    Err(e) => warn!(
+                    records.sort_by_key(|tr| tr.version);
+                    let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
+                        let rel_version = (r.version - registry_version).get();
+                        if cl.len() < rel_version as usize {
+                            cl.push(ChangelogEntry::default());
+                        }
+                        cl.last_mut().unwrap().push(KeyMutation {
+                            key: r.key.clone(),
+                            value: r.value.clone(),
+                        });
+                        cl
+                    });
+
+                    let entries = changelog.len();
+
+                    changelog
+                        .into_iter()
+                        .enumerate()
+                        .try_for_each(|(i, cle)| {
+                            let v = registry_version + RegistryVersion::from(i as u64 + 1);
+                            self.local_store.store(v, cle)
+                        })
+                        .expect("Could not write to local store.");
+                    self.local_store
+                        .update_certified_time(t.as_nanos_since_unix_epoch())
+                        .expect("Could not store certified time");
+                    registry_version += RegistryVersion::from(entries as u64);
+                    timeout = 1;
+                }
+                Err(e) => {
+                    warn!(
                         self.logger,
-                        "Could not fetch registry changelog from NNS: {:?}", e
-                    ),
-                    _ => {}
-                };
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                        "Couldn't fetch registry updates (retry in {}s): {:?}", timeout, e
+                    );
+                    tokio::time::sleep(Duration::from_secs(timeout)).await;
+                    timeout *= 2;
+                    timeout = timeout.min(60); // limit the timeout by a minute max
+                }
             }
         }
     }
