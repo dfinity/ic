@@ -118,7 +118,7 @@ fn time_nanos() -> u64 {
 
 /// Callback for handling replies from "handle_request".
 fn on_reply(_env: *mut ()) {
-    api::msg_cycles_accept(3);
+    //api::msg_cycles_accept(3);
     let (reply, _) =
         candid::Decode!(&api::arg_data()[..], Reply, Vec<u8>).expect("failed to decode response");
     let elapsed = Duration::from_nanos((time_nanos() - reply.time_nanos) as u64);

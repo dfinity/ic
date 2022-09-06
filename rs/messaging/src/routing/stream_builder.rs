@@ -45,6 +45,8 @@ struct StreamBuilderMetrics {
     pub outgoing_messages: IntCounterVec,
     /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
     pub out_cycles: GaugeVec,
+    /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
+    pub msg_cycles_test: IntCounterVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -72,6 +74,7 @@ const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
 const METRIC_OUT_CYCLES: &str = "mr_out_cycles";
+const METRIC_MSG_CYCLES_TEST: &str = "mr_msg_cycles_invalid_test";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -126,6 +129,16 @@ impl StreamBuilderMetrics {
             "Outgoing cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
+        let out_cycles = metrics_registry.gauge_vec(
+            METRIC_OUT_CYCLES,
+            "Outgoing cycles, by receiving subnet.",
+            &[LABEL_REMOTE],
+        );
+        let msg_cycles_test = metrics_registry.int_counter_vec(
+            METRIC_OUT_CYCLES,
+            "Outgoing cycles, by receiving subnet.",
+            &[LABEL_REMOTE],
+        );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
@@ -157,6 +170,7 @@ impl StreamBuilderMetrics {
             routed_payload_sizes,
             outgoing_messages,
             out_cycles,
+            msg_cycles_test,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -456,7 +470,7 @@ impl StreamBuilderImpl {
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
                                     stream.set_sum_cycles_out(
-                                        stream.sum_cycles_out().add(msg.cycles()),
+                                        stream.sum_cycles_out().add(cycles_in_msg),
                                     );
                                     self.metrics
                                         .out_cycles
@@ -468,6 +482,12 @@ impl StreamBuilderImpl {
                                                 .get() 
                                                 + cycles_in_msg.get() as f64,
                                             );
+                                    if cycles_in_msg.get() != 10 {
+                                        self.metrics
+                                            .msg_cycles_test
+                                            .with_label_values(&[&dst_net_id.to_string()])
+                                            .inc();
+                                    }
                                 }
                                 None => {}
                             }

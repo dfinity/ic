@@ -621,7 +621,18 @@ impl StreamHandlerImpl {
                 .route(msg.receiver().get());
 
             let payload_size = msg.payload_size_bytes().get();
+            // Test counting everything to avoid discrepancies
             let cycles_in_msg = msg.cycles();
+            self.metrics
+                .inc_cycles
+                .with_label_values(&[&remote_subnet_id.to_string()])
+                .set(
+                    self.metrics
+                        .inc_cycles
+                        .with_label_values(&[&remote_subnet_id.to_string()])
+                        .get() 
+                        + cycles_in_msg.get() as f64,
+                );
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -641,16 +652,16 @@ impl StreamHandlerImpl {
                         //     .inc_cycles
                         //     .with_label_values(&[&remote_subnet_id.to_string()])
                         //     .set(new_cycles_sum.get() as f64);
-                        self.metrics
-                            .inc_cycles
-                            .with_label_values(&[&remote_subnet_id.to_string()])
-                            .set(
-                                self.metrics
-                                    .inc_cycles
-                                    .with_label_values(&[&remote_subnet_id.to_string()])
-                                    .get() 
-                                    + cycles_in_msg.get() as f64,
-                            );
+                        // self.metrics
+                        //     .inc_cycles
+                        //     .with_label_values(&[&remote_subnet_id.to_string()])
+                        //     .set(
+                        //         self.metrics
+                        //             .inc_cycles
+                        //             .with_label_values(&[&remote_subnet_id.to_string()])
+                        //             .get() 
+                        //             + cycles_in_msg.get() as f64,
+                        //     );
                     }
 
                     // Message not inducted.
