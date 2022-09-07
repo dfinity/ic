@@ -29,6 +29,7 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_validator",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

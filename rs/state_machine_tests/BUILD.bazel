@@ -6,6 +6,7 @@ rust_library(
     name = "state_machine_tests",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_machine_tests",
+    version = "0.8.0",
     deps = [
         "//rs/config",
         "//rs/crypto/internal/crypto_lib/seed",

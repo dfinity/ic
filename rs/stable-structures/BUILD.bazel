@@ -12,6 +12,7 @@ rust_library(
     name = "stable-structures",
     srcs = glob(["src/**"]),
     crate_name = "stable_structures",
+    version = "0.1.0",
 )
 
 rust_test(

@@ -42,6 +42,7 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "ic_transport_test_client",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

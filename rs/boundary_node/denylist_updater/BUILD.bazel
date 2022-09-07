@@ -38,6 +38,7 @@ rust_binary(
     srcs = glob(["src/**"]),
     crate_name = "denylist_updater",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

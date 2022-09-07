@@ -20,6 +20,7 @@ rust_library(
     srcs = glob(["src/*.rs"]),
     crate_name = "ic_universal_canister",
     data = ["src/universal_canister.wasm"],
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
