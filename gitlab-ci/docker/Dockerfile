@@ -112,8 +112,6 @@ RUN mkdir --mode=0700 /home/${USER}/.ssh && \
 
 
 COPY entrypoint.sh /entrypoint.sh
-# Install config for capsules.
-COPY dot_capsules.toml /home/${USER}/.capsules.toml
 WORKDIR /
 
 USER 0

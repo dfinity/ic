@@ -19,7 +19,6 @@ groups
 
 cd "$ROOT_DIR" || exit 1
 
-# When you change the list below, please update ic-os/boundary-guestos/Capsule.toml accordingly!
 pushd artifacts/release
 gunzip \
     boundary-node-control-plane.gz \

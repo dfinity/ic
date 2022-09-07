@@ -237,7 +237,6 @@ def generate_gitlab_yaml(
     fout,
     force_pipeline=False,
     gitlab_ci_config_changes=False,
-    disable_caching=False,
 ):
     """
     Generate a GitLab YAML pipeline that runs Cargo tests on the given crates.
@@ -249,7 +248,6 @@ def generate_gitlab_yaml(
         fout: Output file for the GitLab YAML file.
         force_pipeline: Generate a pipeline even if no crates have been changed.
         gitlab_ci_config_changes: Whether the gitlab ci configurations have been altered.
-        disable_caching: Whether the generated pipeline should disable capsule caching.
 
     """
     crate_test_name_overrides = gitlab_ci_config.get("crate_test_name_override") or {}
@@ -286,8 +284,6 @@ def generate_gitlab_yaml(
             fout.write("  FARM_SHARD: %s\n" % random.randint(1, FARM_RATE_LIMIT))
             fout.write("  CDPRNET: cdpr0%s\n" % (random.randint(1, 5)))
             fout.write("  GIT_REVISION: $CI_COMMIT_SHA\n")
-            if disable_caching:
-                fout.write("  CAPSULE_EXTRA_ARGS: --placebo\n")
 
         if gitlab_ci_config_changes:
             fout.write("  GITLAB_CI_CONFIG_CHANGED: 'true'\n")
@@ -332,14 +328,8 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            disable_caching=True,
         )
         return
-
-    disable_caching = (
-        re.search(r"(\b)nocache(\b)", os.getenv("CI_MERGE_REQUEST_TITLE", "")) is not None
-        or re.search(r"(\b)nocache(\b)", git_repo.commit().message) is not None
-    )
 
     if os.environ.get("TRIGGER_PAYLOAD"):
         logging.info("Running a triggered pipeline, testing all crates")
@@ -347,14 +337,13 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            disable_caching=disable_caching,
         )
         return
 
     if os.getenv("CI_MERGE_REQUEST_EVENT_TYPE", "") != "merge_train":
         if re.search(r"(\b)lessci(\b)", os.getenv("CI_MERGE_REQUEST_TITLE", "")):
             logging.debug("lessci detected in merge request title, running reduced set")
-            generate_gitlab_yaml([], gitlab_ci_config, out, disable_caching=disable_caching)
+            generate_gitlab_yaml([], gitlab_ci_config, out)
             return
         if re.search(r"(\b)moreci(\b)", os.getenv("CI_MERGE_REQUEST_TITLE", "")):
             logging.debug("moreci detected in merge request title, running full set")
@@ -362,12 +351,11 @@ def _generate_tests_may_raise_exception(
                 workspace_crates,
                 gitlab_ci_config,
                 out,
-                disable_caching=disable_caching,
             )
             return
     else:
         logging.info("On merge train pipeline use the parent pipeline's CI fast path")
-        generate_gitlab_yaml([], gitlab_ci_config, out, disable_caching=disable_caching)
+        generate_gitlab_yaml([], gitlab_ci_config, out)
         return
 
     if re.search(r"(\b)moreci(\b)", git_repo.commit().message):
@@ -376,7 +364,6 @@ def _generate_tests_may_raise_exception(
             workspace_crates,
             gitlab_ci_config,
             out,
-            disable_caching=disable_caching,
         )
         return
 
@@ -401,7 +388,7 @@ def _generate_tests_may_raise_exception(
         # The commit message contained the word "lessci", which
         # instructed us to generate a noop pipeline.
         logging.info("lessci or [hotfix] in commit message, skip child pipeline")
-        generate_gitlab_yaml([], gitlab_ci_config, out, disable_caching=disable_caching)
+        generate_gitlab_yaml([], gitlab_ci_config, out)
         return
 
     changed_files = git_changes.get_changed_files(git_root, [rust_workspace], ignored_files=["BUILD.bazel"])
@@ -414,7 +401,6 @@ def _generate_tests_may_raise_exception(
                 workspace_crates,
                 gitlab_ci_config,
                 out,
-                disable_caching=disable_caching,
             )
             return
 
@@ -464,7 +450,6 @@ def _generate_tests_may_raise_exception(
             gitlab_ci_config,
             out,
             gitlab_ci_config_changes=True,
-            disable_caching=disable_caching,
         )
     else:
         force_pipeline = git_changes.get_changed_files(
@@ -480,7 +465,6 @@ def _generate_tests_may_raise_exception(
             gitlab_ci_config,
             out,
             force_pipeline,
-            disable_caching=disable_caching,
         )
 
 
@@ -548,7 +532,6 @@ def generate_tests(
             workspace_crates,
             gitlab_ci_config,
             out,
-            disable_caching=True,
         )
 
     logging.info("Wrote Cargo test GitLab pipeline to %s", out)
@@ -575,7 +558,7 @@ def generate_gitlab_yaml_for_all_crates(rust_workspace: str) -> str:
     gitlab_ci_config = load_gitlab_ci_config(rust_workspace)
 
     out = io.StringIO()
-    generate_gitlab_yaml(workspace_crates, gitlab_ci_config, out, disable_caching=True)
+    generate_gitlab_yaml(workspace_crates, gitlab_ci_config, out)
     out.seek(0)
     return out.read()
 

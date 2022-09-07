@@ -18,7 +18,6 @@ ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR" || exit 1
-# When you change the list below, please update ic-os/guestos/Capsule.toml accordingly!
 for f in replica orchestrator canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-recovery ic-btc-adapter ic-canister-http-adapter; do
     gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
 done
