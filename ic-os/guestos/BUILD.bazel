@@ -9,7 +9,7 @@ docker_tar(
         "--build-arg",
         "ROOT_PASSWORD=root",
         "--build-arg",
-        "BASE_IMAGE=dfinity/guestos-base-dev@sha256:e881a9bea411cd5b4035a0e8edfd0108ff674d4336acef9c8fbf51dd7a0c352c",
+        "BASE_IMAGE=dfinity/guestos-base-dev@sha256:8430c4155c756efaccc6d2d18c7e0492b223d9efe9cfebaaaef9ede91f2364de",
     ],
     # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
     # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
