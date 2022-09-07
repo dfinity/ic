@@ -1,21 +1,39 @@
 #!/bin/bash
-
 # Generate the network configuration from the information set in the
 # configuration store.
-#
-# Arguments:
-# - $1: Name of the input file to be read
-# - $2: Base path of output files
-#
-# Will do nothing if the input file given as first argument does not exist.
+
+set -euox pipefail
+
+readonly BOOT_CONFIG='/boot/config'
+readonly SYSTEMD_NETWORK='/run/systemd/network'
+readonly NFTABLES='/run/ic-node/etc/nftables'
+
+ipv4_http_ips=()
+ipv6_http_ips=()
+ipv6_debug_ips=()
+ipv6_monitoring_ips=()
+
+function err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
 
 # Read the network config variables from file. The file must be of the form
-# "key=value" for each line with a specific set of keys permissible (see
-# code below).
-#
-# Arguments:
-# - $1: Name of the file to be read.
+# "key=value" for each line with a specific set of keys permissible (see code
+# below).
 function read_variables() {
+    if [[ ! -d "${BOOT_CONFIG}" ]]; then
+        err "missing node configuration directory: ${BOOT_CONFIG}"
+        exit 1
+    fi
+    if [[ ! -f "${BOOT_CONFIG}/network.conf" ]]; then
+        err "missing network configuration: ${BOOT_CONFIG}/network.conf"
+        exit 1
+    fi
+    if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
+        err "missing bn_vars configuration: ${BOOT_CONFIG}/bn_vars.conf"
+        exit 1
+    fi
+
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
@@ -25,8 +43,18 @@ function read_variables() {
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
+            "ipv6_replica_ips") ipv6_replica_ips="${value}" ;;
         esac
-    done <"$1"
+    done <"${BOOT_CONFIG}/network.conf"
+
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv4_http_ips") ipv4_http_ips+=("${value}") ;;
+            "ipv6_http_ips") ipv6_http_ips+=("${value}") ;;
+            "ipv6_debug_ips") ipv6_debug_ips+=("${value}") ;;
+            "ipv6_monitoring_ips") ipv6_monitoring_ips+=("${value}") ;;
+        esac
+    done <"${BOOT_CONFIG}/bn_vars.conf"
 }
 
 function generate_name_server_list() {
@@ -36,73 +64,72 @@ function generate_name_server_list() {
 }
 
 # Generate network configuration files (according to variables set previously).
-#
-# Arguments:
-# - $1: Name of output directory for generated network config files.
-#       Should be /run/systemd/network/ for production.
-function generate_config_files() {
-    TARGET_DIR="$1"
-    # Handle ipv6 ...
-    (
-        cat <<EOF
-[Match]
-Name=enp1s0
-Virtualization=!container
+function generate_network_config() {
+    mkdir -p "${SYSTEMD_NETWORK}"
 
-EOF
+    # Handle ipv6
+    #    cat <<EOF
+    #[Match]
+    #Name=enp1s0
+    #Virtualization=!container
+    #
+    #[Network]
+    #$(
+    #    # If we have an IPv6 address given, just configure it. Also, explicitly
+    #    # turn off router advertisements, otherwise we may end up with two
+    #    # (distinct) addresses on the same interface.
+    #    if [ "${ipv6_address}" != "" ]; then
+    #        echo Address=$ipv6_address
+    #        echo Gateway=$ipv6_gateway
+    #        echo IPv6AcceptRA=false
+    #    else
+    #        echo IPv6AcceptRA=true
+    #    fi
+    #    generate_name_server_list
+    #)
+    #EOF >"${SYSTEMD_NETWORK}/10-enp1s0.network"
 
-        if [ "${ipv6_address}" != "" ]; then
-            # If we have an IPv6 address given, just configure
-            # it. Also, explicitly turn off router advertisements,
-            # otherwise we may end up with two (distinct)
-            # addresses on the same interface.
-            cat <<EOF
-[Network]
-Address=$ipv6_address
-Gateway=$ipv6_gateway
-IPv6AcceptRA=false
-EOF
-
-        else
-            cat <<EOF
-
-[Network]
-IPv6AcceptRA=true
-EOF
-        fi
-        generate_name_server_list
-    ) >"${TARGET_DIR}/10-enp1s0.network"
-
-    # Handle ipv4 ...
-    (
-        cat <<EOF
-[Match]
-Name=enp2s0
-
-EOF
-        if [ "${ipv4_address}" != "" ]; then
-            # If we have an IPv6 address given, just configure
-            # it.
-            cat <<EOF
-[Network]
-Address=$ipv4_address
-Gateway=$ipv4_gateway
-EOF
-
-        else
-            cat <<EOF
-[Network]
-DHCP=ipv4
-LinkLocalAddressing=no
-EOF
-        fi
-        generate_name_server_list
-    ) >"${TARGET_DIR}/enp2s0.network"
+    # Handle ipv4
+    #    cat <<EOF
+    #[Match]
+    #Name=enp2s0
+    #
+    #[Network]
+    #$(
+    #    # If we have an IPv4 address given, just configure it.
+    #    if [ "${ipv4_address}" != "" ]; then
+    #        echo Address=$ipv4_address
+    #        echo Gateway=$ipv4_gateway
+    #    else
+    #        echo DHCP=ipv4
+    #        echo LinkLocalAddressing=no
+    #    fi
+    #    generate_name_server_list
+    #)
+    #EOF >"${SYSTEMD_NETWORK}/enp2s0.network"
 }
 
-if [ -e "$1" ]; then
-    read_variables "$1"
-fi
-mkdir -p "$2"
+# Add extra rules to nftables to limit access.
+function generate_nftables_config() {
+    mkdir -p "${NFTABLES}"
 
-generate_config_files "$2"
+    #    cat <<EOF
+    #define ipv6_replica_ips = { $(IFS=,; echo "${ipv6_replica_ips[*]}") }
+    #
+    #define ipv4_http_ips = { $(IFS=,; echo "${ipv4_http_ips[*]}") }
+    #
+    #define ipv6_http_ips = { $(IFS=,; echo "${ipv6_http_ips[*]}") }
+    #
+    #define ipv6_debug_ips = { $(IFS=,; echo "${ipv6_debug_ips[*]}") }
+    #
+    #define ipv6_monitoring_ips = { $(IFS=,; echo "${ipv6_monitoring_ips[*]}") }
+    #EOF >"${NFTABLES}/defs.ruleset"
+}
+
+function main() {
+    read_variables
+    generate_network_config
+    generate_nftables_config
+}
+
+main "$@"

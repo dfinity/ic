@@ -59,8 +59,8 @@ function process_bootstrap() {
 
     # stash a couple of things away to config store
     FILES=(
-        denylist.conf domain.conf journalbeat.conf network.conf nns.conf vector.conf
-        nns_public_key.pem deployment_type denylist.map
+        denylist.conf domain.conf icx-proxy.conf journalbeat.conf network.conf nns.conf vector.conf
+        nns_public_key.pem denylist.map
     )
     for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then

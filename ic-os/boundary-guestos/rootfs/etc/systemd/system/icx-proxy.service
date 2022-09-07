@@ -7,8 +7,9 @@ User=root
 Group=root
 LimitNOFILE=524288
 WorkingDirectory=/etc/nginx/ic
-EnvironmentFile=/etc/default/icx-proxy
-ExecStart=/usr/bin/icx-proxy $OPTIONS
+EnvironmentFile=/run/ic-node/etc/icx-proxy/options
+EnvironmentFile=/run/ic-node/etc/icx-proxy/ssl.options
+ExecStart=/usr/bin/icx-proxy $OPTIONS $SSL_OPTIONS
 
 Restart=always
 RestartSec=10

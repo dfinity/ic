@@ -1,28 +1,51 @@
 #!/bin/bash
 
-set -ex
+set -euox pipefail
 
-WLOC_VECTOR="/run/ic-node/etc/default/vector"
+readonly BOOT_CONFIG='/boot/config'
+readonly VECTOR_CONFIG='/etc/default/vector'
+readonly RUN_CONFIG="/run/ic-node/etc/default/vector"
 
-# Move active configuration and prepare it for updates
-cp -a /etc/default/vector "$WLOC_VECTOR"
+function err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
 
-ELASTICSEARCH_URL="https://elasticsearch.testnet.dfinity.systems"
-if [ -f "/boot/config/vector.conf" ]; then
+# Read the config variables. The files must be of the form
+# "key=value" for each line with a specific set of keys permissible (see
+# code below).
+function read_variables() {
+    if [[ ! -d "${BOOT_CONFIG}" ]]; then
+        err "missing node configuration directory: ${BOOT_CONFIG}"
+        exit 1
+    fi
+    if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
+        err "missing domain configuration: ${BOOT_CONFIG}/bn_vars.conf"
+        exit 1
+    fi
+
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
-            "ELASTICSEARCH_URL") ELASTICSEARCH_URL="${value}" ;;
+            "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
         esac
-    done </boot/config/vector.conf
-fi
+    done <"${BOOT_CONFIG}/bn_vars.conf"
 
-if [[ -z "$ELASTICSEARCH_URL" ]]; then
-    echo "\$ELASTICSEARCH_URL variable not set. vector won't be configured. " 1>&2
-    exit 1
-fi
+    if [[ -z "$ELASTICSEARCH_URL" ]]; then
+        err "missing vector configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
+        exit 1
+    fi
+}
 
-sed -i -e "s/{{ELASTICSEARCH_URL}}/${ELASTICSEARCH_URL}/g" "$WLOC_VECTOR"
+function generate_vector_config() {
+    # Move active configuration and prepare it
+    cp -a "${VECTOR_CONFIG}" "${RUN_CONFIG}"
+    sed -i -e "s/{{ELASTICSEARCH_URL}}/${ELASTICSEARCH_URL}/g" "${RUN_CONFIG}"
+}
 
-mount --bind "$WLOC_VECTOR" /etc/default/vector
+function main() {
+    read_variables
+    generate_vector_config
+}
+
+main "$@"

@@ -11,6 +11,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
+EnvironmentFile=/run/ic-node/etc/default/vector
 ExecStart=/opt/ic/bin/setup-vector.sh
 
 [Install]

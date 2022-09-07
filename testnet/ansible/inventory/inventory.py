@@ -534,13 +534,9 @@ class IcDeploymentInventory:
         result["journalbeat_index"] = nodes_vars.get("journalbeat_index", "")
         result["journalbeat_tags"] = nodes_vars.get("journalbeat_tags", [])
 
-        bn_nodes_vars = self._inventory["boundary"].get("vars", {})
-        result["domain"] = bn_nodes_vars.get("domain", "ic0.app")
-        result["elasticsearch_url"] = bn_nodes_vars.get(
-            "elasticsearch_url", "https://elasticsearch.testnet.dfinity.systems"
-        )
-        if "denylist_url" in bn_nodes_vars.keys():
-            result["denylist_url"] = bn_nodes_vars["denylist_url"]
+        bn_nodes_vars = self._inventory.get("boundary", {}).get("vars", None)
+        if bn_nodes_vars is not None:
+            result["bn_vars"] = bn_nodes_vars
 
         deployment_dcs = set()
         ic_nodes_by_dc = {}

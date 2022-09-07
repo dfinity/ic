@@ -60,13 +60,12 @@ function setup_domain_name() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
-            "DOMAIN") DOMAIN="${value}" ;;
-            "TLD") TLD="${value}" ;;
+            "domain") DOMAIN="${value}" ;;
         esac
-    done </boot/config/domain.conf
+    done </boot/config/bn_vars.conf
 
-    if [[ -z "${DOMAIN}" ]] || [[ -z "${TLD}" ]]; then
-        echo "\${DOMAIN} or \${TLD} variable not set. Nginx won't be configured. " 1>&2
+    if [[ -z "${DOMAIN}" ]]; then
+        echo "\${DOMAIN} variable not set. Nginx won't be configured. " 1>&2
         exit 1
     fi
 
@@ -89,7 +88,6 @@ function setup_domain_name() {
         sed -i \
             -e "s/{{DOMAIN}}/${DOMAIN}/g" \
             -e "s/{{DOMAIN_ESCAPED}}/${DOMAIN_ESCAPED}/g" \
-            -e "s/{{TLD}}/${TLD}/g" \
             /etc/nginx/${path}/*
     done
 }

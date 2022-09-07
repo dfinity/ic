@@ -31,7 +31,6 @@ Arguments:
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --git-revision=                  git revision for which to prepare the media
-       --deployment-type={prod|dev}     production or development deployment type
   -x,  --debug                          enable verbose console output
 '
             exit 1
@@ -56,24 +55,19 @@ Arguments:
             NNS_URL_OVERRIDE="${argument#*=}"
             shift
             ;;
+        --replicas-ipv6=*)
+            REPLICA_IPV6_OVERRIDE="${argument#*=}"
+            shift
+            ;;
         --git-revision=*)
             GIT_REVISION="${argument#*=}"
             shift
             ;;
-        -b=* | --denylist=*)
+        --denylist=*)
             DENY_LIST="${argument#*=}"
             ;;
         --prober-identity=*)
             PROBER_IDENTITY="${argument#*=}"
-            ;;
-        --deployment-type=*)
-            DEPLOYMENT_TYPE="${argument#*=}"
-            shift
-            # mark the deployment as a dev/prod
-            if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
-                echo "only prod or dev deployment types supported"
-                exit 1
-            fi
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -89,7 +83,6 @@ SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:=""}"
 DENY_LIST="${DENY_LIST:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
-DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -99,27 +92,33 @@ fi
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
 
+# Read all the
+BN_VARS=$(
+    echo ${CONFIG} | jq -r '.bn_vars | to_entries | map(' +
+    '    .key as $key | (' +                # Save the key
+    '        [.value] |' +                  # Force value to be an array
+    '        flatten |' +                   # Flatten so we can create pairs
+    '        map( [$key, (. | tostring)] )' # Create pairs
+    '    )' +
+    ')[][] | join("=")'
+)
+
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
-    .domain,
     (.name_servers | join(" ")),
     (.name_servers_fallback | join(" ")),
     (.journalbeat_hosts | join(" ")),
     (.journalbeat_tags | join(" ")),
-    .elasticsearch_url
-    .denylist_url
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT DOMAIN_NAME NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS ELASTICSEARCH_URL DENYLIST_URL < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
 VALUES=$(echo ${CONFIG} \
     | jq -r -c '.datacenters[]
 | .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
-| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix, "ipv6_subnet": .ipv6_subnet } | [
-    .ipv6_prefix,
-    .ipv6_subnet,
+| [.aux_nodes[], .boundary_nodes[], .nodes[]][] | [
     .ipv6_address,
     .ipv4_gateway,
     .ipv4_address,
@@ -128,13 +127,10 @@ VALUES=$(echo ${CONFIG} \
     .subnet_type,
     .subnet_idx,
     .node_idx,
-    .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_address ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx type; do
     eval "declare -A __RAW_NODE_$NODES=(
-        ['ipv6_prefix']=$ipv6_prefix
-        ['ipv6_subnet']=$ipv6_subnet
         ['ipv6_address']=$ipv6_address
 	    ['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
@@ -143,24 +139,11 @@ while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_a
         ['subnet_type']=$subnet_type
         ['subnet_idx']=$subnet_idx
         ['node_idx']=$node_idx
-        ['use_hsm']=$use_hsm
         ['type']=$type
     )"
     NODES=$((NODES + 1))
 done < <(printf "%s\n" "${VALUES[@]}")
 NODES=${!__RAW_NODE_@}
-
-if ! echo $DOMAIN_NAME | grep -q ".*\..*"; then
-    echo "malformed domain name $DOMAIN_NAME"
-    exit 1
-fi
-DOMAIN=${DOMAIN_NAME%.*}
-TLD=${DOMAIN_NAME##*.}
-if [[ $DOMAIN == "" ]] || [[ $TLD == "" ]]; then
-    echo "malformed domain name $DOMAIN_NAME"
-    exit 1
-fi
-echo "Using domain name $DOMAIN_NAME"
 
 function prepare_build_directories() {
     TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
@@ -242,7 +225,7 @@ function generate_logging_config() {
 }
 
 function generate_boundary_node_config() {
-    rm -rf ${IC_PREP_DIR}/NNS_URL
+    local NNS_URL=
     if [ -z ${NNS_URL_OVERRIDE+x} ]; then
         # Query and list all NNS nodes in subnet
         for n in $NODES; do
@@ -257,13 +240,12 @@ function generate_boundary_node_config() {
                 continue
             fi
 
-            echo "http://[${ipv6_address}]:8080" >>"${IC_PREP_DIR}/NNS_URL"
+            NNS_URL+="http://[${ipv6_address}]:8080,"
         done
-        NNS_URL_FILE=${IC_PREP_DIR}/NNS_URL
     else
-        NNS_URL_FILE=${NNS_URL_OVERRIDE}
+        NNS_URL=$(cat ${NNS_URL_OVERRIDE} | awk '$1=$1' ORS=',')
     fi
-    NNS_URL="$(cat ${NNS_URL_FILE} | awk '$1=$1' ORS=',' | sed 's@,$@@g')"
+    NNS_URL=$(echo ${FOO} | sed 's/,$//g')
     #echo ${NNS_URL}
 
     # nns config for boundary nodes
@@ -286,9 +268,6 @@ function generate_boundary_node_config() {
         fi
 
         echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-        echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
-        echo DOMAIN=${DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/domain.conf
-        echo TLD=${TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/domain.conf
         mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
         cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
 # HELP bn_version_info version information for the boundary node
@@ -299,6 +278,25 @@ EOF
 }
 
 function generate_network_config() {
+    local REPLICAS_IPV6=
+    if [ -z ${REPLICA_IPS_OVERRIDE+x} ]; then
+        # Query and list all NNS nodes in subnet
+        for n in $NODES; do
+            declare -n NODE=$n
+
+            local ipv6_address=${NODE["ipv6_address"]}
+
+            if [[ "${NODE["type"]}" != "replica" ]]; then
+                continue
+            fi
+
+            REPLICAS_IPV6+="${ipv6_address}/64,"
+        done
+    else
+        REPLICAS_IPV6=$(cat ${REPLICA_IPV6_OVERRIDE} | awk '$1=$1' ORS=',')
+    fi
+    REPLICAS_IPV6=$(echo ${REPLICAS_IPV6} | sed 's/,$//g')
+
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" == "boundary" ]]; then
@@ -329,6 +327,9 @@ function generate_network_config() {
             else
                 echo "ipv4_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             fi
+
+            # Set ipv6 replicas
+            echo "ipv6_replica_ips=${REPLICAS_IPV6}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
 
             cat "${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             # IPv6 network configuration is obtained from the Router Advertisement.
@@ -380,7 +381,7 @@ function generate_denylist_config() {
                 touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
             fi
 
-            echo "DENYLIST_URL=${DENYLIST_URL}" >>"${CONFIG_DIR}/$NODE_PREFIX/denylist.conf"
+            echo "denylist_url=${DENYLIST_URL}" >>"${CONFIG_DIR}/$NODE_PREFIX/icx-proxy.conf"
         fi
     done
 }
@@ -404,7 +405,7 @@ function copy_ssh_keys() {
     done
 }
 
-function copy_certs() {
+function setup_certs() {
     if [[ -f ${CERT_DIR}/fullchain.pem ]] && [[ -f ${CERT_DIR}/privkey.pem ]] && [[ -f ${CERT_DIR}/chain.pem ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
         for n in $NODES; do
@@ -422,6 +423,17 @@ function copy_certs() {
         done
     else
         echo "Not copying certificates"
+        for n in $NODES; do
+            declare -n NODE=$n
+            if [[ "${NODE["type"]}" == "boundary" ]]; then
+                local subnet_idx=${NODE["subnet_idx"]}
+                local node_idx=${NODE["node_idx"]}
+
+                NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+                echo "invalid_ssl=true" >>"${CONFIG_DIR}/$NODE_PREFIX/icx-proxy.conf"
+            fi
+        done
     fi
 }
 
@@ -476,7 +488,7 @@ function main() {
     generate_prober_config
     generate_denylist_config
     copy_ssh_keys
-    copy_certs
+    setup_certs
     build_tarball
     build_removable_media
     # remove_temporary_directories

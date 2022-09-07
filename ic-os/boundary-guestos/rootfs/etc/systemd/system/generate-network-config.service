@@ -2,6 +2,7 @@
 Description=Generate network config
 After=bootstrap-ic-node.service
 Before=systemd-networkd.service
+Before=nftables.service
 
 [Install]
 WantedBy=systemd-networkd.service
@@ -10,4 +11,4 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/generate-network-config.sh /boot/config/network.conf /run/systemd/network
+ExecStart=/opt/ic/bin/generate-network-config.sh

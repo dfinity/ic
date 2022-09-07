@@ -50,6 +50,9 @@ options may be specified:
     (make sure to quote the argument string so it appears as a single argument
     to the script, e.g. --journalbeat_tags "testnet1 slo")
 
+  --elasticsearch_url url
+    Logging url to use.
+
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by commas (make sure to quote the argument string in that
@@ -66,20 +69,35 @@ options may be specified:
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
 
-  --deployment-type [prod|dev|staging]
-    Creates a file named ./deployment_type with contents 'dev|prod|staging' on the
-    config image.  The boundary vm consults this file to perform any runtime
-    change required for enabling a development mode. The default deployment type
-    is 'prod'.
-
   --denylist path
-    Specify a denylist of canisters for the Boundary Nodes
+    Specify an initial denylist of canisters for the Boundary Nodes
+
+  --denylist_url url
+    Specify the url for the denylist updater 
 
   --prober-identity path
     specify an identity file for the prober
 
-  --nginx-domainname
-    domain name hosted by nginx ic0.dev or ic0.app
+  --domain-name
+    domain name hosted by nginx (e.g. ic0.dev or ic0.app)
+
+  --ipv4_http_ips
+    the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
+    traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_http_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound http(s)
+    traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_debug_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound debug
+    (e.g. ssh) traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_monitoring_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound
+    monitoring (e.g. prometheus) traffic. Multiple block may be specified separated by
+    commas.
+
 EOF
 }
 
@@ -90,12 +108,14 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
-    local IPV4_ADDRESS IPV4_GATEWAY NAME_SERVERS HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY
+    local IPV4_ADDRESS IPV4_GATEWAY
+    local NAME_SERVERS HOSTNAME
     local NNS_URL NNS_PUBLIC_KEY
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ELASTICSEARCH_URL
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
+    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
     while true; do
         if [ $# == 0 ]; then
             break
@@ -146,16 +166,20 @@ function build_ic_bootstrap_tar() {
             --prober-identity)
                 PROBER_IDENTITY="$2"
                 ;;
-            --deployment-type)
-                DEPLOYMENT_TYPE="$2"
-                if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ] && [ ${DEPLOYMENT_TYPE} != "staging" ]; then
-                    echo "only prod, dev or staging deployment types supported"
-                    usage
-                    exit 1
-                fi
-                ;;
             --domain-name)
                 DOMAIN_NAME="$2"
+                ;;
+            --ipv4_http_ips)
+                IPV4_HTTP_IPS="$2"
+                ;;
+            --ipv6_http_ips)
+                IPV6_HTTP_IPS="$2"
+                ;;
+            --ipv6_debug_ips)
+                IPV6_DEBUG_IPS="$2"
+                ;;
+            --ipv6_monitoring_ips)
+                IPV6_MONITORING_IPS="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -172,22 +196,18 @@ function build_ic_bootstrap_tar() {
         exit 1
     }
 
-    DOMAIN_NAME="${DOMAIN_NAME:="ic0.app"}"
+    DOMAIN="${DOMAIN:="ic0.app"}"
     DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
+    ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
+    IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
+    IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
 
-    if ! echo $DOMAIN_NAME | grep -q ".*\..*"; then
-        echo "malformed domain name $DOMAIN_NAME"
-        DOMAIN_NAME="ic0.app"
-    fi
-
-    echo "Using domain name $DOMAIN_NAME"
-    DOMAIN=${DOMAIN_NAME%.*}
-    TLD=${DOMAIN_NAME#*.}
-    if [[ $DOMAIN == "" ]] || [[ $TLD == "" ]]; then
-        echo "Malformed nginx domain $DOMAIN_NAME using defaults"
-        DOMAIN="${DOMAIN:="ic0"}"
-        TLD="${TLD:="app"}"
+    if ! echo $DOMAIN | grep -q ".*\..*"; then
+        echo "malformed domain name $DOMAIN"
+        DOMAIN="ic0.app"
     fi
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
@@ -222,12 +242,8 @@ EOF
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
-    # set the deployment type
-    echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
-
     # Set the domain name
-    echo DOMAIN=${DOMAIN} >"${BOOTSTRAP_TMPDIR}/domain.conf"
-    echo TLD=${TLD} >>"${BOOTSTRAP_TMPDIR}/domain.conf"
+    echo domain=${DOMAIN} >"${BOOTSTRAP_TMPDIR}/bn_vars.conf"
 
     # setup the deny list
     if [[ -f ${DENYLIST} ]]; then
@@ -237,7 +253,7 @@ EOF
         echo "Using empty denylist"
         touch ${BOOTSTRAP_TMPDIR}/denylist.map
     fi
-    echo DENYLIST_URL=${DENYLIST_URL} >"${BOOTSTRAP_TMPDIR}/denylist.conf"
+    echo "denylist_url=${DENYLIST_URL}" >"${BOOTSTRAP_TMPDIR}/bn_vars.conf"
 
     # setup the prober identity
     if [[ -f ${PROBER_IDENTITY} ]]; then
