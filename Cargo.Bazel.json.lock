@@ -1,5 +1,5 @@
 {
-  "checksum": "8b0eefc84273cf0ad00741cb8bd798b7f0a483f182ac0995e3255586c71065cf",
+  "checksum": "701ff5158462a5aa5fad0166083010bb3471f509360db10137893ecbdab43b6d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -902,7 +902,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             }
           ],
@@ -11875,7 +11875,7 @@
               "target": "tracing_subscriber"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             },
             {
@@ -17837,7 +17837,7 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             }
           ],
@@ -33186,7 +33186,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             }
           ],
@@ -41154,7 +41154,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             }
           ],
@@ -43574,7 +43574,7 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.2.2",
+              "id": "url 2.3.0",
               "target": "url"
             },
             {
@@ -44341,13 +44341,13 @@
       },
       "license": "MIT"
     },
-    "url 2.2.2": {
+    "url 2.3.0": {
       "name": "url",
-      "version": "2.2.2",
+      "version": "2.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/url/2.2.2/download",
-          "sha256": "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
+          "url": "https://crates.io/api/v1/crates/url/2.3.0/download",
+          "sha256": "22fe195a4f217c25b25cb5058ced57059824a678474874038dc88d211bf508d3"
         }
       },
       "targets": [
@@ -44370,6 +44370,7 @@
           "**"
         ],
         "crate_features": [
+          "default",
           "serde"
         ],
         "deps": {
@@ -44383,10 +44384,6 @@
               "target": "idna"
             },
             {
-              "id": "matches 0.1.9",
-              "target": "matches"
-            },
-            {
               "id": "percent-encoding 2.1.0",
               "target": "percent_encoding"
             },
@@ -44398,9 +44395,9 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.2.2"
+        "version": "2.3.0"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "utf-8 0.7.6": {
       "name": "utf-8",
