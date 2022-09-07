@@ -58,7 +58,7 @@
     "thebutlah.reorder-python-imports"
   ],
 
-  "postCreateCommand": "pip3 install -r gitlab-ci/src/requirements.txt",
+  "postCreateCommand": "pip3 install -r gitlab-ci/src/requirements.txt && sudo apt-file update",
   "overrideCommand": false,
 
   "remoteUser": "ubuntu"
