@@ -91,7 +91,6 @@ e2e-workload-test:
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
       # Actual test script, sets up VMs and drives the test.
-      capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-workload.py" \
           --vmtoolscfg=internal \
           --disk_image "$(pwd)/disk.img" \
@@ -112,10 +111,6 @@ e2e-workload-test:
   "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
       --git-rev="$CI_COMMIT_SHA" --remote-path="canisters" \
       --out="artifacts/canisters"
-  # capsule needs disk image as an input for caching
-  "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-      --git-rev="$CI_COMMIT_SHA" --remote-path="guest-os/disk-img" \
-      --out="ic-os/guestos/build-out/disk-img"
   DATE="$(date +%Y%m%d_%H%M%S)"
   WORKING_DIR="${CI_PROJECT_DIR}/working_dir/"
   mkdir -p "$WORKING_DIR"
@@ -131,8 +126,7 @@ e2e-workload-test:
   # are forwarded to a separate file.
   # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
   # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
-  $SHELL_WRAPPER capsule -v -t "$CI_COMMIT_SHA" -t "${SUITE_NAME}" -i 'ic-os/guestos/build-out/**/*.gz' -- \
-  "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
+  $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
     --suite="${SUITE_NAME}" \
     --working-dir="${WORKING_DIR}" \
     "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \

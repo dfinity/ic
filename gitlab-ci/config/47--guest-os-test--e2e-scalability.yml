@@ -83,7 +83,6 @@ e2e-scalability-suite-test:
       pipenv --python 3
       pipenv install -r requirements.txt
 
-      capsule -v -i "../ic-os/guestos/tests/*.py" -i "../scalability/**/*" -i "../gitlab-runner-tmp/**/*" -- \
       pipenv run "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
           --vmtoolscfg=internal \
           --timeout "$GUEST_OS_TEST_TIMEOUT" \
