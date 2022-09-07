@@ -154,7 +154,7 @@ Then start qemu as described above.
 
 Then, install the NNS:
 
-    ./scripts/install-nns.sh /tmp/tmp.3HNnhenaD8
+    ./tests/scripts/install-nns.sh /tmp/tmp.3HNnhenaD8
 
 The directory given as argument is printed at the end of the `boot-single-machine-nns.sh` script.
 

@@ -51,7 +51,7 @@ IC_OS_IMAGE_DEPS = {
         # to the template file are reflected in the overall version hash
         # (the root_hash must include the version hash, it cannot be the
         # other way around).
-        ":extra_boot_args.template": "/boot/extra_boot_args.template:0644",
+        ":bootloader/extra_boot_args.template": "/boot/extra_boot_args.template:0644",
     },
     "rootfs": {
         # base layer
@@ -73,7 +73,7 @@ IC_OS_IMAGE_DEPS = {
         "//ic-os/guestos/src:infogetty": "/opt/ic/bin/infogetty:0755",
         "//ic-os/guestos/src:prestorecon": "/opt/ic/bin/prestorecon:0755",
         # NB: this should be there for dev images only
-        ":allow_console_root": "/etc/allow_console_root:0644",
+        ":rootfs/allow_console_root": "/etc/allow_console_root:0644",
     },
 }
 
@@ -98,7 +98,7 @@ ext4_image(
                 (":extra_boot_args", "/boot/extra_boot_args:0644"),
             ]
         )
-        if k != ":extra_boot_args.template"
+        if k != ":bootloader/extra_boot_args.template"
         # additional files to install
         if v != "/"
     },
@@ -148,16 +148,16 @@ genrule(
 genrule(
     name = "extra_boot_args_root_hash",
     srcs = [
-        ":extra_boot_args.template",
+        ":bootloader/extra_boot_args.template",
         ":partition-root-hash",
     ],
     outs = [":extra_boot_args"],
-    cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args.template) > $(location extra_boot_args)",
+    cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :bootloader/extra_boot_args.template) > $(location extra_boot_args)",
 )
 
 disk_image(
     name = "disk.img.tar",
-    layout = "//ic-os/guestos/scripts:partitions.csv",
+    layout = ":partitions.csv",
     partitions = [
         "//ic-os/bootloader:partition-esp.tar",
         "//ic-os/bootloader:partition-grub.tar",
@@ -249,7 +249,7 @@ genrule(
 py_binary(
     name = "launch_single_vm",
     srcs = [
-        "launch_single_vm.py",
+        ":scripts/launch_single_vm.py",
         "//ic-os/guestos/tests:ictools.py",
     ],
     data = [

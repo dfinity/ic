@@ -280,7 +280,7 @@ upgrade-compatibility-pre-master:
 
       # sets the variable $TARGET_VERSION
       # shellcheck source=/dev/null
-      source ic-os/guestos/tests/mainnet-revision.sh
+      source ic-os/guestos/tests/scripts/mainnet-revision.sh
     - *run-farm-based-test
 
 spec-compliance-pre-master:

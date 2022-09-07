@@ -61,7 +61,7 @@ function extract_single_partition() {
 # Internal utility function.
 function read_canonical_partitions_csv() {
     local BASE_DIR=$(dirname "${BASH_SOURCE[0]}")
-    sed -e '/^#/d' -e 's/ *, */,/g' <"${BASE_DIR}"/partitions.csv
+    sed -e '/^#/d' -e 's/ *, */,/g' <"${BASE_DIR}"/../../partitions.csv
 }
 
 # Produce an sfdisk script as output to set up the partition table

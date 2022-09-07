@@ -89,4 +89,4 @@ of the final disk image.
 
 The final disk image is built by setting up a partition table and transferring
 the individually built filesystem images into their respective partitions.
-The layout of the partition table is described in +scripts/partitions.csv+.
+The layout of the partition table is described in +partitions.csv+.
