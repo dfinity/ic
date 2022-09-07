@@ -68,62 +68,77 @@ function generate_network_config() {
     mkdir -p "${SYSTEMD_NETWORK}"
 
     # Handle ipv6
-    #    cat <<EOF
-    #[Match]
-    #Name=enp1s0
-    #Virtualization=!container
-    #
-    #[Network]
-    #$(
-    #    # If we have an IPv6 address given, just configure it. Also, explicitly
-    #    # turn off router advertisements, otherwise we may end up with two
-    #    # (distinct) addresses on the same interface.
-    #    if [ "${ipv6_address}" != "" ]; then
-    #        echo Address=$ipv6_address
-    #        echo Gateway=$ipv6_gateway
-    #        echo IPv6AcceptRA=false
-    #    else
-    #        echo IPv6AcceptRA=true
-    #    fi
-    #    generate_name_server_list
-    #)
-    #EOF >"${SYSTEMD_NETWORK}/10-enp1s0.network"
+    cat >"${SYSTEMD_NETWORK}/10-enp1s0.network" <<EOF
+[Match]
+Name=enp1s0
+Virtualization=!container
+
+[Network]
+$(
+        # If we have an IPv6 address given, just configure it. Also, explicitly
+        # turn off router advertisements, otherwise we may end up with two
+        # (distinct) addresses on the same interface.
+        if [ "${ipv6_address}" != "" ]; then
+            echo Address=$ipv6_address
+            echo Gateway=$ipv6_gateway
+            echo IPv6AcceptRA=false
+        else
+            echo IPv6AcceptRA=true
+        fi
+        generate_name_server_list
+    )
+EOF
 
     # Handle ipv4
-    #    cat <<EOF
-    #[Match]
-    #Name=enp2s0
-    #
-    #[Network]
-    #$(
-    #    # If we have an IPv4 address given, just configure it.
-    #    if [ "${ipv4_address}" != "" ]; then
-    #        echo Address=$ipv4_address
-    #        echo Gateway=$ipv4_gateway
-    #    else
-    #        echo DHCP=ipv4
-    #        echo LinkLocalAddressing=no
-    #    fi
-    #    generate_name_server_list
-    #)
-    #EOF >"${SYSTEMD_NETWORK}/enp2s0.network"
+    cat >"${SYSTEMD_NETWORK}/enp2s0.network" <<EOF
+[Match]
+Name=enp2s0
+
+[Network]
+$(
+        # If we have an IPv4 address given, just configure it.
+        if [ "${ipv4_address}" != "" ]; then
+            echo Address=$ipv4_address
+            echo Gateway=$ipv4_gateway
+        else
+            echo DHCP=ipv4
+            echo LinkLocalAddressing=no
+        fi
+        generate_name_server_list
+    )
+EOF
 }
 
 # Add extra rules to nftables to limit access.
 function generate_nftables_config() {
     mkdir -p "${NFTABLES}"
 
-    #    cat <<EOF
-    #define ipv6_replica_ips = { $(IFS=,; echo "${ipv6_replica_ips[*]}") }
-    #
-    #define ipv4_http_ips = { $(IFS=,; echo "${ipv4_http_ips[*]}") }
-    #
-    #define ipv6_http_ips = { $(IFS=,; echo "${ipv6_http_ips[*]}") }
-    #
-    #define ipv6_debug_ips = { $(IFS=,; echo "${ipv6_debug_ips[*]}") }
-    #
-    #define ipv6_monitoring_ips = { $(IFS=,; echo "${ipv6_monitoring_ips[*]}") }
-    #EOF >"${NFTABLES}/defs.ruleset"
+    cat >"${NFTABLES}/defs.ruleset" <<EOF
+define ipv6_replica_ips = { $(
+        IFS=,
+        echo "${ipv6_replica_ips[*]}"
+    ) }
+
+define ipv4_http_ips = { $(
+        IFS=,
+        echo "${ipv4_http_ips[*]}"
+    ) }
+
+define ipv6_http_ips = { $(
+        IFS=,
+        echo "${ipv6_http_ips[*]}"
+    ) }
+
+define ipv6_debug_ips = { $(
+        IFS=,
+        echo "${ipv6_debug_ips[*]}"
+    ) }
+
+define ipv6_monitoring_ips = { $(
+        IFS=,
+        echo "${ipv6_monitoring_ips[*]}"
+    ) }
+EOF
 }
 
 function main() {
