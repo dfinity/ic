@@ -630,7 +630,7 @@ impl StreamHandlerImpl {
                     self.metrics
                         .inc_cycles
                         .with_label_values(&[&remote_subnet_id.to_string()])
-                        .get() 
+                        .get()
                         + cycles_in_msg.get() as f64,
                 );
             match receiver_host_subnet {
@@ -659,7 +659,7 @@ impl StreamHandlerImpl {
                         //         self.metrics
                         //             .inc_cycles
                         //             .with_label_values(&[&remote_subnet_id.to_string()])
-                        //             .get() 
+                        //             .get()
                         //             + cycles_in_msg.get() as f64,
                         //     );
                     }

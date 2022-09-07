@@ -479,9 +479,9 @@ impl StreamBuilderImpl {
                                             self.metrics
                                                 .out_cycles
                                                 .with_label_values(&[&dst_net_id.to_string()])
-                                                .get() 
+                                                .get()
                                                 + cycles_in_msg.get() as f64,
-                                            );
+                                        );
                                     if cycles_in_msg.get() != 10 {
                                         self.metrics
                                             .msg_cycles_test
@@ -556,7 +556,7 @@ impl StreamBuilderImpl {
                 )
             })
             .for_each(
-                |(subnet, len, size_bytes, begin/*, cycles_transferred*/)| {
+                |(subnet, len, size_bytes, begin /*, cycles_transferred*/)| {
                     self.metrics
                         .stream_messages
                         .with_label_values(&[&subnet])
