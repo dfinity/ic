@@ -440,6 +440,9 @@ impl NnsFunction {
             NnsFunction::RemoveNodesFromSubnet => {
                 (REGISTRY_CANISTER_ID, "remove_nodes_from_subnet")
             }
+            NnsFunction::ChangeSubnetMembership => {
+                (REGISTRY_CANISTER_ID, "change_subnet_membership")
+            }
             NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
             NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
             NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
@@ -1111,6 +1114,7 @@ impl Proposal {
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
                             | NnsFunction::RemoveNodesFromSubnet
+                            | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet
                             | NnsFunction::BlessReplicaVersion
                             | NnsFunction::UpdateSubnetReplicaVersion => Topic::SubnetManagement,
