@@ -6,7 +6,7 @@ rust_library(
     name = "canister_threshold_sigs",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_canister_threshold_sigs",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/crypto",
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",

@@ -23,7 +23,6 @@ use registry_canister::{
 };
 
 async fn get_canister_migrations(canister: &canister_test::Canister<'_>) -> CanisterMigrations {
-    use std::convert::TryFrom;
     let pb_canister_migrations: pb::CanisterMigrations =
         get_value_or_panic(canister, b"canister_migrations").await;
     CanisterMigrations::try_from(pb_canister_migrations)

@@ -96,7 +96,7 @@ impl MEGaPrivateKey {
         curve: EccCurveType,
         rng: &mut R,
     ) -> ThresholdEcdsaResult<Self> {
-        let secret = EccScalar::random(curve, rng)?;
+        let secret = EccScalar::random(curve, rng);
         Ok(Self { secret })
     }
 
@@ -466,7 +466,7 @@ fn compute_eph_key_and_pop(
     associated_data: &[u8],
     dealer_index: NodeIndex,
 ) -> ThresholdEcdsaResult<(EccScalar, EccPoint, EccPoint, zk::ProofOfDLogEquivalence)> {
-    let beta = EccScalar::from_seed(curve_type, seed.derive(ctype.ephemeral_key_domain_sep()))?;
+    let beta = EccScalar::from_seed(curve_type, seed.derive(ctype.ephemeral_key_domain_sep()));
     let v = EccPoint::mul_by_g(&beta)?;
 
     let pop_base = compute_pop_base(ctype, curve_type, associated_data, dealer_index, &v)?;

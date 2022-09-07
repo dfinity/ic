@@ -67,7 +67,8 @@ pub mod proto;
 use crate::chunkable::ChunkId;
 use ic_protobuf::state::sync::v1 as pb;
 use std::fmt;
-use std::ops::Range;
+use std::ops::{Deref, Range};
+use std::sync::Arc;
 
 /// Id of the manifest chunk in StateSync artifact.
 pub const MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
@@ -105,6 +106,33 @@ impl ChunkInfo {
     }
 }
 
+/// We wrap the actual Manifest (ManifestData) in an Arc, in order to
+/// make Manifest both immutable and cheap to copy
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct Manifest(
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    Arc<ManifestData>,
+);
+
+impl Manifest {
+    pub fn new(version: u32, file_table: Vec<FileInfo>, chunk_table: Vec<ChunkInfo>) -> Self {
+        Self(Arc::new(ManifestData {
+            version,
+            file_table,
+            chunk_table,
+        }))
+    }
+}
+
+impl Deref for Manifest {
+    type Target = ManifestData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// Manifest is a short description of the checkpoint contents.
 ///
 /// The manifest is structured as 2 tables: a file table and a chunk table,
@@ -123,8 +151,8 @@ impl ChunkInfo {
 /// ...
 /// [45]: (8, 93000, 0, <hash>)
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct Manifest {
+#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct ManifestData {
     /// Which version of the hashing procedure should be used.
     #[serde(default)]
     pub version: u32,
@@ -226,7 +254,6 @@ pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
 /// Deserializes the manifest from a byte array.
 pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
     use prost::Message;
-    use std::convert::TryInto;
 
     let pb_manifest = pb::Manifest::decode(bytes)
         .map_err(|err| format!("failed to decode Manifest proto {}", err))?;

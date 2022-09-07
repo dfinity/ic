@@ -7,7 +7,7 @@ rust_proc_macro(
     name = "dfn_macro",
     srcs = glob(["src/**"]),
     crate_name = "dfn_macro",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         ":build_script",
         "@crate_index//:proc-macro2",
@@ -24,7 +24,6 @@ rust_doc_test(
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:rustversion",
     ],

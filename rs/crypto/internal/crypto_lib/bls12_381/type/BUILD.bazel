@@ -30,8 +30,8 @@ rust_library(
     name = "type",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_bls12_381_type",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
@@ -39,7 +39,6 @@ rust_binary(
     name = "type_bench",
     srcs = ["benches/ops.rs"],
     crate_root = "benches/ops.rs",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         "@crate_index//:criterion",
@@ -50,7 +49,6 @@ rust_binary(
 rust_test_suite(
     name = "type_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":type"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

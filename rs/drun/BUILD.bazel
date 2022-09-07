@@ -37,20 +37,17 @@ rust_library(
     name = "drun_lib",
     srcs = glob(["src/**"]),
     crate_name = "ic_drun",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "drun",
     srcs = ["src/main.rs"],
-    edition = "2018",
     deps = DEPENDENCIES + [":drun_lib"],
 )
 
 rust_test(
     name = "drun_test",
     crate = ":drun_lib",
-    edition = "2018",
     deps = DEPENDENCIES,
 )

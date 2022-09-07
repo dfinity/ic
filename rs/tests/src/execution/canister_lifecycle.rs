@@ -36,7 +36,9 @@ use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
 use ic_fondue::ic_manager::IcHandle;
-use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob};
+use ic_ic00_types::{
+    CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob, Payload,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
@@ -836,7 +838,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     // See the corresponding field in the execution environment config.
-    let allocatable_compute_capacity_in_percent = 0;
+    let allocatable_compute_capacity_in_percent = 50;
     // Note: the DTS scheduler requires at least 2 scheduler cores
     assert!(ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores >= 2);
     let app_sched_cores =
@@ -850,10 +852,14 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-        let cans = join_all(
-            (0..app_sched_cores)
-                .map(|_| UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None)),
-        )
+        let cans = join_all((0..app_sched_cores).map(|_| {
+            UniversalCanister::new_with_params(
+                &agent,
+                MAX_COMP_ALLOC,
+                Some(std::u64::MAX as u128),
+                None,
+            )
+        }))
         .await;
         for can in cans {
             let can_id = can
@@ -863,7 +869,13 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         }
 
         // Installing the app_sched_cores + 1st canister should fail.
-        let can = UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None).await;
+        let can = UniversalCanister::new_with_params(
+            &agent,
+            MAX_COMP_ALLOC,
+            Some(std::u64::MAX as u128),
+            None,
+        )
+        .await;
         assert!(can.is_err());
 
         let mgr = ManagementCanister::create(&agent);
@@ -900,7 +912,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
                 .update(wasm().call(management::create_canister(
-                    Cycles::from(100_000_000_000_000u128).into_parts(),
+                    Cycles::from(10_000_000_000_000_000u128).into_parts(),
                 )))
                 .await
                 .map(|res| {
@@ -1083,7 +1095,7 @@ fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload
 
 /// Sending no field
 pub fn create_canister_with_no_settings_field(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let payload = EmptyBlob::encode();
+    let payload = EmptyBlob.encode();
     create_canister_test(handle, ctx, payload);
 }
 
@@ -1107,8 +1119,7 @@ pub fn create_canister_with_empty_settings(handle: IcHandle, ctx: &ic_fondue::po
 /// Sending a field with some settings
 pub fn create_canister_with_settings(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let settings = CanisterSettingsArgs {
-        // TODO(RUN-314): Increase the compute allocation to 50%.
-        compute_allocation: Some(candid::Nat::from(0)),
+        compute_allocation: Some(candid::Nat::from(50)),
         ..Default::default()
     };
     let records = CreateCanisterArgs {

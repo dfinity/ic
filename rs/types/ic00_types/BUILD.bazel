@@ -6,10 +6,10 @@ rust_library(
     name = "ic00_types",
     srcs = glob(["src/**"]),
     crate_name = "ic_ic00_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     deps = [
         "//rs/bitcoin/types/public",
         "//rs/protobuf",

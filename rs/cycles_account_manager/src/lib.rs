@@ -97,6 +97,11 @@ impl CyclesAccountManager {
         }
     }
 
+    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
+    pub fn use_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
+        self.use_cost_scaling_flag = use_cost_scaling_flag;
+    }
+
     /// Returns the subnet type of this [`CyclesAccountManager`].
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
@@ -752,10 +757,6 @@ impl CyclesAccountManager {
             );
             return Err(err);
         }
-
-        // TODO(RUN-314): Remove this clearing of compute allocation after the
-        // preparation step for compute allocation fee increase is rolled out.
-        canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
 
         let compute_allocation = canister.compute_allocation();
         if let Err(err) = self.charge_for_compute_allocation(

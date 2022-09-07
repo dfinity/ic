@@ -190,9 +190,9 @@ impl DkgKeyManager {
         }
     }
 
-    // Inspects the latest CUP height and the height of the latest finalized DKG
-    // summary block. If they are newer than what we have seen, triggers the
-    // loading of transcripts from corresponding summaries.
+    /// Inspects the latest CUP height and the height of the latest finalized DKG
+    /// summary block. If they are newer than what we have seen, triggers the
+    /// loading of transcripts from corresponding summaries.
     fn load_transcripts_if_necessary(&mut self, pool_reader: &PoolReader<'_>) {
         let _timer = self
             .metrics
@@ -236,11 +236,11 @@ impl DkgKeyManager {
         }
     }
 
-    // Ensures that the pending transcripts are loaded BEFORE they are needed. For
-    // that we take the next expected random beacon height and check for every
-    // pending transcript load if we hit its deadline. If yes, we join on the
-    // thread handle by enforcing its execution if it didn't happen yet or by
-    // closing the thread otherwise.
+    /// Ensures that the pending transcripts are loaded BEFORE they are needed. For
+    /// that we take the next expected random beacon height and check for every
+    /// pending transcript load if we hit its deadline. If yes, we join on the
+    /// thread handle by enforcing its execution if it didn't happen yet or by
+    /// closing the thread otherwise.
     fn enforce_transcript_loading(&mut self, pool_reader: &PoolReader<'_>) {
         let _timer = self
             .metrics
@@ -248,7 +248,8 @@ impl DkgKeyManager {
             .with_label_values(&["enforce_transcripts"])
             .start_timer();
         let next_random_beacon_height = pool_reader.get_random_beacon_height().increment();
-        // If there are no expired transcripts, which we expected in the most of rounds,
+
+        // If there are no expired transcripts, which is expected in the most of the rounds,
         // we're done.
         if self
             .pending_transcript_loads
@@ -257,6 +258,7 @@ impl DkgKeyManager {
         {
             return;
         }
+
         let (expired, pending): (Vec<_>, _) = self
             .pending_transcript_loads
             .drain()
@@ -264,8 +266,11 @@ impl DkgKeyManager {
         let number_of_transcripts = expired.len();
         info!(
             self.logger,
-            "Waiting on {} transcripts to be loaded", number_of_transcripts
+            "Waiting on {} transcripts to be loaded for height {}",
+            number_of_transcripts,
+            next_random_beacon_height
         );
+
         for (id, (_, handle)) in expired {
             match handle.recv() {
                 Err(err) => panic!(
@@ -279,29 +284,34 @@ impl DkgKeyManager {
                 _ => (),
             }
         }
+
         info!(
             self.logger,
-            "Finished waiting on {} transcripts to be loaded", number_of_transcripts,
+            "Finished waiting on {} transcripts to be loaded for height {}",
+            number_of_transcripts,
+            next_random_beacon_height,
         );
         // Put the pending loads back.
         self.pending_transcript_loads = pending.into_iter().collect();
     }
 
-    // Gets all available transcripts from a summary (current + next ones) and
-    // spawns threads for every transcript load if it's not among transcripts
-    // being loaded already. Note this functionality relies on the assumption,
-    // that CSP does not re-load transcripts, which were succeffully loaded
-    // before.
+    /// Gets all available transcripts from a summary (current + next ones) and
+    /// spawns threads for every transcript load if it's not among transcripts
+    /// being loaded already. Note this functionality relies on the assumption,
+    /// that CSP does not reload transcripts, which were successfully loaded
+    /// before.
     fn load_transcripts_from_summary(&mut self, summary: Arc<Summary>) {
         let transcripts_to_load: Vec<_> = {
             let current_interval_start = summary.height;
             let next_interval_start = summary.get_next_start_height();
+
             // For current transcripts we take the current summary height as a deadline.
             let current_transcripts_with_load_deadlines = summary
                 .current_transcripts()
                 .iter()
                 .filter(|(_, t)| !self.pending_transcript_loads.contains_key(&t.dkg_id))
                 .map(|(_, t)| (current_interval_start, t.dkg_id));
+
             // For next transcripts, we take the start of the next interval as a deadline.
             let next_transcripts_with_load_deadlines = summary
                 .next_transcripts()
@@ -346,8 +356,8 @@ impl DkgKeyManager {
         }
     }
 
-    // Ask the CSP to drop DKG key material related to transcripts that are no
-    // longer relevant
+    /// Ask the CSP to drop DKG key material related to transcripts that are no
+    /// longer relevant
     fn delete_inactive_keys(&mut self, pool_reader: &PoolReader<'_>) {
         if let Some(handle) = self.pending_key_removal.take() {
             // To make sure we delete all keys sequentially, we check if another key removal
@@ -398,15 +408,17 @@ impl DkgKeyManager {
         self.pending_key_removal = Some(handle);
     }
 
-    // Uses the provided summary to update the DKG metrics. Should only be used on
-    // the summary for the last finalized DKG summary block.
+    /// Uses the provided summary to update the DKG metrics. Should only be used on
+    /// the summary for the last finalized DKG summary block.
     fn update_dkg_metrics(&self, summary: &Summary) {
         self.metrics
             .consensus_membership_registry_version
             .set(summary.registry_version.get() as i64);
+
         for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold].iter() {
             let current_transcript = summary.current_transcript(tag);
             let metric_label = &format!("{:?}", tag);
+
             self.metrics
                 .dkg_instance_id
                 .with_label_values(&[metric_label])
@@ -415,6 +427,7 @@ impl DkgKeyManager {
                 .current_committee_size
                 .with_label_values(&[metric_label])
                 .set(current_transcript.committee.count().get().into());
+
             if summary.next_transcript(tag).is_none() && summary.height > Height::from(0) {
                 warn!(
                     self.logger,
@@ -430,8 +443,7 @@ impl DkgKeyManager {
         }
     }
 
-    /// Joins on all thread handles. It is supposed to be used in testing
-    /// only to avoid race conditions and zombie threads.
+    /// Joins on all thread handles.
     pub(crate) fn sync(&mut self) {
         self.pending_transcript_loads
             .drain()
@@ -447,9 +459,6 @@ impl DkgKeyManager {
     }
 }
 
-// We do not need the drop in production scenario, as the replica does not
-// support a graceful shutdown, but we need it for tests where the components
-// might be dropped.
 impl Drop for DkgKeyManager {
     fn drop(&mut self) {
         self.sync()

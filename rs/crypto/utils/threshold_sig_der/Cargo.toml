@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-utils-threshold-sig-der"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 description = "Utils for serializing threshold signatures to DER"
 
 [dependencies]

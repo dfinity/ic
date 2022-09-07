@@ -5,6 +5,7 @@ load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
     "//rs/monitoring/metrics_encoder",
     "//rs/nns/common",
@@ -26,7 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-certified-map",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
@@ -52,7 +53,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -62,8 +62,8 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "cycles_minting_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -71,7 +71,6 @@ rust_canister(
     name = "cycles-minting-canister-raw",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":cmc",
@@ -90,7 +89,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "src/main.rs",
     data = ["cmc.did"],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },

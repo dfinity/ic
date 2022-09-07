@@ -16,13 +16,13 @@ use crate::{
 };
 
 use super::{
-    farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse},
+    farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse, VmType},
     ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     resource::{DiskImage, ImageType},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-        SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
+        SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
 };
 use anyhow::{bail, Result};
@@ -48,6 +48,7 @@ fn mk_compressed_img_path() -> std::string::String {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BoundaryNode {
     pub name: String,
+    pub is_sev: bool,
     pub vm_resources: VmResources,
     pub qemu_cli_args: Vec<String>,
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -62,6 +63,7 @@ impl BoundaryNode {
     pub fn new(name: String) -> Self {
         Self {
             name,
+            is_sev: false,
             vm_resources: Default::default(),
             qemu_cli_args: Default::default(),
             vm_allocation: Default::default(),
@@ -73,8 +75,32 @@ impl BoundaryNode {
         }
     }
 
-    /// Experimental method to set the command-line arguments passed through to QEMU.
-    pub fn with_qemu_cli_args_experimental(mut self, qemu_cli_args: Vec<String>) -> Self {
+    pub fn enable_sev(mut self) -> Self {
+        self.is_sev = true;
+        self.with_required_host_features(vec![HostFeature::AmdSevSnp])
+            .with_qemu_cli_args(
+                vec![
+            "-cpu",
+            "EPYC-v4",
+            "-machine",
+            "memory-encryption=sev0,vmport=off",
+            "-object",
+            "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
+            "-append",
+            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"
+        ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            )
+    }
+
+    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
+        self.vm_resources = vm_resources;
+        self
+    }
+
+    pub fn with_qemu_cli_args(mut self, qemu_cli_args: Vec<String>) -> Self {
         self.qemu_cli_args = qemu_cli_args;
         self
     }
@@ -119,6 +145,11 @@ impl BoundaryNode {
 
         let create_vm_req = CreateVmRequest::new(
             self.name.clone(),
+            if self.is_sev {
+                VmType::Sev
+            } else {
+                VmType::Production
+            },
             self.vm_resources.vcpus.unwrap_or_else(|| {
                 pot_setup
                     .default_vm_resources
@@ -353,7 +384,7 @@ impl SshSession for BoundaryNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session(user)
         })
     }

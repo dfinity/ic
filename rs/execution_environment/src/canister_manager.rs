@@ -1,5 +1,4 @@
 use crate::execution::install_code::{
-    canister_layout, truncate_canister_heap, truncate_canister_stable_memory,
     validate_compute_allocation, validate_controller, validate_memory_allocation, OriginalContext,
 };
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
@@ -42,7 +41,7 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -674,7 +673,7 @@ impl CanisterManager {
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
         let original = OriginalContext {
-            message_instruction_limit: execution_parameters.instruction_limits.message(),
+            execution_parameters,
             mode: context.mode,
             canister_layout_path,
             config: self.config.clone(),
@@ -682,6 +681,9 @@ impl CanisterManager {
             time,
             compilation_cost_handling,
             subnet_size,
+            requested_compute_allocation: context.compute_allocation,
+            requested_memory_allocation: context.memory_allocation,
+            sender: context.sender,
         };
 
         let round = RoundContext {
@@ -693,22 +695,12 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => execute_install(
-                context,
-                canister,
-                execution_parameters,
-                original,
-                round.clone(),
-                round_limits,
-            ),
-            CanisterInstallMode::Upgrade => execute_upgrade(
-                context,
-                canister,
-                execution_parameters,
-                original,
-                round.clone(),
-                round_limits,
-            ),
+            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
+                execute_install(context, canister, original, round.clone(), round_limits)
+            }
+            CanisterInstallMode::Upgrade => {
+                execute_upgrade(context, canister, original, round.clone(), round_limits)
+            }
         }
     }
 
@@ -722,7 +714,6 @@ impl CanisterManager {
         state: &mut ReplicatedState,
     ) -> Result<(), CanisterManagerError> {
         let time = state.time();
-        let path = state.path().to_owned();
         let canister = match state.canister_state_mut(&canister_id) {
             Some(canister) => canister,
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
@@ -737,7 +728,7 @@ impl CanisterManager {
             }
         }
 
-        let rejects = uninstall_canister(&self.log, canister, &path, time);
+        let rejects = uninstall_canister(&self.log, canister, time);
         crate::util::process_responses(
             rejects,
             state,
@@ -1010,11 +1001,6 @@ impl CanisterManager {
             .metadata
             .subnet_metrics
             .consumed_cycles_by_deleted_canisters += consumed_cycles_by_canister_to_delete;
-
-        let layout = canister_layout(state.path(), &canister_id_to_delete);
-        layout
-            .mark_deleted()
-            .expect("failed to mark canister as deleted on the filesystem");
 
         // The canister has now been removed from `ReplicatedState` and is dropped
         // once the function is out of scope.
@@ -1412,7 +1398,6 @@ impl From<CanisterManagerError> for RejectContext {
 pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
-    state_path: &Path,
     time: Time,
 ) -> Vec<Response> {
     // Drop the canister's execution state.
@@ -1420,9 +1405,6 @@ pub fn uninstall_canister(
 
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();
-
-    truncate_canister_heap(log, state_path, canister.canister_id());
-    truncate_canister_stable_memory(log, state_path, canister.canister_id());
 
     let mut rejects = Vec::new();
     let canister_id = canister.canister_id();

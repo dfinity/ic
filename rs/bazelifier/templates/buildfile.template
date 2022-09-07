@@ -45,7 +45,6 @@ ALIASES = {{ aliases|json }}
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    edition = "2018",
     version = "{{ crate_version }}",
     deps = BUILD_DEPENDENCIES,
     aliases = ALIASES,

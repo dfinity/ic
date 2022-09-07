@@ -11,12 +11,11 @@ rust_library(
     name = "metrics",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_metrics",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "metrics_test",
     crate = ":metrics",
-    edition = "2018",
 )

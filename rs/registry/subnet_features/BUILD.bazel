@@ -6,7 +6,7 @@ rust_library(
     name = "subnet_features",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_subnet_features",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/protobuf",
         "//rs/types/ic00_types",

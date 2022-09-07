@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 rust_library(
     name = "wabt-sys",
     srcs = glob(["src/**"]),
-    edition = "2018",
     version = "0.8.0",
     visibility = ["//visibility:public"],
     deps = [

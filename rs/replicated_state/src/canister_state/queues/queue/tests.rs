@@ -275,13 +275,15 @@ fn output_queue_available_slots_is_correct() {
 
 /// An explicit example of deadlines in OutputQueue, where we manually fill
 /// and empty the queue, while checking whether we find what we'd expect.
+/// This also checks whether num_messages is tracked correctly.
 /// * Q: request
 /// * P: response
+/// * _j: num_messages
 /// * [qi]: queue index,
 /// * (d,i): deadline and index,
-/// e.g. QPQ, [0], {(0,1), (1,3)}
+/// e.g. QPQ_3, [0], {(0,1), (1,3)}
 #[test]
-fn output_queue_explicit_deadline_range_ends_test() {
+fn output_queue_explicit_push_and_pop_test() {
     let test_request = Arc::<Request>::from(RequestBuilder::default().build());
     let test_response = Arc::<Response>::from(ResponseBuilder::default().build());
 
@@ -289,18 +291,20 @@ fn output_queue_explicit_deadline_range_ends_test() {
     let deadline_1 = Time::from_nanos_since_unix_epoch(3_u64);
     let deadline_2 = Time::from_nanos_since_unix_epoch(7_u64);
 
-    // Create an OutputQueue, its initial state is _, [0], {}.
+    // Create an OutputQueue, its initial state is _0, [0], {}.
     let mut q = OutputQueue::new(100);
+    assert_eq!(0_usize, q.num_messages());
 
-    // Push a request, the queue is now Q, [0], {(3,1)}.
+    // Push a request, the queue is now Q_1, [0], {(3,1)}.
     let _ = q.push_request(test_request.clone(), deadline_1);
     assert_eq!(q.deadline_range_ends.len(), 1);
     assert_eq!(
         q.deadline_range_ends[0],
         (deadline_1, QueueIndex::from(1_u64))
     );
+    assert_eq!(1_usize, q.num_messages());
 
-    // Push a response, the queue is now QP, [0], {(3,1)}.
+    // Push a response, the queue is now QP_2, [0], {(3,1)}.
     let _ = q.reserve_slot();
     q.push_response(test_response);
     assert_eq!(q.deadline_range_ends.len(), 1);
@@ -308,16 +312,18 @@ fn output_queue_explicit_deadline_range_ends_test() {
         q.deadline_range_ends[0],
         (deadline_1, QueueIndex::from(1_u64))
     );
+    assert_eq!(2_usize, q.num_messages());
 
-    // Push a request with the same deadline, the queue is now QPQ, [0], {(3,3)}.
+    // Push a request with the same deadline, the queue is now QPQ_3, [0], {(3,3)}.
     let _ = q.push_request(test_request.clone(), deadline_1);
     assert_eq!(q.deadline_range_ends.len(), 1);
     assert_eq!(
         q.deadline_range_ends[0],
         (deadline_1, QueueIndex::from(3_u64))
     );
+    assert_eq!(3_usize, q.num_messages());
 
-    // Push a request with a new deadline, the queue is now QPQQ, [0], {(3,3), (7,4)}.
+    // Push a request with a new deadline, the queue is now QPQQ_4, [0], {(3,3), (7,4)}.
     let _ = q.push_request(test_request, deadline_2);
     assert_eq!(q.deadline_range_ends.len(), 2);
     assert_eq!(
@@ -328,8 +334,9 @@ fn output_queue_explicit_deadline_range_ends_test() {
         q.deadline_range_ends[1],
         (deadline_2, QueueIndex::from(4_u64))
     );
+    assert_eq!(4_usize, q.num_messages());
 
-    // Pop a request, the queue is now PQQ, [1], {(3,3), (7,4)}
+    // Pop a request, the queue is now PQQ_3, [1], {(3,3), (7,4)}
     q.pop();
     assert_eq!(q.deadline_range_ends.len(), 2);
     assert_eq!(
@@ -340,8 +347,9 @@ fn output_queue_explicit_deadline_range_ends_test() {
         q.deadline_range_ends[1],
         (deadline_2, QueueIndex::from(4_u64))
     );
+    assert_eq!(3_usize, q.num_messages());
 
-    // Pop a response, the queue is now QQ, [2], {(3,3), (7,4)}
+    // Pop a response, the queue is now QQ_2, [2], {(3,3), (7,4)}
     q.pop();
     assert_eq!(q.deadline_range_ends.len(), 2);
     assert_eq!(
@@ -352,98 +360,106 @@ fn output_queue_explicit_deadline_range_ends_test() {
         q.deadline_range_ends[1],
         (deadline_2, QueueIndex::from(4_u64))
     );
+    assert_eq!(2_usize, q.num_messages());
 
-    // Pop a request, the queue is now Q, [3], {(7,4)}
+    // Pop a request, the queue is now Q_1, [3], {(7,4)}
     q.pop();
     assert_eq!(q.deadline_range_ends.len(), 1);
     assert_eq!(
         q.deadline_range_ends[0],
         (deadline_2, QueueIndex::from(4_u64))
     );
+    assert_eq!(1_usize, q.num_messages());
 
-    // Pop a request, the queue is now _, [4], {}
+    // Pop a request, the queue is now _0, [4], {}
     // We are back in the initial state, but the index has advanced to 4.
     q.pop();
     assert!(q.deadline_range_ends.is_empty());
     assert_eq!(q.index, QueueIndex::from(4_u64));
+    assert_eq!(0_usize, q.num_messages());
 }
 
 prop_compose! {
     /// Generator for an arbitrary OutputQueue. This will generate an OutputQueue where the
     /// distribution of requests, responses and None are equal, e.g. 1 in 3. Invariants on
-    /// OutputQueue imply num_deadlines <= num_messages. This condition is enforced silently
-    /// and min_deadlines is guaranteed only if min_deadlines <= min_messages.
+    /// OutputQueue imply num_deadlines <= num_messages. This condition is enforced silently.
     fn arb_output_queue(capacity: usize,
-                        min_messages: usize,
-                        max_messages: usize,
-                        min_deadlines: usize,
-                        max_deadlines: usize,
+                        num_messages: std::ops::RangeInclusive<usize>,
+                        num_deadlines: std::ops::RangeInclusive<usize>,
+                        min_deadline_nanos: u64,
     ) (
-        (queue, index, deadline_range_ends) in (
-            prop::collection::vec_deque(
-                proptest::option::weighted(
-                    proptest::option::prob(0.667),
-                    arbitrary::request_or_response(),
-                ),
-                min_messages..=max_messages,
-            ),
-            arbitrary::request_or_response(),
+        (queue, deadline_range_ends, index) in (
+            num_messages,
+            num_deadlines,
         )
-        .prop_map(|(mut q, rr)| {
-            // OutputQueue has the invariant that None may not be at the front.
-            // To keep the statistics, we try to rotate Some(...) in front, only
-            // if there are only None, we overwrite the front.
-            if let Some(i) = q.iter().position(|rr| rr.is_some()) {
-                q.rotate_left(i);
-            } else if !q.is_empty() {
-                q[0] = Some(rr);
+        .prop_map(|(num_messages, mut num_deadlines)| {
+            // Ensure num_deadlines <= num_messages.
+            if num_deadlines > num_messages {
+                num_deadlines = num_messages;
             }
-            q
+            (num_messages, num_deadlines)
         })
-        .prop_flat_map(move |q| {
-            // Generate a vector of random times as the basis for deadline_range_ends.
-            (proptest::collection::vec(1..1000_u64, min_deadlines..=max_deadlines), Just(q))
-        })
-        .prop_flat_map(|(mut random_times, q)| {
-            // Make sure there are q.len() random times, possibly filling with up with 0's,
-            // then shuffle to get a vector of random_times with 0's interspersed randomly.
-            random_times.resize(q.len(), 0_u64);
+        .prop_flat_map(move |(num_messages, num_deadlines)| {
             (
-                Just(random_times).prop_shuffle().no_shrink(),
+                // VecDeque of Option<RequestOrResponse> as the basis for the queue along with a
+                // single RequestOrResponse to ensure the no 'None' in front invariant.
+                (
+                    prop::collection::vec_deque(
+                        proptest::option::weighted(
+                            proptest::option::prob(0.667),
+                            arbitrary::request_or_response(),
+                        ),
+                        num_messages,
+                    ),
+                    arbitrary::request_or_response(),
+                )
+                .prop_map(|(mut q, rr)| {
+                    // Make sure Some(...) is at the front.
+                    if !q.is_empty() {
+                        q[0] = Some(rr);
+                    }
+                    q
+                }),
+
+                // BTreeSet of num_deadlines unique sorted u64's as the basis for the deadlines.
+                proptest::collection::btree_set(min_deadline_nanos..u64::MAX/2, num_deadlines),
+
+                // BTreeSet of num_deadlines-1 unique sorted u64's as the basis for deadline_ends.
+                // These must be in the interval (0, num_deadlines) (relative to the queue index),
+                // except the last one which must be at num_deadlines.
+                // Shrinking is disabled because that would concentrate the deadline ranges at the
+                // front of the queue, which is not helping for our purposes.
+                if num_messages == 0 || num_deadlines == 0 {
+                    proptest::collection::btree_set(0..1_u64, 0)
+                } else {
+                    proptest::collection::btree_set(1..num_messages as u64, num_deadlines-1)
+                }
+                .no_shrink()
+                .prop_map(move |mut btr| {
+                    btr.insert(num_messages as u64);
+                    btr
+                }),
+
+                // Random u64 as the basis for the queue index.
                 (0..u64::MAX/2).prop_map(|index| QueueIndex::from(index)),
-                Just(q),
             )
         })
-        .prop_map(|(mut random_times, index, q)| {
-            // We turn random_times into a step function by progressively adding
-            // the immediate predecessor.
-            if random_times.len() > 1 {
-                for i in 1..random_times.len() {
-                    random_times[i] += random_times[i-1];
-                }
-            }
-            // Finally, we generate a deadline_range_ends, by pushing in the random_times.
-            let mut deadline_range_ends = VecDeque::<(Time, QueueIndex)>::new();
-            for (time, index) in random_times
-                .iter()
-                .enumerate()
-                .map(|(i,t)|
-                    (Time::from_nanos_since_unix_epoch(*t), index + (i as u64 + 1).into())
-                )
-            {
-                match deadline_range_ends.back_mut() {
-                    Some((deadline, end_index)) if *deadline == time => {
-                        *end_index = index;
-                    }
-                    _ => {
-                        deadline_range_ends.push_back((time, index));
-                    }
-                }
-            }
-            (q, index, deadline_range_ends)
+        .prop_map(|(q, deadlines, deadline_ends, index)| {
+            // deadline_range_ends is generated by zipping together deadline and deadline_ends,
+            // as well shifting the indices such that they start at index + 1.
+            (
+                q,
+                deadlines
+                    .into_iter()
+                    .zip(deadline_ends.into_iter())
+                    .map(|(t, i)| (Time::from_nanos_since_unix_epoch(t), index + i.into()))
+                    .collect::<VecDeque<(Time, QueueIndex)>>(),
+                index,
+            )
         })
     ) -> OutputQueue {
         assert!(capacity >= queue.len());
+        let num_messages = queue.iter().filter(|rr| rr.is_some()).count();
         OutputQueue {
             queue: QueueWithReservation::<Option::<RequestOrResponse>> {
                 capacity,
@@ -452,24 +468,24 @@ prop_compose! {
             },
             index,
             deadline_range_ends,
+            timeout_index: index,
+            num_messages,
         }
     }
 }
 
 proptest! {
-    /// Proptest for invariants on output queues.
-    /// Checks the invariant 'always Some at the front' and
+    /// Check the invariant 'always Some at the front' and
     /// 'indices are always increasing', as well as that the final
     /// index has increased by the initial length of the queue when
     /// compared to the initial index.
     #[test]
     fn output_queue_invariants_hold(
         mut q in arb_output_queue(
-            100,    // capacity
-            0,      // min_messages
-            10,     // max_messages
-            0,      // min_deadlines
-            5,      // max_deadlines
+            100,        // capacity
+            0..=10,     // num_messages
+            0..=5,      // num_deadlines
+            0,          // min_deadline_nanos
         ),
     ) {
         let initial_len = q.queue.queue.len();
@@ -498,16 +514,15 @@ proptest! {
 }
 
 proptest! {
-    /// Proptest to check whether the deadline_range_ends indices in bounds
-    /// invariant holds when popping from an arbitrary output queue.
+    /// Check whether the deadline_range_ends indices in bounds invariant holds
+    /// when popping from an arbitrary output queue.
     #[test]
     fn output_queue_deadline_range_ends_indices_in_bounds_on_pop(
         mut q in arb_output_queue(
-            100,    // capacity
-            10,     // min_messages
-            20,     // max_messages
-            0,      // min_deadlines
-            10,     // max_deadlines
+            100,        // capacity
+            10..=20,    // num_messages
+            0..=10,     // num_deadlines
+            0,          // min_deadline_nanos
         ),
     ) {
         let mut ref_deadline_range_ends = q.deadline_range_ends.clone();
@@ -525,16 +540,15 @@ proptest! {
         }
     }
 
-    /// Proptest to check whether all the invariants for deadline_range_ends
-    /// hold when filling up a random output queue and then emptying it out.
+    /// Check whether all the invariants for deadline_range_ends hold when
+    /// filling up a random output queue and then emptying it out.
     #[test]
     fn output_queue_deadline_range_ends_invariants_hold(
         mut q in arb_output_queue(
-            super::super::DEFAULT_QUEUE_CAPACITY,       // capacity
-            10,                                         // min_messages
-            20,                                         // max_messages
-            1,                                          // min_deadlines
-            10,                                         // max_deadlines
+            super::super::DEFAULT_QUEUE_CAPACITY,   // capacity
+            10..=20,                                // num_messages
+            1..=10,                                 // num_deadlines
+            0,                                      // min_deadline_nanos
         ),
     ) {
         let mut test_q = OutputQueue::new(q.queue.capacity);
@@ -569,8 +583,8 @@ proptest! {
             prop_assert!(*deadline_front_index < q.index);
         }
         if let Some((_, deadline_back_index)) = test_q.deadline_range_ends.back() {
-            let back_index = test_q.index + (test_q.queue.queue.len() as u64).into();
-            prop_assert!(*deadline_back_index <= back_index);
+            let end = test_q.index + (test_q.queue.queue.len() as u64).into();
+            prop_assert!(*deadline_back_index <= end);
         }
 
         // Check a serialisation/deserialisation round trip, so that we check an
@@ -604,16 +618,15 @@ proptest! {
         prop_assert!(deadlines_tracker.is_empty());
     }
 
-    /// Proptest for arbitrary output queues to check whether
-    /// the conversion to and from for protobuf versions works.
+    /// Check whether the conversion to and from the protobuf version
+    /// works for arbitrary output queues.
     #[test]
     fn output_queue_roundtrip_conversions(
         q in arb_output_queue(
             super::super::DEFAULT_QUEUE_CAPACITY,   // capacity
-            0,                                      // min_messages
-            10,                                     // max_messages
-            0,                                      // min_deadline
-            5,                                      // max_deadline
+            0..=10,                                 // num_messages
+            0..=5,                                  // num_deadlines
+            0,                                      // min_deadline_nanos
         )
     ) {
         let proto_queue: pb_queues::InputOutputQueue = (&q).into();
@@ -622,7 +635,7 @@ proptest! {
         prop_assert_eq!(q, cmpq);
     }
 
-    /// Proptest to check the strictly sorted invariant for deadline_range_ends.
+    /// Check the strictly sorted invariant for deadline_range_ends.
     #[test]
     fn output_queue_decode_deadline_range_ends_roundtrip_strictly_sorted_error(
         (
@@ -631,10 +644,9 @@ proptest! {
             mut q,
         ) in arb_output_queue(
             super::super::DEFAULT_QUEUE_CAPACITY,   // capacity
-            2,                                      // min_messages
-            10,                                     // max_messages
-            2,                                      // min_deadlines
-            10,                                     // max_deadlines
+            2..=10,                                 // num_messages
+            2..=10,                                 // num_deadlines
+            0,                                      // min_deadline_nanos
         )
         .prop_flat_map(|q| {
             // We start by shuffling a copy of the deadline_range_ends from q and a
@@ -706,15 +718,14 @@ proptest! {
         );
     }
 
-    /// Proptest to check the index out of bounds invariant for deadline_range_ends.
+    /// Check the index out of bounds invariant for deadline_range_ends.
     #[test]
     fn output_queue_decode_deadline_range_ends_roundtrip_out_of_bounds_error(
         q in arb_output_queue(
             super::super::DEFAULT_QUEUE_CAPACITY,   // capacity
-            2,                                      // min_messages
-            10,                                     // max_messages
-            1,                                      // min_deadlines
-            10,                                     // max_deadlines
+            2..=10,                                 // num_messages
+            1..=10,                                 // num_deadlines
+            0,                                      // min_deadline_nanos
         )
         .prop_flat_map(|q| {
             // Generate a random vector with random u64's in it.
@@ -729,8 +740,8 @@ proptest! {
         .prop_filter("All indices in bounds.", |(indices, q)| {
             // Make sure it includes at least 1 entry out of bounds.
             // This will only filter a miniscule number of cases.
-            let back_index = q.index + (q.queue.queue.len() as u64).into();
-            !indices.iter().all(|i| *i > q.index && *i <= back_index)
+            let end = q.index + (q.queue.queue.len() as u64).into();
+            !indices.iter().all(|i| q.index < *i && *i <= end)
         })
         .prop_map(|(random_indices, mut q)| {
             // Replace the valid indices in q.deadline_range_ends.
@@ -771,6 +782,156 @@ fn output_queue_decode_with_none_head_fails() {
         OutputQueue::try_from(proto_queue).err(),
         Some(ProxyDecodeError::Other(_))
     ));
+}
+
+proptest! {
+    /// Check timing out requests using an iterator. This uses a random time and then
+    /// checks whether the correct entries are removed from deadline_range_ends as well as whether
+    /// the correct requests are removed from the queue and returned, i.e. that no requests are lost.
+    #[test]
+    fn output_queue_test_time_out_requests(
+        (time, mut ref_q, mut q) in arb_output_queue(
+            100,        // capacity
+            10..=20,    // num_messages
+            0..=10,     // num_deadlines
+            1000,       // min_deadline_nanos
+        )
+        .prop_flat_map(|q| {
+            if let (Some((front_deadline, _)), Some((back_deadline, _))) =
+                (q.deadline_range_ends.front(), q.deadline_range_ends.back())
+            {
+                // If there are deadlines, generate a random time in
+                // [front_deadline - 1, back_deadline + 1].
+                (
+                    front_deadline.as_nanos_since_unix_epoch()-1..=
+                    back_deadline.as_nanos_since_unix_epoch()+1,
+                    Just(q),
+                )
+            } else {
+                // The case of no deadlines covers the last edge case, where we expect
+                // to time out nothing.
+                (0..=1000_u64, Just(q))
+            }
+        })
+        .prop_map(|(time, q)| (Time::from_nanos_since_unix_epoch(time), q.clone(), q))
+    ) {
+        // Time out requests and collect them in a vector manually so we can check
+        // queue invariants are intact along the way.
+        let mut timed_out_requests = Vec::<Arc<Request>>::new();
+        while let Some(request) = q.time_out_requests(time).next() {
+            if let Some(msg) = q.queue.queue.front() {
+                prop_assert!(msg.is_some());
+            }
+            if let Some((_, deadline_range_end)) = q.deadline_range_ends.front() {
+                prop_assert!(q.index < *deadline_range_end);
+                prop_assert!(q.timeout_index < *deadline_range_end);
+            }
+            timed_out_requests.push(request);
+        }
+
+        // Check the number of messages is tracked correctly.
+        prop_assert_eq!(ref_q.num_messages(), q.num_messages() + timed_out_requests.len());
+
+        // Check the deadlines used and then those still remaining
+        // are the same deadlines that were there initially.
+        prop_assert!(ref_q
+            .deadline_range_ends
+            .iter()
+            .filter(|(deadline, deadline_index)| *deadline <= time || *deadline_index <= q.index)
+            .chain(q.deadline_range_ends.iter())
+            .eq(ref_q.deadline_range_ends.iter()));
+
+        // Check relevant deadlines are still there, and timeout_index is in
+        // the corresponding deadline range.
+        if let Some((deadline, deadline_index)) = q.deadline_range_ends.front() {
+            prop_assert!(time < *deadline);
+            prop_assert!(q.timeout_index < *deadline_index);
+        }
+
+        // Pop from both queues and compare. Check that as long as there are requests in
+        // timed_out_requests we can use those to compare them to the requests in ref_q and
+        // once timed_out_requests is empty we can directly compare q and ref_q. Responses
+        // should come out naturally from both queues.
+        // This ensures timing out happened for all requests with a deadline <= time,
+        // but not for any of the requests after that.
+        let mut timed_out_requests_iter = timed_out_requests.into_iter();
+        while let Some((ref_index, rr)) = ref_q.pop() {
+            match rr {
+                RequestOrResponse::Response(ref_response) => {
+                    if let Some((index, RequestOrResponse::Response(response))) = q.pop() {
+                        prop_assert_eq!(ref_index, index);
+                        prop_assert_eq!(ref_response, response);
+                    } else {
+                        prop_assert!(false, "bad queue after time out");
+                    }
+                }
+                RequestOrResponse::Request(ref_request) => {
+                    if let Some(request) = timed_out_requests_iter.next() {
+                        prop_assert_eq!(ref_request, request);
+                    } else if let Some((index, RequestOrResponse::Request(request))) = q.pop() {
+                        prop_assert_eq!(ref_index, index);
+                        prop_assert_eq!(ref_request, request);
+                    } else {
+                        prop_assert!(false, "bad queue after time out");
+                    }
+                }
+            }
+        }
+
+        // Consistency check, if one queue is empty, the other must also be empty.
+        prop_assert_eq!(0, q.num_messages());
+    }
+
+    /// Check timing out requests where we reset the timeout_index during
+    /// a two stage timing out process to see whether the result is the same as
+    /// wituout resetting it. This situation can arise during deserializing
+    /// because the timeout_index is not persisted.
+    #[test]
+    fn output_queue_time_out_requests_with_index_reset(
+        (mut ref_q, mut q) in arb_output_queue(
+            100,        // capacity
+            10..=20,    // num_messages
+            2..=2,      // num_deadlines
+            0,          // min_deadline_nanos
+        )
+        .prop_filter(
+            // Filter cases where the queue only has None after the first
+            // deadline range since for this case, the test makes no sense.
+            "Queue with no messages past the first deadline range",
+            |q| {
+                q
+                    .queue
+                    .queue
+                    .iter()
+                    .skip(q.deadline_range_ends.front().unwrap().1.get() as usize)
+                    .all(|rr| rr.is_none())
+        })
+        .prop_map(|q| (q.clone(), q))
+    ) {
+        // We use the first deadline as the time for the first step.
+        let time = q.deadline_range_ends.front().unwrap().0;
+
+        // Time out requests for the first deadline range on both queues.
+        ref_q.time_out_requests(time).count();
+        q.time_out_requests(time).count();
+
+        // Reset the timeout_index to 0 for q.
+        q.timeout_index = QueueIndex::from(0);
+
+        // We use 'eternity' as the time for the second step.
+        let time = Time::from_nanos_since_unix_epoch(u64::MAX);
+
+        // Time out the rest of the requests.
+        let ref_requests = ref_q.time_out_requests(time).collect::<Vec<Arc<Request>>>();
+        let requests = q.time_out_requests(time).collect::<Vec<Arc<Request>>>();
+
+        // Make sure the two queues are the same.
+        prop_assert!(q.timeout_index <= ref_q.timeout_index);
+        prop_assert_eq!(ref_q, q);
+
+        // Make sure the timed out requests for the second step are the same.
+        prop_assert_eq!(ref_requests, requests);
+    }
 }
 
 #[test]

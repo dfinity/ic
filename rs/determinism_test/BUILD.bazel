@@ -36,7 +36,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = {},
     crate_name = "ic_determinism_test",
-    edition = "2018",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )
@@ -45,7 +44,6 @@ rust_test(
     name = "determinism_test_test",
     aliases = {},
     crate = ":determinism_test",
-    edition = "2018",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )
@@ -58,7 +56,6 @@ rust_test_suite(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",

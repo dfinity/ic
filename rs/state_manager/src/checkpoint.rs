@@ -1,5 +1,6 @@
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS,
+    truncate_path, CheckpointError, CheckpointMetrics, PageMapType, PersistenceError,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
@@ -16,7 +17,8 @@ use ic_state_layout::{
     BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
     ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
-use ic_types::{Height, LongExecutionMode};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{Height, LongExecutionMode, Time};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use rand::prelude::SliceRandom;
@@ -73,6 +75,14 @@ pub fn make_checkpoint(
             DEFRAG_SAMPLE,
             height.get(),
         )?;
+    }
+
+    {
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["filter_canisters"])
+            .start_timer();
+        tip.filter_canisters(&state.canister_states.keys().collect())?;
     }
 
     let cp = {
@@ -175,7 +185,11 @@ fn serialize_canister_to_tip(
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
             })
         }
-        None => None,
+        None => {
+            truncate_path(log, &canister_layout.vmemory_0());
+            truncate_path(log, &canister_layout.stable_memory_blob());
+            None
+        }
     };
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.value(), 0);
@@ -218,6 +232,12 @@ fn serialize_canister_to_tip(
                     .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
                 install_code_debit: canister_state.scheduler_state.install_code_debit,
+                time_of_last_allocation_charge_nanos: Some(
+                    canister_state
+                        .scheduler_state
+                        .time_of_last_allocation_charge
+                        .as_nanos_since_unix_epoch(),
+                ),
                 task_queue: canister_state
                     .system_state
                     .task_queue
@@ -421,6 +441,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                 }
             }
         }
+
         canister_states
     };
 
@@ -573,6 +594,12 @@ pub fn load_canister_state<P: ReadPolicy>(
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
+            // TODO(EXC-1214): Ensure field is always set to some value.
+            time_of_last_allocation_charge: canister_state_bits
+                .time_of_last_allocation_charge_nanos
+                .map_or(UNIX_EPOCH, |time_nanos| {
+                    Time::from_nanos_since_unix_epoch(time_nanos)
+                }),
         },
     };
 
@@ -716,7 +743,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -775,7 +802,7 @@ mod tests {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -791,7 +818,6 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            std::fs::create_dir(&checkpoints_dir).unwrap();
             mark_readonly(&checkpoints_dir).unwrap();
 
             // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
@@ -819,7 +845,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root.clone());
+            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -910,7 +936,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let own_subnet_type = SubnetType::Application;
@@ -942,7 +968,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::try_new(log, root).unwrap();
 
             const MISSING_HEIGHT: Height = Height::new(42);
             match layout
@@ -971,42 +997,14 @@ mod tests {
 
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log, root);
 
-            let own_subnet_type = SubnetType::Application;
-            const HEIGHT: Height = Height::new(42);
-            let canister_id = canister_test_id(10);
-
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                own_subnet_type,
-                "NOT_USED".into(),
-            );
-            state.put_canister_state(new_canister_state(
-                canister_id,
-                user_test_id(24).get(),
-                INITIAL_CYCLES,
-                NumSeconds::from(100_000),
-            ));
-
-            let result = make_checkpoint(
-                &state,
-                HEIGHT,
-                &layout,
-                &log,
-                &checkpoint_metrics(),
-                &mut thread_pool(),
-            );
-
+            assert!(layout.is_err());
+            let err_msg = layout.err().unwrap().to_string();
             assert!(
-                result.is_err()
-                    && result
-                        .as_ref()
-                        .unwrap_err()
-                        .to_string()
-                        .contains("Permission denied"),
-                "Expected a permission error, got {:?}",
-                result
+                err_msg.contains("Permission denied"),
+                "Expected a permission error, got {}",
+                err_msg
             );
         });
     }
@@ -1016,7 +1014,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1076,7 +1074,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1122,7 +1120,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -1168,7 +1166,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1213,7 +1211,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1258,7 +1256,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log.clone(), root);
+            let layout = StateLayout::try_new(log.clone(), root).unwrap();
 
             const HEIGHT: Height = Height::new(42);
 
@@ -1292,7 +1290,10 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let tip = StateLayout::new(log, root).tip(Height::new(42)).unwrap();
+            let tip = StateLayout::try_new(log, root)
+                .unwrap()
+                .tip(Height::new(42))
+                .unwrap();
 
             let defrag_size = 1 << 20; // 1MB
 

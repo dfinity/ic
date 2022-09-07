@@ -15,6 +15,6 @@ rust_library(
     name = "agent",
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_agent",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )

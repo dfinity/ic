@@ -4,7 +4,7 @@ name = "ic-rosetta-api"
 version = "1.6.1"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2018"
+edition = "2021"
 default-run = "ic-rosetta-api"
 
 [dependencies]

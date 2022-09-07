@@ -23,7 +23,7 @@ use ic_error_types::UserError;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
-    Scheduler, WasmExecutionOutput,
+    RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -42,7 +42,7 @@ use ic_system_api::{
     ApiType, ExecutionParameters,
 };
 use ic_test_utilities::{
-    execution_environment::test_registry_settings,
+    execution_environment::{generate_subnets, test_registry_settings},
     state::CanisterStateBuilder,
     types::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -66,6 +66,7 @@ use crate::{
 use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_types::time::UNIX_EPOCH;
 use std::collections::BTreeSet;
 
 /// A helper for the scheduler tests. It comes with its own Wasm executor that
@@ -101,6 +102,8 @@ pub(crate) struct SchedulerTest {
     scheduler: SchedulerImpl,
     // The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
+    // Registry Execution Settings.
+    registry_settings: RegistryExecutionSettings,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -149,6 +152,10 @@ impl SchedulerTest {
         self.xnet_canister_id
     }
 
+    pub fn registry_settings(&self) -> &RegistryExecutionSettings {
+        &self.registry_settings
+    }
+
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
@@ -162,6 +169,7 @@ impl SchedulerTest {
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
+            None,
             None,
         )
     }
@@ -177,11 +185,14 @@ impl SchedulerTest {
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
         system_method: Option<SystemMethod>,
+        time_of_last_allocation_charge: Option<Time>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
         let wasm_source = system_method
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or_default();
+        let time_of_last_allocation_charge =
+            time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
         let mut canister_state = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
@@ -190,6 +201,7 @@ impl SchedulerTest {
             .with_memory_allocation(memory_allocation.bytes())
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
+            .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
@@ -379,7 +391,7 @@ impl SchedulerTest {
             BTreeMap::new(),
             self.round,
             round_type,
-            &test_registry_settings(),
+            self.registry_settings(),
         );
         self.state = Some(state);
         self.increment_round();
@@ -413,9 +425,14 @@ impl SchedulerTest {
             &mut round_limits,
             &measurements,
             long_running_canister_ids,
-            &test_registry_settings(),
+            self.registry_settings(),
             &BTreeMap::new(),
         )
+    }
+
+    pub fn charge_for_resource_allocations(&mut self) {
+        self.scheduler
+            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
@@ -445,12 +462,15 @@ pub(crate) struct SchedulerTestBuilder {
     initial_canister_cycles: Cycles,
     subnet_total_memory: u64,
     subnet_message_memory: u64,
+    registry_settings: RegistryExecutionSettings,
     max_canister_memory_size: u64,
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
+    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
+    use_cost_scaling_flag: bool,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -470,12 +490,14 @@ impl Default for SchedulerTestBuilder {
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_total_memory,
             subnet_message_memory: subnet_total_memory,
+            registry_settings: test_registry_settings(),
             max_canister_memory_size,
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: false,
             log: no_op_logger(),
+            use_cost_scaling_flag: false,
         }
     }
 }
@@ -492,6 +514,23 @@ impl SchedulerTestBuilder {
         Self {
             subnet_type,
             scheduler_config,
+            ..self
+        }
+    }
+
+    pub fn with_cost_scaling(self, use_cost_scaling_flag: bool) -> Self {
+        Self {
+            use_cost_scaling_flag,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_size(self, subnet_size: usize) -> Self {
+        Self {
+            registry_settings: RegistryExecutionSettings {
+                subnet_size,
+                ..self.registry_settings
+            },
             ..self
         }
     }
@@ -559,6 +598,13 @@ impl SchedulerTestBuilder {
             self.subnet_type,
             tmpdir.path().to_path_buf(),
         );
+
+        state.metadata.network_topology.subnets = generate_subnets(
+            vec![self.own_subnet_id, self.nns_subnet_id],
+            self.own_subnet_id,
+            self.subnet_type,
+            self.registry_settings.subnet_size,
+        );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
 
@@ -567,12 +613,14 @@ impl SchedulerTestBuilder {
         let config = SubnetConfigs::default()
             .own_subnet_config(self.subnet_type)
             .cycles_account_manager_config;
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+        let mut cycles_account_manager = CyclesAccountManager::new(
             self.scheduler_config.max_instructions_per_message,
             self.subnet_type,
             self.own_subnet_id,
             config,
-        ));
+        );
+        cycles_account_manager.use_cost_scaling(self.use_cost_scaling_flag);
+        let cycles_account_manager = Arc::new(cycles_account_manager);
         let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
             FlagStatus::Enabled
         } else {
@@ -648,6 +696,7 @@ impl SchedulerTestBuilder {
             xnet_canister_id: canister_test_id(first_xnet_canister),
             scheduler,
             wasm_executor,
+            registry_settings: self.registry_settings,
         }
     }
 }
@@ -789,11 +838,12 @@ impl WasmExecutor for TestWasmExecutor {
         input: WasmExecutionInput,
         execution_state: &ExecutionState,
     ) -> (Option<CompilationResult>, WasmExecutionResult) {
-        let (_message_id, message, call_context_id) = {
+        let (message_id, message, call_context_id) = {
             let mut guard = self.core.lock().unwrap();
             guard.take_message(&input)
         };
         let execution = TestPausedWasmExecution {
+            message_id,
             message,
             sandbox_safe_system_state: input.sandbox_safe_system_state,
             execution_parameters: input.execution_parameters,
@@ -1186,6 +1236,7 @@ impl TestWasmExecutorCore {
 
 /// Represent fake Wasm execution that can be paused and resumed.
 struct TestPausedWasmExecution {
+    message_id: u32,
     message: TestMessage,
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
@@ -1212,7 +1263,10 @@ impl PausedWasmExecution for TestPausedWasmExecution {
     }
 
     fn abort(self: Box<Self>) {
-        // Nothing to do.
+        let executor = Arc::clone(&self.executor);
+        let mut guard = executor.core.lock().unwrap();
+        // Put back the message, so we could restart its execution later
+        guard.messages.insert(self.message_id, self.message);
     }
 }
 

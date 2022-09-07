@@ -307,6 +307,30 @@ pub struct UpgradeSnsControlledCanister {
     #[prost(bytes = "vec", tag = "2")]
     pub new_canister_wasm: ::prost::alloc::vec::Vec<u8>,
 }
+/// A proposal function to change the values of SNS metadata.
+/// Fields with None values will remain unchanged.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ManageSnsMetadata {
+    /// Base64 representation of the logo. Max length is 341334 characters, roughly 256 Kb.
+    #[prost(string, optional, tag = "1")]
+    pub logo: ::core::option::Option<::prost::alloc::string::String>,
+    /// Url string, must be between 10 and 256 characters.
+    #[prost(string, optional, tag = "2")]
+    pub url: ::core::option::Option<::prost::alloc::string::String>,
+    /// Name string, must be between 4 and 255 characters.
+    #[prost(string, optional, tag = "3")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Description string, must be between 10 and 10000 characters.
+    #[prost(string, optional, tag = "4")]
+    pub description: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// A proposal function to upgrade the SNS to the next version.  The versions are such that only
 /// one kind of canister will update at the same time.
 /// This returns an error if the canister cannot be upgraded or no upgrades are available.
@@ -345,7 +369,7 @@ pub struct Proposal {
     ///
     /// See `impl From<&Action> for u64` in src/types.rs for the implementation
     /// of this mapping.
-    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11")]
+    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11, 12")]
     pub action: ::core::option::Option<proposal::Action>,
 }
 /// Nested message and enum types in `Proposal`.
@@ -413,6 +437,11 @@ pub mod proposal {
         /// Id = 7.
         #[prost(message, tag = "11")]
         UpgradeSnsToNextVersion(super::UpgradeSnsToNextVersion),
+        /// Modify values of SnsMetada.
+        ///
+        /// Id = 8
+        #[prost(message, tag = "12")]
+        ManageSnsMetadata(super::ManageSnsMetadata),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]

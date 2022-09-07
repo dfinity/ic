@@ -42,8 +42,8 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_regedit",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -51,7 +51,6 @@ rust_binary(
     name = "ic-regedit",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":regedit"],
 )
@@ -60,7 +59,6 @@ rust_test(
     name = "regedit_test",
     aliases = ALIASES,
     crate = ":regedit",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

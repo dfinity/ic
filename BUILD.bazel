@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:canisters.bzl", "optimized_canister")
-load("//bazel:transitions.bzl", "opt_stripped_binary")
+load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("//bazel:buildifier.bzl", "buildifier_test")
 
@@ -73,8 +73,10 @@ BINARIES = {
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
+    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
     "ic-prep": "//rs/prep:ic-prep",
     "ic-recovery": "//rs/recovery:ic-recovery",
+    "ic-replay": "//rs/replay:ic-replay",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:registry_replicator",
     "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
@@ -89,7 +91,12 @@ BINARIES = {
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
 }
 
-[opt_stripped_binary(
+malicious_binary(
+    name = "malicious_replica",
+    binary = "//rs/replica",
+)
+
+[opt_debug_binary(
     name = name,
     binary = BINARIES[name],
 ) for name in BINARIES]

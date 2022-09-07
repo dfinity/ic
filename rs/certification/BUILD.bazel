@@ -6,7 +6,6 @@ rust_library(
     name = "certification",
     srcs = glob(["src/**"]),
     crate_name = "ic_certification",
-    edition = "2018",
     deps = [
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig",

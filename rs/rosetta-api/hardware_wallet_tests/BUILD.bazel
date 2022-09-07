@@ -38,8 +38,8 @@ rust_binary(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "hardware_wallet_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
@@ -47,7 +47,6 @@ rust_test(
     name = "hardware_wallet_tests_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -6,7 +6,6 @@ rust_library(
     name = "elastic_common_schema",
     srcs = glob(["src/**"]),
     crate_name = "elastic_common_schema",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:slog_derive",
     ],

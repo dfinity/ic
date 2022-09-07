@@ -17,7 +17,7 @@ info() {
 }
 
 count_total() {
-    summary=$(cat $1 | grep '^[0-9]* test' | cut -d ' ' -f 1 | awk '{ sum += $1 } END { print sum }')
+    summary=$(cat $1 | grep '^\(running \)\?[0-9]* test' | grep -o '[0-9]* test' | cut -d ' ' -f 1 | awk '{ sum += $1 } END { print sum }')
     total="$summary"
     echo $total
 }

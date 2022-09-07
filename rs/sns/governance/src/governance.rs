@@ -28,7 +28,7 @@ use crate::pb::v1::{
     proposal, Ballot, DefaultFollowees, Empty, GetMetadataRequest, GetMetadataResponse, GetNeuron,
     GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
     GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
-    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
     ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister,
@@ -63,7 +63,7 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
-use crate::pb::v1::governance::{UpgradeInProgress, Version};
+use crate::pb::v1::governance::{SnsMetadata, UpgradeInProgress, Version};
 use crate::sns_upgrade::{
     get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
 };
@@ -420,12 +420,12 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
             *Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
         let ledger_canister_id =
             *Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
+        let swap_canister_id =
+            *Self::validate_required_field("swap_canister_id", &base.swap_canister_id)?;
 
         Self::validate_canister_id_field("root", root_canister_id)?;
         Self::validate_canister_id_field("ledger", ledger_canister_id)?;
-        if let Some(swap_canister_id) = &base.swap_canister_id {
-            Self::validate_canister_id_field("swap", *swap_canister_id)?;
-        }
+        Self::validate_canister_id_field("swap", swap_canister_id)?;
 
         Self::valid_mode_or_err(&base)?;
         Self::validate_required_field("parameters", &base.parameters)?.validate(base.get_mode())?;
@@ -1819,6 +1819,9 @@ impl Governance {
             proposal::Action::RemoveGenericNervousSystemFunction(id) => {
                 self.perform_remove_generic_nervous_system_function(id)
             }
+            proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+                self.perform_manage_sns_metadata(manage_sns_metadata)
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             proposal::Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -1885,6 +1888,53 @@ impl Governance {
                 Ok(())
             },
         }
+    }
+
+    fn perform_manage_sns_metadata(
+        &mut self,
+        manage_sns_metadata: ManageSnsMetadata,
+    ) -> Result<(), GovernanceError> {
+        let mut sns_metadata = match &self.proto.sns_metadata {
+            Some(sns_metadata) => sns_metadata.clone(),
+            None => SnsMetadata {
+                logo: None,
+                url: None,
+                name: None,
+                description: None,
+            },
+        };
+        let mut log: String = "Updating the following fields of Sns Metadata: \n".to_string();
+        if let Some(new_logo) = manage_sns_metadata.logo {
+            sns_metadata.logo = Some(new_logo);
+            log += "- Logo";
+        }
+        if let Some(new_url) = manage_sns_metadata.url {
+            log += &format!(
+                "Url:\n- old value: {}\n- new value: {}",
+                sns_metadata.url.unwrap_or_else(|| "".to_string()),
+                new_url
+            );
+            sns_metadata.url = Some(new_url);
+        }
+        if let Some(new_name) = manage_sns_metadata.name {
+            log += &format!(
+                "Name:\n- old value: {}\n- new value: {}",
+                sns_metadata.name.unwrap_or_else(|| "".to_string()),
+                new_name
+            );
+            sns_metadata.name = Some(new_name);
+        }
+        if let Some(new_description) = manage_sns_metadata.description {
+            log += &format!(
+                "Description:\n- old value: {}\n- new value: {}",
+                sns_metadata.description.unwrap_or_else(|| "".to_string()),
+                new_description
+            );
+            sns_metadata.description = Some(new_description);
+        }
+        println!("{}", log);
+        self.proto.sns_metadata = Some(sns_metadata);
+        Ok(())
     }
 
     /// Executes a (non-native) nervous system function as a result of an adopted proposal.
@@ -4228,6 +4278,13 @@ mod tests {
     fn test_governance_proto_must_have_ledger_canister_ids() {
         let mut proto = basic_governance_proto();
         proto.ledger_canister_id = None;
+        assert!(ValidGovernanceProto::try_from(proto).is_err());
+    }
+
+    #[test]
+    fn test_governance_proto_must_have_swap_canister_ids() {
+        let mut proto = basic_governance_proto();
+        proto.swap_canister_id = None;
         assert!(ValidGovernanceProto::try_from(proto).is_err());
     }
 

@@ -268,6 +268,14 @@ impl ExecutionTest {
         )
     }
 
+    pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
+        let cost = wasm_compilation_cost(wasm);
+        self.cycles_account_manager()
+            .convert_instructions_to_cycles(
+                cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+            )
+    }
+
     pub fn subnet_available_memory(&self) -> AvailableMemory {
         self.subnet_available_memory.get()
     }
@@ -472,7 +480,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -493,7 +501,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -513,7 +521,7 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -533,7 +541,28 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
+    pub fn upgrade_canister_with_allocation(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        compute_allocation: Option<u64>,
+        memory_allocation: Option<u64>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister_id,
+            wasm_binary,
+            vec![],
+            compute_allocation,
+            memory_allocation,
+            None,
+        );
+        let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
 
@@ -1388,34 +1417,12 @@ impl ExecutionTestBuilder {
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
         subnets.extend(self.caller_subnet_id.iter().copied());
-
-        for subnet in subnets {
-            let mut subnet_type = SubnetType::System;
-            let mut nodes = btreemap! {};
-            if subnet == self.own_subnet_id {
-                subnet_type = self.subnet_type;
-                // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
-                for i in 0..self.registry_settings.subnet_size {
-                    nodes.insert(
-                        node_test_id(i as u64),
-                        NodeTopology {
-                            ip_address: "fake-ip-address".to_string(),
-                            http_port: 1234,
-                        },
-                    );
-                }
-            }
-            state.metadata.network_topology.subnets.insert(
-                subnet,
-                SubnetTopology {
-                    public_key: vec![1, 2, 3, 4],
-                    nodes,
-                    subnet_type,
-                    subnet_features: SubnetFeatures::default(),
-                    ecdsa_keys_held: BTreeSet::new(),
-                },
-            );
-        }
+        state.metadata.network_topology.subnets = generate_subnets(
+            subnets,
+            self.own_subnet_id,
+            self.subnet_type,
+            self.registry_settings.subnet_size,
+        );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.init_allocation_ranges_if_empty().unwrap();
@@ -1557,6 +1564,44 @@ impl ExecutionTestBuilder {
             ecdsa_subnet_public_keys,
         }
     }
+}
+
+/// A helper to create subnets.
+pub fn generate_subnets(
+    subnet_ids: Vec<SubnetId>,
+    own_subnet_id: SubnetId,
+    own_subnet_type: SubnetType,
+    own_subnet_size: usize,
+) -> BTreeMap<SubnetId, SubnetTopology> {
+    let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
+    for subnet_id in subnet_ids {
+        let mut subnet_type = SubnetType::System;
+        let mut nodes = btreemap! {};
+        if subnet_id == own_subnet_id {
+            subnet_type = own_subnet_type;
+            // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
+            for i in 0..own_subnet_size {
+                nodes.insert(
+                    node_test_id(i as u64),
+                    NodeTopology {
+                        ip_address: "fake-ip-address".to_string(),
+                        http_port: 1234,
+                    },
+                );
+            }
+        }
+        result.insert(
+            subnet_id,
+            SubnetTopology {
+                public_key: vec![1, 2, 3, 4],
+                nodes,
+                subnet_type,
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
+    }
+    result
 }
 
 /// A helper to extract the reply from an execution result.

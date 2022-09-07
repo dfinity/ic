@@ -76,8 +76,8 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_wasm",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
@@ -86,7 +86,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/sns-wasm.did"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":sns-wasm"],
 )
@@ -100,7 +99,6 @@ rust_test(
     name = "sns-wasm_test",
     aliases = ALIASES,
     crate = ":sns-wasm",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -132,7 +130,6 @@ rust_test_suite_with_extra_srcs(
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/sns-wasm",
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",

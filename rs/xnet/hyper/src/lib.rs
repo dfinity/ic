@@ -14,7 +14,6 @@ use ic_crypto_tls_interfaces::{
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
-use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -56,7 +55,7 @@ enum ConnectionState {
     Failed(TlsServerHandshakeError),
     /// The handshake completed successfully.
     Ready {
-        stream: TlsStream,
+        stream: Box<TlsStream>,
         peer: AuthenticatedPeer,
     },
     /// An unencrypted TCP stream, MUST ONLY BE USED IN TESTS.
@@ -105,7 +104,10 @@ impl TlsConnection {
                     // into TlsConnection and cause another poll on
                     // the `fut` future, which is not allowed for
                     // futures that returned `Ready`.
-                    self.0 = ConnectionState::Ready { stream, peer };
+                    self.0 = ConnectionState::Ready {
+                        stream: Box::new(stream),
+                        peer,
+                    };
                     if let ConnectionState::Ready { ref mut stream, .. } = self.0 {
                         f(Pin::new(stream), cx)
                     } else {
@@ -213,7 +215,7 @@ impl Accept for TlsAccept {
                         let future = async move {
                             tls.perform_tls_server_handshake(
                                 conn.into_inner(),
-                                AllowedClients::new(SomeOrAllNodes::All, HashSet::new()).unwrap(),
+                                AllowedClients::new(SomeOrAllNodes::All).unwrap(),
                                 registry_version,
                             )
                             .await
@@ -388,7 +390,7 @@ impl Service<Uri> for TlsConnector {
                         .await
                         .map_err(box_err)?;
                     Ok(TlsConnection(ConnectionState::Ready {
-                        stream: tls_stream,
+                        stream: Box::new(tls_stream),
                         peer: AuthenticatedPeer::Node(xnet_auth.node_id),
                     }))
                 }

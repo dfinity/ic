@@ -9,7 +9,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "orchestrator",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
@@ -66,7 +65,6 @@ rust_binary(
     name = "orchestrator",
     srcs = ["src/main.rs"],
     crate_name = "ic_state_tool",
-    edition = "2018",
     deps = [
         ":lib",
         "//rs/async_utils",

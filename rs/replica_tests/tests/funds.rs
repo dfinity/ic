@@ -88,7 +88,7 @@ fn can_deposit_cycles_via_the_management_canister() {
                 wasm().call_with_cycles(
                     IC_00,
                     Method::CreateCanister,
-                    call_args().other_side(EmptyBlob::encode()),
+                    call_args().other_side(EmptyBlob.encode()),
                     cycles_for_new_canister.into_parts(),
                 ),
             )

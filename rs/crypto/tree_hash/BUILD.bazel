@@ -6,7 +6,7 @@ rust_library(
     name = "tree_hash",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tree_hash",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha",

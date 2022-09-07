@@ -20,13 +20,12 @@ rust_library(
     name = "threshold_sigs",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_threshold_sigs",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "threshold_sigs_test",
     crate = ":threshold_sigs",
-    edition = "2018",
     deps = DEPENDENCIES,
 )

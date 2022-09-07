@@ -6,5 +6,4 @@ rust_library(
     name = "rustfmt",
     srcs = ["src/lib.rs"],
     crate_name = "ic_utils_rustfmt",
-    edition = "2018",
 )

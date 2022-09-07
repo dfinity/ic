@@ -188,10 +188,10 @@ function route(r) {
     r.headersOut["x-ic-canister-id"] = canister_id;
   }
 
-  return node_id.concat(",", subnet_id);
+  return `${node_id},${subnet_id}`;
 }
 
-function randomNode() {
+function randomRoute() {
   var canisterSubnets = subnet_table.canister_subnets || [];
   var subnetCount = canisterSubnets.length;
   if (subnetCount == 0) {
@@ -212,7 +212,7 @@ function randomNode() {
   var nodeIdx = Math.floor(Math.random() * nodeCount);
   var nodeId = subnetNodeIds[nodeIdx];
 
-  return nodeId;
+  return `${subnetId},${nodeId}`;
 }
 
-export default { route, randomNode, hostCanisterId, inferCanisterId };
+export default { route, randomRoute, hostCanisterId, inferCanisterId };

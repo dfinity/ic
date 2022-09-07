@@ -205,8 +205,8 @@ impl IDkgDealingInternal {
 
         let (commitment, ciphertext, proof) = match shares {
             SecretShares::Random => {
-                let values = Polynomial::random(curve, num_coefficients, &mut poly_rng)?; // omega in paper
-                let mask = Polynomial::random(curve, num_coefficients, &mut poly_rng)?; // omega' in paper
+                let values = Polynomial::random(curve, num_coefficients, &mut poly_rng); // omega in paper
+                let mask = Polynomial::random(curve, num_coefficients, &mut poly_rng); // omega' in paper
 
                 let (ciphertext, commitment) = encrypt_and_commit_pair_of_polynomials(
                     &values,
@@ -277,7 +277,7 @@ impl IDkgDealingInternal {
                 // Generate secret polynomials
                 let product = left_value.mul(right_value)?;
 
-                let product_masking = EccScalar::random(curve, &mut poly_rng)?;
+                let product_masking = EccScalar::random(curve, &mut poly_rng);
 
                 let values =
                     Polynomial::random_with_constant(product, num_coefficients, &mut poly_rng)?;

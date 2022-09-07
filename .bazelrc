@@ -3,7 +3,8 @@ build --incompatible_strict_action_env # use an environment with a static value 
 
 # default to optimized and stripped binaries. These greatly optimized rust test runtimes.
 build --compilation_mode=opt
-build --strip=always
+build --@rules_rust//:extra_rustc_flag=-Cdebug-assertions=on
+build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
 
@@ -46,7 +47,6 @@ test --test_env=RUST_BACKTRACE=full
 
 build:ci --noremote_local_fallback
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
-build:ci --repository_cache=/cache/bazel
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild

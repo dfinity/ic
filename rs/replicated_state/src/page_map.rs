@@ -308,6 +308,8 @@ pub struct PageMap {
     /// Invariant: round_delta ⊆ page_delta
     round_delta: PageDelta,
 
+    has_stripped_round_deltas: bool,
+
     /// The allocator for PageDelta pages.
     /// It is reset when `strip_all_deltas()` method is called.
     page_allocator: PageAllocator,
@@ -331,6 +333,7 @@ impl PageMap {
             base_height: Some(base_height),
             page_delta: Default::default(),
             round_delta: Default::default(),
+            has_stripped_round_deltas: false,
             page_allocator: Default::default(),
         })
     }
@@ -346,6 +349,7 @@ impl PageMap {
             round_delta: self
                 .page_allocator
                 .serialize_page_delta(self.round_delta.iter()),
+            has_stripped_round_deltas: self.has_stripped_round_deltas,
             page_allocator: self.page_allocator.serialize(),
         }
     }
@@ -363,6 +367,7 @@ impl PageMap {
             base_height: page_map.base_height,
             page_delta,
             round_delta,
+            has_stripped_round_deltas: page_map.has_stripped_round_deltas,
             page_allocator,
         })
     }
@@ -480,6 +485,8 @@ impl PageMap {
 
     /// Removes the round delta from this page map.
     pub fn strip_round_delta(&mut self) {
+        self.has_stripped_round_deltas = true;
+
         std::mem::take(&mut self.round_delta);
     }
 
@@ -495,6 +502,11 @@ impl PageMap {
     /// Whether there are any round deltas
     pub fn round_delta_is_empty(&self) -> bool {
         self.round_delta.is_empty()
+    }
+
+    /// Whether strip_round_deltas has been called before
+    pub fn has_stripped_round_deltas(&self) -> bool {
+        self.has_stripped_round_deltas
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -760,6 +772,7 @@ pub struct PageMapSerialization {
     pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
     pub round_delta: PageDeltaSerialization,
+    pub has_stripped_round_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
 }
 

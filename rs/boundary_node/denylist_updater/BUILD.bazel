@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:httptest",
     "@crate_index//:humantime",
     "@crate_index//:mockall",
     "@crate_index//:nix",
@@ -36,7 +37,6 @@ rust_binary(
     name = "denylist-updater",
     srcs = glob(["src/**"]),
     crate_name = "denylist_updater",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -45,7 +45,6 @@ rust_test(
     name = "denylist_updater_test",
     srcs = glob(["src/**"]),
     crate_root = "src/main.rs",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

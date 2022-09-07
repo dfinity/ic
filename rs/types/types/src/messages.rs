@@ -12,8 +12,8 @@ pub use self::http::{
     Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
     HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpResponseStatus, HttpStatusResponse, HttpUserQuery,
-    RawHttpRequestVal, ReplicaHealthStatus, SignedDelegation,
+    HttpRequestEnvelope, HttpRequestError, HttpStatusResponse, HttpUserQuery, RawHttpRequestVal,
+    ReplicaHealthStatus, SignedDelegation,
 };
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;

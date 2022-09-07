@@ -549,7 +549,7 @@ where
         init_payloads: SnsCanisterInitPayloads,
     ) -> Result<(), String> {
         let results = zip(
-            vec!["Root", "Governance", "Ledger"],
+            vec!["Root", "Governance", "Ledger", "Swap"],
             futures::future::join_all(vec![
                 canister_api.install_wasm(
                     CanisterId::new(canisters.root.unwrap()).unwrap(),

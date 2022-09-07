@@ -15,6 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::CanisterStatus;
 
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_test_utilities::{
     mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
@@ -50,6 +51,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: NumInstructions::from(5),
+            max_instructions_per_slice: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -186,6 +188,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -220,6 +223,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -256,6 +260,7 @@ fn basic_induct_messages_on_same_subnet_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -294,6 +299,7 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -323,6 +329,7 @@ fn induct_messages_to_self_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -368,6 +375,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 scheduler_cores: 2,
                 max_instructions_per_round: NumInstructions::new(1),
                 max_instructions_per_message: NumInstructions::new(1),
+                max_instructions_per_slice: NumInstructions::new(1),
                 instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
@@ -454,6 +462,7 @@ fn test_message_limit_from_message_overhead() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
+        max_instructions_per_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
         instruction_overhead_per_message: NumInstructions::from(2_000_000),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -514,6 +523,7 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -554,6 +564,7 @@ fn canister_can_run_for_multiple_iterations() {
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -588,6 +599,7 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
+            max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -628,7 +640,6 @@ fn only_charge_for_allocation_after_specified_duration() {
     // non-zero time.
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
     test.state_mut().metadata.batch_time = initial_time;
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
 
     let time_between_batches = test
         .scheduler()
@@ -653,6 +664,7 @@ fn only_charge_for_allocation_after_specified_duration() {
         ComputeAllocation::zero(),
         MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
         None,
+        Some(initial_time),
     );
 
     // Don't charge because the time since the last charge is too small.
@@ -682,6 +694,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             scheduler_cores: 2,
             max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
             max_instructions_per_message: instructions_per_message,
+            max_instructions_per_slice: instructions_per_message,
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -717,6 +730,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
 // uninstalled.
 #[test]
 fn canisters_with_insufficient_cycles_are_uninstalled() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
     let mut test = SchedulerTestBuilder::new().build();
     for _ in 0..3 {
         test.create_canister_with(
@@ -724,10 +738,9 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             ComputeAllocation::zero(),
             MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
             None,
+            Some(initial_time),
         );
     }
-    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
     test.state_mut().metadata.batch_time = initial_time
         + test
             .scheduler()
@@ -757,6 +770,62 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 }
 
 #[test]
+fn dont_charge_allocations_for_long_running_canisters() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let initial_cycles = 10_000_000;
+
+    let canister = test.create_canister_with(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+    );
+    let paused_canister = test.create_canister_with(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+    );
+    test.canister_state_mut(paused_canister)
+        .system_state
+        .task_queue
+        .push_front(ExecutionTask::PausedExecution(PausedExecutionId(0)));
+
+    assert!(test.canister_state(paused_canister).has_paused_execution());
+    assert!(!test.canister_state(canister).has_paused_execution());
+
+    let paused_canister_balance_before =
+        test.canister_state(paused_canister).system_state.balance();
+    let canister_balance_before = test.canister_state(canister).system_state.balance();
+
+    let duration_between_allocation_charges = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+    test.state_mut().metadata.batch_time = initial_time + duration_between_allocation_charges;
+
+    test.charge_for_resource_allocations();
+    // Balance has not changed for canister that has long running execution.
+    assert_eq!(
+        test.canister_state(paused_canister).system_state.balance(),
+        paused_canister_balance_before
+    );
+    // Balance has changed for this canister.
+    assert_eq!(
+        test.canister_state(canister).system_state.balance(),
+        canister_balance_before
+            - test.scheduler().cycles_account_manager.memory_cost(
+                NumBytes::from(1 << 30),
+                duration_between_allocation_charges,
+                1
+            )
+    );
+}
+
+#[test]
 fn can_execute_messages_with_just_enough_instructions() {
     // In this test we have 3 canisters with 1 message each and the maximum allowed
     // round cycles is 3 times the instructions consumed by each message. Thus, we
@@ -766,6 +835,7 @@ fn can_execute_messages_with_just_enough_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(50 * 3),
             max_instructions_per_message: NumInstructions::from(50),
+            max_instructions_per_slice: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -806,6 +876,7 @@ fn execute_only_canisters_with_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
+            max_instructions_per_slice: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -900,6 +971,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: NumInstructions::from(5),
+            max_instructions_per_slice: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -948,6 +1020,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
+            max_instructions_per_slice: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -996,6 +1069,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(400),
             max_instructions_per_message: NumInstructions::new(10),
+            max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1113,6 +1187,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1133,6 +1208,7 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::new(1),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1142,6 +1218,7 @@ fn execute_heartbeat_before_messages() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1160,6 +1237,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_slice: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1173,6 +1251,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
             );
             canisters.push(canister);
@@ -1250,6 +1329,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_slice: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1261,6 +1341,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
@@ -1289,6 +1370,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_slice: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1303,6 +1385,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
@@ -1341,6 +1424,7 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(100),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1354,6 +1438,7 @@ fn execute_multiple_heartbeats() {
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
             Some(SystemMethod::CanisterHeartbeat),
+            None,
         );
         for _ in 0..number_of_messages_per_canister {
             test.send_ingress(canister, ingress(1));
@@ -1386,6 +1471,7 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
+            max_instructions_per_slice: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1422,6 +1508,7 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(25),
             max_instructions_per_message: NumInstructions::from(5),
+            max_instructions_per_slice: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1438,6 +1525,7 @@ fn can_record_metrics_for_a_round() {
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
             MemoryAllocation::BestEffort,
+            None,
             None,
         );
         for _ in 0..5 {
@@ -1675,6 +1763,7 @@ fn execution_round_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(400),
             max_instructions_per_message: NumInstructions::from(10),
+            max_instructions_per_slice: NumInstructions::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1824,6 +1913,7 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(100),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1833,12 +1923,14 @@ fn heartbeat_metrics_are_recorded() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     let canister1 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
     );
     test.expect_heartbeat(canister0, instructions(100));
     test.expect_heartbeat(canister1, instructions(101));
@@ -1886,6 +1978,7 @@ fn execution_round_does_not_end_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(100),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2103,6 +2196,7 @@ fn scheduler_maintains_canister_order() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_slice: NumInstructions::from(1),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -2115,6 +2209,7 @@ fn scheduler_maintains_canister_order() {
             Cycles::new(1_000_000_000_000_000_000),
             ComputeAllocation::try_from(*ca).unwrap(),
             MemoryAllocation::BestEffort,
+            None,
             None,
         );
         // The last canister does not have any messages.
@@ -2170,6 +2265,7 @@ fn construct_scheduler_for_prop_test(
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
         max_instructions_per_message: NumInstructions::from(instructions_per_message as u64),
+        max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
         instruction_overhead_per_message: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     };
@@ -2202,6 +2298,7 @@ fn construct_scheduler_for_prop_test(
             } else {
                 None
             },
+            None,
         );
         test.canister_state_mut(canister)
             .scheduler_state
@@ -2502,10 +2599,14 @@ fn rate_limiting_of_install_code() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(5 * B as u64),
+            max_instructions_per_slice: NumInstructions::from(5 * B as u64),
+            install_code_rate_limit: NumInstructions::from(2 * B as u64),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
         .with_rate_limiting_of_instructions()
+        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -2526,14 +2627,15 @@ fn rate_limiting_of_install_code() {
     };
     test.inject_install_code_call_to_ic00(canister, install_code);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
     let responses = test.get_responses_to_injected_calls();
     assert_eq!(
         &responses[0].response_payload,
-        &Payload::Data(EmptyBlob::encode())
+        &Payload::Data(EmptyBlob.encode())
     );
     assert_eq!(
         &responses[1].response_payload,
-        &Payload::Data(EmptyBlob::encode())
+        &Payload::Data(EmptyBlob.encode())
     );
 
     // Try upgrading the canister. It should fail because the canister is rate
@@ -2544,6 +2646,7 @@ fn rate_limiting_of_install_code() {
         post_upgrade: instructions(6 * B as u64),
     };
     test.inject_install_code_call_to_ic00(canister, upgrade);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let response = test.get_responses_to_injected_calls().pop().unwrap();
     match response.response_payload {
@@ -2559,6 +2662,10 @@ fn rate_limiting_of_install_code() {
         }
     };
 
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     // After the previous round the canister is no longer rate limited.
     // Upgrading should succeed now.
     let upgrade = TestInstallCode::Upgrade {
@@ -2568,11 +2675,9 @@ fn rate_limiting_of_install_code() {
     };
     test.inject_install_code_call_to_ic00(canister, upgrade);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
     let response = test.get_responses_to_injected_calls().pop().unwrap();
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(EmptyBlob::encode())
-    );
+    assert_eq!(response.response_payload, Payload::Data(EmptyBlob.encode()));
 }
 
 #[test]
@@ -2581,7 +2686,7 @@ fn dts_long_execution_completes() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
-            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
@@ -2607,7 +2712,7 @@ fn dts_long_execution_runs_out_of_instructions() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             instruction_overhead_per_message: NumInstructions::from(0),
-            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
@@ -2625,4 +2730,529 @@ fn dts_long_execution_runs_out_of_instructions() {
         test.ingress_error(&message_id).code(),
         ErrorCode::CanisterInstructionLimitExceeded,
     );
+}
+
+// Subnet size tests.
+//
+// Each test simulates the execution of a round and asserts the cost of it in relation to a subnet size.
+// Those assertions include:
+//  - specific cost for a default subnet size (base point)
+//  - monotonic growth of a cost in relation to a subnet size
+//  - linear (or other function) growth of a cost in relation to a subnet size
+
+fn simulate_one_gib_per_second_cost(
+    subnet_type: SubnetType,
+    subnet_size: usize,
+    compute_allocation: ComputeAllocation,
+) -> Cycles {
+    // This function simulates `execute_round` to get the storage cost of 1 GiB for 1 second
+    // with a given compute allocation.
+    // Since the duration between allocation charges may not be equal to 1 second
+    // the final cost is scaled proportionally.
+    let one_gib = NumBytes::from(1 << 30);
+    let one_second = Duration::from_secs(1);
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    // Charging handles time=0 as a special case, so it should be set to some non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.state_mut().metadata.batch_time = initial_time;
+    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+
+    let duration_between_allocation_charges = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges();
+
+    let canister_id = test.create_canister_with(
+        Cycles::new(1_000_000_000) * subnet_size,
+        compute_allocation,
+        MemoryAllocation::Reserved(one_gib),
+        None,
+        Some(initial_time),
+    );
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    // The time delta is long enough that allocation charging should be triggered.
+    test.state_mut().metadata.batch_time += duration_between_allocation_charges;
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    // Scale the cost from a defined in config value to a 1 second duration.
+    let cost = balance_before - balance_after;
+    let one_second_cost =
+        (cost.get() * one_second.as_millis()) / duration_between_allocation_charges.as_millis();
+
+    Cycles::from(one_second_cost)
+}
+
+fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of executing a message,
+    // including charging and refunding execution cycles.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    let canister_id = test.create_canister();
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    test.send_ingress(canister_id, ingress(10));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    balance_before - balance_after
+}
+
+fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of installing code,
+    // including charging and refunding execution cycles.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    let canister_id = test.create_canister();
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let install_code = TestInstallCode::Reinstall {
+        start: instructions(20),
+        init: instructions(20),
+    };
+    test.inject_install_code_call_to_ic00(canister_id, install_code);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    balance_before - balance_after
+}
+
+fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of executing a heartbeat,
+    // including charging and refunding execution cycles.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    test.state_mut().metadata.batch_time = initial_time;
+    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+    let canister_id = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        Some(initial_time),
+    );
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    test.expect_heartbeat(canister_id, instructions(30));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    balance_before - balance_after
+}
+
+fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
+    match subnet_type {
+        SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
+        SubnetType::Application => CyclesAccountManagerConfig::application_subnet(),
+        SubnetType::VerifiedApplication => {
+            CyclesAccountManagerConfig::verified_application_subnet()
+        }
+    }
+}
+
+fn scale_cost(config: &CyclesAccountManagerConfig, cycles: Cycles, subnet_size: usize) -> Cycles {
+    Cycles::from((cycles.get() * (subnet_size as u128)) / config.reference_subnet_size)
+}
+
+fn memory_cost(
+    config: &CyclesAccountManagerConfig,
+    bytes: NumBytes,
+    duration: Duration,
+    subnet_size: usize,
+) -> Cycles {
+    let one_gib = 1024 * 1024 * 1024;
+    let cycles = Cycles::from(
+        (bytes.get() as u128
+            * config.gib_storage_per_second_fee.get()
+            * duration.as_secs() as u128)
+            / one_gib,
+    );
+    scale_cost(config, cycles, subnet_size)
+}
+
+fn compute_allocation_cost(
+    config: &CyclesAccountManagerConfig,
+    compute_allocation: ComputeAllocation,
+    duration: Duration,
+    subnet_size: usize,
+) -> Cycles {
+    let cycles = config.compute_percent_allocated_per_second_fee
+        * duration.as_secs()
+        * compute_allocation.as_percent();
+    scale_cost(config, cycles, subnet_size)
+}
+
+fn calculate_one_gib_per_second_cost(
+    config: &CyclesAccountManagerConfig,
+    compute_allocation: ComputeAllocation,
+    subnet_size: usize,
+) -> Cycles {
+    let one_gib = NumBytes::from(1 << 30);
+    let duration = Duration::from_secs(1);
+    memory_cost(config, one_gib, duration, subnet_size)
+        + compute_allocation_cost(config, compute_allocation, duration, subnet_size)
+}
+
+fn convert_instructions_to_cycles(
+    config: &CyclesAccountManagerConfig,
+    num_instructions: NumInstructions,
+) -> Cycles {
+    config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
+}
+
+fn withdraw_execution_cycles(
+    config: &CyclesAccountManagerConfig,
+    num_instructions: NumInstructions,
+    subnet_size: usize,
+) -> Cycles {
+    scale_cost(
+        config,
+        config.update_message_execution_fee
+            + convert_instructions_to_cycles(config, num_instructions),
+        subnet_size,
+    )
+}
+
+fn refund_execution_cycles(
+    config: &CyclesAccountManagerConfig,
+    num_instructions: NumInstructions,
+    num_instructions_initially_charged: NumInstructions,
+    subnet_size: usize,
+) -> Cycles {
+    let num_instructions_to_refund =
+        std::cmp::min(num_instructions, num_instructions_initially_charged);
+    let cycles = convert_instructions_to_cycles(config, num_instructions_to_refund);
+
+    scale_cost(config, cycles, subnet_size)
+}
+
+fn calculate_execution_cycles(
+    config: &CyclesAccountManagerConfig,
+    instructions: NumInstructions,
+    subnet_size: usize,
+) -> Cycles {
+    let instructions_limit = NumInstructions::from(5_000_000_000_000);
+    let instructions_left = instructions_limit - instructions;
+    let withdraw = withdraw_execution_cycles(config, instructions_limit, subnet_size);
+    let refund =
+        refund_execution_cycles(config, instructions_left, instructions_limit, subnet_size);
+
+    withdraw - refund
+}
+
+#[test]
+fn test_subnet_size_one_gib_and_zero_compute_allocation() {
+    let compute_allocation = ComputeAllocation::zero();
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_one_gib_per_second_cost(
+                subnet_type,
+                reference_subnet_size * k,
+                compute_allocation
+            ),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_one_gib_and_50_compute_allocation() {
+    let compute_allocation = ComputeAllocation::try_from(50).unwrap();
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_one_gib_per_second_cost(
+                subnet_type,
+                reference_subnet_size * k,
+                compute_allocation
+            ),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_one_gib_and_100_compute_allocation() {
+    let compute_allocation = ComputeAllocation::try_from(100).unwrap();
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_one_gib_per_second_cost(&config, compute_allocation, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_one_gib_per_second_cost(subnet_type, reference_subnet_size, compute_allocation),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 2, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 11, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 12, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 101, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 102, compute_allocation)
+    );
+    assert!(
+        simulate_one_gib_per_second_cost(subnet_type, 1_001, compute_allocation)
+            < simulate_one_gib_per_second_cost(subnet_type, 1_002, compute_allocation)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_one_gib_per_second_cost(
+                subnet_type,
+                reference_subnet_size * k,
+                compute_allocation
+            ),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_execute_message() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_execution_cycles(&config, NumInstructions::from(10), reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_execute_message_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_execute_message_cost(subnet_type, 1)
+            < simulate_execute_message_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 11)
+            < simulate_execute_message_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 101)
+            < simulate_execute_message_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_execute_message_cost(subnet_type, 1_001)
+            < simulate_execute_message_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_execute_message_cost(subnet_type, reference_subnet_size * k),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_execute_install_code() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_execution_cycles(&config, NumInstructions::from(40), reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_execute_install_code_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_execute_install_code_cost(subnet_type, 1)
+            < simulate_execute_install_code_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_execute_install_code_cost(subnet_type, 11)
+            < simulate_execute_install_code_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_execute_install_code_cost(subnet_type, 101)
+            < simulate_execute_install_code_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_execute_install_code_cost(subnet_type, 1_001)
+            < simulate_execute_install_code_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_execute_install_code_cost(subnet_type, reference_subnet_size * k),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_execute_heartbeat() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_execution_cycles(&config, NumInstructions::from(30), reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 1)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 11)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 101)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_execute_canister_heartbeat_cost(subnet_type, 1_001)
+            < simulate_execute_canister_heartbeat_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    for k in 1..10 {
+        assert_eq!(
+            simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size * k),
+            reference_cost * k
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_system_subnet_has_zero_cost() {
+    let subnet_type = SubnetType::System;
+
+    for subnet_size in 1..30 {
+        let compute_allocation = ComputeAllocation::zero();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero()
+        );
+
+        let compute_allocation = ComputeAllocation::try_from(50).unwrap();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero()
+        );
+
+        let compute_allocation = ComputeAllocation::try_from(100).unwrap();
+        assert_eq!(
+            simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
+            Cycles::zero()
+        );
+
+        assert_eq!(
+            simulate_execute_message_cost(subnet_type, subnet_size),
+            Cycles::zero()
+        );
+
+        assert_eq!(
+            simulate_execute_install_code_cost(subnet_type, subnet_size),
+            Cycles::zero()
+        );
+
+        assert_eq!(
+            simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size),
+            Cycles::zero()
+        );
+    }
 }

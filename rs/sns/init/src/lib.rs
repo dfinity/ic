@@ -40,9 +40,6 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
-/// SNS parameters default values
-pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 100_000_000;
-
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
@@ -151,6 +148,7 @@ impl SnsInitPayload {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
+        governance.swap_canister_id = Some(sns_canister_ids.swap);
         governance.deployed_version = deployed_version;
 
         let parameters = governance
@@ -511,51 +509,20 @@ impl SnsInitPayload {
 
     fn validate_logo(&self) -> Result<(), String> {
         if let Some(logo) = &self.logo {
-            if logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
-                return Err(format!("Error: logo string encoding must be less than {} characters, given character count: {}.", SnsMetadata::MAX_LOGO_LENGTH, logo.len()));
-            }
+            SnsMetadata::validate_logo(logo)?;
         }
-
         Ok(())
     }
 
     fn validate_url(&self) -> Result<(), String> {
         let url = self.url.as_ref().ok_or("Error: url must be specified")?;
-
-        if url.len() > SnsMetadata::MAX_URL_LENGTH {
-            return Err(format!(
-                "Error: url must be less than {} characters, given character count is {}.",
-                SnsMetadata::MAX_URL_LENGTH,
-                url.len()
-            ));
-        } else if url.len() < SnsMetadata::MIN_URL_LENGTH {
-            return Err(format!(
-                "Error: url must be greater than {} characters, given character count is {}.",
-                SnsMetadata::MIN_URL_LENGTH,
-                url.len()
-            ));
-        }
-
+        SnsMetadata::validate_url(url)?;
         Ok(())
     }
 
     fn validate_name(&self) -> Result<(), String> {
         let name = self.name.as_ref().ok_or("Error: name must be specified")?;
-
-        if name.len() > SnsMetadata::MAX_NAME_LENGTH {
-            return Err(format!(
-                "Error: name must be less than {} characters, given character count is {}.",
-                SnsMetadata::MAX_NAME_LENGTH,
-                name.len()
-            ));
-        } else if name.len() < SnsMetadata::MIN_NAME_LENGTH {
-            return Err(format!(
-                "Error: name must be greater than {} characters, given character count is {}.",
-                SnsMetadata::MIN_NAME_LENGTH,
-                name.len()
-            ));
-        }
-
+        SnsMetadata::validate_name(name)?;
         Ok(())
     }
 
@@ -564,17 +531,7 @@ impl SnsInitPayload {
             .description
             .as_ref()
             .ok_or("Error: description must be specified")?;
-
-        if description.len() > SnsMetadata::MAX_DESCRIPTION_LENGTH {
-            return Err(format!(
-                "Error: description must be less than {} characters, given character count is {}.",
-                SnsMetadata::MAX_DESCRIPTION_LENGTH,
-                description.len()
-            ));
-        } else if description.len() < SnsMetadata::MIN_DESCRIPTION_LENGTH {
-            return Err(format!("Error: description must be greater than {} characters, given character count is {}.", SnsMetadata::MIN_DESCRIPTION_LENGTH, description.len()));
-        }
-
+        SnsMetadata::validate_description(description)?;
         Ok(())
     }
 }

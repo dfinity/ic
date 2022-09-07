@@ -6,11 +6,11 @@ rust_library(
     name = "interfaces",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
         "@crate_index//:derive_more",
     ],
+    version = "0.8.0",
     deps = [
         "//rs/crypto/tree_hash",
         "//rs/interfaces/state_manager",

@@ -1,7 +1,7 @@
 [package]
 name = "nns-ui-canister"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "nns-ui-canister"

@@ -4,7 +4,7 @@ end::catalog[] */
 use crate::types::*;
 use crate::util::*;
 use ic_fondue::ic_manager::IcHandle;
-use ic_ic00_types::{self as ic00, EmptyBlob, Method};
+use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_universal_canister::{call_args, wasm};
 
 pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
@@ -22,7 +22,7 @@ pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .query(wasm().call_simple(
                     ic00::IC_00,
                     Method::RawRand,
-                    call_args().other_side(EmptyBlob::encode()),
+                    call_args().other_side(EmptyBlob.encode()),
                 ))
                 .await;
 
@@ -33,7 +33,7 @@ pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                 .update(wasm().call_simple(
                     ic00::IC_00,
                     Method::RawRand,
-                    call_args().other_side(EmptyBlob::encode()),
+                    call_args().other_side(EmptyBlob.encode()),
                 ))
                 .await
                 .unwrap();

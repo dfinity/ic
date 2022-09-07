@@ -1,7 +1,8 @@
 // Replicated messages.
-pub(crate) mod call;
 pub mod heartbeat;
+pub(crate) mod replicated_query;
 pub mod response;
+pub(crate) mod update;
 
 // Non-replicated messages.
 pub mod nonreplicated_query;

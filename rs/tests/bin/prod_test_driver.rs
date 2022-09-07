@@ -218,68 +218,81 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "boundary_nodes_pre_master",
-            vec![
-                pot_with_setup(
-                    "boundary_nodes_pot",
-                    boundary_nodes_integration::boundary_nodes::config,
-                    par(vec![
-                        sys_t(
-                            "boundary_nodes_canister_test",
-                            boundary_nodes_integration::boundary_nodes::canister_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_http_canister_test",
-                            boundary_nodes_integration::boundary_nodes::http_canister_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_nginx_valid_config_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
-                        ),
-                        // https://dfinity.atlassian.net/browse/BOUN-461
-                        // sys_t(
-                        //     "boundary_nodes_denylist_test",
-                        //     boundary_nodes_integration::boundary_nodes::denylist_test,
-                        // ),
-                        sys_t(
-                            "boundary_nodes_redirect_http_to_https_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_redirect_to_dashboard_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_redirect_to_non_raw_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_sw_test",
-                            boundary_nodes_integration::boundary_nodes::sw_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_icx_proxy_test",
-                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_direct_to_replica_test",
-                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_direct_to_replica_rosetta_test",
-                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
-                        ),
-                    ]),
-                ),
-                pot_with_setup(
-                    "boundary_nodes_snp_pot",
-                    boundary_nodes_snp_tests::boundary_nodes_snp::config,
-                    par(vec![sys_t(
-                        "boundary_nodes_snp_kernel_test",
-                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
-                    )]),
-                )
-                .with_alert(ENG_NODE_CHANNEL),
-            ],
+            vec![pot_with_setup(
+                "boundary_nodes_pot",
+                boundary_nodes_integration::boundary_nodes::config,
+                par(vec![
+                    sys_t(
+                        "boundary_nodes_canister_test",
+                        boundary_nodes_integration::boundary_nodes::canister_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_http_canister_test",
+                        boundary_nodes_integration::boundary_nodes::http_canister_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_nginx_valid_config_test",
+                        boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
+                    ),
+                    // https://dfinity.atlassian.net/browse/BOUN-461
+                    // sys_t(
+                    //     "boundary_nodes_denylist_test",
+                    //     boundary_nodes_integration::boundary_nodes::denylist_test,
+                    // ),
+                    sys_t(
+                        "boundary_nodes_redirect_http_to_https_test",
+                        boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_redirect_to_dashboard_test",
+                        boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_redirect_to_non_raw_test",
+                        boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_sw_test",
+                        boundary_nodes_integration::boundary_nodes::sw_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_icx_proxy_test",
+                        boundary_nodes_integration::boundary_nodes::icx_proxy_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_direct_to_replica_test",
+                        boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_direct_to_replica_rosetta_test",
+                        boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_direct_to_replica_options_test",
+                        boundary_nodes_integration::boundary_nodes::direct_to_replica_options_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_seo_test",
+                        boundary_nodes_integration::boundary_nodes::seo_test,
+                    ),
+                ]),
+            )],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
+
+    m.add_suite(
+        suite(
+            "boundary_nodes_sev_snp_pre_master",
+            vec![pot_with_setup(
+                "boundary_nodes_sev_snp_pot",
+                boundary_nodes_snp_tests::boundary_nodes_snp::config,
+                par(vec![sys_t(
+                    "boundary_nodes_sev_snp_kernel_test",
+                    boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                )]),
+            )
+            .with_alert(ENG_NODE_CHANNEL)],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
@@ -366,6 +379,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ]),
             ),
              */
+            pot_with_setup(
+                "canister_http",
+                canister_http::lib::config,
+                par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
+            ),
             pot_with_setup(
                 "firewall_priority_pot",
                 networking::firewall_priority::config,
@@ -611,6 +629,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             "boundary_nodes_direct_to_replica_rosetta_test",
                             boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
                         ),
+                        sys_t(
+                            "boundary_nodes_direct_to_replica_options_test",
+                            boundary_nodes_integration::boundary_nodes::direct_to_replica_options_test,
+                        ),
+                        sys_t(
+                            "boundary_nodes_seo_test",
+                            boundary_nodes_integration::boundary_nodes::seo_test,
+                        ),
                     ]),
                 ),
                 pot_with_setup(
@@ -620,6 +646,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "http_fault_tolerance",
                         canister_http::http_fault_tolerance::test,
                     )]),
+                ),
+                pot_with_setup(
+                    "boundary_subnet_workload_pot",
+                    networking::subnet_update_workload::boundary_config,
+                    seq(vec![
+                        sys_t(
+                            "boundary_subnet_update_workload_test",
+                            networking::subnet_update_workload::boundary_test,
+                        ),
+                    ]),
                 ),
                 pot_with_setup(
                     "large_subnet_workload_pot",
@@ -655,7 +691,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 "default_subnet_query_workload_long_duration_test",
                 networking::subnet_query_workload::long_duration_test,
             )]),
-        )],
+        )
+        .with_default_vm_resources(Some(VmResources {
+            vcpus: None,
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        }))],
     ));
     m.add_suite(suite(
         "nightly_default_subnet_update_workload_long_duration_test",
@@ -774,6 +815,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "create_subnet",
                     nns_tests::create_subnet::hourly_config(),
                     par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+                ),
+                pot_with_setup(
+                    "canister_http_correctness",
+                    canister_http::lib::config,
+                    par(vec![sys_t(
+                        "http_correctness",
+                        canister_http::http_correctness::test,
+                    )]),
                 ),
                 pot(
                     "rejoin",

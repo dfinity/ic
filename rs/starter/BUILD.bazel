@@ -28,7 +28,6 @@ rust_binary(
     name = "ic-starter",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

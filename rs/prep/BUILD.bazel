@@ -55,7 +55,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_prep_lib",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -64,7 +63,6 @@ rust_binary(
     name = "ic-prep",
     srcs = ["src/bin/prep.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":prep"],
 )
@@ -73,7 +71,6 @@ rust_binary(
     name = "ic-principal-id",
     srcs = ["src/bin/principal_id.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":prep"],
 )
@@ -82,7 +79,6 @@ rust_test(
     name = "prep_test",
     aliases = ALIASES,
     crate = ":prep",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -92,7 +88,6 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_root = "src/bin/prep.rs",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":prep"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

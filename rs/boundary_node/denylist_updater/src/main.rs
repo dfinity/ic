@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::ErrorKind,
     net::SocketAddr,
     path::PathBuf,
@@ -110,7 +111,7 @@ async fn main() -> Result<(), Error> {
     let remote_lister = WithNormalize(remote_lister);
     let remote_lister = WithMetrics(
         remote_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
     );
 
     let local_lister = LocalLister::new(cli.local_path.clone());
@@ -118,7 +119,7 @@ async fn main() -> Result<(), Error> {
     let local_lister = WithNormalize(local_lister);
     let local_lister = WithMetrics(
         local_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
+        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
     );
 
     let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
@@ -280,8 +281,29 @@ impl List for RemoteLister {
             .await
             .context("failed to decode response")?;
 
+        #[derive(Deserialize)]
+        struct Canister {}
+
+        #[derive(Deserialize)]
+        struct Response {
+            canisters: HashMap<String, Canister>,
+        }
+
         let entries =
-            json::from_slice::<Vec<Entry>>(&data).context("failed to deserialize json response")?;
+            json::from_slice::<Response>(&data).context("failed to deserialize json response")?;
+
+        // Convert response body to entries
+        let mut entries: Vec<Entry> = entries
+            .canisters
+            .into_iter()
+            .map(|(k, _)| Entry {
+                id: k,
+                code: "N/A".into(),
+                reason: "N/A".into(),
+            })
+            .collect();
+
+        entries.sort_by(|a, b| a.id.cmp(&b.id));
 
         Ok(entries)
     }
@@ -344,7 +366,7 @@ impl Reload for Reloader {
         let pid = fs::read_to_string(self.pid_path.clone())
             .await
             .context("failed to read pid file")?;
-        let pid = pid.parse::<i32>().context("failed to parse pid")?;
+        let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
         let pid = Pid::from_raw(pid);
 
         send_signal(pid, self.signal)?;
@@ -523,6 +545,53 @@ mod tests {
 
         // Create local lister
         let lister = LocalLister::new(file_path.clone());
+
+        let out = lister.list().await?;
+        assert_eq!(
+            out,
+            vec![
+                Entry {
+                    id: "ID_1".to_string(),
+                    code: "N/A".to_string(),
+                    reason: "N/A".to_string(),
+                },
+                Entry {
+                    id: "ID_2".to_string(),
+                    code: "N/A".to_string(),
+                    reason: "N/A".to_string(),
+                }
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_lists_remotely() -> Result<(), Error> {
+        use httptest::{matchers::*, responders::*, Expectation, Server};
+        use serde_json::json;
+
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/denylist.json")).respond_with(
+                json_encoded(json!({
+                  "$schema": "./schema.json",
+                  "version": "1",
+                  "canisters": {
+                    "ID_1": {},
+                    "ID_2": {}
+                  }
+                })),
+            ),
+        );
+
+        // Create remote lister
+        let lister = RemoteLister::new(
+            reqwest::Client::builder().build()?, // http_client
+            Arc::new(NopDecoder),                // decoder
+            server.url_str("/denylist.json"),    // remote_url
+        );
 
         let out = lister.list().await?;
         assert_eq!(

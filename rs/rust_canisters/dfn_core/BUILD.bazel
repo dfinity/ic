@@ -24,8 +24,8 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "dfn_core",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -33,7 +33,6 @@ rust_canister(
     name = "wasm",
     srcs = ["test/wasm.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":dfn_core"],
 )
@@ -42,7 +41,6 @@ rust_test(
     name = "dfn_core_test",
     aliases = ALIASES,
     crate = ":dfn_core",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -57,7 +55,6 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/dfn_core",
         "WASM_WASM_PATH": "$(rootpath :wasm)",

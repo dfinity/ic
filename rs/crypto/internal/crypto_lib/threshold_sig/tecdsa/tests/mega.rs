@@ -84,8 +84,8 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let associated_data = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, &mut rng)?;
-    let ptext_for_b = EccScalar::random(curve, &mut rng)?;
+    let ptext_for_a = EccScalar::random(curve, &mut rng);
+    let ptext_for_b = EccScalar::random(curve, &mut rng);
 
     let dealer_index = 0;
 
@@ -131,12 +131,12 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let associated_data = b"assoc_data_test";
 
     let ptext_for_a = (
-        EccScalar::random(curve, &mut rng)?,
-        EccScalar::random(curve, &mut rng)?,
+        EccScalar::random(curve, &mut rng),
+        EccScalar::random(curve, &mut rng),
     );
     let ptext_for_b = (
-        EccScalar::random(curve, &mut rng)?,
-        EccScalar::random(curve, &mut rng)?,
+        EccScalar::random(curve, &mut rng),
+        EccScalar::random(curve, &mut rng),
     );
 
     let seed = Seed::from_rng(&mut rng);
@@ -174,8 +174,8 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
 
     let ad = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, &mut rng)?;
-    let ptext_for_b = EccScalar::random(curve, &mut rng)?;
+    let ptext_for_a = EccScalar::random(curve, &mut rng);
+    let ptext_for_b = EccScalar::random(curve, &mut rng);
 
     let dealer_index = 0;
 

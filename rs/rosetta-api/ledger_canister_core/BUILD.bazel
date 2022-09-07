@@ -6,10 +6,10 @@ rust_library(
     name = "ledger_canister_core",
     srcs = glob(["src/**"]),
     crate_name = "ic_ledger_canister_core",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
+    version = "0.1.0",
     deps = [
         "//rs/constants",
         "//rs/rosetta-api/ledger_core",

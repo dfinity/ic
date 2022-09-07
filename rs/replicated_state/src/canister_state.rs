@@ -12,6 +12,7 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
+use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
@@ -24,6 +25,7 @@ pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq)]
 /// State maintained by the scheduler.
@@ -61,6 +63,13 @@ pub struct SchedulerState {
     /// The amount of install_code instruction debit. The canister rejects
     /// install_code messages if this value is non-zero.
     pub install_code_debit: NumInstructions,
+
+    /// The last time when the canister was charged for the resource allocations.
+    ///
+    /// Charging for compute and storage is done periodically, so this is
+    /// needed to calculate how much time should be considered when charging
+    /// occurs.
+    pub time_of_last_allocation_charge: Time,
 }
 
 impl Default for SchedulerState {
@@ -73,6 +82,7 @@ impl Default for SchedulerState {
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
+            time_of_last_allocation_charge: UNIX_EPOCH,
         }
     }
 }
@@ -123,6 +133,37 @@ impl CanisterState {
 
     pub fn controllers(&self) -> &BTreeSet<PrincipalId> {
         &self.system_state.controllers
+    }
+
+    /// Returns the difference in time since the canister was last charged for resource allocations.
+    pub fn duration_since_last_allocation_charge(
+        &self,
+        metadata_time_of_last_allocation_charge: Time,
+        current_time: Time,
+    ) -> Duration {
+        debug_assert!(
+            current_time >= self.scheduler_state.time_of_last_allocation_charge,
+            "Expect the time of the current batch to be >= the time of the previous batch"
+        );
+
+        let time_of_last_charge =
+            if self.scheduler_state.time_of_last_allocation_charge == UNIX_EPOCH {
+                metadata_time_of_last_allocation_charge
+            } else {
+                self.scheduler_state.time_of_last_allocation_charge
+            };
+
+        // If the time of the previous block is `UNIX_EPOCH`, then this must be the first block
+        // being handled and hence `Duration::from_secs(0)` is returned.
+        if time_of_last_charge == UNIX_EPOCH {
+            Duration::from_secs(0)
+        } else {
+            Duration::from_nanos(
+                current_time
+                    .as_nanos_since_unix_epoch()
+                    .saturating_sub(time_of_last_charge.as_nanos_since_unix_epoch()),
+            )
+        }
     }
 
     /// See `SystemState::push_input` for documentation.
@@ -207,13 +248,39 @@ impl CanisterState {
         }
     }
 
-    /// Returns `true` if the canister has a pending long execution.
-    pub fn has_long_execution(&self) -> bool {
-        match self.next_execution() {
-            NextExecution::None | NextExecution::StartNew | NextExecution::ContinueInstallCode => {
-                false
-            }
-            NextExecution::ContinueLong => true,
+    /// Returns true if the canister has an aborted execution.
+    pub fn has_aborted_execution(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedInstallCode(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+        }
+    }
+
+    /// Returns true if the canister has a paused execution.
+    pub fn has_paused_execution(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::PausedExecution(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedInstallCode(..))
+            | Some(ExecutionTask::AbortedExecution(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
+        }
+    }
+
+    /// Returns true if the canister has a paused install code.
+    pub fn has_paused_install_code(&self) -> bool {
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::PausedInstallCode(..)) => true,
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::AbortedExecution(..))
+            | Some(ExecutionTask::AbortedInstallCode(..)) => false,
         }
     }
 

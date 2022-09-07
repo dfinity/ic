@@ -2,8 +2,6 @@
 Description=Boundary Node Denylist Updater
 
 [Service]
-User=denylist-updater
-Group=denylist-updater
 Restart=always
 ExecStart=/opt/ic/bin/denylist-updater \
     --remote-url   "${REMOTE_URL}"     \

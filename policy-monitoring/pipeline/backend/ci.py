@@ -186,7 +186,7 @@ class Ci:
             else:
                 intersect = set(new_groups.keys()).intersection(groups.keys())
                 assert set() == intersect, "duplicate groups found: " + ", ".join(
-                    map(lambda g: str(new_groups[g]) + " and " + str(groups[g]), intersect)
+                    map(lambda g: str(new_groups[g]) + " and " + str(groups[g]), intersect)  # type: ignore
                 )
                 groups.update(new_groups)
         return groups

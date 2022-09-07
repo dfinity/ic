@@ -217,6 +217,12 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip_index,
             mut certification,
         } = canister.query_tip().await.map_err(Error::InternalError)?;
+        if tip_index == u64::MAX {
+            error!("Bogus value of tip index: {}", tip_index);
+            return Err(Error::InternalError(
+                "Received tip_index == u64::MAX".to_string(),
+            ));
+        }
         self.metrics.set_target_height(tip_index);
 
         let mut blockchain = self.blockchain.write().await;
@@ -226,17 +232,20 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             None => (None, 0),
         };
 
-        if next_block_index > tip_index {
+        if next_block_index == tip_index + 1 {
+            return Ok(());
+        }
+        if next_block_index > tip_index + 1 {
             trace!(
                 "Tip received from the Ledger is lower than what we already have (queried lagging replica?),
-                Ledger tip index: {}, local copy tip index: {}",
+                Ledger tip index: {}, local copy tip index+1: {}",
                 tip_index,
                 next_block_index
             );
             return Ok(());
         }
 
-        let up_to_block_included = tip_index.min(up_to_block_included.unwrap_or(u64::MAX));
+        let up_to_block_included = tip_index.min(up_to_block_included.unwrap_or(u64::MAX - 1));
 
         if up_to_block_included != tip_index {
             certification = None; // certification can be checked only with the last block
@@ -248,7 +257,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         trace!(
             "Sync {} blocks from index: {}, ledger tip index: {}",
-            up_to_block_included - next_block_index,
+            up_to_block_included + 1 - next_block_index,
             next_block_index,
             tip_index
         );
@@ -281,11 +290,14 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         certification: Option<Vec<u8>>,
         blockchain: &mut Blocks,
     ) -> Result<(), Error> {
+        if range.is_empty() {
+            return Ok(());
+        }
         let print_progress = if range.end - range.start >= PRINT_SYNC_PROGRESS_THRESHOLD {
             info!(
                 "Syncing {} blocks. New tip will be {}",
                 range.end - range.start,
-                range.end,
+                range.end - 1,
             );
             true
         } else {
@@ -316,8 +328,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 }
                 let retry = retry + 1;
                 warn!(
-                    "Failed query while retrieving blocks, retry {}/{}",
-                    retry, MAX_RETRY
+                    "Failed query while retrieving blocks, retry {}/{} (error: {:?})",
+                    retry,
+                    MAX_RETRY,
+                    batch.unwrap_err()
                 );
             }?;
 

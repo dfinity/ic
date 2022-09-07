@@ -4097,17 +4097,24 @@ fn dts_abort_works_in_update_call() {
 
     // The workload above finishes in 5 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     for _ in 0..4 {
         test.execute_slice(canister_id);
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueLong
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .call_context_manager(),
+            original_system_state.call_context_manager()
+        );
     }
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::ContinueLong
-    );
 
     // Abort before executing the last slice.
     test.abort_paused_executions();
@@ -4123,11 +4130,24 @@ fn dts_abort_works_in_update_call() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueLong
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .call_context_manager(),
+            original_system_state.call_context_manager()
+        );
     }
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
+    );
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -4189,11 +4209,16 @@ fn dts_resume_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
         );
         test.execute_slice(canister_id);
     }
@@ -4201,9 +4226,13 @@ fn dts_resume_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    );
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
@@ -4226,11 +4255,16 @@ fn dts_abort_works_in_install_code() {
         memory_allocation: None,
         query_allocation: None,
     };
+    let original_system_state = test.canister_state(canister_id).system_state.clone();
     let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     for _ in 0..3 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
+        );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
         );
         test.execute_slice(canister_id);
     }
@@ -4242,6 +4276,10 @@ fn dts_abort_works_in_install_code() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
+        assert_eq!(
+            test.canister_state(canister_id).system_state.balance(),
+            original_system_state.balance(),
+        );
         test.execute_slice(canister_id);
     }
 
@@ -4249,10 +4287,14 @@ fn dts_abort_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
     );
+    // TODO(RUN-286): Make this assertion more precise.
+    assert!(
+        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
+    );
 
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob::encode()));
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
@@ -4305,6 +4347,7 @@ fn system_state_apply_change_fails() {
         .accept_cycles(1000)
         .message_payload()
         .append_and_reply()
+        .stable64_grow(1)
         .build();
 
     let a = wasm()
@@ -4326,18 +4369,7 @@ fn system_state_apply_change_fails() {
     );
     test.induct_messages();
     test.execute_slice(b_id);
-    let call_contexts = test
-        .canister_state_mut(b_id)
-        .system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .call_contexts_mut();
-
-    // Remove cycles from all call contexts to trigger an error condition
-    // that may happen due to a bug or escape from Wasm sandbox.
-    for (_, call_context) in call_contexts.iter_mut() {
-        call_context.withdraw_cycles(Cycles::new(1000)).unwrap();
-    }
+    test.set_subnet_available_memory(AvailableMemory::new(0, 0));
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
     }
@@ -4357,10 +4389,7 @@ fn system_state_apply_change_fails() {
         WasmResult::Reply(_) => unreachable!("Expected the canister to reject the message"),
         WasmResult::Reject(err) => {
             assert!(
-                err.contains(
-                    "Wasm engine error: Failed to apply system changes: \
-                     Canister accepted more cycles than available from call context"
-                ),
+                err.contains("exceeded its allowed memory allocation"),
                 "{}",
                 err
             );
@@ -4639,4 +4668,49 @@ fn cycles_correct_if_cleanup_fails() {
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
+}
+
+#[test]
+fn cycles_correct_if_update_fails() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister B accepts all cycles, replies, and traps.
+    let b = wasm()
+        .accept_cycles(transferred_cycles)
+        .message_payload()
+        .append_and_reply()
+        .trap()
+        .build();
+
+    // Canister A calls canister B and transfers cycles.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b),
+            (0, transferred_cycles),
+        )
+        .build();
+    test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    let execution_cost_before = test.canister_execution_cost(b_id);
+    test.execute_message(b_id);
+    let execution_cost_after = test.canister_execution_cost(b_id);
+    assert!(execution_cost_after > execution_cost_before);
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test
+                .cycles_account_manager()
+                .convert_instructions_to_cycles(universal_canister_compilation_cost_correction())
+    );
 }

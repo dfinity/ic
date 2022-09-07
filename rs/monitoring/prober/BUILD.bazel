@@ -27,7 +27,6 @@ rust_binary(
     name = "ic-prober",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

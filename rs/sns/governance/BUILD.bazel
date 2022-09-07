@@ -83,7 +83,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.8.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -96,9 +95,25 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "governance_test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
 )
 
 rust_canister(
@@ -106,7 +121,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    edition = "2018",
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":governance"] + [":build_script"],
 )
@@ -120,7 +135,6 @@ rust_test(
     name = "governance_test",
     aliases = ALIASES,
     crate = ":governance",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
@@ -131,7 +145,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "canister/canister.rs",
     data = ["canister/governance.did"],
-    edition = "2021",
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/governance",
     },
@@ -150,7 +163,6 @@ rust_test_suite_with_extra_srcs(
         ],
     ),
     aliases = ALIASES,
-    edition = "2018",
     extra_srcs = [
         "tests/fixtures/mod.rs",
         "tests/interleaving/mod.rs",

@@ -18,13 +18,11 @@ rust_library(
     name = "cup_explorer",
     srcs = glob(["src/**"]),
     crate_name = "ic_cup_explorer",
-    edition = "2018",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "cup_explorer_bin",
     srcs = glob(["src/**"]),
-    edition = "2018",
     deps = DEPENDENCIES,
 )

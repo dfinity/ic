@@ -35,7 +35,6 @@ rust_library(
     name = "lifeline",
     srcs = ["src/lib.rs"],
     compile_data = [":lifeline.wasm"],
-    edition = "2018",
     rustc_env = {
         "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline.wasm)",
     },
@@ -44,6 +43,5 @@ rust_library(
 rust_binary(
     name = "lifeline_bin",
     srcs = ["src/main.rs"],
-    edition = "2018",
     deps = [":lifeline"],
 )

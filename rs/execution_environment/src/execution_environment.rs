@@ -5,8 +5,10 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        call::execute_call, heartbeat::execute_heartbeat, inspect_message,
-        nonreplicated_query::execute_non_replicated_query, response::execute_response,
+        heartbeat::execute_heartbeat, inspect_message,
+        nonreplicated_query::execute_non_replicated_query,
+        replicated_query::execute_replicated_query, response::execute_response,
+        update::execute_update,
     },
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
@@ -304,6 +306,12 @@ impl ExecutionEnvironment {
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
+        // Assert the flag implication: DTS => sandboxing.
+        assert!(
+            config.deterministic_time_slicing == FlagStatus::Disabled
+                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            "Deterministic time slicing works only with canister sandboxing."
+        );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
             config.subnet_memory_capacity,
             config.default_provisional_cycles_balance,
@@ -444,7 +452,7 @@ impl ExecutionEnvironment {
                     Ok(args) => self
                         .canister_manager
                         .uninstall_code(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -519,7 +527,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                         )
-                        .map(|()| EmptyBlob::encode())
+                        .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
@@ -560,7 +568,7 @@ impl ExecutionEnvironment {
                         let result = self
                             .canister_manager
                             .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
-                            .map(|()| EmptyBlob::encode())
+                            .map(|()| EmptyBlob.encode())
                             .map_err(|err| err.into());
 
                         info!(
@@ -579,7 +587,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::RawRand) => {
                 let res = match EmptyBlob::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
-                    Ok(()) => {
+                    Ok(EmptyBlob) => {
                         let mut buffer = vec![0u8; 32];
                         rng.fill_bytes(&mut buffer);
                         Ok(Encode!(&buffer).unwrap())
@@ -960,18 +968,38 @@ impl ExecutionEnvironment {
             time,
         };
 
-        let execution_parameters =
-            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-
-        execute_call(
-            canister,
-            req,
-            execution_parameters,
-            time,
-            round,
-            round_limits,
-            subnet_size,
-        )
+        if canister.exports_query_method(req.method_name().to_string()) {
+            // A query call is expected to finish quickly, so DTS is not supported for it.
+            let slice_instruction_limit = instruction_limits.slice();
+            let instruction_limits = InstructionLimits::new(
+                FlagStatus::Disabled,
+                slice_instruction_limit,
+                slice_instruction_limit,
+            );
+            let execution_parameters =
+                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+            execute_replicated_query(
+                canister,
+                req,
+                execution_parameters,
+                time,
+                round,
+                round_limits,
+                subnet_size,
+            )
+        } else {
+            let execution_parameters =
+                self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+            execute_update(
+                canister,
+                req,
+                execution_parameters,
+                time,
+                round,
+                round_limits,
+                subnet_size,
+            )
+        }
     }
 
     /// Executes a heartbeat of a given canister.
@@ -1106,7 +1134,7 @@ impl ExecutionEnvironment {
                 compute_allocation_used,
                 round_limits,
             )
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1124,7 +1152,7 @@ impl ExecutionEnvironment {
             Ok(stop_contexts) => {
                 // Reject outstanding stop messages (if any).
                 self.reject_stop_requests(canister_id, stop_contexts, state);
-                Ok(EmptyBlob::encode())
+                Ok(EmptyBlob.encode())
             }
             Err(err) => Err(err.into()),
         }
@@ -1148,7 +1176,7 @@ impl ExecutionEnvironment {
             Some(canister_state) => {
                 self.cycles_account_manager
                     .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
-                (Ok(EmptyBlob::encode()), Cycles::zero())
+                (Ok(EmptyBlob.encode()), Cycles::zero())
             }
         }
     }
@@ -1185,7 +1213,7 @@ impl ExecutionEnvironment {
                 cycles_to_return,
             } => Some((Err(error.into()), cycles_to_return)),
             StopCanisterResult::AlreadyStopped { cycles_to_return } => {
-                Some((Ok(EmptyBlob::encode()), cycles_to_return))
+                Some((Ok(EmptyBlob.encode()), cycles_to_return))
             }
         }
     }
@@ -1201,7 +1229,7 @@ impl ExecutionEnvironment {
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .add_cycles(sender, cycles, canister, provisional_whitelist)
-            .map(|()| EmptyBlob::encode())
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 
@@ -1808,7 +1836,7 @@ impl ExecutionEnvironment {
                             result.old_wasm_hash,
                             result.new_wasm_hash);
 
-                        Ok(EmptyBlob::encode())
+                        Ok(EmptyBlob.encode())
                     }
                     Err(err) => {
                         info!(

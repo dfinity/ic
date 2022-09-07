@@ -29,8 +29,6 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
     "$0 ~ /zero-length metadata name/",
-    // TODO(RUN-314): Re-enable this test.
-    "$0 ~ /Valid allocations/",
 ];
 
 pub fn ic_with_system_subnet() -> InternetComputer {

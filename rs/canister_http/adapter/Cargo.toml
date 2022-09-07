@@ -1,7 +1,7 @@
 [package]
 name = "ic-canister-http-adapter"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -34,6 +34,7 @@ tonic = "0.7.2"
 tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 
 [dev-dependencies]
+once_cell = "1.13.1"
 warp = { version = "0.3.2", features = ["tls"] }
 uuid = { version = "0.8.2", features = ["v4"] }
 tempfile = "3.3.0"

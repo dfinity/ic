@@ -81,8 +81,6 @@ impl StateMachineImpl {
         }
 
         for canister_id in ids_to_remove.iter() {
-            use ic_state_layout::{CheckpointLayout, RwPolicy};
-
             if let Some(canister_state) = state.canister_state(canister_id) {
                 if canister_state.status() != CanisterStatusType::Stopped {
                     warn!(
@@ -100,21 +98,6 @@ impl StateMachineImpl {
                 "Removing canister {} that is not in the routing table", canister_id
             );
 
-            let state_layout = CheckpointLayout::<RwPolicy>::new(
-                state.path().to_path_buf(),
-                ic_types::Height::from(0),
-            )
-            .and_then(|layout| layout.canister(canister_id))
-            .expect("failed to obtain canister layout");
-
-            state_layout.mark_deleted().unwrap_or_else(|e| {
-                fatal!(
-                    self.log,
-                    "Failed to mark canister {} as deleted: {}",
-                    canister_id,
-                    e
-                )
-            });
             state.canister_states.remove(canister_id);
         }
     }

@@ -3,6 +3,9 @@ package state.canister_state_bits.v1;
 import "types/v1/types.proto";
 import "state/queues/v1/queues.proto";
 import "state/ingress/v1/ingress.proto";
+import "state/v1/metadata.proto";
+
+import "google/protobuf/wrappers.proto";
 
 message CallContext {
   message Ingress {
@@ -217,4 +220,6 @@ message CanisterStateBits {
   // Contains tasks that need to be executed before processing any input of the
   // canister.
   repeated ExecutionTask task_queue = 30;
+  // Time of last charge for resource allocations.
+  google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
 }

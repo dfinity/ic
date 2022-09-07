@@ -92,7 +92,9 @@ enum Topic {
   TOPIC_KYC = 9;
   // Topic for proposals to reward node providers.
   TOPIC_NODE_PROVIDER_REWARDS = 10;
-  // Reserved for future use.
+  // Currently, the only type of proposal in this topic is
+  // OpenSnsTokenSwap. It is not expected that more types of proposals will
+  // be added to this topic.
   TOPIC_SNS_DECENTRALIZATION_SALE = 11;
 }
 
@@ -476,6 +478,13 @@ enum NnsFunction {
   NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION = 29;
   /// Add a new SNS canister WASM
   NNS_FUNCTION_ADD_SNS_WASM = 30;
+  /// Change the subnet node membership. In a way, this function combines the separate
+  /// functions for adding and removing nodes from the subnet record, but adds the property
+  /// of atomic node replacement (node swap) on top.
+  ///
+  /// The nodes that are being added to the subnet must be currently unassigned.
+  /// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+  NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP = 31;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -576,14 +585,21 @@ message SetDefaultFollowees {
   map<int32, Neuron.Followees> default_followees = 1;
 }
 
+// Obsolete. Superceded by OpenSnsTokenSwap.
+message SetSnsTokenSwapOpenTimeWindow {
+  // The swap canister to send the request to.
+  ic_base_types.pb.v1.PrincipalId swap_canister_id = 1;
+
+  // Arguments that get sent to the swap canister when its set_open_time_window
+  // Candid method is called.
+  ic_sns_swap.pb.v1.SetOpenTimeWindowRequest request = 2;
+}
+
 // A proposal is the immutable input of a proposal submission. This contains
 // all the information from the original proposal submission.
 //
 // Making a proposal implicitly votes yes.
 message Proposal {
-  // Was 'set_sns_token_swap_open_time_window'.
-  reserved 22;
-  
   // Must be present (enforced at the application layer, not by PB).
   // A brief description of what the proposal does.
   // Size in bytes must be in the interval [5, 256].
@@ -654,6 +670,10 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
+    // Obsolete. Use open_sns_token_swap instead. Kept for Candid compatibility.
+    SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22 [deprecated = true];
+    // Call the open method on an SNS swap canister.
+    OpenSnsTokenSwap open_sns_token_swap = 23;
   }
 }
 
@@ -1129,6 +1149,9 @@ message ProposalData {
 
   // Wait-for-quiet state that needs to be saved in stable memory.
   WaitForQuietState wait_for_quiet_state = 16;
+
+  // This is populated when an OpenSnsTokenSwap proposal is first made.
+  optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 }
 
 // Stores data relevant to the "wait for quiet" implementation.
@@ -1156,25 +1179,25 @@ message ProposalInfo {
   // The timestamp, in seconds from the Unix epoch, when this proposal was made.
   uint64 proposal_timestamp_seconds = 5;
 
-  // See [PropopsalData::ballots].
+  // See [ProposalData::ballots].
   map<fixed64, Ballot> ballots = 6;
 
-  // See [PropopsalData::latest_tally].
+  // See [ProposalData::latest_tally].
   Tally latest_tally = 7;
 
-  // See [PropopsalData::decided_timestamp_seconds].
+  // See [ProposalData::decided_timestamp_seconds].
   uint64 decided_timestamp_seconds = 8;
 
-  // See [PropopsalData::executed_timestamp_seconds].
+  // See [ProposalData::executed_timestamp_seconds].
   uint64 executed_timestamp_seconds = 12;
 
-  // See [PropopsalData::failed_timestamp_seconds].
+  // See [ProposalData::failed_timestamp_seconds].
   uint64 failed_timestamp_seconds = 13;
 
   // See [ProposalData::failure_reason].
   GovernanceError failure_reason = 18;
 
-  // See [PropopsalData::reward_event_round].
+  // See [ProposalData::reward_event_round].
   uint64 reward_event_round = 14;
 
   // Derived - see [Topic] for more information
@@ -1288,6 +1311,20 @@ message KnownNeuron {
 message KnownNeuronData {
   string name = 1;
   optional string description = 2;
+}
+
+// Proposal action to call the "open" method of an SNS token swap canister.
+message OpenSnsTokenSwap {
+  // The ID of the canister where the command will be sent (assuming that the
+  // proposal is adopted, of course).
+  ic_base_types.pb.v1.PrincipalId target_swap_canister_id = 1;
+
+  // Various limits on the swap.
+  ic_sns_swap.pb.v1.Params params = 2;
+
+  // The amount that the community fund will collectively spend in maturity on
+  // the swap.
+  optional uint64 community_fund_investment_e8s = 3;
 }
 
 // This represents the whole NNS governance system. It contains all

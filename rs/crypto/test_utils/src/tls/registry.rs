@@ -1,7 +1,6 @@
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::node::NodeRecord;
-use ic_registry_keys::{make_crypto_tls_cert_key, make_node_record_key};
+use ic_registry_keys::make_crypto_tls_cert_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, RegistryVersion};
 use openssl::x509::X509;
@@ -31,20 +30,6 @@ impl TlsRegistry {
         self
     }
 
-    pub fn add_node_record(self, node_id: NodeId) -> TlsRegistry {
-        self.data_provider
-            .add(
-                &make_node_record_key(node_id),
-                REG_V1,
-                Some(NodeRecord {
-                    ..Default::default()
-                }),
-            )
-            .expect("Could not add node record.");
-        self
-    }
-
-    #[allow(unused)]
     pub fn with_cert_from_x509(self, node_id: NodeId, cert: X509) -> TlsRegistry {
         let cert = X509PublicKeyCert {
             certificate_der: cert.to_der().expect("could not DER encode certificate"),

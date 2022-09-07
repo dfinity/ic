@@ -38,11 +38,10 @@ After installing the dependencies, you can run
 
 where `X` is the testnet you reserved, and the last part is a commit hash on master for which CI already built an image
 
-To run the generic test which uses the latest available binaries you can call it as follows:
+To run the rejoin test you can type:
 
 ```
-cd ./testnet/tests/scripts
-./generic.sh "$TESTNET" 10 3 10 results
+./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 2 2 normal results
 ```
 
 Some of the tests are run as part of CD nightly and hourly test runs, defined in link:../pipeline/pipeline.yml[`testnet/tests/pipeline/pipeline.yml`].

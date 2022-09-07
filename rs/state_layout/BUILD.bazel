@@ -39,7 +39,6 @@ rust_library(
     name = "state_layout",
     srcs = glob(["src/**"]),
     crate_name = "ic_state_layout",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

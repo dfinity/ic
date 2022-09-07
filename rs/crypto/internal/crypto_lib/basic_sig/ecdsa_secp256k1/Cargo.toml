@@ -1,7 +1,7 @@
 [package]
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 base64 = "0.11.0"

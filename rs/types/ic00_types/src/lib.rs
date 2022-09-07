@@ -463,14 +463,13 @@ impl InstallCodeArgs {
 #[derive(CandidType, Deserialize)]
 pub struct EmptyBlob;
 
-// TODO(EXC-239): Implement the `Payload` interface.
-impl EmptyBlob {
-    pub fn encode() -> Vec<u8> {
+impl<'a> Payload<'a> for EmptyBlob {
+    fn encode(&self) -> Vec<u8> {
         Encode!().unwrap()
     }
 
-    pub fn decode(blob: &[u8]) -> Result<(), candid::Error> {
-        Decode!(blob)
+    fn decode(blob: &'a [u8]) -> Result<EmptyBlob, candid::Error> {
+        Decode!(blob).map(|_| EmptyBlob)
     }
 }
 

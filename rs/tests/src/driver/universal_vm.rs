@@ -9,7 +9,7 @@ use super::resource::{allocate_resources, get_resource_request_for_universal_vm,
 use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_env_api::{
     get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
-    RETRY_BACKOFF, RETRY_TIMEOUT,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
@@ -232,7 +232,7 @@ impl SshSession for DeployedUniversalVm {
     }
 
     fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
-        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session(user)
         })
     }

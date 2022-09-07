@@ -1,7 +1,7 @@
 [package]
 name = "ic-nns-gtc"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/lib.rs"
@@ -20,6 +20,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = "0.4.2"
 hex-literal = "0.3.1"
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-governance = { path = "../governance" }
@@ -30,8 +31,7 @@ lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 libsecp256k1 = "0.5.0"
 prost = "0.10.4"
-rand = "0.7.3"
-rand_core = "0.5.1"
+rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 sha3 = "0.9.1"
 simple_asn1 = "0.5.4"

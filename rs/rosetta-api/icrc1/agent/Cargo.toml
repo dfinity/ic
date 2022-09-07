@@ -3,7 +3,7 @@ name = "ic-icrc1-agent"
 version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
 description = "ICRC-1 compliant agent library."
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 candid = "0.7.10"

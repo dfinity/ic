@@ -6,7 +6,7 @@ rust_library(
     name = "constants",
     srcs = glob(["src/**"]),
     crate_name = "ic_nns_constants",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/types/base_types",
         "@crate_index//:lazy_static",

@@ -6,7 +6,7 @@ rust_library(
     name = "keys",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_keys",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/types/base_types",
         "//rs/types/ic00_types",

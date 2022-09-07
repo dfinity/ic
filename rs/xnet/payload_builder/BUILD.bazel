@@ -63,7 +63,6 @@ rust_library(
     name = "payload_builder",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_payload_builder",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -81,7 +80,6 @@ rust_test_suite_with_extra_srcs(
         "tests/certified_slice_pool.rs",
         "tests/xnet_payload_builder.rs",
     ],
-    edition = "2018",
     extra_srcs = [
         "tests/common/mod.rs",
     ],

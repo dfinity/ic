@@ -577,16 +577,16 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             "needs_end_event": False,
         },
         "finalization_consistency": {
-            "enabled": False,
+            "enabled": True,
             "preamble_dependencies": frozenset(
                 [
-                    # "originally_in_ic" -- TODO
+                    "originally_in_ic",
                 ]
             ),
             "regular_dependencies": frozenset(
                 [
-                    # "registry__node_removed_from_ic", -- TODO
-                    # "registry__node_added_to_ic", -- TODO
+                    "registry__node_removed_from_ic",
+                    "registry__node_added_to_ic",
                     "finalized",
                 ]
             ),

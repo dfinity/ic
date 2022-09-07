@@ -8,6 +8,6 @@ rust_library(
     name = "gtc_accounts",
     srcs = glob(["src/**"]),
     crate_name = "ic_nns_gtc_accounts",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )

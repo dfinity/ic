@@ -193,7 +193,6 @@ fn upgrade_to(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
-    use std::convert::TryFrom;
     block_on(update_subnet_replica_version(
         nns_node,
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),

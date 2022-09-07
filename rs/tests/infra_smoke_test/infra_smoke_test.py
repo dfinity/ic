@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # ██╗███╗   ██╗███████╗██████╗  █████╗     ███████╗███╗   ███╗ ██████╗ ██╗  ██╗███████╗    ████████╗███████╗███████╗████████╗
 # ██║████╗  ██║██╔════╝██╔══██╗██╔══██╗    ██╔════╝████╗ ████║██╔═══██╗██║ ██╔╝██╔════╝    ╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝
 # ██║██╔██╗ ██║█████╗  ██████╔╝███████║    ███████╗██╔████╔██║██║   ██║█████╔╝ █████╗         ██║   █████╗  ███████╗   ██║
@@ -43,14 +44,16 @@ import traceback
 from contextlib import contextmanager
 from copy import deepcopy
 from io import TextIOWrapper
+from multiprocessing import Pool
+from pathlib import Path
 from typing import Callable
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import paramiko
 import requests
-from tqdm import tqdm
 
 
 UNIVERSAL_VM_IMG_SHA256 = "f1880ad66ead02031264cb6da004f07468b0e6f07ba22bf44c42239eb6819fa5"
@@ -67,10 +70,16 @@ VM_BOOT_READINESS_TIMEOUT_SEC = 150  # max polling time for checking that VM is 
 FILE_DOWNLOAD_TIMEOUT_SEC = 15  # used for downloading (CURLing) files between VMs
 STDERR_NBYTES = 1024 * 1024
 # Defines CI or local run.
-CI_JOB_URL = os.getenv("CI_JOB_URL", default="")
+CI_JOB_URL = os.getenv("CI_JOB_URL", default=None)
+CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="master")
+file_full_path = os.path.realpath(__file__)
+root_index = file_full_path.find("/rs/")
+HOST_MACHINE = socket.gethostname()
+MAX_PARALLELIZATION_DEGREE = 7  # degree of parallelization >= 1
+GITLAB_LINK = f"https://gitlab.com/dfinity-lab/public/ic/-/blob/{CI_COMMIT_SHA}{file_full_path[root_index:]}"
 TMP_DIR_PREFIX = "smoke_test_artifacts_"
 SLACK_ALERTS_FILE = "slack_alerts.json"
-PFOPS_SLACK_CHANNEL = "https://hooks.slack.com/services/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"
+PFOPS_SLACK_CHANNEL = "#pfops-test-alerts"
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
@@ -140,6 +149,14 @@ class VM:
         self.ipv6 = ipv6
         self.hostname = hostname
 
+    def __str__(self) -> str:
+        """Informal string representation of an object"""
+        return f"VM: (name={self.name}, ipv6={self.ipv6}, hostname={self.hostname})"
+
+    def __repr__(self) -> str:
+        """Official string representation of an object"""
+        return str(self)
+
 
 class NetworkingException(Exception):
     def __init__(self, message: str) -> None:
@@ -148,18 +165,23 @@ class NetworkingException(Exception):
 
 class HttpWithRetriesException(Exception):
     def __init__(self, url: str, retries: int, status_code: int, last_error_message: str):
+        # To rectify the issue with exceptions in case of multiprocessing (https://bugs.python.org/issue1692335).
+        super(Exception, self).__init__(url, retries, status_code, last_error_message)
         self.url = url
         self.retries = retries
         self.status_code = status_code
         self.last_error_message = last_error_message
-        super().__init__(
-            f"Request to {self.url} failed {self.retries} times. Last failure code={status_code}, message={last_error_message}."
-        )
+
+    def __str__(self):
+        """Informal string representation of an object"""
+        return f"Request to {self.url} failed {self.retries} times. Last failure code={self.status_code}, message={self.last_error_message}."
 
 
-def send_slack_alert(channel: str, message: str) -> requests.Response:
+def send_slack_alert(webhook_url: str, channel: str, message: str) -> requests.Response:
     response = requests.post(
-        url=channel, json={"text": f"{message}", "channel": "f{channel}"}, headers={"content-type": "application/json"}
+        url=webhook_url,
+        json={"text": message, "channel": channel},
+        headers={"content-type": "application/json"},
     )
     if response.status_code == 200:
         logger.debug(f"Successfully sent slack message to channel={channel}.")
@@ -170,18 +192,16 @@ def send_slack_alert(channel: str, message: str) -> requests.Response:
     return response
 
 
-def send_slack_alerts_from_file(filename: str):
+def send_slack_alerts_from_file(webhook_url: str, filename: str):
     with open(filename) as json_file:
         data = json.load(json_file)
     for channel in data["channels"]:
-        send_slack_alert(channel=channel, message=data["message"])
+        send_slack_alert(webhook_url=webhook_url, channel=channel, message=data["message"])
 
 
 def save_slack_error_to_file(filename: str, exception: Exception, slack_channels: List[str]):
-    job_log_info = f". <{CI_JOB_URL}|log>" if CI_JOB_URL else " during *manual* run"
-    message = (
-        f"`Infra smoke test` *failed*{job_log_info}.\nException: ```{exception.__class__.__name__}('{exception}')```"
-    )
+    job_log_info = f". <{CI_JOB_URL}|log>" if CI_JOB_URL is not None else " during *manual* run"
+    message = f":smoking_pipe-1959: <{GITLAB_LINK}|*Infra smoke test*> *failed* :x:{job_log_info}.\nException: ```{exception.__class__.__name__}('{exception}')```"
     json_string = {"channels": slack_channels, "message": message}
     with open(filename, "w") as outfile:
         json.dump(json_string, outfile)
@@ -203,9 +223,9 @@ def farm_group():
 
 
 @contextmanager
-def artifacts_directory(keep_artifacts_dir: bool):
+def artifacts_directory(keep_artifacts_dir: bool, output_dir: Optional[str]):
     # Create a tmp artifacts directory with a prefixed name.
-    dir = tempfile.mkdtemp(prefix=TMP_DIR_PREFIX)
+    dir = tempfile.mkdtemp(prefix=TMP_DIR_PREFIX, dir=output_dir)
     try:
         yield dir
     finally:
@@ -253,24 +273,61 @@ def http_with_retries(
     return response
 
 
-def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM]) -> str:
+def is_vm_reachable(vm: VM) -> bool:
+    logger.debug(f"Process with pid={os.getpid()} is checking {vm} reachability.")
+    url = f"http://[{vm.ipv6}]/random"
+    try:
+        _ = http_with_retries(
+            func=head_request_to_url,
+            expected_code=200,
+            timeout=VM_BOOT_READINESS_TIMEOUT_SEC,
+            url=url,
+        )
+    except Exception:
+        logger.error(f"url={url} of {vm} is unreachable from {HOST_MACHINE}")
+        return False
+    logger.debug(f"url={url} of {vm} is reachable from {HOST_MACHINE}")
+    return True
+
+
+def create_vm(group_name: str, vm_name: str) -> VM:
+    pid = os.getpid()
+    logger.debug(f"Process with pid={pid} is creating VM with name={vm_name}.")
+    response = http_with_retries(func=farm_create_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
+    resp_body = response.json()
+    vm = VM(vm_name, resp_body["hostname"], resp_body["ipv6"])
+    logger.debug(f"{vm} created by pid={pid} successfully.")
+    return vm
+
+
+def pretty_matrix(matrix_name: str, matrix: List[List[int]], vms: List[VM], is_colored: bool) -> str:
     def to_colored_digit(x: int):
         return f"{BOLD + GREEN}{x}{NC}" if x == 1 else f"{BOLD + RED}{x}{NC}"
 
     abbreviations = [vm.hostname[:3] for vm in vms]
     matrix_copy = deepcopy(matrix)
-    table = [f"{NC}", matrix_name, "   " + " ".join(abbreviations)]
+    table = []
+    if is_colored:
+        table.append(f"{NC}")
+    table.extend([matrix_name, "   " + " ".join(abbreviations)])
     for i, x in enumerate(matrix_copy):
-        table.extend([abbreviations[i] + " " + "   ".join([to_colored_digit(y) for y in x])])
+        if is_colored:
+            table.extend([abbreviations[i] + " " + "   ".join([to_colored_digit(y) for y in x])])
+        else:
+            table.extend([abbreviations[i] + " " + "   ".join([str(y) for y in x])])
     for i in range(len(vms)):
         table.extend([f"{abbreviations[i]}: {vms[i].hostname}, {vms[i].ipv6}"])
-    table.extend([f"{GREEN}1{NC} - success"])
-    table.extend([f"{RED}0{NC} - failure"])
+    if is_colored:
+        table.extend([f"{GREEN}1{NC} - success"])
+        table.extend([f"{RED}0{NC} - failure"])
+    else:
+        table.extend(["1 - success"])
+        table.extend(["0 - failure"])
     return "\n".join(table)
 
 
 def generate_default_group() -> str:
-    return f"{FARM_GROUP_PREFIX}-{socket.gethostname()}-{int(time.time())}"
+    return f"{FARM_GROUP_PREFIX}-{HOST_MACHINE}-{int(time.time())}"
 
 
 def head_request_to_url(url: str) -> requests.Response:
@@ -397,52 +454,62 @@ def generate_config_and_ssh_keys(artifacts_dir: str) -> Tuple[str, str]:
     return config_dir, ssh_dir
 
 
-def boot_vm(group_name: str, vm_name: str, image_id: str) -> requests.Response:
+def boot_vm(group_name: str, vm: VM, image_id: str):
+    pid = os.getpid()
+    logger.debug(f"Process with pid={pid} is booting {vm}.")
     response = http_with_retries(
         func=farm_mount_usb_drives,
         expected_code=200,
         group_name=group_name,
-        vm_name=vm_name,
+        vm_name=vm.name,
         images=[{"_tag": "imageViaId", "id": image_id}],
     )
-    logger.debug(f"Mount image response {response.status_code}.")
-    response = http_with_retries(func=farm_start_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
-    logger.debug(f"Start VM response {response.status_code}")
-    print_console_link(group_name, vm_name)
-    return response
+    logger.debug(f"Mount image of {vm} finished with status_code={response.status_code}, by pid={pid}.")
+    response = http_with_retries(func=farm_start_vm, expected_code=200, group_name=group_name, vm_name=vm.name)
+    logger.debug(f"Start of {vm} finished with status_code={response.status_code}, by  pid={pid}.")
+    print_console_link(group_name, vm.name)
+
+
+def generate_connectivity_from_vm_to_vms(vm: VM, key_filename: str, VMs: List[VM]) -> List[int]:
+    logger.debug(f"Process with pid={os.getpid()} is generating inter-VM file-download array for {vm}")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(vm.ipv6, username="admin", key_filename=key_filename)
+    file_download_array = [-1 for _ in range(len(VMs))]
+    for col in range(len(VMs)):
+        # Get 1M file download result.
+        channel = client.get_transport().open_session()
+        channel.exec_command(
+            f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
+            f"curl --no-progress-meter --verbose --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
+            f"sha256sum -c SHA256SUMS"
+        )
+        exit_status = channel.recv_exit_status()
+        if exit_status != 0:
+            logger.error(
+                f"Failure: curl from {vm.ipv6} ({vm.hostname[:3]}) to {VMs[col].ipv6} ({VMs[col].hostname[:3]}) (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES).decode('utf-8')}"
+            )
+        file_download_array[col] = int(exit_status == 0)
+    return file_download_array
 
 
 def generate_connectivity_matrices(VMs: List[VM], key_filename: str) -> List[List[int]]:
-    N = len(VMs)
-    # 1: success, 0: failure.
-    file_download_matrix = [[0 for _ in range(N)] for _ in range(N)]
-    for row in tqdm(range(N)):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(VMs[row].ipv6, username="admin", key_filename=key_filename)
-        for col in tqdm(range(N), leave=False):
-            # Get 1M file download result.
-            channel = client.get_transport().open_session()
-            channel.exec_command(
-                f"curl --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/random -o random --fail && "
-                f"curl --max-time {FILE_DOWNLOAD_TIMEOUT_SEC} http://[{VMs[col].ipv6}]/SHA256SUMS -o SHA256SUMS --fail && "
-                f"sha256sum -c SHA256SUMS"
-            )
-            exit_status = channel.recv_exit_status()
-            if exit_status != 0:
-                logger.debug(
-                    f"Failure: curl from {VMs[row].ipv6} to {VMs[col].ipv6} (timeout {FILE_DOWNLOAD_TIMEOUT_SEC}) failed with code={exit_status}, stderr={channel.recv_stderr(STDERR_NBYTES)}"
-                )
-            file_download_matrix[row][col] = int(exit_status == 0)
-        client.close()
+    # Binary inter-VMs file-download matrix.
+    # 1: success (file download succeeded), 0: failure (download failed).
+    file_download_matrix = []
+    with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+        args = [(vm, key_filename, VMs) for vm in VMs]
+        connectivity_results = p.starmap(func=generate_connectivity_from_vm_to_vms, iterable=args)
+        [file_download_matrix.append(r) for r in connectivity_results]
     return file_download_matrix
 
 
 def exception_handler(func):
-    def test(keep_artifacts_dir: bool, **kwargs):
+    def test(keep_artifacts_dir: bool, output_dir: Optional[str], **kwargs):
         test_exit_code = 1  # initially set to failed.
         # Use context for cleanup: optionally remove artifacts_dir after execution.
-        with artifacts_directory(keep_artifacts_dir) as artifacts_dir:
+        with artifacts_directory(keep_artifacts_dir, output_dir) as artifacts_dir:
+            logger.debug(f"Test output artifacts will be stored in {artifacts_dir}")
             # Log file is stored in the artifacts_dir.
             add_file_logger(artifacts_dir)
             try:
@@ -455,7 +522,9 @@ def exception_handler(func):
                     filename=f"{artifacts_dir}/{SLACK_ALERTS_FILE}", exception=exc, slack_channels=[PFOPS_SLACK_CHANNEL]
                 )
                 if kwargs["with_slack_alerts"]:
-                    send_slack_alerts_from_file(f"{artifacts_dir}/{SLACK_ALERTS_FILE}")
+                    send_slack_alerts_from_file(
+                        webhook_url=kwargs["slack_webhook_url"], filename=f"{artifacts_dir}/{SLACK_ALERTS_FILE}"
+                    )
         return test_exit_code
 
     return test
@@ -490,15 +559,9 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
                 logger.debug(f"Existing {FARM_GROUP_PREFIX} groups: {g['name']} expires_at: {g['expiresAt']}")
 
     with step_span("creating VMs in Farm", step_idx) as step_idx:
-        VMs = []
-        for idx in range(len(dc_names)):
-            vm_name = f"{VM_NAME_BASE}{idx}"
-            response = http_with_retries(func=farm_create_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
-            resp_body = response.json()
-            VMs.append(VM(vm_name, resp_body["hostname"], resp_body["ipv6"]))
-            logger.debug(
-                f"VM name={VMs[-1].name}, hostname={VMs[-1].hostname}, ipv6={VMs[-1].ipv6} created successfully."
-            )
+        create_vm_args = [(group_name, f"{VM_NAME_BASE}{idx}") for idx in range(len(dc_names))]
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            VMs = p.starmap(func=create_vm, iterable=create_vm_args)
         # Sort VMs by hostname, so that networking matrices computed below always have the same ordering.
         VMs.sort(key=lambda x: x.hostname)
         logger.info(f"All {len(VMs)} VMs created successfully.")
@@ -510,33 +573,29 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
         logger.info(f"All {len(dc_names)} DCs contain a VM.")
 
     with step_span("booting all VMs", step_idx) as step_idx:
-        for vm in VMs:
-            boot_vm(group_name, vm.name, image_id)
-        logger.info(f"All {len(VMs)} VMs were booted successfully.")
+        boot_vm_args = [(group_name, vm, image_id) for vm in VMs]
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            p.starmap(func=boot_vm, iterable=boot_vm_args)
 
-    with step_span(f"verifying {socket.gethostname()} can reach all VMs", step_idx) as step_idx:
+    with step_span(f"verifying {HOST_MACHINE} can reach all VMs", step_idx) as step_idx:
+        with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
+            vms_reachability = p.map(is_vm_reachable, VMs)
+            unreachable_vms = [VMs[idx] for (idx, is_reachable) in enumerate(vms_reachability) if not is_reachable]
+        if unreachable_vms:
+            raise NetworkingException(
+                f"Host {HOST_MACHINE} can't reach the following VMs after their boot: {[unreachable_vms]}"
+            )
         for vm in VMs:
-            try:
-                http_with_retries(
-                    func=head_request_to_url,
-                    expected_code=200,
-                    timeout=VM_BOOT_READINESS_TIMEOUT_SEC,
-                    url=f"http://[{vm.ipv6}]/random",
-                )
-            except Exception:
-                raise NetworkingException(
-                    f"VM name={vm.name}, hostname={vm.hostname} can't be reached from the host {socket.gethostname()} after booting."
-                )
-            logger.debug(f"vm={vm.name} ipv6 is reachable.")
             logger.debug(f"ssh admin@{vm.ipv6} -i {ssh_dir}/admin")
 
     with step_span("generating inter-vms networking matrices", step_idx) as step_idx:
         # Check VMs can download 1M file from each other.
         file_download_matrix = generate_connectivity_matrices(VMs, f"{ssh_dir}/admin")
-        logger.debug(pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs))
+        logger.debug(pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs, True))
         all_vms_file_download_success = all(all(x) for x in file_download_matrix)
         if not all_vms_file_download_success:
-            raise NetworkingException("Not all VMs can download files from each other.")
+            slack_matrix = pretty_matrix("Inter-VMs file download matrix:", file_download_matrix, VMs, False)
+            raise NetworkingException(f"Not all VMs can download files from each other.\n{slack_matrix}")
         logger.info("All VMs can download files from each other.")
     return 0
 
@@ -556,6 +615,11 @@ def smoke_test(artifacts_dir: str) -> int:
 
 
 if __name__ == "__main__":
+    # Set path to the current script path (in case script is launched from non-parent dir).
+    current_path = Path(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(current_path.absolute())
+    # Get slack token from the env variable.
+    slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL", None)
     # Parse command line arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -564,16 +628,27 @@ if __name__ == "__main__":
         help="Keep dir containing: log file/s, ssh keys, alert messages, etc.",
     )
     parser.add_argument("--with_slack_alerts", action="store_true", help="Send slack alerts in case of test failure.")
+    parser.add_argument("--output_dir", type=str, help="Artifacts output directory.")
     args = parser.parse_args()
+    output_dir = os.getenv("TMPDIR", None)
+    if args.output_dir:
+        output_dir = args.output_dir
     if not args.with_slack_alerts:
         logger.warning("Slack alerts are turned off. Use --with_slack_alerts flag to send alerts.")
+    elif slack_webhook_url is None:
+        raise Exception("No slack webhook url defined, alerts can't be sent.")
     if not args.keep_artifacts_dir:
         logger.warning(
             "All test artifacts will be deleted after test execution. Use --keep_artifacts_dir to keep them."
         )
     # Start the test.
     start = datetime.datetime.now()
-    test_exit_code = smoke_test(keep_artifacts_dir=args.keep_artifacts_dir, with_slack_alerts=args.with_slack_alerts)
+    test_exit_code = smoke_test(
+        output_dir=output_dir,
+        keep_artifacts_dir=args.keep_artifacts_dir,
+        with_slack_alerts=args.with_slack_alerts,
+        slack_webhook_url=slack_webhook_url,
+    )
     test_duration = datetime.datetime.now() - start
     if test_exit_code == 0:
         logger.info(f"Smoke test succeeded after {str(test_duration)}.")

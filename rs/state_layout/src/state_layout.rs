@@ -123,6 +123,7 @@ pub struct CanisterStateBits {
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
     pub task_queue: Vec<ExecutionTask>,
+    pub time_of_last_allocation_charge_nanos: Option<u64>,
 }
 
 /// This struct contains bits of the `BitcoinState` that are not already
@@ -253,8 +254,21 @@ pub struct StateLayout {
 
 impl StateLayout {
     /// Needs to be pub for criterion performance regression tests.
-    pub fn new(log: ReplicaLogger, root: PathBuf) -> Self {
-        Self { root, log }
+    pub fn try_new(log: ReplicaLogger, root: PathBuf) -> Result<Self, LayoutError> {
+        let state_layout = Self { root, log };
+        state_layout.init()?;
+        Ok(state_layout)
+    }
+
+    fn init(&self) -> Result<(), LayoutError> {
+        self.cleanup_tip()?;
+        self.cleanup_tmp()?;
+        WriteOnly::check_dir(&self.backups())?;
+        WriteOnly::check_dir(&self.checkpoints())?;
+        WriteOnly::check_dir(&self.diverged_checkpoints())?;
+        WriteOnly::check_dir(&self.fs_tmp())?;
+        WriteOnly::check_dir(&self.tip_path())?;
+        WriteOnly::check_dir(&self.tmp())
     }
 
     /// Returns the the raw root path for state
@@ -264,20 +278,35 @@ impl StateLayout {
 
     /// Returns the path to the temporary directory.
     /// This directory is cleaned during restart of a node.
-    pub fn tmp(&self) -> Result<PathBuf, LayoutError> {
-        let tmp = self.root.join("tmp");
-        WriteOnly::check_dir(&tmp)?;
-        Ok(tmp)
+    pub fn tmp(&self) -> PathBuf {
+        self.root.join("tmp")
     }
 
-    /// Removes the tmp directory and all its contents
-    pub fn remove_tmp(&self) -> Result<(), LayoutError> {
-        let tmp = self.tmp()?;
-        std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
-            path: tmp,
-            message: "Unable to remove temporary directory".to_string(),
-            io_err: err,
-        })
+    /// Returns the path to the temporary directory for checkpoint operations,
+    /// aka fs_tmp. This directory is cleaned during restart of a node.
+    pub fn fs_tmp(&self) -> PathBuf {
+        self.root.join("fs_tmp")
+    }
+
+    /// Removes the tmp directory and all its contents.
+    fn cleanup_tmp(&self) -> Result<(), LayoutError> {
+        let tmp = self.tmp();
+        if tmp.exists() {
+            std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
+                path: tmp,
+                message: "Unable to remove temporary directory".to_string(),
+                io_err: err,
+            })?
+        }
+        let fs_tmp = self.fs_tmp();
+        if fs_tmp.exists() {
+            std::fs::remove_dir_all(&fs_tmp).map_err(|err| LayoutError::IoError {
+                path: fs_tmp,
+                message: "Unable to remove fs_tmp directory".to_string(),
+                io_err: err,
+            })?
+        }
+        Ok(())
     }
 
     /// Returns a layout object representing tip state in "tip"
@@ -297,17 +326,18 @@ impl StateLayout {
 
     /// Returns scratchpad used during statesync
     pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        let tmp = self.tmp()?;
-        Ok(tmp.join(format!("state_sync_scratchpad_{:016x}", height.get())))
+        Ok(self
+            .tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
     pub fn state_sync_cache(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        let tmp = self.tmp()?;
+        let tmp = self.tmp();
         Ok(tmp.join(format!("state_sync_cache_{:016x}", height.get())))
     }
 
-    pub fn cleanup_tip(&self) -> Result<(), LayoutError> {
+    fn cleanup_tip(&self) -> Result<(), LayoutError> {
         if self.tip_path().exists() {
             std::fs::remove_dir_all(self.tip_path()).map_err(|err| LayoutError::IoError {
                 path: self.tip_path(),
@@ -328,7 +358,6 @@ impl StateLayout {
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let height = tip.height;
         let cp_name = self.checkpoint_name(height);
-        WriteOnly::check_dir(&self.checkpoints())?;
         let new_cp = self.checkpoints().join(&cp_name);
 
         if new_cp.exists() {
@@ -353,7 +382,6 @@ impl StateLayout {
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        WriteOnly::check_dir(&self.checkpoints())?;
         let scratchpad = layout.raw_path();
         sync_and_mark_files_readonly(scratchpad).map_err(|err| LayoutError::IoError {
             path: scratchpad.to_path_buf(),
@@ -385,7 +413,7 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        let tmp_path = self.tmp()?;
+        let tmp_path = self.tmp();
         let scratchpad_dir = tempfile::Builder::new()
             .prefix(&tmp_path)
             .tempdir()
@@ -557,7 +585,6 @@ impl StateLayout {
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let diverged_checkpoints_dir = self.diverged_checkpoints();
-        WriteOnly::check_dir(&diverged_checkpoints_dir)?;
 
         let dst_path = diverged_checkpoints_dir.join(&cp_name);
 
@@ -609,7 +636,6 @@ impl StateLayout {
         }
 
         let backups_dir = self.backups();
-        WriteOnly::check_dir(&backups_dir)?;
         let dst = backups_dir.join(&cp_name);
         self.copy_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
@@ -653,7 +679,6 @@ impl StateLayout {
         }
 
         let backups_dir = self.backups();
-        WriteOnly::check_dir(&backups_dir)?;
         let dst = backups_dir.join(&cp_name);
 
         if dst.exists() {
@@ -679,12 +704,6 @@ impl StateLayout {
             message: "Failed to sync checkpoints".to_string(),
             io_err: err,
         })
-    }
-
-    // Returns the path to the temporary directory for checkpoint operations,
-    // aka fs_tmp.
-    fn fs_tmp(&self) -> PathBuf {
-        self.root.join("fs_tmp")
     }
 
     fn checkpoint_name(&self, height: Height) -> String {
@@ -885,6 +904,18 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
                 .join("canister_states")
                 .join(hex::encode(canister_id.get_ref().as_slice())),
         )
+    }
+
+    /// Mark any canister as deleted that is not in ids
+    pub fn filter_canisters(&self, ids: &BTreeSet<&CanisterId>) -> Result<(), LayoutError> {
+        let canisters_on_disk = self.canister_ids()?;
+        for id in canisters_on_disk {
+            if !ids.contains(&id) {
+                let canister = self.canister(&id)?;
+                canister.mark_deleted()?;
+            }
+        }
+        Ok(())
     }
 
     pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
@@ -1224,6 +1255,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
+            time_of_last_allocation_charge_nanos: item.time_of_last_allocation_charge_nanos,
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
         }
     }
@@ -1296,6 +1328,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
+            time_of_last_allocation_charge_nanos: try_from_option_field(
+                value.time_of_last_allocation_charge_nanos,
+                "CanisterStateBits::time_of_last_allocation_charge_nanos",
+            )
+            .ok(),
             task_queue,
         })
     }
@@ -1651,6 +1688,7 @@ mod test {
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
             install_code_debit: NumInstructions::from(0),
+            time_of_last_allocation_charge_nanos: None,
             task_queue: vec![],
         }
     }

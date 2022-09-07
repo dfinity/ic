@@ -54,7 +54,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert_serialization_round_trips(EccPoint::generator_h(curve_type)?);
 
         for _r in 0..100 {
-            let s = EccScalar::random(curve_type, &mut rng)?;
+            let s = EccScalar::random(curve_type, &mut rng);
             let gs = EccPoint::mul_by_g(&s)?;
 
             assert_serialization_round_trips(gs);
@@ -164,7 +164,7 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
         let zero = EccScalar::zero(curve);
 
         for _trial in 0..100 {
-            let random = EccScalar::random(curve, &mut rng)?;
+            let random = EccScalar::random(curve, &mut rng);
             let n_random = random.negate();
             let should_be_zero = random.add(&n_random)?;
             assert_eq!(should_be_zero, zero);
@@ -210,7 +210,7 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
             scalars.push(EccScalar::one(curve_type));
             scalars.push(EccScalar::one(curve_type).negate());
             for _ in 0..100 {
-                scalars.push(EccScalar::random(curve_type, &mut rng)?);
+                scalars.push(EccScalar::random(curve_type, &mut rng));
             }
 
             // test correctness for the generated scalars
@@ -237,7 +237,7 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
         assert_eq!(id.negate(), id);
 
         for _trial in 0..100 {
-            let random_scalar = EccScalar::random(curve_type, &mut rng)?;
+            let random_scalar = EccScalar::random(curve_type, &mut rng);
             let random_point = g.scalar_mul(&random_scalar)?;
             let n_random_point = random_point.negate();
 
@@ -264,8 +264,8 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
             let g = EccPoint::generator_g(curve_type)?;
             let mut random_pair = || -> ThresholdEcdsaResult<_> {
                 Ok((
-                    g.scalar_mul(&EccScalar::random(curve_type, &mut rng)?)?,
-                    EccScalar::random(curve_type, &mut rng)?,
+                    g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?,
+                    EccScalar::random(curve_type, &mut rng),
                 ))
             };
 

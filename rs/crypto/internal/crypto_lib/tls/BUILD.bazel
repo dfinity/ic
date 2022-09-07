@@ -6,7 +6,7 @@ rust_library(
     name = "tls",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_tls",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
         "//rs/types/types",

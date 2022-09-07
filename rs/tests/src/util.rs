@@ -10,7 +10,7 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
-use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
+use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -738,7 +738,7 @@ pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: E
 
     let start = Instant::now();
     let mut es: Vec<IcEndpoint> = vec![];
-    while start.elapsed() < RETRY_TIMEOUT {
+    while start.elapsed() < READY_WAIT_TIMEOUT {
         es = check_reachability().await;
         if es.is_empty() {
             return;
@@ -748,7 +748,7 @@ pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: E
     panic!(
       "The following endpoints have not reached the desired health status {:?} within timeout {} sec:\n{:?}",
       status,
-      RETRY_TIMEOUT.as_secs(),
+      READY_WAIT_TIMEOUT.as_secs(),
       es.iter().map(|e|format!("{:?}",e)).collect::<Vec<String>>().join("\n")
     );
 }
@@ -873,7 +873,7 @@ pub(crate) async fn create_canister_via_canister_with_cycles(
         .forward_with_cycles_to(
             &Principal::management_canister(),
             "create_canister",
-            EmptyBlob::encode(),
+            EmptyBlob.encode(),
             cycles,
         )
         .await

@@ -1,46 +1,54 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto/tls_interfaces",
+    "//rs/interfaces/transport",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
+    "//rs/types/base_types",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto",
+    "//rs/crypto/tls_interfaces/mocks",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
+    "@crate_index//:mockall",
+    "@crate_index//:tower-test",
+]
 
 rust_library(
     name = "transport",
     srcs = glob(["src/**"]),
     crate_name = "ic_transport",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    deps = [
-        "//rs/config",
-        "//rs/crypto/tls_interfaces",
-        "//rs/interfaces/transport",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/phantom_newtype",
-        "//rs/types/base_types",
-        "@crate_index//:prometheus",
-        "@crate_index//:serde",
-        "@crate_index//:slog",
-        "@crate_index//:strum",
-        "@crate_index//:tokio",
-        "@crate_index//:tower",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "transport_tests",
     srcs = glob(["src/**"]),
     crate = ":transport",
-    edition = "2018",
-    deps = [
-        "//rs/crypto",
-        "//rs/crypto/tls_interfaces/mocks",
-        "//rs/registry/fake",
-        "//rs/registry/keys",
-        "//rs/registry/proto_data_provider",
-        "//rs/test_utilities/logger",
-        "//rs/types/types_test_utils",
-        "@crate_index//:mockall",
-        "@crate_index//:tower-test",
-    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "transport_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

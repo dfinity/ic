@@ -7,6 +7,5 @@ rust_library(
     srcs = ["src/lib.rs"],
     compile_data = ["mainnet_delta_00-6d-c1.pb"],
     crate_name = "ic_registry_local_store_artifacts",
-    edition = "2018",
     version = "0.8.0",
 )

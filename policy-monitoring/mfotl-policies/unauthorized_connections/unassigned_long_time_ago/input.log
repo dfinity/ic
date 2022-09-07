@@ -1,0 +1,7 @@
+@0000000 COMMENT("the x-net connection attempt comes from node A to node B; the nodes were in the same subnet a long time ago (more that 15 min)")
+@0000000 EXPECTED(FAIL)
+@0000000 originally_in_subnet(A_id, A_addr, subnet)
+@0000000 originally_in_subnet(B_id, B_addr, subnet)
+@0005000 registry__node_removed_from_subnet(A_id, A_addr)
+@0010000 registry__node_added_to_subnet(A_id, A_addr, subneta)
+@1000000 ControlPlane__spawn_accept_task__tls_server_handshake_failed(B_addr, A_addr)

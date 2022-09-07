@@ -12,8 +12,8 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
 
     let seed = Seed::from_rng(&mut rng);
 
-    let secret = EccScalar::random(curve, &mut rng)?;
-    let masking = EccScalar::random(curve, &mut rng)?;
+    let secret = EccScalar::random(curve, &mut rng);
+    let masking = EccScalar::random(curve, &mut rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking)?;
     let simple = EccPoint::mul_by_g(&secret)?;
@@ -39,12 +39,12 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
 
     let seed = Seed::from_rng(&mut rng);
 
-    let lhs = EccScalar::random(curve, &mut rng)?;
-    let rhs = EccScalar::random(curve, &mut rng)?;
-    let masking = EccScalar::random(curve, &mut rng)?;
+    let lhs = EccScalar::random(curve, &mut rng);
+    let rhs = EccScalar::random(curve, &mut rng);
+    let masking = EccScalar::random(curve, &mut rng);
 
     let product = lhs.mul(&rhs)?;
-    let product_masking = EccScalar::random(curve, &mut rng)?;
+    let product_masking = EccScalar::random(curve, &mut rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
     let lhs_c = EccPoint::mul_by_g(&lhs)?;
@@ -71,12 +71,12 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
 
     let seed = Seed::from_rng(&mut rng);
 
-    let lhs = EccScalar::random(curve, &mut rng)?;
-    let rhs = EccScalar::random(curve, &mut rng)?;
-    let masking = EccScalar::random(curve, &mut rng)?;
+    let lhs = EccScalar::random(curve, &mut rng);
+    let rhs = EccScalar::random(curve, &mut rng);
+    let masking = EccScalar::random(curve, &mut rng);
 
-    let product = EccScalar::random(curve, &mut rng)?; // bad product!
-    let product_masking = EccScalar::random(curve, &mut rng)?;
+    let product = EccScalar::random(curve, &mut rng); // bad product!
+    let product_masking = EccScalar::random(curve, &mut rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
     let lhs_c = EccPoint::mul_by_g(&lhs)?;
@@ -102,7 +102,7 @@ fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
     let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "g_domain".as_bytes())?;
     let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "h_domain".as_bytes())?;
 
-    let x = EccScalar::random(curve, &mut rng)?;
+    let x = EccScalar::random(curve, &mut rng);
     let g_x = g.scalar_mul(&x)?;
     let h_x = h.scalar_mul(&x)?;
 

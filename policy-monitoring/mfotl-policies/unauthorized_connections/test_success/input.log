@@ -1,4 +1,0 @@
-@00000 originally_in_subnet(node7, "127.0.0.1", subnet1)
-@00000 originally_in_subnet(node8, "10.0.0.1", subnet2)
-@40000 ControlPlane__spawn_accept_task__tls_server_handshake_failed("127.0.0.1", "10.0.0.1")
-@50000 consensus_finalized(node7, subnet2, 0, 1)

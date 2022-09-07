@@ -128,8 +128,8 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_integration_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -137,7 +137,6 @@ rust_canister(
     name = "mem-utils-test-canister-raw",
     srcs = ["test_canisters/mem_utils_test.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":integration_tests"],
 )
@@ -151,7 +150,6 @@ rust_canister(
     name = "governance-mem-test-canister-raw",
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":integration_tests"],
 )
@@ -175,7 +173,6 @@ rust_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     data = DEV_DATA,
-    edition = "2018",
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
@@ -194,7 +191,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "src/governance_mem_test.rs",
     data = DEV_DATA,
-    edition = "2018",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["post_master"],

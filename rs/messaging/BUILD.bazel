@@ -6,7 +6,6 @@ rust_library(
     name = "messaging",
     srcs = glob(["src/**"]),
     crate_name = "ic_messaging",
-    edition = "2018",
     deps = [
         "//rs/canonical_state/certification_version",
         "//rs/config",
@@ -26,7 +25,6 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/state_layout",
         "//rs/types/base_types",
         "//rs/types/error_types",
         "//rs/types/ic00_types",

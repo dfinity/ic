@@ -63,7 +63,7 @@
     set -eExuo pipefail
 
     # Deploy replica images
-    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/{{ ic_boundary_node_image }}"
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     ITEMS=({{ boundary_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
@@ -75,7 +75,7 @@
   args:
     executable: /bin/bash
   when: boundary_nodes | length > 0
-  tags: [ "ic_guest" ]
+  tags: [ "boundary_node_vm" ]
 
 - name: copy file disk.img for aux nodes
   vars:

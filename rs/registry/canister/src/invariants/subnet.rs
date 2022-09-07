@@ -97,11 +97,6 @@ pub(crate) fn check_subnet_invariants(
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
         }
-        assert!(
-            subnet_record.max_instructions_per_message <= subnet_record.max_instructions_per_round,
-            "The message instruction limit should not exceed \
-                the round instruction limit."
-        );
 
         check_gossip_config_invariants(subnet_id, subnet_record);
     }

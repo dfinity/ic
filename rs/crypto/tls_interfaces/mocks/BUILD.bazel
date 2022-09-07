@@ -7,10 +7,10 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tls_interfaces_mocks",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
+    version = "0.8.0",
     deps = [
         "//rs/crypto/tls_interfaces",
         "//rs/types/base_types",

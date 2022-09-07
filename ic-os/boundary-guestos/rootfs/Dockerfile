@@ -10,8 +10,8 @@ ARG BASE_IMAGE=
 
 
 # Service worker version and sha256
-ARG sw_version=1.2.7
-ARG sw_sha256=9aeb3c37742b162804dfb0094a4956a4df173030971cf6e12f376ae80c207b0f
+ARG sw_version=1.2.9
+ARG sw_sha256=9ee338d7f97da00688cb64721527eea28c59438a17d87ad336d5c72fb16cacc6
 
 # ICX proxy  version and sha256
 ARG icx_proxy_version=dcaa135
@@ -39,6 +39,17 @@ RUN \
    curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
    echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
+# Download Nginx NJS Plugins
+ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
+ARG NGINX_NJS_PLUGINS_REF_NAME=v1.0.0
+ARG NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN=glpat-2s2iXys15ZmVpgdxok58
+
+RUN \
+    curl -sL -o njs-plugin-is-bot.js \
+        -H "Private-Token: ${NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN}" \
+        https://gitlab.com/api/v4/projects/${NGINX_NJS_PLUGINS_PROJECT_ID}/jobs/artifacts/${NGINX_NJS_PLUGINS_REF_NAME}/raw/dist/njs-plugin-is-bot.js?job=build-plugins && \
+    echo "4cd35a7356469d5bf9d69cbce356c2135854a2e8e8dc45c2c855cd0e848861c77ea19ee80d530326fab8cf5abc684bd6e9b16678a7e2049f9a4aec5dd9ecb496  njs-plugin-is-bot.js" | shasum -c
+
 #
 # Second build stage:
 # - Construct the actual target image (IC-OS root filesystem)
@@ -61,7 +72,12 @@ RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
 RUN mkdir -p /boot/config \
              /boot/efi \
              /boot/grub
+
 COPY etc /etc
+
+# Install Nginx NJS Plugins
+COPY --from=download \
+    /tmp/njs-plugin-is-bot.js /etc/nginx/njs/
 
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
@@ -197,10 +213,16 @@ RUN \
     chown prober:prober /var/log/prober && \
     chmod 755 /var/log/prober
 
+# Setup denylist-updater
 RUN \
     addgroup denylist-updater && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "denylist-updater" denylist-updater && \
     adduser denylist-updater denylist-updater
+
+RUN \
+    mkdir -p /var/opt/nginx/denylist && \
+    chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
+    chmod 644 /var/opt/nginx/denylist
 
 # Install journalbeat
 RUN chown root:root /etc/journalbeat/*.yml \

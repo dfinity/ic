@@ -1,6 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -47,6 +48,17 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:prost-derive",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/canister_client/sender",
+    "//rs/test_utilities/compare_dirs",
+    "//rs/rosetta-api/ledger_canister/protobuf_generator:lib",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:rand_core",
+    "@crate_index//:tempfile",
+]
+
 rust_library(
     name = "ledger_canister",
     srcs = glob([
@@ -57,7 +69,54 @@ rust_library(
     data = [
         "wasm/ledger-archive-node-canister-bazel.wasm",
     ],
-    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        # Circular dependency between ledger-canister-wasm and ledger_canister.
+        # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister-bazel.wasm",
+    },
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ledger_canister_canister_test",
+    srcs = ["src/main.rs"],
+    # TODO: Migrate this test to work in bazel environment IDX-2469
+    args = [
+        "--skip",
+        "check_candid_interface_compatibility",
+    ],
+    data = [
+        "ledger.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
+    },
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ledger_canister"],
+)
+
+motoko_library(
+    name = "ledger_mo_lib",
+    srcs = ["wasm/Ledger.mo"],
+)
+
+motoko_binary(
+    name = "ledger_proxy",
+    entry = "wasm/Proxy.mo",
+    deps = [":ledger_mo_lib"],
+)
+
+rust_library(
+    name = "ledger_canister_test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "ledger_canister",
+    data = [
+        "wasm/ledger-archive-node-canister-bazel.wasm",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         # Circular dependency between ledger-canister-wasm and ledger_canister.
@@ -67,13 +126,62 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_binary(
-    name = "test_notified",
+rust_test(
+    name = "test_notified_test",
     srcs = ["test/notified.rs"],
-    edition = "2018",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ledger_canister"],
+)
+
+rust_canister(
+    name = "test_notified_canister",
+    srcs = ["test/notified.rs"],
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
+)
+
+rust_test(
+    name = "ledger_canister_test",
+    crate = ":ledger_canister",
+    data = [
+        "wasm/ledger-archive-node-canister-bazel.wasm",
+    ],
+    rustc_env = {
+        # Circular dependency between ledger-canister-wasm and ledger_canister.
+        # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister-bazel.wasm",
+    },
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "ledger_canister_integration_test",
+    srcs = ["test/test.rs"],
+    data = [
+        "ledger.did",
+        "ledger_archive.did",
+        "wasm/ledger-archive-node-canister-bazel.wasm",
+        "wasm/ledger_proxy.wasm",
+        ":ledger-canister-wasm",
+        ":ledger-canister-wasm-notify-method",
+        ":test_notified_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath :ledger-canister-wasm-notify-method)",
+        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    rustc_env = {
+        # Circular dependency between ledger-canister-wasm and ledger_canister.
+        # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister-bazel.wasm",
+    },
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ledger_canister"],
 )
 
 rust_canister(
@@ -82,7 +190,6 @@ rust_canister(
     data = [
         "ledger.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -100,7 +207,6 @@ rust_canister(
     data = [
         "ledger.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -117,7 +223,6 @@ rust_canister(
     data = [
         "ledger_archive.did",
     ],
-    edition = "2018",
     deps = [
         ":ledger_canister",
     ] + DEPENDENCIES,
@@ -126,6 +231,18 @@ rust_canister(
 optimized_canister(
     name = "ledger-archive-node-canister-wasm",
     wasm = "ledger-archive-node-canister-wasm-raw",
+)
+
+rust_test(
+    name = "ledger-archive-node_test",
+    srcs = ["src/archive_node.rs"],
+    data = [
+        "ledger_archive.did",
+    ],
+    rustc_env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
+    },
+    deps = [":ledger_canister"] + DEPENDENCIES,
 )
 
 generated_files_check(
@@ -142,9 +259,3 @@ generated_files_check(
         "@crate_index//:tempfile",
     ],
 )
-
-# TODO: Build wasm/ledger_proxy.wasm with rules motoko
-# Tracked in https://dfinity.atlassian.net/browse/IDX-2368
-
-# TODO: Ledger.mo and Proxy.mo with rules motoko
-# Tracked in https://dfinity.atlassian.net/browse/IDX-2368

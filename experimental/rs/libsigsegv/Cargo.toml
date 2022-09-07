@@ -2,7 +2,7 @@
 name = "libsigsegv"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 lazy_static = "*"

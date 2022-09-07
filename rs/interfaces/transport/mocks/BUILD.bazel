@@ -7,7 +7,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_transport_mocks",
-    edition = "2018",
+    version = "0.8.0",
     deps = [
         "//rs/interfaces/transport",
         "//rs/types/base_types",

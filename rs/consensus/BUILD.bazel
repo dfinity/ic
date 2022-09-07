@@ -66,8 +66,11 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "consensus",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_consensus",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
@@ -84,7 +87,6 @@ rust_test(
     name = "integration_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
-    edition = "2018",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )
 
@@ -92,7 +94,6 @@ rust_test(
     name = "payload_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/payload.rs",
-    edition = "2018",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )
 
@@ -100,6 +101,5 @@ rust_test(
     name = "types_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/types.rs",
-    edition = "2018",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )

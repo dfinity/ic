@@ -498,6 +498,24 @@ pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
 }
+/// Obsolete. Superceded by OpenSnsTokenSwap.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetSnsTokenSwapOpenTimeWindow {
+    /// The swap canister to send the request to.
+    #[prost(message, optional, tag = "1")]
+    pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Arguments that get sent to the swap canister when its set_open_time_window
+    /// Candid method is called.
+    #[prost(message, optional, tag = "2")]
+    pub request: ::core::option::Option<::ic_sns_swap::pb::v1::SetOpenTimeWindowRequest>,
+}
 /// A proposal is the immutable input of a proposal submission. This contains
 /// all the information from the original proposal submission.
 ///
@@ -526,7 +544,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -604,6 +622,12 @@ pub mod proposal {
         /// Register Known Neuron
         #[prost(message, tag = "21")]
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Obsolete. Use open_sns_token_swap instead. Kept for Candid compatibility.
+        #[prost(message, tag = "22")]
+        SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
+        /// Call the open method on an SNS swap canister.
+        #[prost(message, tag = "23")]
+        OpenSnsTokenSwap(super::OpenSnsTokenSwap),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1427,6 +1451,9 @@ pub struct ProposalData {
     /// Wait-for-quiet state that needs to be saved in stable memory.
     #[prost(message, optional, tag = "16")]
     pub wait_for_quiet_state: ::core::option::Option<WaitForQuietState>,
+    /// This is populated when an OpenSnsTokenSwap proposal is first made.
+    #[prost(uint64, optional, tag = "17")]
+    pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
 }
 /// Stores data relevant to the "wait for quiet" implementation.
 #[derive(
@@ -1469,25 +1496,25 @@ pub struct ProposalInfo {
     /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
     #[prost(uint64, tag = "5")]
     pub proposal_timestamp_seconds: u64,
-    /// See \[PropopsalData::ballots\].
+    /// See \[ProposalData::ballots\].
     #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// See \[PropopsalData::latest_tally\].
+    /// See \[ProposalData::latest_tally\].
     #[prost(message, optional, tag = "7")]
     pub latest_tally: ::core::option::Option<Tally>,
-    /// See \[PropopsalData::decided_timestamp_seconds\].
+    /// See \[ProposalData::decided_timestamp_seconds\].
     #[prost(uint64, tag = "8")]
     pub decided_timestamp_seconds: u64,
-    /// See \[PropopsalData::executed_timestamp_seconds\].
+    /// See \[ProposalData::executed_timestamp_seconds\].
     #[prost(uint64, tag = "12")]
     pub executed_timestamp_seconds: u64,
-    /// See \[PropopsalData::failed_timestamp_seconds\].
+    /// See \[ProposalData::failed_timestamp_seconds\].
     #[prost(uint64, tag = "13")]
     pub failed_timestamp_seconds: u64,
     /// See \[ProposalData::failure_reason\].
     #[prost(message, optional, tag = "18")]
     pub failure_reason: ::core::option::Option<GovernanceError>,
-    /// See \[PropopsalData::reward_event_round\].
+    /// See \[ProposalData::reward_event_round\].
     #[prost(uint64, tag = "14")]
     pub reward_event_round: u64,
     /// Derived - see \[Topic\] for more information
@@ -1625,6 +1652,28 @@ pub struct KnownNeuronData {
     pub name: ::prost::alloc::string::String,
     #[prost(string, optional, tag = "2")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Proposal action to call the "open" method of an SNS token swap canister.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct OpenSnsTokenSwap {
+    /// The ID of the canister where the command will be sent (assuming that the
+    /// proposal is adopted, of course).
+    #[prost(message, optional, tag = "1")]
+    pub target_swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Various limits on the swap.
+    #[prost(message, optional, tag = "2")]
+    pub params: ::core::option::Option<::ic_sns_swap::pb::v1::Params>,
+    /// The amount that the community fund will collectively spend in maturity on
+    /// the swap.
+    #[prost(uint64, optional, tag = "3")]
+    pub community_fund_investment_e8s: ::core::option::Option<u64>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -2024,7 +2073,9 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// Reserved for future use.
+    /// Currently, the only type of proposal in this topic is
+    /// OpenSnsTokenSwap. It is not expected that more types of proposals will
+    /// be added to this topic.
     SnsDecentralizationSale = 11,
 }
 /// Every neuron is in one of three states.
@@ -2236,6 +2287,13 @@ pub enum NnsFunction {
     CompleteCanisterMigration = 29,
     //// Add a new SNS canister WASM
     AddSnsWasm = 30,
+    //// Change the subnet node membership. In a way, this function combines the separate
+    //// functions for adding and removing nodes from the subnet record, but adds the property
+    //// of atomic node replacement (node swap) on top.
+    ////
+    //// The nodes that are being added to the subnet must be currently unassigned.
+    //// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+    ChangeSubnetMembership = 31,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

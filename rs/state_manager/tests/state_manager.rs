@@ -10,8 +10,8 @@ use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    page_map::PageIndex, testing::ReplicatedStateTesting, NumWasmPages, PageMap, ReplicatedState,
-    Stream,
+    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
+    ReplicatedState, Stream,
 };
 use ic_state_manager::{BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
@@ -126,11 +126,11 @@ fn rejoining_node_doesnt_accumulate_states() {
 fn temporary_directory_gets_cleaned() {
     state_manager_restart_test(|state_manager, restart_fn| {
         // write something to some file in the tmp directory
-        let test_file = state_manager
-            .state_layout()
-            .tmp()
-            .expect("failed to get tmp directory path")
-            .join("some_file");
+        let test_file = state_manager.state_layout().tmp().join("some_file");
+        std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
+
+        // same for fs_tmp
+        let test_file = state_manager.state_layout().fs_tmp().join("some_file");
         std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
 
         // restart the state_manager
@@ -141,7 +141,17 @@ fn temporary_directory_gets_cleaned() {
             state_manager
                 .state_layout()
                 .tmp()
+                .read_dir()
                 .unwrap()
+                .next()
+                .is_none(),
+            "tmp directory is not empty"
+        );
+        // check the fs_tmp directory is empty
+        assert!(
+            state_manager
+                .state_layout()
+                .fs_tmp()
                 .read_dir()
                 .unwrap()
                 .next()
@@ -2709,6 +2719,222 @@ fn deletes_diverged_states() {
             assert!(last_diverged > 0);
         },
     );
+}
+
+#[test]
+fn can_reset_memory() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // One canister with some data
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+        ]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Wipe data and write different data
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory = Memory::new(PageMap::new(), NumWasmPages::new(0));
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(100), &[100u8; PAGE_SIZE]),
+        ]);
+
+        // Check no remnants of the old data remain
+        assert_eq!(
+            execution_state
+                .wasm_memory
+                .page_map
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            execution_state
+                .wasm_memory
+                .page_map
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        // Check file in checkpoint does not contain old data by checking its size
+        let memory_path = state_manager
+            .state_layout()
+            .checkpoint(height(2))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap()
+            .vmemory_0();
+        assert_eq!(
+            std::fs::metadata(memory_path).unwrap().len(),
+            101 * PAGE_SIZE as u64
+        );
+
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+        // Check again after checkpoint that no remnants of old data remain
+        assert_eq!(
+            execution_state
+                .wasm_memory
+                .page_map
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            execution_state
+                .wasm_memory
+                .page_map
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        // Wipe data completely
+        execution_state.wasm_memory = Memory::new(PageMap::new(), NumWasmPages::new(0));
+
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        // File should be empty after wiping and checkpoint
+        let memory_path = state_manager
+            .state_layout()
+            .checkpoint(height(3))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap()
+            .vmemory_0();
+        assert_eq!(std::fs::metadata(memory_path).unwrap().len(), 0);
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn can_delete_canister() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Insert a canister and a write checkpoint
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        // Check the checkpoint has the canister
+        let canister_path = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap()
+            .raw_path();
+        assert!(std::fs::metadata(canister_path).unwrap().is_dir());
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Delete the canister
+        let _deleted_canister = state.take_canister_state(&canister_test_id(100));
+
+        // Commit two rounds, once without checkpointing and once with
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+
+        let (_height, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        // Check that the checkpoint does not contain the canister
+        assert!(!state_manager
+            .state_layout()
+            .checkpoint(height(3))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .exists());
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn can_uninstall_code() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Insert a canister a write checkpoint
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+        ]);
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+        ]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        // Check the checkpoint has the canister
+        let canister_path = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap()
+            .raw_path();
+        assert!(std::fs::metadata(canister_path).unwrap().is_dir());
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Remove the execution state
+        state
+            .canister_state_mut(&canister_test_id(100))
+            .unwrap()
+            .execution_state = None;
+
+        // Commit two rounds, once without checkpointing and once with
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+
+        let (_height, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        // Check that the checkpoint does contains the canister
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(3))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+
+        assert!(canister_layout.raw_path().exists());
+
+        // WASM and stable memory should be empty after checkpoint
+        assert_eq!(
+            std::fs::metadata(canister_layout.vmemory_0())
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            std::fs::metadata(canister_layout.stable_memory_blob())
+                .unwrap()
+                .len(),
+            0
+        );
+
+        assert_error_counters(metrics);
+    });
 }
 
 proptest! {

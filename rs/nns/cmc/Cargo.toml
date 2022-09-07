@@ -2,7 +2,7 @@
 name = "cycles-minting-canister"
 version = "0.8.0"
 description = "Canister for cycles administration"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
@@ -14,6 +14,7 @@ dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 dfn_core = {path = "../../rust_canisters/dfn_core"}
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 ic-base-types = {path="../../types/base_types"}
+ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
@@ -29,7 +30,7 @@ on_wire = {path = "../../rust_canisters/on_wire"}
 
 base64 = "0.13.0"
 prost = "0.10.4"
-rand = "0.7.3"
+rand = "0.8"
 serde = "1.0"
 serde_cbor = "0.11.2"
 sha2 = "0.9.1"

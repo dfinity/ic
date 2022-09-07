@@ -2142,6 +2142,7 @@ dependencies = [
  "dfn_protobuf",
  "ic-base-types",
  "ic-certified-map",
+ "ic-crypto-getrandom-for-wasm",
  "ic-crypto-tree-hash",
  "ic-ic00-types",
  "ic-ledger-core",
@@ -2155,7 +2156,7 @@ dependencies = [
  "ledger-canister",
  "on_wire",
  "prost",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_cbor",
  "sha2 0.9.9",
@@ -2255,6 +2256,7 @@ dependencies = [
  "clap 3.2.14",
  "flate2",
  "futures",
+ "httptest",
  "humantime 2.1.0",
  "mockall 0.11.2",
  "nix 0.24.2",
@@ -3595,6 +3597,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
 
 [[package]]
+name = "httptest"
+version = "0.15.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f25cfb6def593d43fae1ead24861f217e93bc70768a45cc149a69b5f049df4"
+dependencies = [
+ "bstr",
+ "bytes",
+ "crossbeam-channel 0.5.6",
+ "form_urlencoded",
+ "futures",
+ "http",
+ "hyper",
+ "log",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tokio",
+]
+
+[[package]]
 name = "humansize"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4228,6 +4252,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "itertools 0.10.3",
+ "once_cell",
  "prost",
  "rand 0.8.5",
  "serde",
@@ -5310,7 +5335,6 @@ dependencies = [
  "openssl",
  "serde",
  "tokio",
- "tokio-openssl",
  "tokio-rustls 0.22.0",
 ]
 
@@ -6126,7 +6150,6 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-state-layout",
  "ic-test-utilities",
  "ic-test-utilities-metrics",
  "ic-types 0.8.0",
@@ -6308,6 +6331,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-config",
+ "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
@@ -6320,14 +6344,15 @@ dependencies = [
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
+ "lazy_static",
  "ledger-canister",
  "maplit",
  "on_wire",
  "pretty_assertions 1.2.1",
  "proptest 1.0.0",
  "prost",
- "rand 0.7.3",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "registry-canister",
  "serde",
  "strum 0.23.0",
@@ -6358,6 +6383,7 @@ dependencies = [
  "hex",
  "hex-literal 0.3.3",
  "ic-base-types",
+ "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
@@ -6372,8 +6398,7 @@ dependencies = [
  "ledger-canister",
  "libsecp256k1",
  "prost",
- "rand 0.7.3",
- "rand_core 0.5.1",
+ "rand 0.8.5",
  "serde",
  "sha3 0.9.1",
  "simple_asn1 0.5.4",
@@ -7067,10 +7092,12 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.14",
  "ic-config",
+ "ic-crypto",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
+ "ic-metrics-exporter",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
@@ -7079,6 +7106,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-routing-table",
  "ic-types 0.8.0",
+ "prometheus 0.12.0",
  "prost",
  "slog",
  "tempfile",
@@ -7731,6 +7759,7 @@ dependencies = [
  "lazy_static",
  "ledger-canister",
  "maplit",
+ "num-traits",
  "on_wire",
  "pretty-bytes",
  "prost",
@@ -8055,6 +8084,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "ic-wasm-types",
  "maplit",
+ "nix 0.23.0",
  "parking_lot 0.12.1",
  "prometheus 0.12.0",
  "proptest 0.9.6",
@@ -8105,7 +8135,6 @@ dependencies = [
  "nix 0.23.0",
  "phantom_newtype",
  "tempfile",
- "wait-timeout",
  "wsl",
 ]
 
@@ -10200,9 +10229,9 @@ version = "0.8.0"
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "oorandom"
@@ -11695,6 +11724,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
  "ipnet",
+ "itertools 0.10.3",
  "lazy_static",
  "leb128",
  "maplit",

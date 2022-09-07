@@ -150,7 +150,6 @@ rust_library(
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
     crate_name = "ic_tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
@@ -160,7 +159,6 @@ rust_binary(
     name = "system-tests",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
@@ -170,7 +168,6 @@ rust_binary(
     name = "prod-test-driver",
     srcs = ["bin/prod_test_driver.rs"],
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
@@ -180,7 +177,6 @@ rust_test(
     name = "tests_test",
     aliases = ALIASES,
     crate = ":tests",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,

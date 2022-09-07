@@ -58,7 +58,6 @@ def rust_canister(name, **kwargs):
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
     kwargs.setdefault("visibility", ["//visibility:public"])
-    kwargs.setdefault("edition", "2018")
 
     rust_binary(
         name = wasm_name,

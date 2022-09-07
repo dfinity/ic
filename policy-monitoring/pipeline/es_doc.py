@@ -299,6 +299,36 @@ class RegistryDoc(EsDoc):
         assert len(nodes) > 0, "got empty list of node ids"
         return list(map(lambda n: NodesubnetParams(n, subnet), nodes))
 
+    def get_change_subnet_membership_params(self) -> Optional[Tuple[List[NodesubnetParams], List[NodeParams]]]:
+        # TODO: add this function to other places where node add and remove are used elsewhere in the code
+        text = self._text()
+        m = re.match("do_change_subnet_membership finished: ChangeSubnetMembershipPayload { (.*?) }", text)
+        if not m or len(m.groups()) != 1:
+            return None
+        params = m.group(1)
+        m1 = re.match(".*subnet_id: (.*?),.*", params)
+        assert (
+            m1 and len(m1.groups()) == 1
+        ), f"could not parse find `subnet_id` in ChangeSubnetMembershipPayload with params `{params}`"
+        subnet = m1.group(1)
+        m2 = re.match(r".*node_ids_add: \[(.*?)\].*", params)
+        assert (
+            m2 and len(m2.groups()) == 1
+        ), f"could not parse find `node_ids_add` in ChangeSubnetMembershipPayload with params `{params}`"
+        nodes_add_str = m2.group(1)
+        nodes_add = nodes_add_str.split(", ")
+        assert len(nodes_add) > 0, "got empty list of node ids to add"
+        m3 = re.match(r".*node_ids_remove: \[(.*?)\].*", params)
+        assert (
+            m3 and len(m3.groups()) == 1
+        ), f"could not parse find `node_ids_remove` in ChangeSubnetMembershipPayload with params `{params}`"
+        nodes_remove_str = m3.group(1)
+        nodes_remove = nodes_remove_str.split(", ")
+        assert len(nodes_remove) > 0, "got empty list of node ids to remove"
+        return list(map(lambda n: NodesubnetParams(n, subnet), nodes_add)), list(
+            map(lambda n: NodeParams(n), nodes_remove)
+        )
+
     def get_added_node_to_ic_params(self) -> Optional[NodeParams]:
         text = self._text()
         m = re.match(r"do_add_node finished: AddNodePayload { (.*?) }", text)

@@ -35,8 +35,8 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_ckbtc_minter",
-    edition = "2018",
     proc_macro_deps = LIB_PROC_MACRO_DEPS,
+    version = "0.1.0",
     deps = LIB_DEPS,
 )
 
@@ -49,7 +49,6 @@ rust_canister(
     name = "ckbtc_minter_raw",
     srcs = ["src/main.rs"],
     crate_name = "ic_ckbtc_minter_canister",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
         "@crate_index//:ic-cdk-macros",
@@ -78,7 +77,6 @@ rust_test(
     data = [
         ":ckbtc_minter.did",
     ],
-    edition = "2018",
     proc_macro_deps = LIB_PROC_MACRO_DEPS,
     deps = LIB_DEPS,
 )
@@ -92,7 +90,6 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter.wasm)",

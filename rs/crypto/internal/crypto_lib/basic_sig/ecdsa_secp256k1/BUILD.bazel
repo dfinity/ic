@@ -43,8 +43,8 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256k1",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -52,7 +52,6 @@ rust_test(
     name = "ecdsa_secp256k1_test",
     aliases = ALIASES,
     crate = ":ecdsa_secp256k1",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -61,7 +60,6 @@ rust_test_suite(
     name = "ecdsa_secp256k1_integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":ecdsa_secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -20,7 +20,7 @@ rust_library(
     name = "local_registry",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_registry",
-    edition = "2018",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
@@ -32,7 +32,6 @@ rust_test(
         "1",
     ],
     crate = ":local_registry",
-    edition = "2018",
     deps = [
         "//rs/registry/local_store/artifacts",
         "@crate_index//:tempfile",

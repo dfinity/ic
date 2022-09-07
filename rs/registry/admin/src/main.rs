@@ -105,8 +105,9 @@ use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesP
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
-    do_bless_replica_version::BlessReplicaVersionPayload, do_create_subnet::CreateSubnetPayload,
-    do_recover_subnet::RecoverSubnetPayload,
+    do_bless_replica_version::BlessReplicaVersionPayload,
+    do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
@@ -227,6 +228,8 @@ enum SubCommand {
     /// Submits a proposal to remove nodes from the subnets they are currently
     /// assigned to.
     ProposeToRemoveNodesFromSubnet(ProposeToRemoveNodesFromSubnetCmd),
+    /// Submits a proposal to change node membership in a subnet.
+    ProposeToChangeSubnetMembership(ProposeToChangeSubnetMembershipCmd),
     /// Get the last version of a node from the registry.
     GetNode(GetNodeCmd),
     /// Get the nodes added since a given version (exclusive).
@@ -502,6 +505,60 @@ impl ProposalTitleAndPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNo
             .map(NodeId::from)
             .collect();
         RemoveNodesFromSubnetPayload { node_ids }
+    }
+}
+
+/// Sub-command to submit a proposal to replace in a subnet.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToChangeSubnetMembershipCmd {
+    #[clap(long, required = true, alias = "subnet-id")]
+    /// The subnet to modify
+    subnet: SubnetDescriptor,
+
+    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    /// The node IDs of the nodes that should be added to the subnet.
+    pub node_ids_add: Vec<PrincipalId>,
+
+    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    /// The node IDs of the nodes that should be removed from the subnet.
+    pub node_ids_remove: Vec<PrincipalId>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<ChangeSubnetMembershipPayload> for ProposeToChangeSubnetMembershipCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Replace nodes {} with {} in subnet {}",
+                shortened_pids_string(&self.node_ids_remove),
+                shortened_pids_string(&self.node_ids_add),
+                shortened_subnet_string(&self.subnet)
+            ),
+        }
+    }
+
+    async fn payload(&self, nns_url: Url) -> ChangeSubnetMembershipPayload {
+        let registry_canister = RegistryCanister::new(vec![nns_url]);
+        let subnet_id = self.subnet.get_id(&registry_canister).await;
+        let node_ids_add = self
+            .node_ids_add
+            .clone()
+            .into_iter()
+            .map(NodeId::from)
+            .collect();
+        let node_ids_remove = self
+            .node_ids_remove
+            .clone()
+            .into_iter()
+            .map(NodeId::from)
+            .collect();
+        ChangeSubnetMembershipPayload {
+            subnet_id: subnet_id.get(),
+            node_ids_add,
+            node_ids_remove,
+        }
     }
 }
 
@@ -1146,7 +1203,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
     }
 }
 
-/// Sub-command to submit a prposals to add a nodes to an existing subnet.
+/// Sub-command to submit a proposal to add nodes to an existing subnet.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToAddNodesToSubnetCmd {
@@ -1197,7 +1254,7 @@ impl ProposalTitleAndPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSub
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateRecoveryCupCmd {
     #[clap(long, required = true, alias = "subnet-index")]
-    /// The targetted subnet.
+    /// The targeted subnet.
     subnet: SubnetDescriptor,
 
     #[clap(long, required = true)]
@@ -2872,6 +2929,7 @@ async fn main() {
             SubCommand::ProposeToAddNodesToSubnet(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
             SubCommand::ProposeToRemoveNodesFromSubnet(_) => (),
+            SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
@@ -3170,6 +3228,15 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::AddNodeToSubnet,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToChangeSubnetMembership(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::ChangeSubnetMembership,
                 opts.nns_url,
                 sender,
             )

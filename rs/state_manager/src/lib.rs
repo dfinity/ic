@@ -376,7 +376,7 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct StateMetadata {
     // We don't persist the checkpoint reference because we re-create it every
     // time we discover a checkpoint on disk.
@@ -651,6 +651,7 @@ pub struct StateManagerImpl {
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
+    persist_metadata_guard: Arc<Mutex<()>>,
     #[cfg(debug_assertions)]
     load_checkpoint_as_tip_guard: Arc<Mutex<()>>,
 }
@@ -1054,6 +1055,38 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
     }
 }
 
+/// Persists metadata after releasing the write lock
+///
+/// A common pattern is that we modify the metadata in
+/// StateManagerImpl.states.states_metadata and then want to persist
+/// this change to disk using persist_metadata_or_die.
+///
+/// In order to modify states_metadata a write lock on states is
+/// required. As persisting needs to interact with the disk and hence
+/// is slow, we can't afford to hold the write lock for the duration
+/// of that step. At the same time, we want to ensure that all changes
+/// are persisted, with no race conditions such as reordering of write
+/// commands.
+///
+/// Hence we do the following pattern:
+/// 1. Clone the relevant data
+/// 2. Grab a lock to be held for the duration of the persist step
+/// 3. Release the write lock on states_metadata
+/// 4. Persist the cloned data
+fn release_lock_and_persist_metadata(
+    log: &ReplicaLogger,
+    metrics: &StateManagerMetrics,
+    state_layout: &StateLayout,
+    states: parking_lot::RwLockWriteGuard<SharedState>,
+    persist_metadata_lock: &Arc<Mutex<()>>,
+) {
+    let states_metadata = states.states_metadata.clone();
+    // This should be the only place where we lock this mutex
+    let _guard = persist_metadata_lock.lock().unwrap();
+    drop(states);
+    persist_metadata_or_die(log, metrics, state_layout, &states_metadata);
+}
+
 /// Persist the metadata of `StateManagerImpl` to disk
 ///
 /// This function is a free function, so that it can easily be called
@@ -1074,10 +1107,7 @@ fn persist_metadata_or_die(
     use std::io::Write;
 
     let started_at = Instant::now();
-    let tmp = state_layout
-        .tmp()
-        .unwrap_or_else(|err| fatal!(log, "Failed to create temporary directory: {}", err))
-        .join("tmp_states_metadata.pb");
+    let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
 
     ic_utils::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
         let mut pb_meta = pb::StatesMetadata::default();
@@ -1128,11 +1158,10 @@ impl StateManagerImpl {
             "Using path '{}' to manage local state",
             config.state_root().display()
         );
-        let state_layout = StateLayout::new(log.clone(), config.state_root());
-
-        state_layout
-            .remove_tmp()
-            .unwrap_or_else(|err| fatal!(log, "{:?}", err));
+        let starting_time = Instant::now();
+        let state_layout = StateLayout::try_new(log.clone(), config.state_root())
+            .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
         let mut states_metadata =
@@ -1206,12 +1235,6 @@ impl StateManagerImpl {
             "Determining starting height took {:?}",
             starting_time.elapsed()
         );
-
-        let starting_time = Instant::now();
-        state_layout
-            .cleanup_tip()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to cleanup old tip {:?}", err));
-        info!(log, "Cleaning up tip took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
         cleanup_diverged_states(&log, &state_layout);
@@ -1341,6 +1364,8 @@ impl StateManagerImpl {
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
+        let persist_metadata_guard = Arc::new(Mutex::new(()));
+
         let _state_hasher_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("StateHasher".to_string())
@@ -1350,6 +1375,7 @@ impl StateManagerImpl {
                     let metrics = metrics.clone();
                     let checkpoint_thread_pool = Arc::clone(&checkpoint_thread_pool);
                     let state_layout = state_layout.clone();
+                    let persist_metadata_guard = persist_metadata_guard.clone();
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
                             Self::handle_compute_manifest_request(
@@ -1359,6 +1385,7 @@ impl StateManagerImpl {
                                 &states,
                                 &state_layout,
                                 req,
+                                &persist_metadata_guard,
                                 &malicious_flags,
                             );
                         }
@@ -1407,6 +1434,7 @@ impl StateManagerImpl {
             checkpoint_thread_pool,
             _state_hasher_handle,
             _deallocation_handle,
+            persist_metadata_guard,
             #[cfg(debug_assertions)]
             load_checkpoint_as_tip_guard,
         }
@@ -1512,8 +1540,17 @@ impl StateManagerImpl {
         }
     }
 
-    fn persist_metadata_or_die(&self, metadata: &StatesMetadata) {
-        persist_metadata_or_die(&self.log, &self.metrics, &self.state_layout, metadata);
+    fn release_lock_and_persist_metadata(
+        &self,
+        states: parking_lot::RwLockWriteGuard<SharedState>,
+    ) {
+        release_lock_and_persist_metadata(
+            &self.log,
+            &self.metrics,
+            &self.state_layout,
+            states,
+            &self.persist_metadata_guard,
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1524,6 +1561,7 @@ impl StateManagerImpl {
         states: &parking_lot::RwLock<SharedState>,
         state_layout: &StateLayout,
         req: ComputeManifestRequest,
+        persist_metadata_lock: &Arc<Mutex<()>>,
         #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     ) {
         // As long as CheckpointRef object is in scope, it should be safe to
@@ -1611,7 +1649,13 @@ impl StateManagerImpl {
             metadata.manifest = Some(manifest);
         }
 
-        persist_metadata_or_die(log, metrics, state_layout, &states.states_metadata);
+        release_lock_and_persist_metadata(
+            log,
+            metrics,
+            state_layout,
+            states,
+            persist_metadata_lock,
+        );
     }
 
     fn latest_certified_state(
@@ -1804,17 +1848,44 @@ impl StateManagerImpl {
             .tip(height)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
 
+        let get_path = |entry: PageMapType, path_cache: &mut Option<PathBuf>| match path_cache {
+            Some(path) => path.clone(),
+            None => {
+                let path = entry.path(&tip_layout).unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to access layout @TIP {}: {}",
+                        tip_layout.raw_path().display(),
+                        err
+                    )
+                });
+                *path_cache = Some(path.clone());
+                path
+            }
+        };
+
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
+                // Accessing the path has some overhead to ensure that
+                // the path exists, so we don't want to do it twice
+                let mut path_cache = None;
+
+                // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
+                // created one. In these cases, we also need to wipe the data from the file on disk.
+                // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
+                // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
+                // disk before applying any round deltas of that PageMap. We detect this case by looking at
+                // has_stripped_round_deltas, which will be false at the beginning, but true as soon as we strip round
+                // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
+                // we have not persisted round deltas before, then there are no relevant pages beyond the ones in the
+                // round delta, and we truncate the file on disk to size 0.
+                if page_map.base_height.is_none() && !page_map.has_stripped_round_deltas() {
+                    let path = &get_path(entry, &mut path_cache);
+                    truncate_path(&self.log, path);
+                }
+
                 if !page_map.round_delta_is_empty() {
-                    let path = &entry.path(&tip_layout).unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to access layout @TIP {}: {}",
-                            tip_layout.raw_path().display(),
-                            err
-                        )
-                    });
+                    let path = &get_path(entry, &mut path_cache);
 
                     page_map.persist_round_delta(path).unwrap_or_else(|err| {
                         fatal!(
@@ -1824,8 +1895,10 @@ impl StateManagerImpl {
                             err
                         )
                     });
-                    page_map.strip_round_delta();
                 }
+
+                // We strip empty round deltas to keep has_stripped_round_deltas() correct
+                page_map.strip_round_delta();
             }
         }
     }
@@ -1932,7 +2005,7 @@ impl StateManagerImpl {
         let latest_height = update_latest_height(&self.latest_state_height, height);
         self.metrics.max_resident_height.set(latest_height as i64);
 
-        self.persist_metadata_or_die(&states.states_metadata);
+        self.release_lock_and_persist_metadata(states);
 
         // Note: it might feel tempting to also set states.tip here.  We should
         // NOT do that.  We might be applying blocks and fetching states in
@@ -1970,6 +2043,8 @@ impl StateManagerImpl {
         };
 
         let mut states = self.states.write();
+
+        let number_of_checkpoints = states.states_metadata.len();
 
         // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
         let latest_certified_height = self.latest_certified_height();
@@ -2091,9 +2166,13 @@ impl StateManagerImpl {
             deallocate(Box::new(metadata_to_keep));
         }
 
-        self.persist_metadata_or_die(&states.states_metadata);
+        if number_of_checkpoints != states.states_metadata.len() {
+            // We removed a checkpoint, so states_metadata needs to be updated on disk
+            self.release_lock_and_persist_metadata(states);
+        } else {
+            drop(states);
+        }
 
-        drop(states);
         #[cfg(debug_assertions)]
         {
             use ic_interfaces_state_manager::CERT_ANY;
@@ -2780,7 +2859,6 @@ impl StateManager for StateManagerImpl {
                             manifest_delta: if is_nns { None } else { manifest_delta },
                         })
                         .expect("failed to send ComputeManifestRequest message");
-                    self.persist_metadata_or_die(&states.states_metadata);
                 }
 
                 states
@@ -2802,6 +2880,10 @@ impl StateManager for StateManagerImpl {
             .set(tip_height.get() as i64);
 
         states.tip = Some((tip_height, tip));
+
+        if scope == CertificationScope::Full {
+            self.release_lock_and_persist_metadata(states);
+        }
     }
 
     fn report_diverged_state(&self, height: Height) {
@@ -2828,7 +2910,8 @@ impl StateManager for StateManagerImpl {
         }
 
         states.states_metadata.split_off(&height);
-        self.persist_metadata_or_die(&states.states_metadata);
+
+        self.release_lock_and_persist_metadata(states);
 
         fatal!(self.log, "Replica diverged at height {}", height)
     }
@@ -3063,6 +3146,20 @@ impl CertifiedStreamStore for StateManagerImpl {
         self.get_latest_state()
             .get_ref()
             .subnets_with_available_streams()
+    }
+}
+
+fn truncate_path(log: &ReplicaLogger, path: &Path) {
+    if let Err(err) = nix::unistd::truncate(path, 0) {
+        // It's OK if the file doesn't exist, everything else is a fatal error.
+        if err != nix::errno::Errno::ENOENT {
+            fatal!(
+                log,
+                "failed to truncate page map stored at {}: {}",
+                path.display(),
+                err
+            )
+        }
     }
 }
 

@@ -63,8 +63,11 @@ rust_library(
     name = "p2p",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_p2p",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -73,7 +76,6 @@ rust_test(
     name = "p2p_test",
     aliases = ALIASES,
     crate = ":p2p",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -82,7 +84,6 @@ rust_test_suite_with_extra_srcs(
     name = "p2p_integration_tests",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
-    edition = "2018",
     extra_srcs = glob(["tests/framework/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":p2p"] + DEPENDENCIES + DEV_DEPENDENCIES,

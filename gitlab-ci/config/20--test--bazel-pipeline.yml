@@ -1,13 +1,6 @@
-bazel-test-all:
+.bazel-test-all:
   extends:
-    - .ubuntu-docker
     - .bazel-rules-pipeline
-  tags:
-    - dfinity
-    - docker
-    - ubuntu
-    # Run in ZH since BuildFarm is in ZH
-    - zh
   stage: test
   needs: []
   artifacts:
@@ -16,27 +9,63 @@ bazel-test-all:
       - bazel-build-log*.json*
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
+  variables:
+    BAZEL_STARTUP_ARGS: ""
+    BAZEL_COMMAND: "test"
+    BAZEL_TARGETS: "//..."
+    BAZEL_EXTRA_ARGS: ""
   script:
-    - set -euo pipefail
+    - set -eufo pipefail
     - bazel version
-    - mkdir -p "${HOME}/.aws"
-    - ln -s "${AWS_SHARED_CREDENTIALS_FILE}" "${HOME}/.aws/credentials"
+    - AWS_CREDS="${HOME}/.aws/credentials"
+    - mkdir -p "$(dirname "${AWS_CREDS}")"
+    - test -f "${AWS_CREDS}" || ln -s "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+    - "# shellcheck disable=SC2086 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
     - >
       bazel
-      --output_base "/cache/bazel-output/${CI_CONCURRENT_ID}"
-      test
+      ${BAZEL_STARTUP_ARGS}
+      ${BAZEL_COMMAND}
       --config ci
       --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})"
-      ...
+      ${BAZEL_EXTRA_ARGS}
+      ${BAZEL_TARGETS}
       2>&1 |
-      sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
+      perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
   after_script:
     - | 
+      set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "*************************************************************"
       echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel **"
       echo -e "*************************************************************"
       echo -e "\033[0m"
-    - cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
+    - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
     - gzip bazel-build-log*.json
     - !reference [after_script]
+
+bazel-test-all:
+  extends:
+    - .ubuntu-docker
+    - .bazel-test-all
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+    # Run in ZH since BuildFarm is in ZH
+    - zh
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base /cache/bazel-output/${CI_CONCURRENT_ID}"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+
+bazel-test-all-macos:
+  extends:
+    - .build-env-base
+    - .bazel-test-all
+  allow_failure: true # TODO(IDX-2378): Remove when it will be stable.
+  tags:
+    - macos
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/... //rs/replica"
+    BAZEL_EXTRA_ARGS: "--config dev"

@@ -74,7 +74,6 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    edition = "2018",
     version = "0.1.0",
     deps = BUILD_DEPENDENCIES,
 )
@@ -87,8 +86,8 @@ rust_library(
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_swap",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -101,8 +100,8 @@ rust_library(
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_swap",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES + [
         ":build_script",
     ],
@@ -112,7 +111,6 @@ rust_canister(
     name = "sns-swap-canister-raw",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":swap"] + [":build_script"],
 )
@@ -126,7 +124,6 @@ rust_test(
     name = "swap_test",
     aliases = ALIASES,
     crate = ":swap",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -137,7 +134,6 @@ rust_test(
     aliases = ALIASES,
     crate_root = "canister/canister.rs",
     data = ["canister/swap.did"],
-    edition = "2021",
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/swap",
     },
@@ -152,7 +148,6 @@ rust_test_suite(
         exclude = ["tests/check_generated_files.rs"],
     ),
     aliases = ALIASES,
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

@@ -88,7 +88,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replica",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -100,20 +99,10 @@ rust_binary(
         "src/main.rs",
     ],
     aliases = ALIASES,
-    edition = "2018",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":replica_lib"],
-)
-
-rust_binary(
-    name = "replica_malicious",
-    srcs = [
-        "src/jemalloc_metrics.rs",
-        "src/main.rs",
-    ],
-    aliases = ALIASES,
-    edition = "2018",
-    features = ["malicious_code"],
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":replica_lib"],
 )
@@ -122,7 +111,6 @@ rust_test(
     name = "replica_test",
     aliases = ALIASES,
     crate = ":replica",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -132,7 +120,6 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = [":replica"],
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

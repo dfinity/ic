@@ -138,8 +138,9 @@ impl SchedulerImpl {
                 canister.scheduler_state.priority_credit = 0.into();
             }
 
-            let has_long_execution = canister.has_long_execution();
-            if !has_long_execution {
+            let has_aborted_or_paused_execution =
+                canister.has_aborted_execution() || canister.has_paused_execution();
+            if !has_aborted_or_paused_execution {
                 canister.scheduler_state.long_execution_mode = LongExecutionMode::Opportunistic;
             }
 
@@ -150,7 +151,7 @@ impl SchedulerImpl {
                 accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
                 compute_allocation,
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
-                has_long_execution,
+                has_aborted_or_paused_execution,
             });
 
             total_compute_allocation += compute_allocation;
@@ -173,7 +174,7 @@ impl SchedulerImpl {
             // DTS Scheduler: round priority = accumulated priority + ACi
             rs.accumulated_priority += factual;
             canister.scheduler_state.accumulated_priority = rs.accumulated_priority.into();
-            if rs.has_long_execution {
+            if rs.has_aborted_or_paused_execution {
                 long_executions_compute_allocation += factual;
                 total_long_executions += 1;
             }
@@ -186,7 +187,7 @@ impl SchedulerImpl {
         round_states.sort_by_key(|rs| {
             (
                 Reverse(rs.long_execution_mode),
-                Reverse(rs.has_long_execution),
+                Reverse(rs.has_aborted_or_paused_execution),
                 Reverse(rs.accumulated_priority),
                 rs.canister_id,
             )
@@ -795,25 +796,34 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let duration_since_last_charge = state
-            .metadata
-            .duration_between_batches(state.metadata.time_of_last_allocation_charge);
-
-        if state.time()
-            < state.metadata.time_of_last_allocation_charge
-                + self
-                    .cycles_account_manager
-                    .duration_between_allocation_charges()
-        {
-            return;
-        } else {
-            state.metadata.time_of_last_allocation_charge = state.time();
-        }
-
-        let state_path = state.root.clone();
         let state_time = state.time();
+        let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
         for canister in state.canisters_iter_mut() {
+            // Postpone charging for resources when a canister has a paused execution
+            // to avoid modifying the balance of a canister during an unfinished operation.
+            if canister.has_paused_execution() || canister.has_paused_install_code() {
+                continue;
+            }
+
+            let duration_since_last_charge = canister.duration_since_last_allocation_charge(
+                metadata_time_of_last_allocation_charge,
+                state_time,
+            );
+
+            if state_time
+                < canister.scheduler_state.time_of_last_allocation_charge
+                    + self
+                        .cycles_account_manager
+                        .duration_between_allocation_charges()
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            } else {
+                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+            }
+
             self.observe_canister_metrics(canister);
             if self
                 .cycles_account_manager
@@ -825,12 +835,7 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                all_rejects.push(uninstall_canister(
-                    &self.log,
-                    canister,
-                    &state_path,
-                    state_time,
-                ));
+                all_rejects.push(uninstall_canister(&self.log, canister, state_time));
                 canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
 
@@ -1215,15 +1220,15 @@ impl Scheduler for SchedulerImpl {
         // The round will stop as soon as the counter reaches zero.
         // We can compute the initial value `X` of the counter based on:
         // - `R = max_instructions_per_round`,
-        // - `M = max_instructions_per_message`.
+        // - `S = max_instructions_per_slice`.
         // In the worst case, we start a new Wasm execution when then counter
-        // reaches 1 and the execution uses the maximum `M` instructions. After
-        // the execution the counter will be set to `1 - M`.
+        // reaches 1 and the execution uses the maximum `S` instructions. After
+        // the execution the counter will be set to `1 - S`.
         //
         // We want the total number executed instructions to not exceed `R`,
-        // which gives us: `X - (1 - M) <= R` or `X <= R - M + 1`.
+        // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
         round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
-            - as_round_instructions(self.config.max_instructions_per_message)
+            - as_round_instructions(self.config.max_instructions_per_slice)
             + RoundInstructions::from(1);
 
         let round_schedule;

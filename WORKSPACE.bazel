@@ -9,6 +9,15 @@ load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "f7be3474d42aae265405a592bb7da8e171919d74c16f082a5457840f06054728",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+    ],
+)
+
 git_repository(
     name = "rules_rust",
     commit = "e702f3d1cea8a43021ea37317e2448c6137abe9a",
@@ -20,7 +29,10 @@ load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_regi
 
 rules_rust_dependencies()
 
-rust_register_toolchains(version = "1.60.0")
+rust_register_toolchains(
+    edition = "2021",
+    version = "1.60.0",
+)
 
 git_repository(
     name = "rules_foreign_cc",

@@ -19,6 +19,6 @@ rust_library(
     name = "adapter_metrics",
     srcs = glob(["src/**"]),
     crate_name = "ic_adapter_metrics",
-    edition = "2021",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )

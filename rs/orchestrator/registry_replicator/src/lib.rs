@@ -29,25 +29,32 @@
 //! switch-over is handled in this component.
 
 use crate::internal_state::InternalState;
+use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_config::{registry_client::DataProviderConfig, Config};
+use ic_crypto::CryptoComponentFatClient;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion};
+use metrics::RegistryreplicatorMetrics;
 use std::io::{Error, ErrorKind};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use url::Url;
 
 pub mod args;
 mod internal_state;
+pub mod metrics;
 
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
@@ -57,6 +64,7 @@ pub struct RegistryReplicator {
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     poll_delay: Duration,
+    metrics: Arc<RegistryreplicatorMetrics>,
 }
 
 impl RegistryReplicator {
@@ -83,6 +91,8 @@ impl RegistryReplicator {
         // updates
         let registry_client = Self::initialize_registry_client(local_store.clone());
 
+        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::global()));
+
         Self {
             logger,
             node_id,
@@ -91,7 +101,35 @@ impl RegistryReplicator {
             started: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             poll_delay,
+            metrics,
         }
+    }
+
+    pub fn new_with_metrics_runtime(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        config: &Config,
+        metrics_addr: SocketAddr,
+    ) -> (Self, (MetricsRuntimeImpl, TempDir)) {
+        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
+        let (crypto, _, _crypto_dir) = CryptoComponentFatClient::new_temp_with_all_keys(
+            replicator.get_registry_client(),
+            logger.clone(),
+        );
+
+        let metrics_config = MetricsConfig {
+            exporter: Exporter::Http(metrics_addr),
+        };
+        let _runtime = MetricsRuntimeImpl::new(
+            tokio::runtime::Handle::current(),
+            metrics_config,
+            MetricsRegistry::global(),
+            replicator.get_registry_client(),
+            Arc::new(crypto),
+            &logger.inner_logger.root,
+        );
+
+        (replicator, (_runtime, _crypto_dir))
     }
 
     /// initialize a new registry client and start polling the given data
@@ -162,64 +200,74 @@ impl RegistryReplicator {
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) {
-        if self
+        // If the local registry store is not empty, exit.
+        if !self
             .local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
-            let nns_pub_key = nns_pub_key
-                .expect("Registry Local Store is empty and no NNS Public Key is provided.");
+            return;
+        }
 
-            let registry_canister = RegistryCanister::new(nns_urls);
+        let nns_pub_key =
+            nns_pub_key.expect("Registry Local Store is empty and no NNS Public Key is provided.");
+        let mut registry_version = ZERO_REGISTRY_VERSION;
+        let mut timeout = 1;
 
-            // While the local registry changelog is empty, fill it by polling the registry
-            // canister. Retry every 30 seconds
-            while self
-                .local_store
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .expect("Could not read registry local store.")
-                .is_empty()
+        let registry_canister = RegistryCanister::new(nns_urls);
+
+        // Fill the local registry store by polling the registry canister until we get no
+        // more changes.
+        loop {
+            // Note, code duplicate in internal_state.rs poll()
+            match registry_canister
+                .get_certified_changes_since(registry_version.get(), &nns_pub_key)
+                .await
             {
-                // Note, code duplicate in internal_state.rs poll()
-                match registry_canister
-                    .get_certified_changes_since(0, &nns_pub_key)
-                    .await
-                {
-                    Ok((mut records, _, t)) if !records.is_empty() => {
-                        records.sort_by_key(|tr| tr.version);
-                        let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
-                            let rel_version = (r.version - ZERO_REGISTRY_VERSION).get();
-                            if cl.len() < rel_version as usize {
-                                cl.push(ChangelogEntry::default());
-                            }
-                            cl.last_mut().unwrap().push(KeyMutation {
-                                key: r.key.clone(),
-                                value: r.value.clone(),
-                            });
-                            cl
-                        });
-
-                        changelog
-                            .into_iter()
-                            .enumerate()
-                            .try_for_each(|(i, cle)| {
-                                let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
-                                self.local_store.store(v, cle)
-                            })
-                            .expect("Could not write to local store.");
-                        self.local_store
-                            .update_certified_time(t.as_nanos_since_unix_epoch())
-                            .expect("Could not store certified time");
+                Ok((mut records, _, t)) => {
+                    // We fetched the latest version.
+                    if records.is_empty() {
                         return;
                     }
-                    Err(e) => warn!(
+                    records.sort_by_key(|tr| tr.version);
+                    let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
+                        let rel_version = (r.version - registry_version).get();
+                        if cl.len() < rel_version as usize {
+                            cl.push(ChangelogEntry::default());
+                        }
+                        cl.last_mut().unwrap().push(KeyMutation {
+                            key: r.key.clone(),
+                            value: r.value.clone(),
+                        });
+                        cl
+                    });
+
+                    let entries = changelog.len();
+
+                    changelog
+                        .into_iter()
+                        .enumerate()
+                        .try_for_each(|(i, cle)| {
+                            let v = registry_version + RegistryVersion::from(i as u64 + 1);
+                            self.local_store.store(v, cle)
+                        })
+                        .expect("Could not write to local store.");
+                    self.local_store
+                        .update_certified_time(t.as_nanos_since_unix_epoch())
+                        .expect("Could not store certified time");
+                    registry_version += RegistryVersion::from(entries as u64);
+                    timeout = 1;
+                }
+                Err(e) => {
+                    warn!(
                         self.logger,
-                        "Could not fetch registry changelog from NNS: {:?}", e
-                    ),
-                    _ => {}
-                };
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                        "Couldn't fetch registry updates (retry in {}s): {:?}", timeout, e
+                    );
+                    tokio::time::sleep(Duration::from_secs(timeout)).await;
+                    timeout *= 2;
+                    timeout = timeout.min(60); // limit the timeout by a minute max
+                }
             }
         }
     }
@@ -252,10 +300,13 @@ impl RegistryReplicator {
         );
 
         let logger = self.logger.clone();
+        let metrics = self.metrics.clone();
+        let registry_client = self.registry_client.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
         let handle = tokio::spawn(async move {
             while !cancelled.load(Ordering::Relaxed) {
+                let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
                 // a node on the NNS for updates. As we set the query timeout to
                 // `poll_delay` when constructing the underlying
@@ -263,10 +314,15 @@ impl RegistryReplicator {
                 // `poll()` returns after a maximal duration of `poll_delay`.
                 if let Err(msg) = internal_state.poll().await {
                     warn!(logger, "Polling the NNS registry failed: {}", msg);
+                    metrics.poll_count.with_label_values(&["error"]).inc();
                 } else {
                     debug!(logger, "Polling the NNS succeeded.");
+                    metrics.poll_count.with_label_values(&["success"]).inc();
                 }
-
+                timer.observe_duration();
+                metrics
+                    .registry_version
+                    .set(registry_client.get_latest_version().get() as i64);
                 tokio::time::sleep(poll_delay).await;
             }
         });

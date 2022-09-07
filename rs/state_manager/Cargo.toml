@@ -1,7 +1,7 @@
 [package]
 name = "ic-state-manager"
 version = "0.8.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bit-vec = "0.6.3"
@@ -25,6 +25,7 @@ ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+nix = "0.23.0"
 parking_lot = "0.12.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.10.4"

@@ -30,10 +30,10 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_base_types",
-    edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    version = "0.8.0",
     deps = COMMON_DEPS,
 )
 

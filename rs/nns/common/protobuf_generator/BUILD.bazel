@@ -7,7 +7,7 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     crate_name = "ic_nns_common_protobuf_generator",
-    edition = "2021",
+    version = "0.8.0",
     deps = [
         "//rs/utils/rustfmt",
         "@crate_index//:prost-build",
