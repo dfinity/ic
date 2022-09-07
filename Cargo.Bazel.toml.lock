@@ -2411,9 +2411,9 @@ checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
 name = "ecdsa"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e852f4174d2a8646a0fa8a34b55797856c722f86267deb0aa1e93f7f247f800e"
+checksum = "1826508d57f3140a2e8e3c307b19915a266c92a1b8c2f6bb54e29e5d72a394ae"
 dependencies = [
  "der 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "elliptic-curve 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3541,9 +3541,9 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebed180ae82aa994a90c4477fc928379efb8d55e52e5b90c3ab1611dd4c11ab1"
+checksum = "aa2ae3c75c0ba162ef5480620affd298ee8ea6d4535267c8504fb1f8d9f1f9a6"
 dependencies = [
  "anyhow",
  "candid",
