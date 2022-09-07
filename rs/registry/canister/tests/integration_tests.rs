@@ -522,7 +522,7 @@ fn test_that_init_traps_if_any_init_mutation_fails() {
             .build();
         assert_matches!(
                 try_to_install_registry_canister(&runtime, init_payload).await,
-                Err(msg) if msg.contains("Transaction rejected"));
+                Err(msg) if msg.contains("Verification of the mutation type failed"));
         Ok(())
     });
 }

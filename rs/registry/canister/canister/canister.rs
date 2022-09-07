@@ -36,6 +36,7 @@ use registry_canister::{
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
+        do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
@@ -478,6 +479,20 @@ fn remove_nodes_from_subnet() {
 #[candid_method(update, rename = "remove_nodes_from_subnet")]
 fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
     registry_mut().do_remove_nodes_from_subnet(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update change_subnet_membership"]
+fn change_subnet_membership() {
+    check_caller_is_governance_and_log("change_subnet_membership");
+    over(candid_one, |payload: ChangeSubnetMembershipPayload| {
+        change_subnet_membership_(payload)
+    });
+}
+
+#[candid_method(update, rename = "change_subnet_membership")]
+fn change_subnet_membership_(payload: ChangeSubnetMembershipPayload) {
+    registry_mut().do_change_subnet_membership(payload);
     recertify_registry();
 }
 

@@ -11701,6 +11701,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
  "ipnet",
+ "itertools 0.10.3",
  "lazy_static",
  "leb128",
  "maplit",
