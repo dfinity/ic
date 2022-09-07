@@ -242,7 +242,7 @@ icos-continuous-upgrade-nightly:
           --disk_image "${GUESTOS_IMG}" \
           --ic_prep_bin "$(pwd)/artifacts/ic-prep" \
           --install_nns_bin "$(pwd)/artifacts/ic-nns-init" \
-          --script_dir "${CI_PROJECT_DIR}/ic-os/guestos/scripts/" \
+          --script_dir "${CI_PROJECT_DIR}/ic-os/guestos/tests/scripts/" \
           --upgrade_tar "${UPGRADE_IMG}" \
           --ic_admin_bin "$(pwd)/artifacts/ic-admin" \
           --nns_canisters "$(pwd)/artifacts/" \
