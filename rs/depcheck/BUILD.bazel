@@ -10,6 +10,7 @@ rust_library(
     name = "depcheck",
     srcs = glob(["src/**"]),
     crate_name = "depcheck",
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

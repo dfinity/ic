@@ -9,6 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:slog_derive",
     ],
+    version = "0.8.0",
     deps = [
         "@crate_index//:chrono",
         "@crate_index//:erased-serde",

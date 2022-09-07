@@ -18,6 +18,7 @@ rust_library(
     name = "cup_explorer",
     srcs = glob(["src/**"]),
     crate_name = "ic_cup_explorer",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

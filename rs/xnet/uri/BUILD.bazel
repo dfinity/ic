@@ -11,6 +11,7 @@ rust_library(
     name = "uri",
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_uri",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

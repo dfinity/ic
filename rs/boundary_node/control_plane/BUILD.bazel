@@ -45,6 +45,7 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "boundary_node_control_plane",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

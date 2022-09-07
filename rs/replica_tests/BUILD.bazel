@@ -77,6 +77,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_replica_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

@@ -13,6 +13,7 @@ rust_library(
         "//conditions:default": [],
     }),
     rustc_flags = ["--crate-type=cdylib"],
+    version = "0.1.0",
     deps = select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [
             "@crate_index//:candid",
