@@ -23,7 +23,6 @@ use ic_types::{
 use mockall::automock;
 use prometheus::{GaugeVec, Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::{Arc, Mutex};
 
@@ -461,7 +460,10 @@ impl StreamBuilderImpl {
                                 .outgoing_messages
                                 .with_label_values(&[&dst_net_id.to_string()])
                                 .inc();
+                            streams.push(dst_net_id, msg);
                             // Increase cycle sum
+                            // Important: This needs to be done after streams.push, else on the first message,
+                            // the stream will not exist and we cannot store the value
                             match streams.get_mut(&dst_net_id) {
                                 Some(mut stream) => {
                                     stream.set_sum_cycles_out(
@@ -470,23 +472,16 @@ impl StreamBuilderImpl {
                                     self.metrics
                                         .out_cycles
                                         .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(
-                                            self.metrics
-                                                .out_cycles
-                                                .with_label_values(&[&dst_net_id.to_string()])
-                                                .get()
-                                                + cycles_in_msg.get() as f64,
-                                        );
-                                    if cycles_in_msg.get() != 10 {
-                                        self.metrics
-                                            .msg_cycles_test
-                                            .with_label_values(&[&dst_net_id.to_string()])
-                                            .inc();
-                                    }
+                                        .set(stream.sum_cycles_out().get() as f64);
+                                    // if cycles_in_msg.get() != 10 {
+                                    //     self.metrics
+                                    //         .msg_cycles_test
+                                    //         .with_label_values(&[&dst_net_id.to_string()])
+                                    //         .inc();
+                                    // }
                                 }
                                 None => {}
                             }
-                            streams.push(dst_net_id, msg);
                         }
                     };
                 }
