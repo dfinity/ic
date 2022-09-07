@@ -1761,6 +1761,7 @@ fn get_instructions_limit_for_subnet_message(
             | BitcoinGetUtxos
             | BitcoinSendTransaction
             | BitcoinGetCurrentFeePercentiles
+            | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister => config.max_instructions_per_message,
             InstallCode => match InstallCodeArgs::decode(payload) {
@@ -1785,6 +1786,7 @@ fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
                 BitcoinGetBalance
                 | BitcoinGetUtxos
                 | BitcoinSendTransaction
+                | BitcoinGetSuccessors
                 | BitcoinGetCurrentFeePercentiles => true,
                 CanisterStatus
                 | CreateCanister
