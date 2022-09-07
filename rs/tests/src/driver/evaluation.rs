@@ -187,6 +187,9 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
             required_host_features: pot.required_host_features.clone(),
+            preferred_network: ic_setup
+                .preferred_network
+                .map(|ipv6| ipv6.to_string() + "/128"),
         },
     )?;
 
