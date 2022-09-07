@@ -32,7 +32,6 @@ use tower::Service;
 enum TransportTlsHandshakeError {
     DeadlineExceeded,
     Internal(String),
-    NotFound,
     InvalidArgument,
 }
 
@@ -446,12 +445,7 @@ impl TransportImpl {
             Ok(Ok((tls_stream, authenticated_peer))) => Ok((tls_stream, authenticated_peer)),
             Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
         }?;
-        let peer_id = match authenticated_peer {
-            AuthenticatedPeer::Node(node_id) => node_id,
-            AuthenticatedPeer::Cert(_) => {
-                return Err(TransportTlsHandshakeError::NotFound);
-            }
-        };
+        let AuthenticatedPeer::Node(peer_id) = authenticated_peer;
         Ok((peer_id, tls_stream))
     }
 
