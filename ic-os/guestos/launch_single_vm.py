@@ -34,9 +34,11 @@ def main(argv):
     # Create group
     response = requests.post(
         group_url,
-        json={"ttl": TTL, "spec": {"vmAllocation": "distributeWithinSingleHost"}},
+        json={"ttl": TTL, "spec": {"vmAllocation": "distributeAcrossDcs"}},
         headers={"accept": "application/json"},
     )
+    if response.status_code >= 400:
+        print("Response:", response.text)
     response.raise_for_status()
     expiry = response.json()["expiresAt"]
     print("Farm group expires at", expiry)

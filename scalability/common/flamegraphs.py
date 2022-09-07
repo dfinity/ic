@@ -1,10 +1,12 @@
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 
-from common import metrics
-from common import ssh
+sys.path.insert(1, ".")
+from common import metrics  # noqa
+from common import ssh  # noqa
 
 TARGET_DIR = "/var/lib/ic/data/flamegraph"
 # Frequency at which we sample for flamegraph generation.
@@ -51,23 +53,9 @@ class Flamegraph(metrics.Metric):
         r = ssh.run_ssh_in_parallel(machines, "stat flamegraph")
         if r != [0 for _ in machines]:
 
-            # Flamegraph binary not installed: installing and setting up OS.
-
-            # Could also think about doing this:
-            # warning: Maximum frequency rate (750 Hz) exceeded, throttling from 997 Hz to 750 Hz.
-            # The limit can be raised via /proc/sys/kernel/perf_event_max_sample_rate.
-            # The kernel will lower it when perf's interrupts take too long.
-            all_correct = [0 for _ in range(len(machines))]
-
+            # Flamegraph binary not installed: installing and configuring
             rcs = ssh.run_ssh_in_parallel(machines, "echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid")
-            assert rcs == all_correct
-            # ic-os now has a read-only file system. Need to remount rw
-            rcs = ssh.run_ssh_in_parallel(machines, "sudo mount -o remount,rw /")
-            assert rcs == all_correct
-            rcs = ssh.run_ssh_in_parallel(
-                machines, "sudo apt update; sudo apt install -y linux-tools-common linux-tools-$(uname -r)"
-            )
-            assert rcs == all_correct
+            assert rcs == [0 for _ in range(len(machines))]
 
             # Extract flamegraph binary, if not already done
             if not os.path.exists("common/flamegraph"):
@@ -156,28 +144,14 @@ if __name__ == "__main__":
 
     # Useful for more lightweight testing and development.
     # Should normally not be ran directly.
+    class Bla:
+        def __init__(self):
+            self.iter_outdir = "/tmp"
 
-    import threading
-
-    import common.base_experiment as base_experiment
-
-    exp = base_experiment.BaseExperiment()
-    exp.start_iteration()
-
-    def thread():
-        for i in range(50):
-            subprocess.run(["echo", "hello", i])
-            time.sleep(10)
-
-    for i in range(10):
-
-        th = threading.Thread(target=thread)
-        th.start()
-
-        m = Flamegraph("flamegraph", exp.target, True)
-        m.init()
-        m.start_iteration("/tmp")
-        time.sleep(500)
-        m.end_iteration(exp)
-
-        th.join()
+    TARGET = "2001:4d78:40d:0:506a:82ff:fe97:57b4"
+    m = Flamegraph("flamegraph", TARGET, True)
+    m.init()
+    m.start_iteration("/tmp")
+    time.sleep(500)
+    exp = Bla()
+    m.end_iteration(exp)
