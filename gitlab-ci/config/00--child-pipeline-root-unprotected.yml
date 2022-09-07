@@ -4,13 +4,13 @@ include:
 .ubuntu-docker-protected:
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:7e58156e2f6210633b9c55a5ddfc66416ffbfd72b113ac912dd1894add0c85fa"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:145c44efa453b54fab4247de76da9c9310eab396a33bebb0e23ed475bf965853"
   extends:
     - .ubuntu-nix-docker-pinned-dc
 
 .ubuntu-docker-k8s-protected:
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:7e58156e2f6210633b9c55a5ddfc66416ffbfd72b113ac912dd1894add0c85fa"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:145c44efa453b54fab4247de76da9c9310eab396a33bebb0e23ed475bf965853"
   extends:
     - .ubuntu-nix-docker-k8s-pinned-dc
