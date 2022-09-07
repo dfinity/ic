@@ -309,6 +309,9 @@ def external_crates_repository(name, annotations):
             "http": crate.spec(
                 version = "^0.2.6",
             ),
+            "httptest": crate.spec(
+                version = "^0.15.4",
+            ),
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),

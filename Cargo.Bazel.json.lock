@@ -1,5 +1,5 @@
 {
-  "checksum": "701ff5158462a5aa5fad0166083010bb3471f509360db10137893ecbdab43b6d",
+  "checksum": "a349458de865e67e399a0204167a4dde5b442bf4e070faaecdecc98ab12d0810",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11229,6 +11229,10 @@
               "target": "http"
             },
             {
+              "id": "httptest 0.15.4",
+              "target": "httptest"
+            },
+            {
               "id": "humantime 2.1.0",
               "target": "humantime"
             },
@@ -17169,6 +17173,100 @@
         "version": "1.0.2"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "httptest 0.15.4": {
+      "name": "httptest",
+      "version": "0.15.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/httptest/0.15.4/download",
+          "sha256": "f6f25cfb6def593d43fae1ead24861f217e93bc70768a45cc149a69b5f049df4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "httptest",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "httptest",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bstr 0.2.17",
+              "target": "bstr"
+            },
+            {
+              "id": "bytes 1.2.1",
+              "target": "bytes"
+            },
+            {
+              "id": "crossbeam-channel 0.5.6",
+              "target": "crossbeam_channel"
+            },
+            {
+              "id": "form_urlencoded 1.0.1",
+              "target": "form_urlencoded"
+            },
+            {
+              "id": "futures 0.3.24",
+              "target": "futures"
+            },
+            {
+              "id": "http 0.2.8",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.20",
+              "target": "hyper"
+            },
+            {
+              "id": "log 0.4.17",
+              "target": "log"
+            },
+            {
+              "id": "once_cell 1.14.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "regex 1.6.0",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.144",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.85",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_urlencoded 0.7.1",
+              "target": "serde_urlencoded"
+            },
+            {
+              "id": "tokio 1.21.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.15.4"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "humansize 1.1.1": {
       "name": "humansize",
@@ -44745,18 +44843,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -44771,6 +44857,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:httptest",
     "@crate_index//:humantime",
     "@crate_index//:mockall",
     "@crate_index//:nix",
