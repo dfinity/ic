@@ -129,14 +129,9 @@ impl StreamBuilderMetrics {
             "Outgoing cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
-        let out_cycles = metrics_registry.gauge_vec(
-            METRIC_OUT_CYCLES,
-            "Outgoing cycles, by receiving subnet.",
-            &[LABEL_REMOTE],
-        );
         let msg_cycles_test = metrics_registry.int_counter_vec(
-            METRIC_OUT_CYCLES,
-            "Outgoing cycles, by receiving subnet.",
+            METRIC_MSG_CYCLES_TEST,
+            "Test counter for each message not having 10 cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
