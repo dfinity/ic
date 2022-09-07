@@ -115,7 +115,7 @@ function build_ic_bootstrap_tar() {
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ELASTICSEARCH_URL
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
-    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
+    local IPV6_REPLICA_IPS IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
     while true; do
         if [ $# == 0 ]; then
             break
@@ -169,6 +169,9 @@ function build_ic_bootstrap_tar() {
             --domain-name)
                 DOMAIN_NAME="$2"
                 ;;
+            --ipv6_replica_ips)
+                IPV6_REPLICA_IPS="$2"
+                ;;
             --ipv4_http_ips)
                 IPV4_HTTP_IPS="$2"
                 ;;
@@ -200,10 +203,15 @@ function build_ic_bootstrap_tar() {
     DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
     ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
-    IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
-    IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
-    IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
-    IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
+    IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:=""}"
+    #IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
+    #IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    #IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    #IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
+    IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="::/0"}"
+    IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="::/0"}"
+    IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="::/0"}"
+    IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="::/0"}"
 
     if ! echo $DOMAIN | grep -q ".*\..*"; then
         echo "malformed domain name $DOMAIN"
@@ -242,9 +250,6 @@ EOF
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
-    # Set the domain name
-    echo domain=${DOMAIN} >"${BOOTSTRAP_TMPDIR}/bn_vars.conf"
-
     # setup the deny list
     if [[ -f ${DENYLIST} ]]; then
         echo "Using deny list ${DENYLIST}"
@@ -253,7 +258,18 @@ EOF
         echo "Using empty denylist"
         touch ${BOOTSTRAP_TMPDIR}/denylist.map
     fi
-    echo "denylist_url=${DENYLIST_URL}" >"${BOOTSTRAP_TMPDIR}/bn_vars.conf"
+
+    # setup the bn_vars
+    cat >"${BOOTSTRAP_TMPDIR}/bn_vars.conf" <<EOF
+domain=${DOMAIN}
+denylist_url=${DENYLIST_URL}
+elasticsearch_url=${ELASTICSEARCH_URL}
+ipv6_replica_ips=${IPV6_REPLICA_IPS}
+ipv4_http_ips=${IPV4_HTTP_IPS}
+ipv6_http_ips=${IPV6_HTTP_IPS}
+ipv6_debug_ips=${IPV6_DEBUG_IPS}
+ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
+EOF
 
     # setup the prober identity
     if [[ -f ${PROBER_IDENTITY} ]]; then

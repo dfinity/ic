@@ -1,5 +1,6 @@
 use std::{
     env,
+    fmt::Write as FmtWrite,
     fs::File,
     io::{self, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -10,21 +11,20 @@ use std::{
 use crate::{
     driver::{
         driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR},
+        farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse, VmType},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+        resource::{DiskImage, ImageType},
+        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
+            HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+        },
         test_setup::PotSetup,
     },
     util::create_agent_mapping,
 };
 
-use super::{
-    farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse, VmType},
-    ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
-    resource::{DiskImage, ImageType},
-    test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{
-        get_ssh_session_from_env, retry, HasPublicApiUrl, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-        SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-    },
-};
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use flate2::{write::GzEncoder, Compression};
@@ -57,6 +57,7 @@ pub struct BoundaryNode {
     pub boot_image: Option<DiskImage>,
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
+    pub replica_ipv6_rule: String,
 }
 
 impl BoundaryNode {
@@ -72,6 +73,7 @@ impl BoundaryNode {
             boot_image: Default::default(),
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
+            replica_ipv6_rule: Default::default(),
         }
     }
 
@@ -123,6 +125,40 @@ impl BoundaryNode {
     pub fn with_nns_public_key(mut self, nns_public_key: PathBuf) -> Self {
         self.nns_public_key = Some(nns_public_key);
         self
+    }
+
+    pub fn with_replica_ipv6_rule(mut self, replica_ipv6_rule: String) -> Self {
+        self.replica_ipv6_rule = replica_ipv6_rule;
+        self
+    }
+
+    pub fn for_ic(self, env: &TestEnv, name: &str) -> Self {
+        let replica_ipv6_rule = env
+            .topology_snapshot()
+            .subnets()
+            .flat_map(|subnet| subnet.nodes())
+            .filter_map(|node| {
+                if let IpAddr::V6(addr) = node.get_ip_addr() {
+                    Some(addr)
+                } else {
+                    None
+                }
+            })
+            .try_fold(String::new(), |mut s, ip| {
+                write!(&mut s, "{ip}/32,").map(|_| s)
+            })
+            .unwrap();
+
+        let nns_urls: Vec<_> = env
+            .topology_snapshot_by_name(name)
+            .root_subnet()
+            .nodes()
+            .map(|ep| ep.get_public_url())
+            .collect();
+
+        self.with_replica_ipv6_rule(replica_ipv6_rule)
+            .with_nns_public_key(env.prep_dir(name).unwrap().root_public_key_path())
+            .with_nns_urls(nns_urls)
     }
 
     pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
@@ -204,7 +240,7 @@ impl BoundaryNode {
 
 /// side-effectful function that creates the config disk images
 /// in the boundary node directories.
-pub fn create_and_upload_config_disk_image(
+fn create_and_upload_config_disk_image(
     boundary_node: &BoundaryNode,
     env: &TestEnv,
     group_name: &str,
@@ -234,8 +270,8 @@ pub fn create_and_upload_config_disk_image(
         .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name))
-        .arg("--deployment-type")
-        .arg("dev")
+        .arg("--ipv6_replica_ips")
+        .arg(&boundary_node.replica_ipv6_rule)
         .arg("--name_servers")
         .arg("2606:4700:4700::1111 2606:4700:4700::1001");
 
