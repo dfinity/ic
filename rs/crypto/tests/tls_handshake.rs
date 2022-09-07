@@ -1446,6 +1446,5 @@ fn assert_string_contains(internal_error: String, expected_substring: &str) {
 fn assert_peer_node_eq(peer: AuthenticatedPeer, node_id: NodeId) {
     match peer {
         AuthenticatedPeer::Node(n) => assert_eq!(n, node_id),
-        AuthenticatedPeer::Cert(_) => panic!("expected peer to be a node not a cert"),
     }
 }

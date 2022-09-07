@@ -607,10 +607,8 @@ impl SomeOrAllNodes {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-/// An authenticated Node ID, or an authenticated certificate
+/// An authenticated Node ID
 pub enum AuthenticatedPeer {
     /// Authenticated Node ID
     Node(NodeId),
-    /// Authenticated X.509 certificate
-    Cert(TlsPublicKeyCert),
 }
