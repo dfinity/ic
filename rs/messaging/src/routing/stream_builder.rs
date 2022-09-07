@@ -40,12 +40,8 @@ struct StreamBuilderMetrics {
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
     pub routed_payload_sizes: Histogram,
-    /// Outgoing XNet messages, by destination subnet
-    pub outgoing_messages: IntCounterVec,
     /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
     pub out_cycles: GaugeVec,
-    /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
-    pub msg_cycles_test: IntCounterVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -71,9 +67,7 @@ const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
-const METRIC_OUTGOING_MESSAGES: &str = "mr_outgoing_message_count";
 const METRIC_OUT_CYCLES: &str = "mr_out_cycles";
-const METRIC_MSG_CYCLES_TEST: &str = "mr_msg_cycles_invalid_test";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -118,19 +112,9 @@ impl StreamBuilderMetrics {
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );
-        let outgoing_messages = metrics_registry.int_counter_vec(
-            METRIC_OUTGOING_MESSAGES,
-            "Outgoing XNet messages, by destination subnet.",
-            &[LABEL_REMOTE],
-        );
         let out_cycles = metrics_registry.gauge_vec(
             METRIC_OUT_CYCLES,
             "Outgoing cycles, by receiving subnet.",
-            &[LABEL_REMOTE],
-        );
-        let msg_cycles_test = metrics_registry.int_counter_vec(
-            METRIC_MSG_CYCLES_TEST,
-            "Test counter for each message not having 10 cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
@@ -162,9 +146,7 @@ impl StreamBuilderMetrics {
             stream_begin,
             routed_messages,
             routed_payload_sizes,
-            outgoing_messages,
             out_cycles,
-            msg_cycles_test,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -442,24 +424,28 @@ impl StreamBuilderImpl {
                                     context.message = message;
                                 }
                             }
-                            // Increase cycle sum
-                            // match streams.get_mut(&dst_net_id) {
-                            //     Some(mut stream) => {
-                            //         stream.set_sum_cycles_out(stream.sum_cycles_out().add(rep.refund));
-                            //     }
-                            //     None => {}
-                            // }
                             streams.push(dst_net_id, msg);
+                            // Increase cycle sum
+                            // Important: This needs to be done after streams.push, else on the first message,
+                            // the stream will not exist and we cannot store the value
+                            match streams.get_mut(&dst_net_id) {
+                                Some(mut stream) => {
+                                    stream.set_sum_cycles_out(
+                                        stream.sum_cycles_out().add(cycles_in_msg),
+                                    );
+                                    self.metrics
+                                        .out_cycles
+                                        .with_label_values(&[&dst_net_id.to_string()])
+                                        .set(stream.sum_cycles_out().get() as f64);
+                                }
+                                None => {}
+                            }
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            self.metrics
-                                .outgoing_messages
-                                .with_label_values(&[&dst_net_id.to_string()])
-                                .inc();
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
