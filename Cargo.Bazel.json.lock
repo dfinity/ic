@@ -1,5 +1,5 @@
 {
-  "checksum": "8455db2b6a43e0a2aac2cb209aa8f813e19d5312e0d63a2a57334b3e25873ff5",
+  "checksum": "8b0eefc84273cf0ad00741cb8bd798b7f0a483f182ac0995e3255586c71065cf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11281,7 +11281,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "ic-wasm 0.1.4",
+              "id": "ic-wasm 0.1.5",
               "target": "ic_wasm"
             },
             {
@@ -12418,13 +12418,13 @@
       },
       "license": "MIT"
     },
-    "ecdsa 0.14.4": {
+    "ecdsa 0.14.5": {
       "name": "ecdsa",
-      "version": "0.14.4",
+      "version": "0.14.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ecdsa/0.14.4/download",
-          "sha256": "e852f4174d2a8646a0fa8a34b55797856c722f86267deb0aa1e93f7f247f800e"
+          "url": "https://crates.io/api/v1/crates/ecdsa/0.14.5/download",
+          "sha256": "1826508d57f3140a2e8e3c307b19915a266c92a1b8c2f6bb54e29e5d72a394ae"
         }
       },
       "targets": [
@@ -12481,7 +12481,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.14.4"
+        "version": "0.14.5"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -18328,13 +18328,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-wasm 0.1.4": {
+    "ic-wasm 0.1.5": {
       "name": "ic-wasm",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-wasm/0.1.4/download",
-          "sha256": "ebed180ae82aa994a90c4477fc928379efb8d55e52e5b90c3ab1611dd4c11ab1"
+          "url": "https://crates.io/api/v1/crates/ic-wasm/0.1.5/download",
+          "sha256": "aa2ae3c75c0ba162ef5480620affd298ee8ea6d4535267c8504fb1f8d9f1f9a6"
         }
       },
       "targets": [
@@ -18400,7 +18400,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.4"
+        "version": "0.1.5"
       },
       "license": "Apache-2.0"
     },
@@ -20003,7 +20003,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "ecdsa 0.14.4",
+              "id": "ecdsa 0.14.5",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
@@ -44748,8 +44748,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44772,8 +44772,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48340,7 +48340,7 @@
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
-    "ic-wasm 0.1.4",
+    "ic-wasm 0.1.5",
     "inferno 0.11.7",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
