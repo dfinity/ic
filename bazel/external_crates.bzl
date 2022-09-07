@@ -201,6 +201,9 @@ def external_crates_repository(name, annotations):
             "crossbeam-channel": crate.spec(
                 version = "^0.5.5",
             ),
+            "crossbeam-utils": crate.spec(
+                version = "^0.8.11",
+            ),
             "csv": crate.spec(
                 version = "^1.1",
             ),

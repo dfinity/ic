@@ -1,5 +1,5 @@
 {
-  "checksum": "a349458de865e67e399a0204167a4dde5b442bf4e070faaecdecc98ab12d0810",
+  "checksum": "c5c27fc8845ab57559c77ab7f3e7f786611a8f3ec2f4fda16a6ee2594012c2e4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11111,6 +11111,10 @@
             {
               "id": "crossbeam-channel 0.5.6",
               "target": "crossbeam_channel"
+            },
+            {
+              "id": "crossbeam-utils 0.8.11",
+              "target": "crossbeam_utils"
             },
             {
               "id": "csv 1.1.6",
@@ -44843,8 +44847,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44855,8 +44859,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

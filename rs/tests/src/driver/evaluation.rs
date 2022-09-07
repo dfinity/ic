@@ -1,17 +1,18 @@
-use std::panic::catch_unwind;
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{panic::catch_unwind, thread::JoinHandle, time::Duration};
 
-use super::config;
-use super::driver_setup::DriverContext;
-use super::farm::{Farm, GroupSpec};
-use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use crate::driver::driver_setup::IcSetup;
-use crate::driver::test_env::{HasTestPath, TestEnv, TestEnvAttribute};
-use crate::driver::test_setup::PotSetup;
+use crate::driver::{
+    config,
+    driver_setup::{DriverContext, IcSetup},
+    farm::{Farm, GroupSpec},
+    pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet},
+    test_env::{HasTestPath, TestEnv, TestEnvAttribute},
+    test_setup::PotSetup,
+};
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
+use crossbeam_utils::sync::WaitGroup;
 use ic_fondue::result::*;
+use rayon::{ScopeFifo, ThreadPoolBuilder};
 use slog::{error, info, warn, Logger};
 
 // This function has a `dry-run` execution concept for the test suite.
@@ -24,11 +25,7 @@ pub fn generate_suite_execution_contract(suite: &Suite) -> TestSuiteContract {
         .filter(|p| p.execution_mode != ExecutionMode::Ignore)
     {
         let mut tests_results_for_pot: Vec<TestSuiteContract> = Vec::new();
-        let all_tests = match pot.testset {
-            TestSet::Sequence(ref tests) => tests,
-            TestSet::Parallel(ref tests) => tests,
-        };
-        for test in all_tests.iter() {
+        for test in pot.testset.iter() {
             if test.execution_mode != ExecutionMode::Ignore {
                 tests_results_for_pot.push(TestSuiteContract {
                     name: test.name.clone(),
@@ -58,38 +55,30 @@ pub fn generate_suite_execution_contract(suite: &Suite) -> TestSuiteContract {
 }
 
 pub fn evaluate(ctx: &DriverContext, ts: Suite) {
-    let pots: Vec<Pot> = ts
-        .pots
-        .into_iter()
-        .filter(|p| p.execution_mode != ExecutionMode::Ignore)
-        .collect();
+    let pots = ts.pots;
+    let path = &TestPath::new_with_root(ts.name);
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(config::N_THREADS_PER_SUITE)
+        .build()
+        .expect("Could not create threadpool");
 
-    let path = TestPath::new_with_root(ts.name);
-    let chunks = chunk(pots, config::N_THREADS_PER_SUITE);
+    pool.scope_fifo(move |scope| {
+        let pots = pots
+            .into_iter()
+            .filter(|p| p.execution_mode != ExecutionMode::Ignore);
 
-    let mut join_handles = vec![];
-    for chunk in chunks {
-        let join_handle = std::thread::spawn({
-            let t_path = path.clone();
-            let t_ctx = ctx.clone();
-            move || {
-                for p in chunk {
-                    let pot_name = p.name.clone();
-                    evaluate_pot(&t_ctx, p, t_path.clone()).unwrap_or_else(|e| {
-                        error!(t_ctx.logger, "Failed to execute pot {}: {}.", pot_name, e);
-                    });
-                }
-            }
-        });
-        join_handles.push(join_handle);
-    }
-
-    for jh in join_handles {
-        jh.join().expect("waiting for thread failed!");
-    }
+        for p in pots {
+            scope.spawn_fifo(move |_| {
+                let pot_name = p.name.clone();
+                evaluate_pot(ctx, p, path).unwrap_or_else(|e| {
+                    error!(ctx.logger, "Failed to execute pot {}: {}.", pot_name, e);
+                });
+            })
+        }
+    })
 }
 
-fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()> {
+fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: &TestPath) -> Result<()> {
     let pot_path = path.join(&pot.name);
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
         .replace(':', "_")
@@ -151,7 +140,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()>
         bail!("Could not evaluate pot setup: {}", err);
     }
 
-    evaluate_pot_with_group(ctx, pot, pot_path.clone(), &pot_env)?;
+    evaluate_pot_with_group(ctx, pot, &pot_path, &pot_env);
 
     // at this point we should be guaranteed to have a task_handle
     if let Some((task_handle, stop_sig_s)) = keep_alive_handle_and_signal {
@@ -201,63 +190,72 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
     Ok((task_handle, stop_sig_s))
 }
 
-fn evaluate_pot_with_group(
-    ctx: &DriverContext,
-    pot: Pot,
-    pot_path: TestPath,
-    pot_env: &TestEnv,
-) -> Result<()> {
-    use slog::Drain;
-    let (no_threads, all_tests) = match pot.testset {
-        TestSet::Sequence(tests) => (1, tests),
-        TestSet::Parallel(tests) => (config::N_THREADS_PER_POT, tests),
-    };
-    let tests: Vec<Test> = all_tests
-        .into_iter()
-        .filter(|t| t.execution_mode != ExecutionMode::Ignore)
-        .collect();
-    let chunks = chunk(tests, no_threads);
-    let mut join_handles = vec![];
-
-    for chunk in chunks {
-        let join_handle = std::thread::spawn({
-            let t_path = pot_path.clone();
-            let t_pot_env = pot_env.clone();
-            let t_ctx = ctx.clone();
-
-            move || {
-                let discard_drain = slog::Discard;
-                for t in chunk {
-                    let logger = if t_ctx.propagate_test_logs {
-                        t_ctx.logger()
-                    } else {
-                        slog::Logger::root(discard_drain.fuse(), slog::o!())
-                    };
-                    // the pot env is in <pot>/setup. Hence, we take the parent,
-                    // to create the path <pot>/tests/<test>
-                    let t_env_dir = t_pot_env
-                        .base_path()
-                        .parent()
-                        .expect("parent not set")
-                        .to_owned()
-                        .join(config::TESTS_DIR)
-                        .join(&t.name);
-                    let test_env = t_pot_env
-                        .fork(logger, t_env_dir)
-                        .expect("Could not create test env.");
-                    evaluate_test(&t_ctx, test_env, t, t_path.clone());
-                }
-            }
-        });
-        join_handles.push(join_handle);
-    }
-    for jh in join_handles {
-        jh.join().expect("waiting for thread failed!");
-    }
-    Ok(())
+fn evaluate_pot_with_group(ctx: &DriverContext, pot: Pot, pot_path: &TestPath, pot_env: &TestEnv) {
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(config::N_THREADS_PER_POT)
+        .build()
+        .expect("Could not create threadpool");
+    pool.scope_fifo(move |scope| {
+        scope.spawn_fifo(move |scope| {
+            evaluate_testset_with_group(ctx, scope, pot.testset, pot_path, pot_env)
+        })
+    })
 }
 
-fn evaluate_test(ctx: &DriverContext, test_env: TestEnv, t: Test, path: TestPath) {
+fn evaluate_testset_with_group<'scope>(
+    ctx: &'scope DriverContext,
+    scope: &ScopeFifo<'scope>,
+    testset: TestSet,
+    pot_path: &'scope TestPath,
+    pot_env: &'scope TestEnv,
+) {
+    match testset {
+        TestSet::Single(test) => {
+            if test.execution_mode != ExecutionMode::Ignore {
+                evaluate_test(ctx, pot_env, test, pot_path)
+            }
+        }
+        TestSet::Sequence(tests) => {
+            for test in tests {
+                evaluate_testset_with_group(ctx, scope, test, pot_path, pot_env)
+            }
+        }
+        TestSet::Parallel(tests) => {
+            let wg = WaitGroup::new();
+            for test in tests {
+                let wg = wg.clone();
+                scope.spawn_fifo(move |scope| {
+                    let _wg = wg;
+                    evaluate_testset_with_group(ctx, scope, test, pot_path, pot_env)
+                });
+            }
+            wg.wait();
+        }
+    }
+}
+
+fn evaluate_test(ctx: &DriverContext, pot_env: &TestEnv, t: Test, pot_path: &TestPath) {
+    use slog::Drain;
+    let discard_drain = slog::Discard;
+    let logger = if ctx.propagate_test_logs {
+        ctx.logger()
+    } else {
+        slog::Logger::root(discard_drain.fuse(), slog::o!())
+    };
+
+    // the pot env is in <pot>/setup. Hence, we take the parent,
+    // to create the path <pot>/tests/<test>
+    let t_env_dir = pot_env
+        .base_path()
+        .parent()
+        .expect("parent not set")
+        .to_owned()
+        .join(config::TESTS_DIR)
+        .join(&t.name);
+    let test_env = pot_env
+        .fork(logger, t_env_dir)
+        .expect("Could not create test env.");
+
     let mut result = TestResultNode {
         name: t.name.clone(),
         ..TestResultNode::default()
@@ -267,7 +265,7 @@ fn evaluate_test(ctx: &DriverContext, test_env: TestEnv, t: Test, path: TestPath
         return;
     }
 
-    let path = path.join(&t.name);
+    let path = pot_path.join(&t.name);
     test_env
         .write_test_path(&path)
         .expect("Could not write test path");
@@ -304,16 +302,6 @@ fn evaluate_test(ctx: &DriverContext, test_env: TestEnv, t: Test, path: TestPath
         })
 }
 
-fn chunk<T>(items: Vec<T>, no_buckets: usize) -> Vec<Vec<T>> {
-    let mut res: Vec<Vec<T>> = (0..no_buckets).map(|_| Vec::new()).collect();
-    items
-        .into_iter()
-        .enumerate()
-        .for_each(|(i, item)| res[i % no_buckets].push(item));
-    res.retain(|i| !i.is_empty());
-    res
-}
-
 pub fn collect_n_children(r: Receiver<TestResultNode>, n: usize) -> Vec<TestResultNode> {
     let mut ch = vec![];
     for _ in 0..n {
@@ -343,22 +331,4 @@ fn keep_group_alive_task(log: Logger, farm: Farm, group_name: &str) -> (impl FnM
         }
     };
     (task, stop_sig_s)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::chunk;
-    use std::collections::HashSet;
-
-    #[test]
-    fn chunking_retains_all_elements() {
-        for c in 1..11 {
-            for n in 1..63 {
-                let set: HashSet<_> = (0..n).collect();
-                let chunks = chunk(set.iter().cloned().collect::<Vec<_>>(), c);
-                assert_eq!(chunks.len().min(n), c.min(n));
-                assert_eq!(chunks.concat().iter().cloned().collect::<HashSet<_>>(), set);
-            }
-        }
-    }
 }

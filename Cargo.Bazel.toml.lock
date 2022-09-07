@@ -2115,6 +2115,7 @@ dependencies = [
  "criterion",
  "crossbeam",
  "crossbeam-channel",
+ "crossbeam-utils",
  "csv",
  "curve25519-dalek",
  "cvt",
