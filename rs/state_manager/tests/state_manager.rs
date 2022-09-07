@@ -2713,8 +2713,11 @@ fn deletes_diverged_states() {
                 state_manager.get_latest_state().height(),
                 "Expected diverged checkpoint@2 to go away"
             );
-            let last_diverged =
-                fetch_int_gauge(metrics, "state_manager_last_diverged_state_timestamp").unwrap();
+            let last_diverged = fetch_int_gauge(
+                metrics,
+                "state_manager_last_diverged_state_timestamp_seconds",
+            )
+            .unwrap();
 
             assert!(last_diverged > 0);
         },
