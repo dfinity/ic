@@ -3,6 +3,7 @@ pub mod cell;
 #[cfg(target_arch = "wasm32")]
 mod ic0_memory; // Memory API for canisters.
 pub mod log;
+pub mod memory_manager;
 pub mod storable;
 mod types;
 pub mod vec_mem;
