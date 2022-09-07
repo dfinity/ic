@@ -8,6 +8,7 @@ def _opt_debug_transition(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "never",
+        "@rules_rust//:extra_rustc_flag": ["-Cdebug-assertions=off"],
     }
 
 opt_debug_transition = transition(
@@ -16,6 +17,7 @@ opt_debug_transition = transition(
     outputs = [
         "//command_line_option:compilation_mode",
         "//command_line_option:strip",
+        "@rules_rust//:extra_rustc_flag",
     ],
 )
 
