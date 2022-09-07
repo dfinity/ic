@@ -30,6 +30,9 @@ use crate::{
     },
     util::{assert_create_agent, delay},
 };
+
+use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
+
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
 use garcon::Delay;
@@ -43,7 +46,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use serde::Deserialize;
 use slog::{error, info};
-use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
