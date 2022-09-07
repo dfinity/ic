@@ -12843,6 +12843,10 @@ dependencies = [
 [[package]]
 name = "stable-structures"
 version = "0.1.0"
+dependencies = [
+ "maplit",
+ "proptest 0.9.6",
+]
 
 [[package]]
 name = "stable_deref_trait"
