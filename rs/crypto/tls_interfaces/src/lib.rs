@@ -607,19 +607,8 @@ impl SomeOrAllNodes {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-/// A TLS peer, with identification information (if authenticated)
-pub enum Peer {
-    /// Peer hasn't been authenticated.
-    Unauthenticated,
-    /// Peer has been authenticated.
-    Authenticated(AuthenticatedPeer),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-/// An authenticated Node ID, or an authenticated certificate
+/// An authenticated Node ID
 pub enum AuthenticatedPeer {
     /// Authenticated Node ID
     Node(NodeId),
-    /// Authenticated X.509 certificate
-    Cert(TlsPublicKeyCert),
 }

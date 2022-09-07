@@ -597,6 +597,9 @@ def external_crates_repository(name, annotations):
             "proptest": crate.spec(
                 version = "^0.9.4",
             ),
+            "test-strategy": crate.spec(
+                version = "^0.2",
+            ),
             "proptest-derive": crate.spec(
                 version = "^0.1.0",
             ),

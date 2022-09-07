@@ -78,9 +78,14 @@ class RcloneUpload:
             self._upload(
                 local_path=local_path,
                 remote_subdir=f"blessed/ic/{version}/{remote_subdir}",
+                other_options=["--immutable"],
             )
 
-        self._upload(local_path=local_path, remote_subdir=f"ic/{version}/{remote_subdir}")
+        self._upload(
+            local_path=local_path,
+            remote_subdir=f"ic/{version}/{remote_subdir}",
+            other_options=["--immutable"],
+        )
 
 
 def main():

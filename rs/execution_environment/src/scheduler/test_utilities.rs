@@ -838,11 +838,12 @@ impl WasmExecutor for TestWasmExecutor {
         input: WasmExecutionInput,
         execution_state: &ExecutionState,
     ) -> (Option<CompilationResult>, WasmExecutionResult) {
-        let (_message_id, message, call_context_id) = {
+        let (message_id, message, call_context_id) = {
             let mut guard = self.core.lock().unwrap();
             guard.take_message(&input)
         };
         let execution = TestPausedWasmExecution {
+            message_id,
             message,
             sandbox_safe_system_state: input.sandbox_safe_system_state,
             execution_parameters: input.execution_parameters,
@@ -1235,6 +1236,7 @@ impl TestWasmExecutorCore {
 
 /// Represent fake Wasm execution that can be paused and resumed.
 struct TestPausedWasmExecution {
+    message_id: u32,
     message: TestMessage,
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
@@ -1261,7 +1263,10 @@ impl PausedWasmExecution for TestPausedWasmExecution {
     }
 
     fn abort(self: Box<Self>) {
-        // Nothing to do.
+        let executor = Arc::clone(&self.executor);
+        let mut guard = executor.core.lock().unwrap();
+        // Put back the message, so we could restart its execution later
+        guard.messages.insert(self.message_id, self.message);
     }
 }
 

@@ -906,6 +906,18 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
+    /// Mark any canister as deleted that is not in ids
+    pub fn filter_canisters(&self, ids: &BTreeSet<&CanisterId>) -> Result<(), LayoutError> {
+        let canisters_on_disk = self.canister_ids()?;
+        for id in canisters_on_disk {
+            if !ids.contains(&id) {
+                let canister = self.canister(&id)?;
+                canister.mark_deleted()?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
         // TODO(EXC-1113): Rename this path to "bitcoin", as it stores data for either network.
         BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))

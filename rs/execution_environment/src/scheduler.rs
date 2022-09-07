@@ -796,7 +796,6 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        let state_path = state.root.clone();
         let state_time = state.time();
         let metadata_time_of_last_allocation_charge = state.metadata.time_of_last_allocation_charge;
         let mut all_rejects = Vec::new();
@@ -836,12 +835,7 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                all_rejects.push(uninstall_canister(
-                    &self.log,
-                    canister,
-                    &state_path,
-                    state_time,
-                ));
+                all_rejects.push(uninstall_canister(&self.log, canister, state_time));
                 canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
 
@@ -1226,15 +1220,15 @@ impl Scheduler for SchedulerImpl {
         // The round will stop as soon as the counter reaches zero.
         // We can compute the initial value `X` of the counter based on:
         // - `R = max_instructions_per_round`,
-        // - `M = max_instructions_per_message`.
+        // - `S = max_instructions_per_slice`.
         // In the worst case, we start a new Wasm execution when then counter
-        // reaches 1 and the execution uses the maximum `M` instructions. After
-        // the execution the counter will be set to `1 - M`.
+        // reaches 1 and the execution uses the maximum `S` instructions. After
+        // the execution the counter will be set to `1 - S`.
         //
         // We want the total number executed instructions to not exceed `R`,
-        // which gives us: `X - (1 - M) <= R` or `X <= R - M + 1`.
+        // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
         round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
-            - as_round_instructions(self.config.max_instructions_per_message)
+            - as_round_instructions(self.config.max_instructions_per_slice)
             + RoundInstructions::from(1);
 
         let round_schedule;

@@ -115,7 +115,6 @@ pub struct CustomClient {
     msg_expected_from_server: Option<String>,
 }
 
-#[allow(unused)]
 impl CustomClient {
     pub fn builder() -> CustomClientBuilder {
         CustomClientBuilder {
@@ -163,7 +162,7 @@ impl CustomClient {
                     error
                 ),
                 Ok(()) => {
-                    let (mut tls_read_half, tls_write_half) = tokio::io::split(tls_stream);
+                    let (mut tls_read_half, _tls_write_half) = tokio::io::split(tls_stream);
                     self.expect_msg_from_server_if_configured(&mut tls_read_half)
                         .await;
                 }
@@ -190,7 +189,9 @@ impl CustomClient {
         }
         if let Some(extra_chain_certs) = &self.extra_chain_certs {
             for extra_chain_cert in extra_chain_certs {
-                builder.add_extra_chain_cert(extra_chain_cert.clone());
+                builder
+                    .add_extra_chain_cert(extra_chain_cert.clone())
+                    .expect("Failed to add extra chain certificate.");
             }
         }
         let mut connect_config = builder

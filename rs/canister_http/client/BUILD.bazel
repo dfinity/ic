@@ -2,37 +2,41 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    "//rs/async_utils",
+    "//rs/canister_http/service",
+    "//rs/config",
+    "//rs/interfaces",
+    "//rs/interfaces/canister_http_adapter_client",
+    "//rs/monitoring/adapter_metrics",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+    "@crate_index//:tower",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "@crate_index//:tower-test",
+]
+
 rust_library(
     name = "client",
     srcs = glob(["src/**"]),
     crate_name = "ic_canister_http_adapter_client",
-    deps = [
-        "//rs/async_utils",
-        "//rs/canister_http/service",
-        "//rs/config",
-        "//rs/interfaces",
-        "//rs/interfaces/canister_http_adapter_client",
-        "//rs/monitoring/adapter_metrics",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/protobuf",
-        "//rs/types/error_types",
-        "//rs/types/ic00_types",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:futures",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-        "@crate_index//:tonic",
-        "@crate_index//:tower",
-        "@crate_index//:tower-test",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "client_test",
     crate = ":client",
-    deps = [
-        "//rs/test_utilities",
-    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

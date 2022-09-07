@@ -1,5 +1,6 @@
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS,
+    truncate_path, CheckpointError, CheckpointMetrics, PageMapType, PersistenceError,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
@@ -74,6 +75,14 @@ pub fn make_checkpoint(
             DEFRAG_SAMPLE,
             height.get(),
         )?;
+    }
+
+    {
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["filter_canisters"])
+            .start_timer();
+        tip.filter_canisters(&state.canister_states.keys().collect())?;
     }
 
     let cp = {
@@ -176,7 +185,11 @@ fn serialize_canister_to_tip(
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
             })
         }
-        None => None,
+        None => {
+            truncate_path(log, &canister_layout.vmemory_0());
+            truncate_path(log, &canister_layout.stable_memory_blob());
+            None
+        }
     };
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.value(), 0);

@@ -66,6 +66,9 @@ pub mod native_action_ids {
 
     /// UpgradeSnsToNextVersion Action.
     pub const UPGRADE_SNS_TO_NEXT_VERSION: u64 = 7;
+
+    /// ManageSnsMetadata Action.
+    pub const MANAGE_SNS_METADATA: u64 = 8;
 }
 
 impl governance::Mode {
@@ -963,6 +966,24 @@ impl SnsMetadata {
     /// Validate the SnsMetadata values
     pub fn validate(&self) -> Result<(), String> {
         let url = self.url.as_ref().ok_or("SnsMetadata.url must be set")?;
+        Self::validate_url(url)?;
+
+        if let Some(logo) = &self.logo {
+            Self::validate_logo(logo)?;
+        }
+
+        let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
+        Self::validate_name(name)?;
+
+        let description = self
+            .description
+            .as_ref()
+            .ok_or("SnsMetadata.description must be set")?;
+        Self::validate_description(description)?;
+        Ok(())
+    }
+
+    pub fn validate_url(url: &str) -> Result<(), String> {
         if url.len() > Self::MAX_URL_LENGTH {
             return Err(format!(
                 "SnsMetadata.url must be less than {} characters",
@@ -974,17 +995,20 @@ impl SnsMetadata {
                 Self::MIN_URL_LENGTH
             ));
         }
+        Ok(())
+    }
 
-        if let Some(logo) = &self.logo {
-            if logo.len() > Self::MAX_LOGO_LENGTH {
-                return Err(format!(
-                    "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                    Self::MAX_LOGO_LENGTH
-                ));
-            }
+    pub fn validate_logo(logo: &str) -> Result<(), String> {
+        if logo.len() > Self::MAX_LOGO_LENGTH {
+            return Err(format!(
+                "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
+                Self::MAX_LOGO_LENGTH
+            ));
         }
+        Ok(())
+    }
 
-        let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
+    pub fn validate_name(name: &str) -> Result<(), String> {
         if name.len() > Self::MAX_NAME_LENGTH {
             return Err(format!(
                 "SnsMetadata.name must be less than {} characters",
@@ -996,11 +1020,10 @@ impl SnsMetadata {
                 Self::MIN_NAME_LENGTH
             ));
         }
+        Ok(())
+    }
 
-        let description = self
-            .description
-            .as_ref()
-            .ok_or("SnsMetadata.description must be set")?;
+    pub fn validate_description(description: &str) -> Result<(), String> {
         if description.len() > Self::MAX_DESCRIPTION_LENGTH {
             return Err(format!(
                 "SnsMetadata.description must be less than {} characters",
@@ -1012,7 +1035,6 @@ impl SnsMetadata {
                 Self::MIN_DESCRIPTION_LENGTH
             ));
         }
-
         Ok(())
     }
 }
@@ -1122,6 +1144,7 @@ impl From<&Action> for u64 {
                 native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
+            Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
         }
     }
 }

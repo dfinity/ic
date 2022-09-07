@@ -17,6 +17,8 @@
 /toolchains/              @dfinity-lab/teams/idx
 /WORKSPACE.bazel          @dfinity-lab/teams/idx
 /BUILD.bazel              @dfinity-lab/teams/idx
+.bazelrc                  @dfinity-lab/teams/idx
+.bazelversion             @dfinity-lab/teams/idx
 
 
 # [Documentation]

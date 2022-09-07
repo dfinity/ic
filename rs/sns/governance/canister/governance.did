@@ -6,6 +6,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   Unspecified : record {};
+  ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   Motion : Motion;
 };
@@ -143,7 +144,7 @@ type Governance = record {
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { text; NeuronInFlightCommand };
-  sns_metadata : opt GetMetadataResponse;
+  sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
 };
@@ -188,6 +189,12 @@ type ListProposals = record {
 type ListProposalsResponse = record { proposals : vec ProposalData };
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
+type ManageSnsMetadata = record {
+  url : opt text;
+  logo : opt text;
+  name : opt text;
+  description : opt text;
+};
 type MemoAndController = record { controller : opt principal; memo : nat64 };
 type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
