@@ -424,11 +424,12 @@ impl StreamBuilderImpl {
                                     context.message = message;
                                 }
                             }
+                            dst_net_id_cpy = dst_net_id.clone();
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
                             // the stream will not exist and we cannot store the value
-                            match streams.get_mut(&dst_net_id) {
+                            match streams.get_mut(&dst_net_id_cpy) {
                                 Some(mut stream) => {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
@@ -446,11 +447,12 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
+                            dst_net_id_cpy = dst_net_id.clone();
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
                             // the stream will not exist and we cannot store the value
-                            match streams.get_mut(&dst_net_id) {
+                            match streams.get_mut(&dst_net_id_cpy) {
                                 Some(mut stream) => {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
