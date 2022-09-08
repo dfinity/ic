@@ -21,7 +21,7 @@ pub type DefaultMemoryImpl = Ic0StableMemory;
 #[cfg(not(target_arch = "wasm32"))]
 pub type DefaultMemoryImpl = VectorMemory;
 
-const WASM_PAGE_SIZE: u64 = 65536;
+pub const WASM_PAGE_SIZE: u64 = 65536;
 
 pub trait Memory {
     /// Returns the current size of the stable memory in WebAssembly
