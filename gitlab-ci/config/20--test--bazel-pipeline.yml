@@ -61,7 +61,6 @@ bazel-test-all-macos:
   extends:
     - .build-env-base
     - .bazel-test-all
-  allow_failure: true # TODO(IDX-2378): Remove when it will be stable.
   tags:
     - macos
   variables:
