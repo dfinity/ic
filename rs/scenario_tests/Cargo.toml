@@ -45,7 +45,6 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
-log_analyzer = { path = "../log_analyzer" }
 nix = "0.23.0"
 on_wire = { path = "../rust_canisters/on_wire" }
 prost = "0.10.4"

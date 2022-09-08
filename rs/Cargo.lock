@@ -7552,7 +7552,6 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
- "log_analyzer",
  "nix 0.23.0",
  "on_wire",
  "prost",
@@ -9411,17 +9410,6 @@ dependencies = [
  "thread-id",
  "typemap",
  "winapi 0.3.9",
-]
-
-[[package]]
-name = "log_analyzer"
-version = "0.8.0"
-dependencies = [
- "chrono",
- "clap 3.2.14",
- "criterion",
- "lazy_static",
- "regex",
 ]
 
 [[package]]
@@ -13366,7 +13354,6 @@ dependencies = [
  "lazy_static",
  "ledger-canister",
  "lifeline",
- "log_analyzer",
  "maplit",
  "nix 0.23.0",
  "on_wire",
