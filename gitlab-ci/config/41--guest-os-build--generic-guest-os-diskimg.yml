@@ -1,6 +1,6 @@
 generic-guest-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
@@ -13,8 +13,6 @@ generic-guest-os-diskimg:
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
           --out="artifacts/release"
-
-      ls -lah /var/run/docker.sock; groups
 
       pushd artifacts/release
       gunzip \

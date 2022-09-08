@@ -1,6 +1,6 @@
 guest-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
@@ -52,7 +52,7 @@ guest-os-diskimg-dev-malicious:
 
 boundary-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:

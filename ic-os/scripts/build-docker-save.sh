@@ -12,11 +12,9 @@ if [ "${CI_JOB_NAME:-}" == "docker-build-ic"* ]; then
     ARGS+=(--no-cache)
 fi
 
-DOCKER_ID=$(
-    # Account for two different output formats of docker command:
-    # "classic" docker and "buildkit" docker
-    echo "docker build ${ARGS[@]} $@" >&2
-    docker build "${ARGS[@]}" "$@" 2>&1 | tee >(cat 1>&2) | sed -e 's/Successfully built \([0-9a-f]\{12\}\)/\1/' -e t -e 's/.*writing image sha256:\([0-9a-f]\{64\}\) .*/\1/' -e t -e d
-)
+echo "docker build ${ARGS[@]} $@" >&2
+docker build --iidfile iidfile "${ARGS[@]}" "$@" >&2
+IMAGE_ID=$(cat iidfile | cut -d':' -f2)
 
-docker save "${DOCKER_ID}"
+docker save "$IMAGE_ID" -o "$IMAGE_ID.tar"
+cat "$IMAGE_ID.tar"
