@@ -526,7 +526,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, canister_id);
+        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
         let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_command).unwrap();
         info!(
             logger,
