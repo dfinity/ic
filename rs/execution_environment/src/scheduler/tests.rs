@@ -3256,3 +3256,80 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
         );
     }
 }
+
+#[test]
+fn dts_allow_only_one_long_install_code_execution_at_any_time() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(160),
+            max_instructions_per_message: NumInstructions::from(40),
+            max_instructions_per_slice: NumInstructions::from(10),
+            max_instructions_per_install_code: NumInstructions::new(40),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister_1 = test.create_canister();
+    let install_code = TestInstallCode::Upgrade {
+        pre_upgrade: instructions(23),
+        start: instructions(0),
+        post_upgrade: instructions(0),
+    };
+    test.inject_install_code_call_to_ic00(canister_1, install_code);
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .messages
+            .get_sample_sum(),
+        1.0
+    );
+
+    // Add a second canister with a long install code message.
+    let canister_2 = test.create_canister();
+    let install_code = TestInstallCode::Upgrade {
+        pre_upgrade: instructions(5),
+        start: instructions(1),
+        post_upgrade: instructions(4),
+    };
+    test.inject_install_code_call_to_ic00(canister_2, install_code);
+
+    // Before second round: install code message in progress.
+    // The second canister will not be executed.
+    assert!(test.canister_state(canister_1).has_paused_install_code());
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // After second round.
+    assert!(test.canister_state(canister_1).has_paused_install_code());
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .messages
+            .get_sample_sum(),
+        1.0
+    );
+
+    // Third round: execution for first canister is done.
+    // The second canister will be executed.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(!test.canister_state(canister_1).has_paused_install_code());
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_subnet_queue
+            .messages
+            .get_sample_sum(),
+        2.0
+    );
+}

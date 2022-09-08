@@ -1,7 +1,7 @@
 //! Messages used in various components.
 use ic_types::{
     messages::{Ingress, Request, Response, StopCanisterContext},
-    Cycles, PrincipalId,
+    CanisterId, Cycles, PrincipalId,
 };
 use std::{convert::TryFrom, sync::Arc};
 
@@ -13,6 +13,17 @@ pub enum CanisterInputMessage {
     Response(Arc<Response>),
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
+}
+
+impl CanisterInputMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            CanisterInputMessage::Ingress(ingress) => ingress.effective_canister_id,
+            CanisterInputMessage::Request(request) => request.extract_effective_canister_id(),
+            CanisterInputMessage::Response(_) => None,
+        }
+    }
 }
 
 impl Display for CanisterInputMessage {
