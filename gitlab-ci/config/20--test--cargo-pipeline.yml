@@ -24,20 +24,6 @@ gen-cargo-pipeline:
       DC="${DCS[$RANDOM % ${#DCS[@]} ]}"
       echo "DC_TAG=$DC" >> dc.env
 
-      # CI env vars HYBRID_FACTOR_{ZH,SF,CH} with numeric value are expected
-      # HYBRID_FACTOR_SF defines percentage of jobs that are extended from .ubuntu-nix-docker-k8s
-      # that we distribute to k8s CI runners in SF DC, 0 means disabled, 100 means all the jobs
-      VAR="HYBRID_FACTOR_${DC^^}"
-      if [[ "${!VAR}" =~ ^[0-9]+$ ]]; then
-        R="$(echo "$RANDOM" % 100 + 1 | bc)"
-        if [ "$R" -le "${!VAR}" ]; then
-          echo "MODE=k8s" >> dc.env
-        else
-          echo "MODE=docker" >> dc.env
-        fi
-      else
-        echo "MODE=docker" >> dc.env
-      fi
   artifacts:
     paths:
       - child-pipeline.yml
@@ -54,7 +40,6 @@ cargo-pipeline:
   variables:
     CI_PARENT_PIPELINE_SOURCE: "${CI_PIPELINE_SOURCE}"
     SELECTED_DC: "$DC_TAG"
-    RUNNER_MODE: "$MODE"
   trigger:
     include:
       - artifact: child-pipeline.yml

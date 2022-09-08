@@ -257,18 +257,10 @@ after_script:
     # This MUST match the directory used in our `docker-build-ic` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
-.ubuntu-nix-k8s:
-  extends: .ubuntu-nix-docker
-  tags:
-    - k8s
-    - dfinity
-    - ubuntu
-
 .ubuntu-nix-docker-k8s:
   extends: .ubuntu-nix-docker
   tags:
     # We dynamically set tags to distribute jobs between docker and k8s runners
-    - $RUNNER_MODE # 'docker' or 'k8s'
     - dfinity
     - ubuntu
 
@@ -288,7 +280,6 @@ after_script:
     # - pin jobs to one DC
     # - distribute jobs between docker and k8s runners
     - $SELECTED_DC # 'zh', 'sf' or 'ch'
-    - $RUNNER_MODE # 'docker' or 'k8s'
     - dfinity
     - ubuntu
 
