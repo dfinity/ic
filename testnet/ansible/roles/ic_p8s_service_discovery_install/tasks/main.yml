@@ -74,11 +74,19 @@
       #
       # Add the openssl package to the Nix store, and get the binary path
       openssl_bin=$(nix-shell -p openssl --run "which openssl")
+
+      TMP=$(mktemp -d)
+      echo -e "#include <iostream>\n int main() {}" > "$TMP"/main.cc
+      nix-shell -p gcc -p stdenv.cc.cc.lib --run "g++ $TMP/main.cc -o $TMP/a.out"
+
       # Extract the directory name for the libssl.so.1.1 library, from the ldd output
       libssl_path=$(dirname "$(ldd "$openssl_bin" | grep "libssl.so.1.1" | awk '{print $3}')")
+      libcpp6_path=$(dirname "$(ldd "$TMP/a.out" | grep "libstdc++.so.6" | awk '{print $3}')")
+      rm -rf "$TMP"
+
       ld_lib_path=$(which ls | xargs -n1 ldd | grep "ld-linux-x86-64.so" | awk '{print $3}')
       # Path the ld and libssl.so.1.1 library paths in the ic-p8s-service-discovery binary
-      nix-shell -p patchelf --run "patchelf --set-rpath $libssl_path --set-interpreter $ld_lib_path ic-p8s-service-discovery"
+      nix-shell -p patchelf --run "patchelf --set-rpath "$libssl_path:$libcpp6_path" --set-interpreter $ld_lib_path ic-p8s-service-discovery"
 
       # if the downloaded binary differs from the current one, overwrite it.
       if ! diff "ic-p8s-service-discovery" "../ic-p8s-service-discovery" >/dev/null; then
