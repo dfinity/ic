@@ -55,6 +55,16 @@ class RcloneUpload:
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=self.timeout)
                 break
             except subprocess.SubprocessError as e:
+                # stop-gap solution to IDX-2477
+                if e.output is not None and "immutable file modified" in e.output:
+                    logging.warning(
+                        "rclone failed (%d) with exception: %s\n%s",
+                        e.returncode,
+                        e.output,
+                        e,
+                    )
+                    logging.warning("Tried to modify a file that already exists. Failing open, see IDX-2477")
+                    break
                 logging.warning(
                     "rclone failed (%d) with exception: %s\n%s",
                     e.returncode,

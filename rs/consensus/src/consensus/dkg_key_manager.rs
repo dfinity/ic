@@ -344,8 +344,11 @@ impl DkgKeyManager {
 
                 let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
                 match &result {
-                    Ok(_) => info!(logger, "Finished loading transcript with id={:?}", dkg_id),
-                    Err(err) => warn!(
+                    Ok(LoadTranscriptResult::SigningKeyAvailable) => {
+                        info!(logger, "Finished loading transcript with id={:?}", dkg_id)
+                    }
+                    Ok(_) => error!(logger, "Failed to load transcripts with id={:?}", dkg_id),
+                    Err(err) => error!(
                         logger,
                         "The DKG transcript with id={:?} couldn't be loaded: {:?}", dkg_id, err
                     ),
@@ -369,7 +372,7 @@ impl DkgKeyManager {
             // key removal.
             handle
                 .join()
-                .unwrap_or_else(|err| panic!("Couldn't finish the DKG key removal: {:?}", err));
+                .expect("Key removal thread paniced unexpectedly");
         }
 
         // Create list of transcripts that we need to retain, which is all DKG
@@ -403,7 +406,7 @@ impl DkgKeyManager {
         let logger = self.logger.clone();
         let handle = std::thread::spawn(move || {
             NiDkgAlgorithm::retain_only_active_keys(&*crypto, transcripts_to_retain)
-                .unwrap_or_else(|err| error!(logger, "Could not delete DKG keys: {:?}", err));
+                .unwrap_or_else(|err| warn!(logger, "Could not delete DKG keys: {:?}", err));
         });
         self.pending_key_removal = Some(handle);
     }
