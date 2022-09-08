@@ -100,18 +100,6 @@
 
 # NIGHTLY TESTS
 
-# boundary_update_workload: 10min 1kb @ 100 update requests per second
-boundary-update-workload-nightly:
-  extends: .prod-nightly-test-group-3
-  allow_failure: true #boundary node test is not needed for release of replica
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 48m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 600 100 1k normal boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 # rejoin_test: 15min runtime, 8 canisters installed
 # Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
 rejoin-nightly:
