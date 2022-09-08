@@ -48,41 +48,5 @@ python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/summary.py \
     --test_results "${CI_PROJECT_DIR}"/test-results.json
 
 /usr/bin/time "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_core_dumps.sh"
-if [[ "$?" == 0 ]] && [[ $RES == 0 ]]; then
-    # Check LTL predicates for replica logs collected during execution of the system tests.
-    echo "Running the LTL analyzer..."
-    REPLICA_LOGS_BASE_DIR=$(find "${CI_PROJECT_DIR}"/replica-logs/* -type d | head -1)
-    cd "${CI_PROJECT_DIR}/hs/analyzer"
-    buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" transducer -- \
-        "$SHELL_WRAPPER" nix-shell --run "
-    set -exuo pipefail
-    cabal run analyze $REPLICA_LOGS_BASE_DIR
-  "
-    RES=$?
-else
-    RES=1
-fi
-
-if [[ $RES -ne 0 ]]; then
-    echo "FAILURE. READ ME:"
-    echo "================="
-    echo ""
-    echo "(0) Currently, logs are analyzed only on CI. So you might encounter"
-    echo "    failures on CI that cannot be reproduced locally (e.g. when"
-    echo "    running setup-and-cargo-test.sh)."
-    echo ""
-    echo "(1) The logs produced by all nodes are stored with the CI Job artifacts."
-    echo "    In case of any failure, please take a look at them before reporting "
-    echo "    a problem."
-    echo ""
-    echo "(2) If any of the pots that are marked as 'experimental' failed (e.g."
-    echo "    exp_basic_health_pot), NOTIFY the testing team and disable the test"
-    echo "    on your PR with a corresponding comment."
-    echo ""
-    echo "    (Unfortunately, as of now, the tests are not run if some of the"
-    echo "    of the dependencies, such as ic-os scripts, change. Thus, failures"
-    echo "    might be reduced silently.)"
-    echo ""
-fi
 
 exit $RES
