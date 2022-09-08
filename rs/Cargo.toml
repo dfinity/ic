@@ -101,7 +101,6 @@ members = [
   "interfaces/p2p",
   "interfaces/transport",
   "interfaces/transport/mocks",
-  "log_analyzer",
   "memory_tracker",
   "messaging",
   "monitoring/adapter_metrics",
