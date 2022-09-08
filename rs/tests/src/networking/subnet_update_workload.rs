@@ -21,27 +21,34 @@ Runbook::
 
 end::catalog[] */
 
-use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer, NnsInstallationExt,
-    SubnetSnapshot,
+use crate::{
+    driver::{
+        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        ic::{InternetComputer, Subnet},
+        pot_dsl::get_ic_handle_and_ctx,
+        test_env::{HasIcPrepDir, TestEnv},
+        test_env_api::{
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, ADMIN,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
+    },
+    util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on},
+    workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload},
 };
-use crate::util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on};
-use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
-use anyhow::bail;
+
+use std::{io::Read, thread::JoinHandle, time::Duration};
+
+use anyhow::{bail, Context, Error};
 use ic_agent::{export::Principal, Agent};
+use ic_interfaces::registry::RegistryValue;
 use ic_prep_lib::subnet_configuration::constants;
-
+use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+use ic_registry_keys::make_routing_table_record_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-
 use slog::{debug, info, Logger};
-
-use std::thread::JoinHandle;
-use std::time::Duration;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 const COUNTER_CANISTER_WAT: &str = "counter.wat";
@@ -58,40 +65,31 @@ const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
+fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
+    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+
+    channel.exec(command)?;
+
+    let mut output = String::new();
+    channel.read_to_string(&mut output)?;
+    channel.wait_close()?;
+
+    Ok((output, channel.exit_status()?))
+}
+
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
 fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_boundary_node: bool) {
+    let logger = env.logger();
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    if use_boundary_node {
-        info!(
-            &env.logger(),
-            "Step 0: Additionally installing a boundary node ..."
-        );
-        let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
-        let nns_urls = handle
-            .public_api_endpoints
-            .iter()
-            .filter(|ep| ep.is_root_subnet)
-            .map(|ep| ep.url.clone())
-            .collect();
-        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-            .with_nns_urls(nns_urls)
-            .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
-            .start(&env)
-            .expect("Failed to setup a universal VM.");
-        info!(
-            &env.logger(),
-            "Step 0: Installation of the boundary nodes succeeded."
-        );
-    }
-    info!(
-        &env.logger(),
-        "Step 1: Installing NNS canisters on the System subnet ..."
-    );
+
+    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
+
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -99,6 +97,79 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
         .unwrap()
         .install_nns_canisters()
         .expect("Could not install NNS canisters.");
+
+    let nns_urls: Vec<_> = handle
+        .public_api_endpoints
+        .iter()
+        .filter(|ep| ep.is_root_subnet)
+        .map(|ep| ep.url.clone())
+        .collect();
+
+    if use_boundary_node {
+        info!(&logger, "Installing a boundary node ...");
+
+        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+            .with_nns_urls(nns_urls.clone())
+            .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
+            .start(&env)
+            .expect("Failed to setup a universal VM.");
+        info!(&logger, "Installation of the boundary nodes succeeded.");
+    }
+
+    // Await Replicas
+    info!(&logger, "Checking readiness of all replica nodes...");
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.await_status_is_healthy()
+                .expect("Replica did not come up healthy.");
+        }
+    }
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    info!(&logger, "Polling registry");
+    let registry = RegistryCanister::new(nns_urls);
+    let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+            .context("Failed to `get_value` from registry")?;
+        let routes = PbRoutingTable::decode(bytes.as_slice())
+            .context("Failed to decode registry routes")?;
+        let routes = RoutingTable::try_from(routes)
+            .context("Failed to convert registry routes")?;
+        Ok((latest, routes))
+    }))
+    .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
+    info!(&logger, "Latest registry {latest}: {routes:?}");
+
+    if use_boundary_node {
+        // Await Boundary Node
+        let boundary_node_vm = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+
+        info!(
+            &logger,
+            "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
+            boundary_node_vm.block_on_ipv4().unwrap(),
+            boundary_node_vm.ipv6()
+        );
+
+        info!(&logger, "Waiting for routes file");
+        let sleep_command = "until [ -f /var/cache/ic_routes/* ]; do sleep 5; done";
+        let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, sleep_command).unwrap();
+        info!(
+            logger,
+            "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
+            cmd_output.trim(),
+        );
+
+        info!(&logger, "Checking BN health");
+        boundary_node_vm
+            .await_status_is_healthy()
+            .expect("Boundary node did not come up healthy.");
+    }
 }
 
 // Create IC with two subnets, a system subnet of the same size as the mainnet NNS

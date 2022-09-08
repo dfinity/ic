@@ -27,6 +27,7 @@ rust_library(
     name = "cycles_account_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_cycles_account_manager",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

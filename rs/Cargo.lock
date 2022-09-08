@@ -1871,7 +1871,7 @@ dependencies = [
  "crossbeam-deque 0.8.1",
  "crossbeam-epoch 0.9.1",
  "crossbeam-queue 0.3.1",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
 ]
 
 [[package]]
@@ -1891,7 +1891,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2dd04ddaf88237dc3b8d8f9a3c1004b506b54b3313403944054d23c0870c521"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
 ]
 
 [[package]]
@@ -1913,7 +1913,7 @@ checksum = "6455c0ca19f0d2fbf751b908d5c55c1f5cbc65e03c4225427254b46890bdde1e"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-epoch 0.9.1",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
 ]
 
 [[package]]
@@ -1939,7 +1939,7 @@ checksum = "a1aaa739f95311c2c7887a76863f500026092fb1dce0161dab577e559ef3569d"
 dependencies = [
  "cfg-if 1.0.0",
  "const_fn",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
  "lazy_static",
  "memoffset 0.6.4",
  "scopeguard",
@@ -1962,7 +1962,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f6cb3c7f5b8e51bc3ebb73a2327ad4abdbd119dc13223f14f961d2f38486756"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
 ]
 
 [[package]]
@@ -1978,13 +1978,12 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.3"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7e9d99fa91428effe99c5c6d4634cdeba32b8cf784fc428a2a687f61a952c49"
+checksum = "51887d4adc7b564537b15adcfb307936f8075dfcd5f00dde9a9f1d29383682bc"
 dependencies = [
- "autocfg 1.1.0",
  "cfg-if 1.0.0",
- "lazy_static",
+ "once_cell",
 ]
 
 [[package]]
@@ -2256,6 +2255,7 @@ dependencies = [
  "clap 3.2.14",
  "flate2",
  "futures",
+ "httptest",
  "humantime 2.1.0",
  "mockall 0.11.2",
  "nix 0.24.2",
@@ -3594,6 +3594,28 @@ name = "httpdate"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
+
+[[package]]
+name = "httptest"
+version = "0.15.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f25cfb6def593d43fae1ead24861f217e93bc70768a45cc149a69b5f049df4"
+dependencies = [
+ "bstr",
+ "bytes",
+ "crossbeam-channel 0.5.6",
+ "form_urlencoded",
+ "futures",
+ "http",
+ "hyper",
+ "log",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tokio",
+]
 
 [[package]]
 name = "humansize"
@@ -11537,7 +11559,7 @@ checksum = "258bcdb5ac6dad48491bb2992db6b7cf74878b0384908af124823d118c99683f"
 dependencies = [
  "crossbeam-channel 0.5.6",
  "crossbeam-deque 0.8.1",
- "crossbeam-utils 0.8.3",
+ "crossbeam-utils 0.8.11",
  "num_cpus",
 ]
 
@@ -11701,6 +11723,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
  "ipnet",
+ "itertools 0.10.3",
  "lazy_static",
  "leb128",
  "maplit",
@@ -12842,6 +12865,10 @@ dependencies = [
 [[package]]
 name = "stable-structures"
 version = "0.1.0"
+dependencies = [
+ "maplit",
+ "proptest 0.9.6",
+]
 
 [[package]]
 name = "stable_deref_trait"
@@ -13264,6 +13291,7 @@ dependencies = [
  "chrono",
  "clap 3.2.14",
  "crossbeam-channel 0.5.6",
+ "crossbeam-utils 0.8.11",
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
@@ -13355,6 +13383,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rand_core 0.6.3",
+ "rayon",
  "regex",
  "registry-canister",
  "reqwest",

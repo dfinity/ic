@@ -350,6 +350,7 @@ impl CanisterManager {
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
+            | Ok(Ic00Method::BitcoinGetSuccessors)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 if provisional_whitelist.contains(sender.get_ref()) {
                     Ok(())

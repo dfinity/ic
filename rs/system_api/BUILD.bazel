@@ -6,6 +6,7 @@ rust_library(
     name = "system_api",
     srcs = glob(["src/**"]),
     crate_name = "ic_system_api",
+    version = "0.8.0",
     deps = [
         "//rs/config",
         "//rs/constants",

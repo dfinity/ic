@@ -6,8 +6,10 @@ use ic_icrc1::{
 };
 use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock};
 use serde::{Deserialize, Serialize};
+use stable_structures::memory_manager::{ManagedMemory, MemoryId};
 use stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, DefaultMemoryImpl, RestrictedMemory, Storable,
+    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
+    DefaultMemoryImpl, RestrictedMemory, Storable, WASM_PAGE_SIZE,
 };
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -17,20 +19,17 @@ const GIB: usize = 1024 * 1024 * 1024;
 /// How much memory do we want to allocate for raw blocks.
 const DEFAULT_MEMORY_LIMIT: usize = 3 * GIB;
 
-/// The minimum block size in bytes, computed empirically.
-const MIN_BLOCK_SIZE: usize = 90;
-
 /// The maximum number of blocks to return in a single get_transactions request.
 const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
-/// The expected number of blocks that fits into stable memory.
-const MAX_BLOCKS: usize = DEFAULT_MEMORY_LIMIT / MIN_BLOCK_SIZE;
-
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
-const NUM_WASM_PAGES: u64 = 4 * (GIB as u64) / 65536;
+const NUM_WASM_PAGES: u64 = 4 * (GIB as u64) / WASM_PAGE_SIZE;
+
+const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
+const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
 
 type Memory = RestrictedMemory<DefaultMemoryImpl>;
-type BlockLog = StableLog<Memory>;
+type BlockLog = StableLog<ManagedMemory<Memory>, ManagedMemory<Memory>>;
 type ConfigCell = StableCell<ArchiveConfig, Memory>;
 
 /// Creates a memory region for the configuration stable cell.
@@ -50,11 +49,13 @@ thread_local! {
         ArchiveConfig::default(),
     ).expect("failed to initialize stable cell"));
 
+    /// Static memory manager to manage the memory available for blocks.
+    static MEMORY_MANAGER: RefCell<MemoryManager<Memory>> = RefCell::new(MemoryManager::init(blocks_memory()));
+
     /// Append-only list of encoded blocks stored in stable memory.
-    static BLOCKS: RefCell<BlockLog> = RefCell::new(BlockLog::init(
-        blocks_memory(),
-        MAX_BLOCKS as u32,
-    ).expect("failed to initialize stable log"));
+    static BLOCKS: RefCell<BlockLog> = with_memory_manager(|memory_manager| {
+        RefCell::new(BlockLog::init(memory_manager.get(BLOCK_LOG_INDEX_MEMORY_ID), memory_manager.get(BLOCK_LOG_DATA_MEMORY_ID)).expect("failed to initialize stable log"))
+    });
 }
 
 /// Configuration of the archive node.
@@ -98,8 +99,13 @@ fn with_archive_opts<R>(f: impl FnOnce(&ArchiveConfig) -> R) -> R {
     CONFIG.with(|cell| f(cell.borrow().get()))
 }
 
+/// A helper function to access the memory manager.
+fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<Memory>) -> R) -> R {
+    MEMORY_MANAGER.with(|cell| f(&*cell.borrow()))
+}
+
 /// A helper function to access the block list.
-fn with_blocks<R>(f: impl FnOnce(&StableLog<Memory>) -> R) -> R {
+fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
     BLOCKS.with(|cell| f(&*cell.borrow()))
 }
 
@@ -112,7 +118,7 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
 #[init]
 #[candid_method(init)]
 fn init(ledger_id: Principal, block_index_offset: u64, max_memory_size_bytes: Option<usize>) {
-    let max_memory_size_bytes = CONFIG.with(|cell| {
+    CONFIG.with(|cell| {
         let max_memory_size_bytes = max_memory_size_bytes
             .unwrap_or(DEFAULT_MEMORY_LIMIT)
             .min(DEFAULT_MEMORY_LIMIT);
@@ -123,15 +129,18 @@ fn init(ledger_id: Principal, block_index_offset: u64, max_memory_size_bytes: Op
                 ledger_id,
             })
             .expect("failed to set archive config");
-        max_memory_size_bytes
     });
 
-    BLOCKS.with(|cell| {
-        *cell.borrow_mut() = BlockLog::new(
-            blocks_memory(),
-            (max_memory_size_bytes / MIN_BLOCK_SIZE).min(u32::MAX as usize) as u32,
-        )
-    });
+    MEMORY_MANAGER.with(|cell| *cell.borrow_mut() = MemoryManager::init(blocks_memory()));
+
+    with_memory_manager(|memory_manager| {
+        BLOCKS.with(|cell| {
+            *cell.borrow_mut() = BlockLog::new(
+                memory_manager.get(BLOCK_LOG_INDEX_MEMORY_ID),
+                memory_manager.get(BLOCK_LOG_DATA_MEMORY_ID),
+            )
+        });
+    })
 }
 
 #[post_upgrade]
@@ -142,7 +151,7 @@ fn post_upgrade() {
     // stable variables happens in that hook.  This way the system will roll-back
     // the upgrade if the initialization traps.
     let max_memory_size_bytes = with_archive_opts(|opts| opts.max_memory_size_bytes);
-    with_blocks(|blocks| assert!(blocks.size_bytes() <= max_memory_size_bytes));
+    with_blocks(|blocks| assert!(blocks.log_size_bytes() <= max_memory_size_bytes));
 }
 
 #[update]
@@ -160,7 +169,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 
     with_blocks(|blocks| {
         let bytes: usize = new_blocks.iter().map(|b| b.size_bytes()).sum();
-        if max_memory_size_bytes < blocks.size_bytes().saturating_add(bytes) {
+        if max_memory_size_bytes < blocks.log_size_bytes().saturating_add(bytes) {
             ic_cdk::api::trap("no space left");
         }
         for block in new_blocks {
@@ -174,7 +183,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 #[query]
 #[candid_method(query)]
 fn remaining_capacity() -> usize {
-    let total_block_size = with_blocks(|blocks| blocks.size_bytes());
+    let total_block_size = with_blocks(|blocks| blocks.log_size_bytes());
     with_archive_opts(|opts| {
         opts.max_memory_size_bytes
             .checked_sub(total_block_size)

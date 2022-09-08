@@ -280,7 +280,7 @@ impl Registry {
             .collect()
     }
 
-    /// Checks that invariants hold after applying mutations
+    /// Checks that invariants would hold after applying mutations, and applies the mutations if they do
     pub fn maybe_apply_mutation_internal(&mut self, mutations: Vec<RegistryMutation>) {
         println!(
             "{}Received a mutate call containing a list of {} mutations",
@@ -288,10 +288,16 @@ impl Registry {
             mutations.len()
         );
 
+        self.verify_mutations_internal(&mutations);
+        self.apply_mutations(mutations);
+    }
+
+    /// Checks that invariants would hold after applying the mutations
+    pub(crate) fn verify_mutations_internal(&self, mutations: &Vec<RegistryMutation>) {
         let errors = self.verify_mutation_type(mutations.as_slice());
         if !errors.is_empty() {
             panic!(
-                "{}Transaction rejected because of the following errors: [{}].",
+                "{}Verification of the mutation type failed with the following errors: [{}].",
                 LOG_PREFIX,
                 errors
                     .iter()
@@ -302,7 +308,6 @@ impl Registry {
         }
 
         self.check_global_state_invariants(mutations.as_slice());
-        self.apply_mutations(mutations);
     }
 
     /// Serializes the registry contents using the specified version of stable

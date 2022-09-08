@@ -46,6 +46,11 @@ type BlessReplicaVersionPayload = record {
   binary_url : text;
 };
 type CanisterIdRange = record { end : principal; start : principal };
+type ChangeSubnetMembershipPayload = record {
+  node_ids_add : vec principal;
+  subnet_id : principal;
+  node_ids_remove : vec principal;
+};
 type CompleteCanisterMigrationPayload = record {
   canister_id_ranges : vec CanisterIdRange;
   migration_trace : vec principal;
@@ -252,6 +257,7 @@ service : {
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
   add_or_remove_data_centers : (AddOrRemoveDataCentersProposalPayload) -> ();
   bless_replica_version : (BlessReplicaVersionPayload) -> ();
+  change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> (
       Result_1,

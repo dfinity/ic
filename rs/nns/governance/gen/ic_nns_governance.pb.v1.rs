@@ -1496,25 +1496,25 @@ pub struct ProposalInfo {
     /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
     #[prost(uint64, tag = "5")]
     pub proposal_timestamp_seconds: u64,
-    /// See \[PropopsalData::ballots\].
+    /// See \[ProposalData::ballots\].
     #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// See \[PropopsalData::latest_tally\].
+    /// See \[ProposalData::latest_tally\].
     #[prost(message, optional, tag = "7")]
     pub latest_tally: ::core::option::Option<Tally>,
-    /// See \[PropopsalData::decided_timestamp_seconds\].
+    /// See \[ProposalData::decided_timestamp_seconds\].
     #[prost(uint64, tag = "8")]
     pub decided_timestamp_seconds: u64,
-    /// See \[PropopsalData::executed_timestamp_seconds\].
+    /// See \[ProposalData::executed_timestamp_seconds\].
     #[prost(uint64, tag = "12")]
     pub executed_timestamp_seconds: u64,
-    /// See \[PropopsalData::failed_timestamp_seconds\].
+    /// See \[ProposalData::failed_timestamp_seconds\].
     #[prost(uint64, tag = "13")]
     pub failed_timestamp_seconds: u64,
     /// See \[ProposalData::failure_reason\].
     #[prost(message, optional, tag = "18")]
     pub failure_reason: ::core::option::Option<GovernanceError>,
-    /// See \[PropopsalData::reward_event_round\].
+    /// See \[ProposalData::reward_event_round\].
     #[prost(uint64, tag = "14")]
     pub reward_event_round: u64,
     /// Derived - see \[Topic\] for more information
@@ -2287,6 +2287,13 @@ pub enum NnsFunction {
     CompleteCanisterMigration = 29,
     //// Add a new SNS canister WASM
     AddSnsWasm = 30,
+    //// Change the subnet node membership. In a way, this function combines the separate
+    //// functions for adding and removing nodes from the subnet record, but adds the property
+    //// of atomic node replacement (node swap) on top.
+    ////
+    //// The nodes that are being added to the subnet must be currently unassigned.
+    //// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+    ChangeSubnetMembership = 31,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

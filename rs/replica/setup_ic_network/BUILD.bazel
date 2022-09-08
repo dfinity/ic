@@ -6,6 +6,7 @@ rust_library(
     name = "setup_ic_network",
     srcs = glob(["src/**"]),
     crate_name = "ic_replica_setup_ic_network",
+    version = "0.8.0",
     deps = [
         "//rs/artifact_manager",
         "//rs/artifact_pool",

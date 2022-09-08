@@ -11,6 +11,7 @@ chacha20poly1305 = "0.10.0"
 clap = { version = "3.2.6", features = ["derive"] }
 flate2 = "1.0.24"
 futures = "0.3.21"
+httptest = "0.15.4"
 humantime = "2.1.0"
 mockall = "0.11.1"
 nix = { version = "0.24.2", features = ["signal"] }

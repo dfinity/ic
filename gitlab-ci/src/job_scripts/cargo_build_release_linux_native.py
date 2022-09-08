@@ -32,10 +32,6 @@ def run(build_command: Optional[str] = None, artifact_ext: str = "", sccache_sta
             sh("bash", "-c", build_command, cwd=f"{ENV.top}/rs")
         else:
             sh(
-                "capsule",
-                "--passive",
-                "-v",
-                "--",
                 f"{ENV.top}/gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh",
                 cwd=f"{ENV.top}/rs",
             )

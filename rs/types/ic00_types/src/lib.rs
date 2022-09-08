@@ -47,6 +47,7 @@ pub enum Method {
     BitcoinGetUtxos,
     BitcoinSendTransaction,
     BitcoinGetCurrentFeePercentiles,
+    BitcoinGetSuccessors, // A private API for the Bitcoin canister to fetch blocks.
 
     // These methods are added for the Mercury I release.
     // They should be removed afterwards.

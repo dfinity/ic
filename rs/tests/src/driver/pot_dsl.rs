@@ -1,17 +1,22 @@
-use std::fmt::Display;
-use std::panic::{catch_unwind, UnwindSafe};
+use std::{
+    fmt::Display,
+    panic::{catch_unwind, UnwindSafe},
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
-use super::farm::HostFeature;
-use super::ic::{VmAllocationStrategy, VmResources};
-use super::test_env_api::IcHandleConstructor;
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use ic_fondue::ic_manager::IcHandle;
-use ic_fondue::pot::{Context, FondueTestFn};
-use ic_fondue::slack::{Alertable, SlackChannel};
+use crate::driver::{
+    farm::HostFeature,
+    ic::{InternetComputer, VmAllocationStrategy, VmResources},
+    test_env::TestEnv,
+    test_env_api::IcHandleConstructor,
+};
+use ic_fondue::{
+    ic_manager::IcHandle,
+    pot::{Context, FondueTestFn},
+    slack::{Alertable, SlackChannel},
+};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
 impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}
@@ -49,12 +54,25 @@ pub fn pot(name: &str, mut ic: InternetComputer, testset: TestSet) -> Pot {
     )
 }
 
+#[macro_export]
+macro_rules! seq {
+    ($($test:expr),+ $(,)?) => {
+        TestSet::Sequence(vec![$(TestSet::from($test)),*])
+    };
+}
+#[macro_export]
+macro_rules! par {
+    ($($test:expr),+ $(,)?) => {
+        TestSet::Parallel(vec![$(TestSet::from($test)),*])
+    };
+}
+
 pub fn seq(tests: Vec<Test>) -> TestSet {
-    TestSet::Sequence(tests)
+    TestSet::Sequence(tests.into_iter().map(TestSet::Single).collect())
 }
 
 pub fn par(tests: Vec<Test>) -> TestSet {
-    TestSet::Parallel(tests)
+    TestSet::Parallel(tests.into_iter().map(TestSet::Single).collect())
 }
 
 pub fn t<F>(name: &str, test: F) -> Test
@@ -182,8 +200,85 @@ impl Pot {
 }
 
 pub enum TestSet {
-    Sequence(Vec<Test>),
-    Parallel(Vec<Test>),
+    Sequence(Vec<TestSet>),
+    Parallel(Vec<TestSet>),
+    Single(Test),
+}
+
+impl From<Test> for TestSet {
+    fn from(t: Test) -> Self {
+        TestSet::Single(t)
+    }
+}
+
+impl TestSet {
+    pub fn iter(&self) -> impl Iterator<Item = &Test> {
+        enum Iter<'a> {
+            Single(Option<&'a Test>),
+            Vec(Vec<std::slice::Iter<'a, TestSet>>),
+        }
+        impl<'a> Iterator for Iter<'a> {
+            type Item = &'a Test;
+            fn next(&mut self) -> Option<Self::Item> {
+                let vec = match self {
+                    Iter::Single(test) => return test.take(),
+                    Iter::Vec(vec) => vec,
+                };
+                loop {
+                    use TestSet::*;
+                    let mut ti = vec.pop()?;
+                    let next = match ti.next() {
+                        None => continue,
+                        Some(next) => next,
+                    };
+                    vec.push(ti);
+                    match next {
+                        Single(test) => return Some(test),
+                        Parallel(tests) | Sequence(tests) => vec.push(tests.iter()),
+                    }
+                }
+            }
+        }
+
+        match self {
+            Self::Single(test) => Iter::Single(Some(test)),
+            Self::Parallel(tests) | Self::Sequence(tests) => Iter::Vec(vec![tests.iter()]),
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Test> {
+        enum IterMut<'a> {
+            Single(Option<&'a mut Test>),
+            Vec(Vec<std::slice::IterMut<'a, TestSet>>),
+        }
+        impl<'a> Iterator for IterMut<'a> {
+            type Item = &'a mut Test;
+            fn next(&mut self) -> Option<Self::Item> {
+                let vec = match self {
+                    IterMut::Single(test) => return test.take(),
+                    IterMut::Vec(vec) => vec,
+                };
+                loop {
+                    use TestSet::*;
+                    let mut ti = vec.pop()?;
+                    let next = match ti.next() {
+                        None => continue,
+                        Some(next) => next,
+                    };
+                    vec.push(ti);
+                    match next {
+                        Single(test) => return Some(test),
+                        Parallel(tests) | Sequence(tests) => vec.push(tests.iter_mut()),
+                    }
+                }
+            }
+        }
+
+        match self {
+            Self::Single(test) => IterMut::Single(Some(test)),
+            Self::Parallel(tests) | Self::Sequence(tests) => IterMut::Vec(vec![tests.iter_mut()]),
+        }
+    }
 }
 
 pub struct Test {

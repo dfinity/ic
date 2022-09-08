@@ -9,6 +9,7 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
     },
     crate_name = "ic_canister_client_sender",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
         "//rs/crypto/sha",

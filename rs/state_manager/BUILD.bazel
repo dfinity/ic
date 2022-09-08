@@ -11,6 +11,7 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_state_manager",
+    version = "0.8.0",
     deps = [
         "//rs/canonical_state",
         "//rs/config",

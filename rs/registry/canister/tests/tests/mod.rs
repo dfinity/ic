@@ -2,6 +2,7 @@ mod add_node;
 mod add_node_operator;
 mod add_nodes_to_subnet;
 mod add_or_remove_data_centers;
+mod change_subnet_membership;
 mod clear_provisional_whitelist;
 mod create_subnet;
 mod delete_subnet;

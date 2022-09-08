@@ -15,6 +15,7 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_protobuf",
+    version = "0.8.0",
     deps = [
         "@crate_index//:bincode",
         "@crate_index//:candid",

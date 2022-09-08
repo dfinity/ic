@@ -1,6 +1,6 @@
 build-determinism-binaries:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
@@ -18,7 +18,7 @@ build-determinism-binaries:
 
 build-determinism-canisters:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
@@ -36,7 +36,7 @@ build-determinism-canisters:
 
 build-determinism-guest-update-img:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
@@ -57,7 +57,7 @@ build-determinism-guest-update-img:
 
 build-determinism-host-update-img:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:

@@ -882,6 +882,8 @@ impl ExecutionEnvironment {
                 Some(res)
             }
 
+            // NOTE: The BitcoinGetSuccessors method is currently a scaffold and not implemented yet.
+            Ok(Ic00Method::BitcoinGetSuccessors) |
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,

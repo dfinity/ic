@@ -13,11 +13,11 @@
 # 4. $ pip install -r requirements.txt
 # 5. $ python infra_smoke_test.py
 # Runbook:
-#     - Step: Health check request to farm.dfinity.systems: HEAD farm.dfinity.systems/dc (get data centers)
+#     - Step: health check request to farm.dfinity.systems: HEAD farm.dfinity.systems/dc (get data centers)
+#     - Step: creating group in Farm (Farm API call)
 #     - Step: generating ssh_keys
 #     - Step: generating VM config image file
 #     - Step: getting active data centers from Farm (Farm API call)
-#     - Step: creating group_name in Farm (Farm API call)
 #     - Step: uploading image file to Farm (Farm API call)
 #     - Step: creating VMs in Farm (Farm API call)
 #     - Step: verifying that VMs are distributed across DCs
@@ -41,6 +41,8 @@ import sys
 import tempfile
 import time
 import traceback
+from abc import ABC
+from abc import abstractmethod
 from contextlib import contextmanager
 from copy import deepcopy
 from io import TextIOWrapper
@@ -64,9 +66,12 @@ FARM_GROUP_PREFIX = "smoke_test"
 FARM_HOSTNAME = "farm.dfinity.systems"
 FARM_BASE_URL = f"https://{FARM_HOSTNAME}"
 FARM_GROUP_TTL_SEC = 500  # TTL for the Farm group
-HTTP_WITH_RETRIES_TIMEOUT_SEC = 60  # default timeout for http_with_retries()
-HTTP_RETRY_DELAY_SEC = 10  # default retry interval for http_with_retries()
-VM_BOOT_READINESS_TIMEOUT_SEC = 150  # max polling time for checking that VM is ready after boot
+FARM_TCP_CONNECTION_TIMEOUT_SEC = 5  # max time a client waits to establish a connection to a remote machine
+FARM_MAX_HTTP_ATTEMPTS = 7
+HTTP_RETRY_DELAY_SEC = 15  # default retry interval for http_with_retries()
+FARM_HTTP_RESPONSE_TIMEOUT = 200  # default timeout for all Farm http requests
+FARM_REQUEST_TIMEOUT = (FARM_TCP_CONNECTION_TIMEOUT_SEC, FARM_HTTP_RESPONSE_TIMEOUT)
+FARM_VM_BOOT_READINESS_TIMEOUT_SEC = 150  # max polling time for checking that VM is ready after boot
 FILE_DOWNLOAD_TIMEOUT_SEC = 15  # used for downloading (CURLing) files between VMs
 STDERR_NBYTES = 1024 * 1024
 # Defines CI or local run.
@@ -164,17 +169,17 @@ class NetworkingException(Exception):
 
 
 class HttpWithRetriesException(Exception):
-    def __init__(self, url: str, retries: int, status_code: int, last_error_message: str):
+    def __init__(self, url: str, attempts: int, status_code: int, last_error_message: str):
         # To rectify the issue with exceptions in case of multiprocessing (https://bugs.python.org/issue1692335).
-        super(Exception, self).__init__(url, retries, status_code, last_error_message)
+        super(Exception, self).__init__(url, attempts, status_code, last_error_message)
         self.url = url
-        self.retries = retries
+        self.attempts = attempts
         self.status_code = status_code
         self.last_error_message = last_error_message
 
     def __str__(self):
         """Informal string representation of an object"""
-        return f"Request to {self.url} failed {self.retries} times. Last failure code={self.status_code}, message={self.last_error_message}."
+        return f"Request to {self.url} failed {self.attempts} times. Last failure code={self.status_code}, message={self.last_error_message}."
 
 
 def send_slack_alert(webhook_url: str, channel: str, message: str) -> requests.Response:
@@ -182,6 +187,7 @@ def send_slack_alert(webhook_url: str, channel: str, message: str) -> requests.R
         url=webhook_url,
         json={"text": message, "channel": channel},
         headers={"content-type": "application/json"},
+        timeout=FARM_REQUEST_TIMEOUT,
     )
     if response.status_code == 200:
         logger.debug(f"Successfully sent slack message to channel={channel}.")
@@ -208,18 +214,30 @@ def save_slack_error_to_file(filename: str, exception: Exception, slack_channels
 
 
 @contextmanager
-def farm_group():
+def farm_group(step_idx: int):
     group_name = generate_default_group()
-    http_with_retries(func=farm_create_group, expected_code=200, group_name=group_name)
+    with step_span(f"Creating group={group_name} in Farm", step_idx) as step_idx:
+        _ = http_with_retries(
+            func=farm_create_group,
+            expected_code=200,
+            retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+            group_name=group_name,
+        )
     try:
-        yield group_name
+        yield (group_name, step_idx)
     finally:
         logger.debug(f"Deleting group_name={group_name} from Farm.")
         try:
-            response = farm_delete_group(group_name)
+            response = http_with_retries(
+                func=farm_delete_group,
+                expected_code=200,
+                retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+                group_name=group_name,
+            )
             logger.debug(f"Group {group_name} deletion status {response.status_code}.")
         except Exception as e:
-            logger.error(f"Failed to delete group {group_name}, err={e}")
+            logger.error(f"Failed to delete group {group_name}, error={e}")
+            raise e
 
 
 @contextmanager
@@ -239,34 +257,79 @@ def artifacts_directory(keep_artifacts_dir: bool, output_dir: Optional[str]):
             logger.debug(f"Test artifacts are saved in {dir}.")
 
 
+class IRetryStrategy(ABC):
+    @abstractmethod
+    def retry(self) -> bool:
+        pass
+
+    @property
+    @abstractmethod
+    def attempts_made(self) -> int:
+        pass
+
+
+class MaxAttemptsRetryStrategy(IRetryStrategy):
+    def __init__(self, max_attempts: int) -> None:
+        self.max_attempts = max_attempts
+        self._attempts_made = 0
+
+    def retry(self) -> bool:
+        if self._attempts_made < self.max_attempts:
+            self._attempts_made += 1
+            return True
+        return False
+
+    @property
+    def attempts_made(self) -> int:
+        return self._attempts_made
+
+
+class TimeoutRetryStrategy(IRetryStrategy):
+    def __init__(self, timeout) -> None:
+        self.timeout = timeout
+        self.start = datetime.datetime.now()
+        self._attempts_made = 0
+
+    def retry(self) -> bool:
+        if (datetime.datetime.now() - self.start).total_seconds() < self.timeout:
+            self._attempts_made += 1
+            return True
+        return False
+
+    @property
+    def attempts_made(self) -> int:
+        return self._attempts_made
+
+
 def http_with_retries(
-    func: Callable[..., requests.Response], expected_code: int, timeout=HTTP_WITH_RETRIES_TIMEOUT_SEC, **kwargs
+    func: Callable[..., requests.Response], expected_code: int, retry_strategy: IRetryStrategy, **kwargs
 ) -> requests.Response:
-    start = datetime.datetime.now()
-    retries = 0
     response = None
     last_exception = None
-    while (datetime.datetime.now() - start).total_seconds() <= timeout:
+    while retry_strategy.retry():
         try:
             response = func(**kwargs)
             if response.status_code == expected_code:
                 return response
             else:
                 logger.debug(
-                    f"Request to {response.url} failed with {response.status_code}: {response.text}. Retrying in {HTTP_RETRY_DELAY_SEC} sec ..."
+                    f"Request to {response.url} failed with code={response.status_code}, message='{response.text}'. Attempt {retry_strategy.attempts_made}. Retrying in {HTTP_RETRY_DELAY_SEC} sec ..."
                 )
         except Exception as exception:
             # If e.g. connection can't be established, we keep retrying...
-            logger.debug(f"Request failed with err={str(exception)}. Retrying in {HTTP_RETRY_DELAY_SEC} sec ...")
+            logger.debug(
+                f"Request failed with error={str(exception)}. Attempt {retry_strategy.attempts_made}. Retrying in {HTTP_RETRY_DELAY_SEC} sec ..."
+            )
             last_exception = exception
         time.sleep(HTTP_RETRY_DELAY_SEC)
-        retries += 1
     if response is None:
-        raise Exception(f"Request failed after {retries} attempts, last err={str(last_exception)}")
+        raise Exception(
+            f"Request failed after {retry_strategy.attempts_made} attempts, last error={str(last_exception)}"
+        )
     elif response.status_code != expected_code:
         raise HttpWithRetriesException(
             url=response.url,
-            retries=retries - 1,
+            attempts=retry_strategy.attempts_made,
             status_code=response.status_code,
             last_error_message=response.text,
         )
@@ -280,7 +343,7 @@ def is_vm_reachable(vm: VM) -> bool:
         _ = http_with_retries(
             func=head_request_to_url,
             expected_code=200,
-            timeout=VM_BOOT_READINESS_TIMEOUT_SEC,
+            retry_strategy=TimeoutRetryStrategy(FARM_VM_BOOT_READINESS_TIMEOUT_SEC),
             url=url,
         )
     except Exception:
@@ -293,7 +356,13 @@ def is_vm_reachable(vm: VM) -> bool:
 def create_vm(group_name: str, vm_name: str) -> VM:
     pid = os.getpid()
     logger.debug(f"Process with pid={pid} is creating VM with name={vm_name}.")
-    response = http_with_retries(func=farm_create_vm, expected_code=200, group_name=group_name, vm_name=vm_name)
+    response = http_with_retries(
+        func=farm_create_vm,
+        expected_code=200,
+        retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+        group_name=group_name,
+        vm_name=vm_name,
+    )
     resp_body = response.json()
     vm = VM(vm_name, resp_body["hostname"], resp_body["ipv6"])
     logger.debug(f"{vm} created by pid={pid} successfully.")
@@ -331,38 +400,38 @@ def generate_default_group() -> str:
 
 
 def head_request_to_url(url: str) -> requests.Response:
-    return requests.head(url)
+    return requests.head(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_get_data_centers() -> requests.Response:
     url = f"{FARM_BASE_URL}/dc"
-    return requests.get(url)
+    return requests.get(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_get_groups() -> requests.Response:
     url = f"{FARM_BASE_URL}/group"
-    return requests.get(url)
+    return requests.get(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_get_vms(group_name: str) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}/vm"
-    return requests.get(url)
+    return requests.get(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_get_vm(group_name: str, vm_name: str) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}/vm/{vm_name}"
-    return requests.get(url)
+    return requests.get(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_create_group(group_name: str) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}"
     body = {"spec": {"vmAllocation": "distributeAcrossDcs"}, "ttl": FARM_GROUP_TTL_SEC}
-    return requests.post(url, json=body)
+    return requests.post(url, json=body, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_delete_group(group_name: str):
     url = f"{FARM_BASE_URL}/group/{group_name}"
-    return requests.delete(url)
+    return requests.delete(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_create_vm(group_name: str, vm_name: str) -> requests.Response:
@@ -378,23 +447,23 @@ def farm_create_vm(group_name: str, vm_name: str) -> requests.Response:
         },
         "hasIPv4": True,  # can be dropped when switch to fetching the nginx container from our docker registry
     }
-    return requests.post(url, json=body)
+    return requests.post(url, json=body, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_upload_file(group_name: str, files: TextIOWrapper) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}/file"
-    return requests.post(url, files=files)
+    return requests.post(url, files=files, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_mount_usb_drives(group_name: str, vm_name: str, images: List[Dict]) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}/vm/{vm_name}/drive-templates/usb-storage"
     body = {"drives": images}
-    return requests.put(url, json=body)
+    return requests.put(url, json=body, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def farm_start_vm(group_name: str, vm_name: str) -> requests.Response:
     url = f"{FARM_BASE_URL}/group/{group_name}/vm/{vm_name}/start"
-    return requests.put(url)
+    return requests.put(url, timeout=FARM_REQUEST_TIMEOUT)
 
 
 def print_console_link(group_name: str, vm_name: str):
@@ -460,12 +529,19 @@ def boot_vm(group_name: str, vm: VM, image_id: str):
     response = http_with_retries(
         func=farm_mount_usb_drives,
         expected_code=200,
+        retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
         group_name=group_name,
         vm_name=vm.name,
         images=[{"_tag": "imageViaId", "id": image_id}],
     )
     logger.debug(f"Mount image of {vm} finished with status_code={response.status_code}, by pid={pid}.")
-    response = http_with_retries(func=farm_start_vm, expected_code=200, group_name=group_name, vm_name=vm.name)
+    response = http_with_retries(
+        func=farm_start_vm,
+        expected_code=200,
+        retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+        group_name=group_name,
+        vm_name=vm.name,
+    )
     logger.debug(f"Start of {vm} finished with status_code={response.status_code}, by  pid={pid}.")
     print_console_link(group_name, vm.name)
 
@@ -500,7 +576,8 @@ def generate_connectivity_matrices(VMs: List[VM], key_filename: str) -> List[Lis
     with Pool(processes=MAX_PARALLELIZATION_DEGREE) as p:
         args = [(vm, key_filename, VMs) for vm in VMs]
         connectivity_results = p.starmap(func=generate_connectivity_from_vm_to_vms, iterable=args)
-        [file_download_matrix.append(r) for r in connectivity_results]
+        for r in connectivity_results:
+            file_download_matrix.append(r)
     return file_download_matrix
 
 
@@ -538,19 +615,29 @@ def test_with_farm_group(group_name: str, artifacts_dir: str, step_idx: int) -> 
         image_file = prepare_config_image_file(config_dir)
 
     with step_span("getting active data centers from Farm", step_idx) as step_idx:
-        response = http_with_retries(func=farm_get_data_centers, expected_code=200)
+        response = http_with_retries(
+            func=farm_get_data_centers,
+            expected_code=200,
+            retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+        )
         dc_names = response.json().keys()
         logger.info(f"Found active data centers: {dc_names}.")
 
     with step_span("uploading image file to Farm", step_idx) as step_idx:
         with open(image_file, "rb") as image:
             response = http_with_retries(
-                func=farm_upload_file, expected_code=200, group_name=group_name, files={"image": image}
+                func=farm_upload_file,
+                expected_code=200,
+                retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+                group_name=group_name,
+                files={"image": image},
             )
         image_id = response.json()["fileIds"]["image"]
 
     with step_span(f"checking existing groups in Farm with {FARM_GROUP_PREFIX} prefix", step_idx) as step_idx:
-        response = http_with_retries(func=farm_get_groups, expected_code=200)
+        response = http_with_retries(
+            func=farm_get_groups, expected_code=200, retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS)
+        )
         groups = response.json()
         for g in groups:
             if g["name"] == group_name:
@@ -606,11 +693,16 @@ def smoke_test(artifacts_dir: str) -> int:
 
     with step_span(f"Execute Farm health check request: HEAD {FARM_BASE_URL}/dc", step_idx) as step_idx:
         try:
-            http_with_retries(func=head_request_to_url, expected_code=200, url=f"{FARM_BASE_URL}/dc")
+            http_with_retries(
+                func=head_request_to_url,
+                expected_code=200,
+                retry_strategy=MaxAttemptsRetryStrategy(FARM_MAX_HTTP_ATTEMPTS),
+                url=f"{FARM_BASE_URL}/dc",
+            )
         except Exception:
             raise NetworkingException(f"HEAD request to {FARM_BASE_URL}/dc failed, Farm is unreachable.")
 
-    with farm_group() as group_name:
+    with farm_group(step_idx) as (group_name, step_idx):
         return test_with_farm_group(group_name, artifacts_dir, step_idx)
 
 

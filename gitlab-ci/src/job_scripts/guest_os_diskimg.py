@@ -6,11 +6,9 @@ from ci import buildevent
 from ci import cwd
 from ci import ENV
 from ci import sh
-from ci import sha256
 
 
 def run():
-    build_extra_args = getenv("BUILD_EXTRA_ARGS", "")
     build_extra_suffix = getenv("BUILD_EXTRA_SUFFIX", "")
     build_out = f"build-out/disk-img{build_extra_suffix}"
     build_tmp = f"build-tmp{build_extra_suffix}"
@@ -25,16 +23,6 @@ def run():
         script_env = {**offline_defaults, **environ.copy()}
 
         sh(
-            "capsule",
-            "--passive",
-            "-v",
-            "-t",
-            sha256(f"{build_extra_args}{build_extra_suffix}\n"),
-            "-t",
-            version,
-            "-o",
-            f"{build_out}/**/*",
-            "--",
             f"{ENV.top}/gitlab-ci/src/job_scripts/lib/guest-os-diskimg.sh",
             build_out,
             build_tmp,

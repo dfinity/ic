@@ -1,6 +1,6 @@
 guest-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
@@ -52,7 +52,7 @@ guest-os-diskimg-dev-malicious:
 
 boundary-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
@@ -76,8 +76,6 @@ boundary-os-diskimg:
       BUILD_TMP="build-tmp${BUILD_EXTRA_SUFFIX}"
       UPLOAD_TARGET="boundary-os/disk-img${BUILD_EXTRA_SUFFIX}"
 
-      # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
-      capsule --passive -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "$CI_COMMIT_SHA" -o "${BUILD_OUT}/**/*" -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/boundary-os-diskimg.sh \
         "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$CI_COMMIT_SHA" "$CDPRNET"
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \

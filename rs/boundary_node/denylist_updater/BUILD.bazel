@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:httptest",
     "@crate_index//:humantime",
     "@crate_index//:mockall",
     "@crate_index//:nix",
@@ -37,6 +38,7 @@ rust_binary(
     srcs = glob(["src/**"]),
     crate_name = "denylist_updater",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

@@ -478,6 +478,13 @@ enum NnsFunction {
   NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION = 29;
   /// Add a new SNS canister WASM
   NNS_FUNCTION_ADD_SNS_WASM = 30;
+  /// Change the subnet node membership. In a way, this function combines the separate
+  /// functions for adding and removing nodes from the subnet record, but adds the property
+  /// of atomic node replacement (node swap) on top.
+  ///
+  /// The nodes that are being added to the subnet must be currently unassigned.
+  /// The nodes that are being removed from the subnet must be currently assigned to the subnet.
+  NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP = 31;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -1172,25 +1179,25 @@ message ProposalInfo {
   // The timestamp, in seconds from the Unix epoch, when this proposal was made.
   uint64 proposal_timestamp_seconds = 5;
 
-  // See [PropopsalData::ballots].
+  // See [ProposalData::ballots].
   map<fixed64, Ballot> ballots = 6;
 
-  // See [PropopsalData::latest_tally].
+  // See [ProposalData::latest_tally].
   Tally latest_tally = 7;
 
-  // See [PropopsalData::decided_timestamp_seconds].
+  // See [ProposalData::decided_timestamp_seconds].
   uint64 decided_timestamp_seconds = 8;
 
-  // See [PropopsalData::executed_timestamp_seconds].
+  // See [ProposalData::executed_timestamp_seconds].
   uint64 executed_timestamp_seconds = 12;
 
-  // See [PropopsalData::failed_timestamp_seconds].
+  // See [ProposalData::failed_timestamp_seconds].
   uint64 failed_timestamp_seconds = 13;
 
   // See [ProposalData::failure_reason].
   GovernanceError failure_reason = 18;
 
-  // See [PropopsalData::reward_event_round].
+  // See [ProposalData::reward_event_round].
   uint64 reward_event_round = 14;
 
   // Derived - see [Topic] for more information

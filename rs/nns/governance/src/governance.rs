@@ -440,6 +440,9 @@ impl NnsFunction {
             NnsFunction::RemoveNodesFromSubnet => {
                 (REGISTRY_CANISTER_ID, "remove_nodes_from_subnet")
             }
+            NnsFunction::ChangeSubnetMembership => {
+                (REGISTRY_CANISTER_ID, "change_subnet_membership")
+            }
             NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
             NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
             NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
@@ -1111,6 +1114,7 @@ impl Proposal {
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
                             | NnsFunction::RemoveNodesFromSubnet
+                            | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet
                             | NnsFunction::BlessReplicaVersion
                             | NnsFunction::UpdateSubnetReplicaVersion => Topic::SubnetManagement,
@@ -6900,7 +6904,7 @@ fn draw_funds_from_the_community_fund(
         // Create a record of this contribution.
         principal_id_to_cf_neurons
             .entry(neuron.controller.expect("Neuron has no controller."))
-            .or_insert_with(|| vec![])
+            .or_insert_with(Vec::new)
             .push(sns_swap_pb::CfNeuron {
                 nns_neuron_id: neuron.id.as_ref().expect("Neuron lacks an id.").id,
                 amount_icp_e8s: neuron_contribution_e8s,

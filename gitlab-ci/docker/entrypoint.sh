@@ -19,6 +19,8 @@ if [ -S $DOCKER_SOCKET ] && [ $DOCKER_GREP_RET -ne 0 ]; then
 
     sudo addgroup --gid $DOCKER_GID $DOCKER_GROUP
     sudo usermod -aG $DOCKER_GROUP $USER
+else
+    echo "Docker is replaced with rootful podman!"
 fi
 
 if [ -c $KVM_DEV ] && [ $KVM_GREP_RET -ne 0 ]; then

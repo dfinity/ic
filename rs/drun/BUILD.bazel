@@ -37,6 +37,7 @@ rust_library(
     name = "drun_lib",
     srcs = glob(["src/**"]),
     crate_name = "ic_drun",
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

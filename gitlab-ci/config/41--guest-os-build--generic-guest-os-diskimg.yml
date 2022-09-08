@@ -1,6 +1,6 @@
 generic-guest-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
@@ -14,8 +14,6 @@ generic-guest-os-diskimg:
           --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
           --out="artifacts/release"
 
-      ls -lah /var/run/docker.sock; groups
-
       pushd artifacts/release
       gunzip \
         boundary-node-control-plane.gz \
@@ -28,7 +26,6 @@ generic-guest-os-diskimg:
 
       mkdir -p build-out/disk-img/ build-tmp/
       buildevents cmd  "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-      capsule --passive -v -t "$CI_COMMIT_SHA" -o build-tmp/disk.img -- \
       ./scripts/build-disk-image.sh -o build-tmp/disk.img -p root -v "$CI_COMMIT_SHA" -x ../../artifacts/release/
       echo "$CI_COMMIT_SHA" > build-tmp/version.txt
       ls -lah build-tmp

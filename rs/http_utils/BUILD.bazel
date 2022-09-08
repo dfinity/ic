@@ -6,6 +6,7 @@ rust_library(
     name = "http_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_http_utils",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/sha",
         "//rs/monitoring/logger",
