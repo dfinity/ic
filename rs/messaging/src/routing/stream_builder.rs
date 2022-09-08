@@ -424,7 +424,7 @@ impl StreamBuilderImpl {
                                     context.message = message;
                                 }
                             }
-                            dst_net_id_cpy = dst_net_id.clone();
+                            let dst_net_id_cpy = dst_net_id.clone();
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
@@ -447,7 +447,7 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            dst_net_id_cpy = dst_net_id.clone();
+                            let dst_net_id_cpy = dst_net_id.clone();
                             streams.push(dst_net_id, msg);
                             // Increase cycle sum
                             // Important: This needs to be done after streams.push, else on the first message,
