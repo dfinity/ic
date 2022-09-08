@@ -11,7 +11,6 @@ UPLOAD_TARGET=${3:-"host-os/disk-img"}
 VERSION=${4:-$(git rev-parse --verify HEAD)}
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
-ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR"/ic-os/hostos || exit 1

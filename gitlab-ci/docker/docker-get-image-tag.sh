@@ -9,4 +9,4 @@ REPO_ROOT="$(
 cd "$REPO_ROOT"/gitlab-ci/docker
 
 # print sha of relevant files
-sha256sum Dockerfile* entrypoint.sh | sha256sum | cut -d' ' -f1
+sha256sum Dockerfile* entrypoint.sh docker.sh | sha256sum | cut -d' ' -f1

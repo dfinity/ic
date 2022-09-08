@@ -1,6 +1,6 @@
 host-os-diskimg:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-nix-docker-k8s-pinned-dc
     - .rules-parent-pipeline-autorun-on-trigger
   stage: host-os-build
   needs: []

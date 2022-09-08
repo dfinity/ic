@@ -14,7 +14,6 @@ VERSION=${4:-$(git rev-parse --verify HEAD)}
 CDPRNET=${5:-"cdpr05"}
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
-ls -lah /var/run/docker.sock
 groups
 
 cd "$ROOT_DIR" || exit 1
