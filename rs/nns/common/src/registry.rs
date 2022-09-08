@@ -14,7 +14,7 @@ use ic_registry_transport::{
 };
 use on_wire::bytes;
 
-pub const MAX_NUM_SSH_KEYS: usize = 130;
+pub const MAX_NUM_SSH_KEYS: usize = 50;
 
 /// Wraps around Message::encode and panics on error.
 pub fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
