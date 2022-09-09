@@ -171,13 +171,20 @@ mod verify {
         let invalid_pk = PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
         let result = verify(&signature, msg, &invalid_pk);
 
+        // since OpenSSL 3.0.5, ec_GFp_simple_oct2point function is prefixed with ossl_,
+        // so let either version pass the test
+        //
+        // ? in regex stands for 0 or 1 occurrence
+        let re = regex::Regex::new(
+            r":elliptic curve routines:(ossl_)?ec_GFp_simple_oct2point:invalid encoding:",
+        )
+        .unwrap();
+
         assert!(
             matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
                      if algorithm == AlgorithmId::EcdsaP256
                      && key_bytes == Some(invalid_pk.0)
-                     && internal_error.contains(
-                         ":elliptic curve routines:ec_GFp_simple_oct2point:invalid encoding:"
-                     )
+                     && re.is_match(&internal_error[..])
             )
         );
     }
