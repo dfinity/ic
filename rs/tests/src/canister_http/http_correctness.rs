@@ -25,11 +25,35 @@ use anyhow::bail;
 use candid;
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use ic_base_types::CanisterId;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload, TransformType};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformType};
+use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
+use ic_types::canister_http::CanisterHttpRequestContext;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
+use std::convert::TryFrom;
 use std::time::Duration;
+
+/// Pricing function of canister http requests.
+fn expected_cycle_cost(proxy_canister: CanisterId, request: CanisterHttpRequestArgs) -> u64 {
+    let response_size = request.max_response_bytes.unwrap_or(2 * 1024 * 1024);
+
+    let dummy_context = CanisterHttpRequestContext::try_from((
+        mock_time(),
+        &RequestBuilder::default()
+            .receiver(CanisterId::from(1))
+            .sender(proxy_canister)
+            .build(),
+        request,
+    ))
+    .unwrap();
+    let req_size = dummy_context.variable_parts_size().get();
+
+    // 400M is the base fee for a requests
+    // 100k is the dynamic factor to represent resource usage
+    400_000_000 + (req_size as u64 + response_size) * 100_000
+}
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -102,8 +126,6 @@ pub fn test(env: TestEnv) {
             })),
             max_response_bytes: None,
         };
-        let cycle_cost = 400_000_000
-            + 100_000 * (2 * 1024 * 1024 + request.encode().len() + "http_request".len()) as u64;
         test_results.push(
             test_canister_http_property(
                 "2Mb response cycle test for success path",
@@ -111,7 +133,7 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: cycle_cost,
+                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()),
                 },
                 |response| matches!(response, Ok(r) if r.status==200),
             )
@@ -124,7 +146,7 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: cycle_cost - 1,
+                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()) - 1,
                 },
                 |response| matches!(response, Err((RejectionCode::CanisterReject, _))),
             )
@@ -143,11 +165,6 @@ pub fn test(env: TestEnv) {
             })),
             max_response_bytes: Some(16384),
         };
-        let cycle_cost = 400_000_000
-            + 100_000
-                * (request.max_response_bytes.unwrap() as usize
-                    + request.encode().len()
-                    + "http_request".len()) as u64;
         test_results.push(
             test_canister_http_property(
                 "4096 max response cycle test 1/2",
@@ -155,7 +172,7 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: cycle_cost,
+                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()),
                 },
                 |response| matches!(response, Ok(r) if r.status==200),
             )
@@ -168,7 +185,7 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: request.clone(),
-                    cycles: cycle_cost - 1,
+                    cycles: expected_cycle_cost(proxy_canister.canister_id(), request.clone()) - 1,
                 },
                 |response| matches!(response, Err((RejectionCode::CanisterReject, _))),
             )
