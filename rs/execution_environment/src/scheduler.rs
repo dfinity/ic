@@ -91,13 +91,23 @@ impl SchedulerImpl {
         }
     }
 
+    /// Orders canister round states according to the scheduling strategy.
+    /// The function is to keep in sync `apply_scheduling_strategy()` and
+    /// `abort_paused_executions_above_limit()`
+    fn order_canister_round_states(&self, round_states: &mut [CanisterRoundState]) {
+        round_states.sort_by_key(|rs| {
+            (
+                Reverse(rs.long_execution_mode),
+                Reverse(rs.has_aborted_or_paused_execution),
+                Reverse(rs.accumulated_priority),
+                rs.canister_id,
+            )
+        });
+    }
+
     /// Orders the canisters and updates their accumulated priorities according to
-    /// the strategy described in the Scheduler Analysis document:
-    ///   https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
-    /// DTS Scheduler design doc:
-    ///   https://docs.google.com/document/d/12mpg2qUq-IAl4BVM_DDClAuwm9LzLvLs_R5mU2aP6WY
-    /// Scheduler simulator:
-    ///   https://github.com/dfinity-lab/scheduler_simulator
+    /// the strategy described in RUN-58.
+    ///
     /// A shorter description of the scheduling strategy is available in the note
     /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
     fn apply_scheduling_strategy(
@@ -184,14 +194,7 @@ impl SchedulerImpl {
         let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
             / (100 * multiplier)) as usize;
 
-        round_states.sort_by_key(|rs| {
-            (
-                Reverse(rs.long_execution_mode),
-                Reverse(rs.has_aborted_or_paused_execution),
-                Reverse(rs.accumulated_priority),
-                rs.canister_id,
-            )
-        });
+        self.order_canister_round_states(&mut round_states);
 
         let round_schedule = RoundSchedule::new(
             scheduler_cores,
@@ -972,6 +975,36 @@ impl SchedulerImpl {
         true
     }
 
+    /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
+    fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+        let mut paused_round_states = state
+            .canisters_iter()
+            .filter_map(|canister| {
+                if canister.has_paused_execution() {
+                    Some(CanisterRoundState {
+                        canister_id: canister.canister_id(),
+                        accumulated_priority: canister.scheduler_state.accumulated_priority.value(),
+                        compute_allocation: 0, // not used
+                        long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        has_aborted_or_paused_execution: true,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        self.order_canister_round_states(&mut paused_round_states);
+
+        paused_round_states
+            .iter()
+            .skip(self.config.max_paused_executions)
+            .for_each(|rs| {
+                let canister = state.canister_states.get_mut(&rs.canister_id).unwrap();
+                self.exec_env.abort_canister(canister);
+            });
+    }
+
     // Code that must be executed unconditionally after each round.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
@@ -984,10 +1017,14 @@ impl SchedulerImpl {
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
                     // Abort all paused execution before the checkpoint.
-                    self.exec_env.abort_paused_executions(state);
+                    self.exec_env.abort_all_paused_executions(state);
                 }
             }
-            ExecutionRoundType::OrdinaryRound => {}
+            ExecutionRoundType::OrdinaryRound => {
+                if self.deterministic_time_slicing == FlagStatus::Enabled {
+                    self.abort_paused_executions_above_limit(state);
+                }
+            }
         }
         self.check_dts_invariants(state, current_round_type);
     }
@@ -1081,15 +1118,15 @@ impl Scheduler for SchedulerImpl {
                 FlagStatus::Enabled => state
                     .canister_states
                     .iter()
-                    .filter(
-                        |(_, canister_state)| match canister_state.next_execution() {
-                            NextExecution::None => false,
-                            NextExecution::StartNew => false,
-                            NextExecution::ContinueLong => true,
-                            NextExecution::ContinueInstallCode => true,
-                        },
-                    )
-                    .map(|(canister_id, _)| *canister_id)
+                    .filter_map(|(&canister_id, canister_state)| {
+                        if canister_state.has_paused_execution()
+                            || canister_state.has_paused_install_code()
+                        {
+                            Some(canister_id)
+                        } else {
+                            None
+                        }
+                    })
                     .collect(),
                 // Don't iterate through canisters if DTS is not enabled.
                 FlagStatus::Disabled => BTreeSet::new(),

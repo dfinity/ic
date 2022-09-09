@@ -1027,9 +1027,9 @@ impl ExecutionTest {
     }
 
     /// Aborts all paused executions.
-    pub fn abort_paused_executions(&mut self) {
+    pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
-        self.exec_env.abort_paused_executions(&mut state);
+        self.exec_env.abort_all_paused_executions(&mut state);
         self.state = Some(state);
     }
 

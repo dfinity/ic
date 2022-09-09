@@ -4117,7 +4117,7 @@ fn dts_abort_works_in_update_call() {
     }
 
     // Abort before executing the last slice.
-    test.abort_paused_executions();
+    test.abort_all_paused_executions();
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
@@ -4269,7 +4269,7 @@ fn dts_abort_works_in_install_code() {
         test.execute_slice(canister_id);
     }
 
-    test.abort_paused_executions();
+    test.abort_all_paused_executions();
 
     for _ in 0..5 {
         assert_eq!(
@@ -4463,7 +4463,7 @@ fn dts_abort_works_in_response_callback() {
     );
 
     // Aborting doesn't change the clean canister state.
-    test.abort_paused_executions();
+    test.abort_all_paused_executions();
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         original_system_state.balance()
@@ -4554,7 +4554,7 @@ fn dts_abort_works_in_cleanup_callback() {
             );
         }
         // Aborting doesn't change the clean canister state.
-        test.abort_paused_executions();
+        test.abort_all_paused_executions();
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
