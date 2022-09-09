@@ -6,6 +6,7 @@ use ic_types::ReplicaVersion;
 use rand_chacha::{rand_core, ChaCha8Rng};
 use slog::{o, warn, Drain, Logger};
 use std::ffi::OsStr;
+use std::net::Ipv6Addr;
 use std::time::SystemTime;
 use std::{fs, path::PathBuf, time::Duration};
 use url::Url;
@@ -34,6 +35,7 @@ pub struct IcSetup {
     pub journalbeat_hosts: Vec<String>,
     pub initial_replica_version: ReplicaVersion,
     pub log_debug_overrides: Vec<String>,
+    pub preferred_network: Option<Ipv6Addr>,
 }
 
 impl TestEnvAttribute for IcSetup {
@@ -63,6 +65,7 @@ pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Resu
         journalbeat_hosts: cli_args.journalbeat_hosts,
         initial_replica_version: cli_args.initial_replica_version,
         log_debug_overrides: cli_args.log_debug_overrides,
+        preferred_network: cli_args.preferred_network,
     }
     .write_attribute(env);
     Ok(())

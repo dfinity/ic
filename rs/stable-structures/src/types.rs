@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Mul, Sub};
+use core::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 pub const NULL: Address = Address(0);
 
@@ -46,7 +46,7 @@ impl AddAssign<Bytes> for Address {
 }
 
 #[repr(packed)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Bytes(u64);
 
 impl<I: Into<u64>> From<I> for Bytes {
@@ -72,6 +72,14 @@ impl Add<Bytes> for Bytes {
     }
 }
 
+impl Sub<Bytes> for Bytes {
+    type Output = Self;
+
+    fn sub(self, bytes: Bytes) -> Self {
+        Self(self.0 - bytes.0)
+    }
+}
+
 impl Mul<Bytes> for Bytes {
     type Output = Self;
 
@@ -94,8 +102,18 @@ impl AddAssign<Bytes> for Bytes {
     }
 }
 
+impl SubAssign<Bytes> for Bytes {
+    fn sub_assign(&mut self, other: Bytes) {
+        *self = Self(self.0 - other.0);
+    }
+}
+
 impl Bytes {
     pub const fn new(val: u64) -> Self {
         Self(val)
+    }
+
+    pub fn get(&self) -> u64 {
+        self.0
     }
 }

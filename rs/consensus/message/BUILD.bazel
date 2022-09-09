@@ -6,6 +6,7 @@ rust_library(
     name = "message",
     srcs = glob(["src/**"]),
     crate_name = "ic_consensus_message",
+    version = "0.8.0",
     deps = [
         "//rs/crypto/hash",
         "//rs/interfaces",

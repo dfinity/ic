@@ -1,6 +1,6 @@
 guest-os-updateimg-build:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-docker-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
   retry: 1
   stage: guest-os-build

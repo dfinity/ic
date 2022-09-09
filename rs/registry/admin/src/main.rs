@@ -516,11 +516,11 @@ struct ProposeToChangeSubnetMembershipCmd {
     /// The subnet to modify
     subnet: SubnetDescriptor,
 
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(long, multiple_values(true))]
     /// The node IDs of the nodes that should be added to the subnet.
     pub node_ids_add: Vec<PrincipalId>,
 
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(long, multiple_values(true))]
     /// The node IDs of the nodes that should be removed from the subnet.
     pub node_ids_remove: Vec<PrincipalId>,
 }

@@ -7,6 +7,7 @@ rust_binary(
     srcs = glob(["src/**"]),
     compile_data = glob(["templates/**"]),
     crate_name = "bazelifier",
+    version = "0.1.0",
     deps = [
         "@crate_index//:askama",
         "@crate_index//:clap",

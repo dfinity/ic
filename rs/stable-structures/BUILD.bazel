@@ -2,13 +2,21 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:maplit",
+    "@crate_index//:proptest",
+]
+
 rust_library(
     name = "stable-structures",
     srcs = glob(["src/**"]),
     crate_name = "stable_structures",
+    version = "0.1.0",
 )
 
 rust_test(
     name = "stable_structures_test",
     crate = ":stable-structures",
+    deps = DEV_DEPENDENCIES,
 )

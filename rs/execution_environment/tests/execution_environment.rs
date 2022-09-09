@@ -2341,3 +2341,28 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
         BALANCE_EPSILON,
     );
 }
+
+#[test]
+fn bitcoin_get_successors_returns_not_found() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_provisional_whitelist_all()
+        .build();
+    let uni = test.universal_canister().unwrap();
+    let call = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::BitcoinGetSuccessors,
+            call_args()
+                .other_side(vec![])
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let result = test.ingress(uni, "update", call).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reject(
+            "Management canister has no method 'bitcoin_get_successors'".to_string()
+        )
+    );
+}

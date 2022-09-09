@@ -11,6 +11,7 @@ rust_library(
     ],
     crate_name = "vsock_agent",
     target_compatible_with = ["@platforms//os:linux"],
+    version = "0.8.0",
     deps = [
         "@crate_index//:libc",
     ],

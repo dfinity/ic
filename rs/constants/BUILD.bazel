@@ -6,4 +6,5 @@ rust_library(
     name = "constants",
     srcs = glob(["src/**"]),
     crate_name = "ic_constants",
+    version = "0.8.0",
 )

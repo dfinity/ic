@@ -882,6 +882,8 @@ impl ExecutionEnvironment {
                 Some(res)
             }
 
+            // NOTE: The BitcoinGetSuccessors method is currently a scaffold and not implemented yet.
+            Ok(Ic00Method::BitcoinGetSuccessors) |
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -1123,17 +1125,9 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
-        let compute_allocation_used = state.total_compute_allocation();
-
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
-            .update_settings(
-                sender,
-                settings,
-                canister,
-                compute_allocation_used,
-                round_limits,
-            )
+            .update_settings(sender, settings, canister, round_limits)
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
@@ -1718,10 +1712,6 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ReplicatedState {
-        // overwrite this for now
-        // TODO update round_limits.compute_allocation_used when it changes
-        round_limits.compute_allocation_used = state.total_compute_allocation();
-
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,

@@ -15,7 +15,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     apt -yqq install --no-install-recommends git openssh-client curl xz-utils time parallel net-tools \
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
         android-sdk-ext4-utils \
@@ -26,7 +28,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         policycoreutils python3 python3-pip python3-gflags python3-cbor pipenv shellcheck \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
-        grub-efi-amd64-bin && \
+        grub-efi-amd64-bin podman buildah && \
     gem install asciidoctor-diagram rouge
 
 # Add the `${USER}` user, and the required folders
@@ -112,11 +114,13 @@ RUN mkdir --mode=0700 /home/${USER}/.ssh && \
 
 
 COPY entrypoint.sh /entrypoint.sh
-# Install config for capsules.
-COPY dot_capsules.toml /home/${USER}/.capsules.toml
 WORKDIR /
 
 USER 0
+
+RUN mv /usr/bin/docker /usr/bin/docker-bin
+COPY containers.conf /etc/containers/containers.conf
+COPY docker.sh /usr/bin/docker
 
 RUN echo "USER=${USER}" > /entrypoint_user
 

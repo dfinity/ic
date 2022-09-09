@@ -119,7 +119,7 @@ INSTALL_EXEC_ARGS+=("${BASE_DIR}/src/infogetty:/opt/ic/bin/infogetty:0755")
 INSTALL_EXEC_ARGS+=("${BASE_DIR}/src/prestorecon:/opt/ic/bin/prestorecon:0755")
 
 if [ "${BUILD_TYPE}" == "dev" ]; then
-    INSTALL_EXEC_ARGS+=("${BASE_DIR}/allow_console_root:/etc/allow_console_root:0644")
+    INSTALL_EXEC_ARGS+=("${BASE_DIR}/rootfs/allow_console_root:/etc/allow_console_root:0644")
 fi
 
 echo "${VERSION}" >"${TMPDIR}/version.txt"
@@ -129,7 +129,7 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 # If specified, and ONLY on dev, add an additional layer to the built image,
 # containing an extra certificate.
 if [ "${BUILD_TYPE}" == "dev" -a "${DEV_ROOT_CA}" != "" ]; then
-    EXTRA_DOCKERFILE=("--extra-dockerfile" "${BASE_DIR}/rootfs/Dockerfile.dev" "--extra-vars" "DEV_ROOT_CA=$(cat ${DEV_ROOT_CA})")
+    EXTRA_DOCKERFILE=("--extra-dockerfile" "${BASE_DIR}/rootfs/Dockerfile.dev" "--extra-vars" "DEV_ROOT_CA=\"$(cat ${DEV_ROOT_CA})\"")
 fi
 "${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" "${EXTRA_DOCKERFILE[@]}" -- \
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
@@ -140,7 +140,7 @@ tar xOf "${TMPDIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/
     "${INSTALL_EXEC_ARGS[@]}" \
     "${TMPDIR}/version.txt:/opt/ic/share/version.txt:0644"
 "${TOOL_DIR}"/verity_sign.py -i "${TMPDIR}/partition-root-unsigned.tar" -o "${TMPDIR}/partition-root.tar" -r "${TMPDIR}/partition-root-hash"
-sed -e s/ROOT_HASH/$(cat "${TMPDIR}/partition-root-hash")/ <"${BASE_DIR}/extra_boot_args.template" >"${TMPDIR}/extra_boot_args"
+sed -e s/ROOT_HASH/$(cat "${TMPDIR}/partition-root-hash")/ <"${BASE_DIR}/bootloader/extra_boot_args.template" >"${TMPDIR}/extra_boot_args"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" -p boot/ \
     "${TMPDIR}/version.txt:/boot/version.txt:0644" \
     "${TMPDIR}/extra_boot_args:/boot/extra_boot_args:0644"

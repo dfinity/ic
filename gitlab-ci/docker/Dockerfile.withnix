@@ -37,6 +37,8 @@ RUN echo 'curl --fail -L https://releases.nixos.org/nix/nix-${NIX_VERSION}/insta
 USER ${UID}
 
 # Ensure that nix-shell is available in the docker container.
-RUN /usr/bin/nix-install
+RUN echo "sandbox = false" | sudo tee -a /etc/nix/nix.conf && \
+    /usr/bin/nix-install && \
+    sudo sed -i '/sandbox/d' /etc/nix/nix.conf
 
 ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]

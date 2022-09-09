@@ -274,9 +274,8 @@ impl SchedulerImpl {
         long_running_canister_ids: &BTreeSet<CanisterId>,
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
-    ) -> ReplicatedState {
-        // TODO(RUN-290): Fix the iteration order to guarantee progress of
-        // long-running execution and to respect the accumulated priority.
+    ) -> (ReplicatedState, bool) {
+        let mut ongoing_long_install_code = false;
         for canister_id in long_running_canister_ids.iter() {
             match state.canister_state(canister_id) {
                 None => continue,
@@ -300,14 +299,22 @@ impl SchedulerImpl {
                 round_limits,
                 subnet_size,
             );
+            ongoing_long_install_code = state
+                .canister_state(canister_id)
+                .map_or(false, |canister| canister.has_paused_install_code());
+
             let instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
             measurement_scope.add(instructions_executed, NumMessages::from(0));
-            if round_limits.instructions <= RoundInstructions::from(0) {
+
+            // Break when reached the instructions limit or
+            // found a canister that has a long install code message in progress.
+            if round_limits.instructions <= RoundInstructions::from(0) || ongoing_long_install_code
+            {
                 break;
             }
         }
-        state
+        (state, ongoing_long_install_code)
     }
 
     /// Drains the subnet queues, executing all messages not blocked by long executions.
@@ -317,6 +324,7 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
+        ongoing_long_install_code: bool,
         long_running_canister_ids: &BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
@@ -327,7 +335,7 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_msg(&msg, long_running_canister_ids) {
+                if can_execute_msg(&msg, ongoing_long_install_code, long_running_canister_ids) {
                     available_subnet_messages = true;
                     break;
                 }
@@ -1194,7 +1202,8 @@ impl Scheduler for SchedulerImpl {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
 
-            state = self.advance_long_running_install_code(
+            let ongoing_long_install_code;
+            (state, ongoing_long_install_code) = self.advance_long_running_install_code(
                 state,
                 &mut round_limits,
                 &long_running_canister_ids,
@@ -1208,6 +1217,7 @@ impl Scheduler for SchedulerImpl {
                     &mut csprng,
                     &mut round_limits,
                     &measurement_scope,
+                    ongoing_long_install_code,
                     &long_running_canister_ids,
                     registry_settings,
                     &ecdsa_subnet_public_keys,
@@ -1700,20 +1710,39 @@ fn observe_replicated_state_metrics(
         .set(canisters_not_in_routing_table);
 }
 
-/// Verifies if a message is not blocked due to long-running execution.
+/// Helper function that checks if a message can be executed:
+///     1. A message cannot be executed if it is directed to a canister
+///     with another long-running execution in progress.
+///     2. Install code messages can only be executed sequentially.
 fn can_execute_msg(
     msg: &CanisterInputMessage,
+    ongoing_long_install_code: bool,
     long_running_canister_ids: &BTreeSet<CanisterId>,
 ) -> bool {
-    let effective_canister_id: Option<CanisterId> = match msg {
-        CanisterInputMessage::Ingress(ingress) => ingress.effective_canister_id,
-        CanisterInputMessage::Request(request) => request.extract_effective_canister_id(),
-        CanisterInputMessage::Response(_) => None,
-    };
+    if let Some(effective_canister_id) = msg.effective_canister_id() {
+        if long_running_canister_ids.contains(&effective_canister_id) {
+            return false;
+        }
+    }
 
-    effective_canister_id
-        .map(|id| !long_running_canister_ids.contains(&id))
-        .unwrap_or(true)
+    if ongoing_long_install_code {
+        let maybe_instal_code_method = match msg {
+            CanisterInputMessage::Ingress(ingress) => {
+                Ic00Method::from_str(ingress.method_name.as_str()).ok()
+            }
+            CanisterInputMessage::Request(request) => {
+                Ic00Method::from_str(request.method_name.as_str()).ok()
+            }
+            CanisterInputMessage::Response(_) => None,
+        };
+
+        // Only one install code message allowed at a time.
+        if let Some(Ic00Method::InstallCode) = maybe_instal_code_method {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// Based on the type of the subnet message to execute, figure out its
@@ -1761,6 +1790,7 @@ fn get_instructions_limit_for_subnet_message(
             | BitcoinGetUtxos
             | BitcoinSendTransaction
             | BitcoinGetCurrentFeePercentiles
+            | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister => config.max_instructions_per_message,
             InstallCode => match InstallCodeArgs::decode(payload) {
@@ -1785,6 +1815,7 @@ fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
                 BitcoinGetBalance
                 | BitcoinGetUtxos
                 | BitcoinSendTransaction
+                | BitcoinGetSuccessors
                 | BitcoinGetCurrentFeePercentiles => true,
                 CanisterStatus
                 | CreateCanister

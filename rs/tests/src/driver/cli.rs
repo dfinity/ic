@@ -3,7 +3,7 @@ use clap::Parser;
 use humantime::parse_duration;
 use ic_types::ReplicaVersion;
 use regex::Regex;
-use std::{convert::TryFrom, path::PathBuf, str::FromStr, time::Duration};
+use std::{convert::TryFrom, net::Ipv6Addr, path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
 
 const RND_SEED_DEFAULT: u64 = 42;
@@ -145,8 +145,8 @@ used."#
     #[clap(
         long = "nns-canister-path",
         parse(from_os_str),
-        help = r#"Path to directory containing wasm-files of NNS canisters. 
-Required for tests that install NNS canisters."#
+        help = r#"Path to directory containing wasm-files of NNS canisters.
+ Required for tests that install NNS canisters."#
     )]
     nns_canister_path: Option<PathBuf>,
 
@@ -162,15 +162,15 @@ Required for tests that install NNS canisters."#
 
     #[clap(
         long = "include-pattern",
-        help = r#"If set, only tests matching this regex will be exercised 
-and all others will be ignored. Note: when `include-pattern` is set, `skip-pattern` is not effective."#
+        help = r#"If set, only tests matching this regex will be exercised
+ and all others will be ignored. Note: when `include-pattern` is set, `skip-pattern` is not effective."#
     )]
     include_pattern: Option<String>,
 
     #[clap(
         long = "skip-pattern",
-        help = r#"If set, all tests matching this regex will be skipped, 
-i.e. included in a summary, but not exercised."#
+        help = r#"If set, all tests matching this regex will be skipped,
+ i.e. included in a summary, but not exercised."#
     )]
     skip_pattern: Option<String>,
 
@@ -184,15 +184,15 @@ i.e. included in a summary, but not exercised."#
 
     #[clap(
         long = "journalbeat-hosts",
-        help = r#"A comma-separated list of hostname/port-pairs that journalbeat 
-should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
+        help = r#"A comma-separated list of hostname/port-pairs that journalbeat
+ should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
     )]
     journalbeat_hosts: Option<String>,
 
     #[clap(
         long = "log-debug-overrides",
-        help = r#"A string containing debug overrides in terms of ic.json5.template  
-(e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
+        help = r#"A string containing debug overrides in terms of ic.json5.template
+ (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
     log_debug_overrides: Option<String>,
 
@@ -209,6 +209,15 @@ should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
         help = "Path to a working directory of the test driver."
     )]
     working_dir: PathBuf,
+
+    #[clap(
+        long = "preferred-network",
+        help = r#"An IPv6 address like "2a00:fb01:400:42:3eec:efff:fe4a:7018".
+ When specified, Farm will prefer allocating VMs to hosts which are "closer" to this network.
+ Specifically it will order hosts based on how many matching leading bits the host's IPv6 network has
+ with this specified preferred-network."#
+    )]
+    preferred_network: Option<Ipv6Addr>,
 }
 
 impl ProcessTestsArgs {
@@ -292,6 +301,7 @@ impl RunTestsArgs {
             log_debug_overrides,
             pot_timeout: self.pot_timeout,
             working_dir: self.working_dir,
+            preferred_network: self.preferred_network,
         })
     }
 }
@@ -340,6 +350,7 @@ pub struct ValidatedCliRunTestsArgs {
     pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
     pub working_dir: PathBuf,
+    pub preferred_network: Option<Ipv6Addr>,
 }
 
 fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {

@@ -18,6 +18,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }
 crossbeam-channel = "0.5.5"
+crossbeam-utils = "0.8.11"
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
@@ -88,7 +89,6 @@ hyper-rustls = { version = "0.23.0", features = [ "webpki-roots" ] }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../rosetta-api/ledger_canister" }
 lifeline = { path = "../nns/handlers/lifeline" }
-log_analyzer = { path = "../log_analyzer" }
 itertools = "0.10.0"
 maplit = "1.0.2"
 nix = "0.23.0"
@@ -105,6 +105,7 @@ rand_chacha = "0.3.0"
 rand_chacha_02 = { package = "rand_chacha", version = "0.2" }
 rand_core = "0.6.1"
 rand_core_05 = { package = "rand_core", version = "0.5.1" }
+rayon = "1"
 regex = "1.5.0"
 registry-canister = { path = "../registry/canister" }
 reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }

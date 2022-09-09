@@ -35,6 +35,7 @@ rust_library(
     name = "registry_replicator",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

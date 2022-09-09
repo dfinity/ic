@@ -37,6 +37,7 @@ rust_library(
     aliases = {},
     crate_name = "ic_determinism_test",
     proc_macro_deps = [],
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 

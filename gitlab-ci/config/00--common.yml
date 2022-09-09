@@ -151,11 +151,6 @@ before_script:
     # set all git dirs safe
     git config --global --add safe.directory '*'
 
-    # Make sure Capsule writes to the correct Honeycomb dataset.
-    CAPSULE_ID="$(echo "${CI_JOB_NAME}" | tr ' ' '-')"
-    export CAPSULE_ID
-    CAPSULE_EXTRA_ARGS="${CAPSULE_EXTRA_ARGS:-}"
-    export CAPSULE_ARGS="${CAPSULE_EXTRA_ARGS} -c '${CAPSULE_ID}' -j '${CI_JOB_URL}' -b s3 --honeycomb_dataset='${CAPSULE_HONEYCOMB_DATASET}' --honeycomb_token='${CAPSULE_HONEYCOMB_TOKEN}' --honeycomb_trace_id='${ROOT_PIPELINE_ID}' --honeycomb_kv=branch='${CI_COMMIT_BRANCH:-}' -t '${CI_JOB_IMAGE:-docker}'"
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
 
 
@@ -233,15 +228,13 @@ after_script:
 
       set +x
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      # If the build artifacts came from the capsules cache, then sccache server will have never started.
-      # Therefore mark the output advisory so it doesn't fail the job.
       "$RUSTC_WRAPPER" --show-stats || true
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
 .ubuntu-docker:
   extends: .build-env-base
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:145c44efa453b54fab4247de76da9c9310eab396a33bebb0e23ed475bf965853"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   tags:
     - dfinity
     - docker
@@ -257,25 +250,17 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:145c44efa453b54fab4247de76da9c9310eab396a33bebb0e23ed475bf965853"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"
     # This MUST match the directory used in our `docker-build-ic` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
-.ubuntu-nix-k8s:
-  extends: .ubuntu-nix-docker
-  tags:
-    - k8s
-    - dfinity
-    - ubuntu
-
 .ubuntu-nix-docker-k8s:
   extends: .ubuntu-nix-docker
   tags:
     # We dynamically set tags to distribute jobs between docker and k8s runners
-    - $RUNNER_MODE # 'docker' or 'k8s'
     - dfinity
     - ubuntu
 
@@ -295,7 +280,6 @@ after_script:
     # - pin jobs to one DC
     # - distribute jobs between docker and k8s runners
     - $SELECTED_DC # 'zh', 'sf' or 'ch'
-    - $RUNNER_MODE # 'docker' or 'k8s'
     - dfinity
     - ubuntu
 

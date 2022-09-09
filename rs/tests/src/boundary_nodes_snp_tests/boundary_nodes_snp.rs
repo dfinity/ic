@@ -9,14 +9,40 @@ use crate::driver::{
     ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
     pot_dsl::get_ic_handle_and_ctx,
     test_env::{HasIcPrepDir, TestEnv},
-    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, SshSession, ADMIN},
+    test_env_api::{
+        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+        RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    },
 };
+
+use std::io::Read;
+
+use anyhow::{Context, Error};
+use ic_interfaces::registry::RegistryValue;
+use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+use ic_registry_keys::make_routing_table_record_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
 const BOUNDARY_NODE_SNP_NAME: &str = "boundary-node-snp-1";
 
+fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
+    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+
+    channel.exec(command)?;
+
+    let mut output = String::new();
+    channel.read_to_string(&mut output)?;
+    channel.wait_close()?;
+
+    Ok((output, channel.exit_status()?))
+}
+
 pub fn config(env: TestEnv) {
+    let logger = env.logger();
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
@@ -32,7 +58,7 @@ pub fn config(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let nns_urls = handle
+    let nns_urls: Vec<_> = handle
         .public_api_endpoints
         .iter()
         .filter(|ep| ep.is_root_subnet)
@@ -40,7 +66,7 @@ pub fn config(env: TestEnv) {
         .collect();
 
     BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))
-        .with_nns_urls(nns_urls)
+        .with_nns_urls(nns_urls.clone())
         .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
         .with_vm_resources(VmResources {
             vcpus: None,
@@ -51,6 +77,59 @@ pub fn config(env: TestEnv) {
         .with_snp_boot_img(&env)
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
+
+    // Await Replicas
+    info!(&logger, "Checking readiness of all replica nodes...");
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.await_status_is_healthy()
+                .expect("Replica did not come up healthy.");
+        }
+    }
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    info!(&logger, "Polling registry");
+    let registry = RegistryCanister::new(nns_urls);
+    let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+            .context("Failed to `get_value` from registry")?;
+        let routes = PbRoutingTable::decode(bytes.as_slice())
+            .context("Failed to decode registry routes")?;
+        let routes = RoutingTable::try_from(routes)
+            .context("Failed to convert registry routes")?;
+        Ok((latest, routes))
+    }))
+    .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
+    info!(&logger, "Latest registry {latest}: {routes:?}");
+
+    // Await Boundary Node
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_SNP_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    info!(
+        &logger,
+        "Boundary node {BOUNDARY_NODE_SNP_NAME} has IPv4 {:?} and IPv6 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap(),
+        boundary_node_vm.ipv6()
+    );
+
+    info!(&logger, "Waiting for routes file");
+    let sleep_command = "until [ -f /var/cache/ic_routes/* ]; do sleep 5; done";
+    let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, sleep_command).unwrap();
+    info!(
+        logger,
+        "{BOUNDARY_NODE_SNP_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
+        cmd_output.trim(),
+    );
+
+    info!(&logger, "Checking BN health");
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
 }
 
 /* tag::catalog[]

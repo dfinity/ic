@@ -45,6 +45,7 @@ TIMEOUT_CODE = 124
 
 # This timeout should be shorter than the CI job timeout.
 TIMEOUT_DEFAULT_SEC = 50 * 60
+GET_EXTERNAL_IPV6_TIMEOUT = 10
 SLACK_CHANNEL_NOTIFY = "test-failure-alerts"
 RUN_TESTS_SUBCOMMAND = "run-tests"
 PROCESS_TEST_RESULTS_SUBCOMMAND = "process-test-results"
@@ -56,6 +57,10 @@ SHELL_WRAPPER_DEFAULT = "/usr/bin/time"
 
 
 class GetImageShaException(Exception):
+    pass
+
+
+class GetExternalIPv6Exception(Exception):
     pass
 
 
@@ -218,6 +223,17 @@ def send_all_slack_alerts(slack_alerts_file_path: str, ci_project_dir: str) -> N
             logging.error(
                 f"Failed to send slack alert with id={id} to channel={alert['channel']}, exit code={returncode}."
             )
+
+
+def get_external_ipv6_address():
+    url = "http://v6.ident.me"
+    get_ipv6_resp = requests.get(url, timeout=GET_EXTERNAL_IPV6_TIMEOUT)
+    status_code = get_ipv6_resp.status_code
+    if status_code != 200:
+        raise GetExternalIPv6Exception(
+            f"Failed to get external IPv6 address by requesting {url} because status code = {str(status_code)}!"
+        )
+    return get_ipv6_resp.text
 
 
 def main(
@@ -408,6 +424,8 @@ def main(
     logging.debug("ARTIFACTS_DIR content:")
     os.system(f"ls -R {ARTIFACT_DIR}")
 
+    external_ipv6_address = get_external_ipv6_address()
+
     run_test_driver_cmd = (
         [SHELL_WRAPPER]
         + RUN_CMD
@@ -428,6 +446,7 @@ def main(
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
+            f"--preferred-network={external_ipv6_address}",
         ]
     )
     logging.debug(f"run_test_driver_cmd: {run_test_driver_cmd}")

@@ -264,6 +264,8 @@ pub struct GroupSpec {
     pub vm_allocation: Option<VmAllocationStrategy>,
     #[serde(rename = "requiredHostFeatures")]
     pub required_host_features: Vec<HostFeature>,
+    #[serde(rename = "preferredNetwork")]
+    pub preferred_network: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

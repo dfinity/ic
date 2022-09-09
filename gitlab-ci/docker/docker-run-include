@@ -24,7 +24,6 @@ WORKDIR="/ic"
 DOCKER_RUN_ARGS=(
     -w "$WORKDIR"
 
-    -v /var/run/docker.sock:/var/run/docker.sock
     -v /dev/kvm:/dev/kvm
 
     # Environment variables matching what GitLab sets in CI pipelines to make scripts easier to debug
@@ -34,6 +33,12 @@ DOCKER_RUN_ARGS=(
     -e SHELL_WRAPPER="${SHELL_WRAPPER:-/usr/bin/time}"
     -e VERSION=${VERSION:-"$(git rev-parse HEAD)"}
 )
+
+if [ -e /var/run/docker.sock ]; then
+    DOCKER_RUN_ARGS+=(
+        -v /var/run/docker.sock:/var/run/docker.sock
+    )
+fi
 
 # if i'm not withing docker already, bind mount the source
 if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then

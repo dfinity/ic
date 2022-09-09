@@ -15,7 +15,7 @@ FLAGS = gflags.FLAGS
 
 gflags.DEFINE_string("ic_admin_bin", None, "Path to ic-admin binary")
 gflags.DEFINE_string("ic_prep_bin", None, "Path to ic-prep binary")
-gflags.DEFINE_string("install_nns_bin", None, "Path to install_nns script")
+gflags.DEFINE_string("install_nns_bin", None, "Path to ic-nns-init bin")
 gflags.DEFINE_integer("timeout", 240, "Timeout in seconds to wait for IC to come up")
 gflags.DEFINE_string("nns_canisters", None, "Path to directory with NNS canisters wasm files")
 
@@ -184,7 +184,6 @@ def _get_artifact_version(artifact, kind):
 
     get_artifact_version = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "..",
         "scripts",
         "get-artifact-version.sh",
     )

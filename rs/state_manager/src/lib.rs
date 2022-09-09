@@ -205,7 +205,7 @@ impl StateManagerMetrics {
         );
 
         let last_diverged = metrics_registry.int_gauge(
-            "state_manager_last_diverged_state_timestamp",
+            "state_manager_last_diverged_state_timestamp_seconds",
             "The (UTC) timestamp of the last diverged state report.",
         );
 

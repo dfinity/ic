@@ -29,6 +29,9 @@ use crate::{
     },
     util::{assert_create_agent, delay},
 };
+
+use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
+
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
 use garcon::Delay;
@@ -42,7 +45,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use serde::Deserialize;
 use slog::{error, info};
-use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
 use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -515,7 +517,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, canister_id);
+        let denylist_command = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
         let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_command).unwrap();
         info!(
             logger,

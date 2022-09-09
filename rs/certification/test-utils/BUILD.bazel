@@ -20,5 +20,6 @@ rust_library(
     name = "test-utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_certification_test_utils",
+    version = "0.1.0",
     deps = DEPENDENCIES,
 )

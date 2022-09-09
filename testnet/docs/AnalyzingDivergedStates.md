@@ -8,10 +8,11 @@ across replicas on a subnet.
 
 There are a couple of situations in which diverged states may be encountered:
 
- * Single replica divergence: the `state_manager_last_diverged_state_timestamp`
-   gets bumped, along with a "Replica diverged at height X" log message, meaning
-   that the replica's state diverged from the state certified by the subnet (and
-   included in the respective CUP).
+ * Single replica divergence: the
+   `state_manager_last_diverged_state_timestamp_seconds` gets bumped, along
+   with a "Replica diverged at height X" log message, meaning that the replica's
+   state diverged from the state certified by the subnet (and included in the
+   respective CUP).
 
  * More than 1/3 of replicas diverge: no CUPs are created for longer than one
    CUP interval; certified height stalls; eventually finalization rate drops to

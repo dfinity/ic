@@ -69,6 +69,7 @@ rust_library(
     }),
     crate_name = "ic_p2p",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
