@@ -225,7 +225,6 @@ impl StreamHandlerImpl {
             max_canister_memory_size: hypervisor_config.max_canister_memory_size,
             subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
             subnet_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
-            //cycle_map: BTreeMap::new(),
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -621,18 +620,14 @@ impl StreamHandlerImpl {
                 .route(msg.receiver().get());
 
             let payload_size = msg.payload_size_bytes().get();
-            // Test counting everything to avoid discrepancies
-            let cycles_in_msg = msg.cycles();
+            // Count incoming cycles of all messages in stream
+            // All of the msgs appearing here were counted as outgoing cycles
+            let new_cycles_sum = stream.sum_cycles_inc().add(msg.cycles());
+            stream.set_sum_cycles_inc(new_cycles_sum);
             self.metrics
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
-                .set(
-                    self.metrics
-                        .inc_cycles
-                        .with_label_values(&[&remote_subnet_id.to_string()])
-                        .get()
-                        + cycles_in_msg.get() as f64,
-                );
+                .set(new_cycles_sum.get() as f64);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -645,35 +640,11 @@ impl StreamHandlerImpl {
                     Ok(()) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
-                        // #### XNet cycle transfer monitoring
-                        let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                        stream.set_sum_cycles_inc(new_cycles_sum);
-                        // self.metrics
-                        //     .inc_cycles
-                        //     .with_label_values(&[&remote_subnet_id.to_string()])
-                        //     .set(new_cycles_sum.get() as f64);
-                        // self.metrics
-                        //     .inc_cycles
-                        //     .with_label_values(&[&remote_subnet_id.to_string()])
-                        //     .set(
-                        //         self.metrics
-                        //             .inc_cycles
-                        //             .with_label_values(&[&remote_subnet_id.to_string()])
-                        //             .get()
-                        //             + cycles_in_msg.get() as f64,
-                        //     );
                     }
 
                     // Message not inducted.
                     Err((err, msg)) => {
                         self.observe_inducted_message_status(msg_type, err.to_label_value());
-                        // #### XNet cycle transfer monitoring
-                        // let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                        // stream.set_sum_cycles_inc(new_cycles_sum);
-                        // self.metrics
-                        //     .inc_cycles
-                        //     .with_label_values(&[&remote_subnet_id.to_string()])
-                        //     .set(new_cycles_sum.get() as f64);
                         match msg {
                             RequestOrResponse::Request(_) => {
                                 debug!(
@@ -714,13 +685,6 @@ impl StreamHandlerImpl {
                                     host_subnet
                                 ),
                             );
-                            // #### XNet cycle transfer monitoring
-                            // let new_cycles_sum = stream.sum_cycles_inc().add(cycles_in_msg);
-                            // stream.set_sum_cycles_inc(new_cycles_sum);
-                            // self.metrics
-                            //     .inc_cycles
-                            //     .with_label_values(&[&remote_subnet_id.to_string()])
-                            //     .set(new_cycles_sum.get() as f64);
                             stream.push(generate_reject_response(msg, context));
                         }
 

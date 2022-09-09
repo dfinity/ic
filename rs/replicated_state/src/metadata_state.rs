@@ -984,24 +984,14 @@ impl Stream {
         self.signals_end.inc_assign()
     }
 
-    /// Returns the sum of cycles received.
-    pub fn sum_cycles_inc(&self) -> Cycles {
-        self.sum_cycles_inc
-    }
-
     /// Sets the amount of cycles received.
     pub fn set_sum_cycles_inc(&mut self, new_sum_cycles_inc: Cycles) {
-        self.sum_cycles_inc = new_sum_cycles_inc
-    }
-
-    /// Returns the sum of cycles sent.
-    pub fn sum_cycles_out(&self) -> Cycles {
-        self.sum_cycles_out
+        self.sum_cycles_inc = new_sum_cycles_inc;
     }
 
     /// Sets the amount of cycles sent.
     pub fn set_sum_cycles_out(&mut self, new_sum_cycles_out: Cycles) {
-        self.sum_cycles_out = new_sum_cycles_out
+        self.sum_cycles_out = new_sum_cycles_out;
     }
 
     /// Appends the given reject signal to the tail of the reject signals.
@@ -1201,19 +1191,19 @@ impl<'a> StreamHandle<'a> {
         self.stream.sum_cycles_inc
     }
 
-    /// Sets the amount of cycles received.
-    pub fn set_sum_cycles_inc(&mut self, new_sum_cycles_inc: Cycles) {
-        self.stream.sum_cycles_inc = new_sum_cycles_inc
-    }
-
     /// Returns the sum of cycles sent.
     pub fn sum_cycles_out(&self) -> Cycles {
         self.stream.sum_cycles_out
     }
 
+    /// Sets the amount of cycles received.
+    pub fn set_sum_cycles_inc(&mut self, new_sum_cycles_inc: Cycles) {
+        self.stream.set_sum_cycles_inc(new_sum_cycles_inc);
+    }
+
     /// Sets the amount of cycles sent.
     pub fn set_sum_cycles_out(&mut self, new_sum_cycles_out: Cycles) {
-        self.stream.sum_cycles_out = new_sum_cycles_out
+        self.stream.set_sum_cycles_out(new_sum_cycles_out);
     }
 
     /// Appends the given message to the tail of the stream.
