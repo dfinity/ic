@@ -41,18 +41,14 @@ function copy_certs() {
 }
 
 function copy_deny_list() {
-    DENY_LIST="/boot/config/denylist.map"
-    if [[ ! -f ${DENY_LIST} ]]; then
-        DENY_LIST="/etc/nginx/denylist.map"
+    DENY_LIST_SRC="/boot/config/denylist.map"
+    DENY_LIST_DST="/var/opt/nginx/denylist/denylist.map"
+
+    if [[ ! -f ${DENY_LIST_SRC} ]]; then
+        touch "${DENY_LIST_DST}"
+    else
+        cp "${DENY_LIST_SRC}" "${DENY_LIST_DST}"
     fi
-
-    cp \
-        "${DENY_LIST}" \
-        "${NGINX_RUN}"/denylist.map
-
-    mount --bind \
-        "${NGINX_RUN}"/denylist.map \
-        /etc/nginx/denylist.map
 }
 
 function setup_domain_name() {
@@ -111,7 +107,6 @@ function restore_context() {
         certs/chain.pem
         certs/fullchain.pem
         conf.d/*.conf
-        denylist.map
         ic_public_key.pem
         ic/*
         keys/privkey.pem

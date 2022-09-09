@@ -82,6 +82,7 @@
       # Extract the directory name for the libssl.so.1.1 library, from the ldd output
       libssl_path=$(dirname "$(ldd "$openssl_bin" | grep "libssl.so.1.1" | awk '{print $3}')")
       libcpp6_path=$(dirname "$(ldd "$TMP/a.out" | grep "libstdc++.so.6" | awk '{print $3}')")
+      rm -rf "$TMP"
 
       ld_lib_path=$(which ls | xargs -n1 ldd | grep "ld-linux-x86-64.so" | awk '{print $3}')
       # Path the ld and libssl.so.1.1 library paths in the ic-p8s-service-discovery binary

@@ -454,13 +454,12 @@ impl CanisterManager {
         sender: PrincipalId,
         settings: CanisterSettings,
         canister: &mut CanisterState,
-        total_subnet_compute_allocation_used: u64,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // Verify controller.
         validate_controller(canister, &sender)?;
         validate_compute_allocation(
-            total_subnet_compute_allocation_used,
+            round_limits.compute_allocation_used,
             canister,
             settings.compute_allocation(),
             &self.config,
@@ -481,8 +480,20 @@ impl CanisterManager {
             .memory_allocation
             .bytes()
             .max(old_usage);
+        let old_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
 
         self.do_update_settings(validated_settings, canister);
+
+        let new_compute_allocation = canister.scheduler_state.compute_allocation.as_percent();
+        if old_compute_allocation < new_compute_allocation {
+            round_limits.compute_allocation_used = round_limits
+                .compute_allocation_used
+                .saturating_add(new_compute_allocation - old_compute_allocation);
+        } else {
+            round_limits.compute_allocation_used = round_limits
+                .compute_allocation_used
+                .saturating_sub(old_compute_allocation - new_compute_allocation);
+        }
 
         let new_usage = old_usage;
         let new_mem = canister
@@ -549,7 +560,7 @@ impl CanisterManager {
         // Validate settings before `create_canister_helper` applies them
         match self.validate_settings(
             settings,
-            state.total_compute_allocation(),
+            round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
         ) {
             Err(err) => (Err(err), cycles),
@@ -590,10 +601,7 @@ impl CanisterManager {
     ) {
         let time = state.time();
         let canister_layout_path = state.path().to_path_buf();
-        let compute_allocation_used = state.total_compute_allocation();
         let network_topology = state.metadata.network_topology.clone();
-        // overwrite for now
-        round_limits.compute_allocation_used = compute_allocation_used;
 
         let old_canister = match state.take_canister_state(&context.canister_id) {
             None => {
@@ -905,21 +913,12 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
-        // Setting controller has nothing to do with compute allocation
-        let compute_allocation_used = 0;
-
         let canister = state
             .canister_state_mut(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
 
         let settings = CanisterSettings::new(Some(new_controller), None, None, None, None);
-        self.update_settings(
-            sender,
-            settings,
-            canister,
-            compute_allocation_used,
-            round_limits,
-        )
+        self.update_settings(sender, settings, canister, round_limits)
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.
@@ -1038,7 +1037,7 @@ impl CanisterManager {
         // No creation fee applied.
         match self.validate_settings(
             settings,
-            state.total_compute_allocation(),
+            round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
         ) {
             Err(err) => Err(err),
@@ -1106,6 +1105,9 @@ impl CanisterManager {
             .try_decrement(new_mem, NumBytes::from(0))
             .ok();
 
+        round_limits.compute_allocation_used = round_limits
+            .compute_allocation_used
+            .saturating_add(new_canister.scheduler_state.compute_allocation.as_percent());
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
 

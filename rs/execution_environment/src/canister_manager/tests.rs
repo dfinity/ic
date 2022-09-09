@@ -3339,17 +3339,10 @@ fn lower_memory_allocation_than_usage_fails() {
             None,
         );
 
-        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         assert_matches!(
-            canister_manager.update_settings(
-                sender,
-                settings,
-                canister,
-                compute_allocation_used,
-                &mut round_limits,
-            ),
+            canister_manager.update_settings(sender, settings, canister, &mut round_limits,),
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
     })
@@ -3421,17 +3414,10 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             None,
         );
 
-        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
-            .update_settings(
-                sender,
-                settings,
-                canister,
-                compute_allocation_used,
-                &mut round_limits,
-            )
+            .update_settings(sender, settings, canister, &mut round_limits)
             .unwrap();
 
         install_code(
@@ -3553,17 +3539,10 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             None,
         );
 
-        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
-            .update_settings(
-                sender,
-                settings,
-                canister,
-                compute_allocation_used,
-                &mut round_limits,
-            )
+            .update_settings(sender, settings, canister, &mut round_limits)
             .unwrap();
 
         install_code(
@@ -3663,7 +3642,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
             None,
         );
 
-        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
@@ -3671,7 +3649,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 sender,
                 settings,
                 canister,
-                compute_allocation_used,
                 //memory_allocation_used,
                 &mut round_limits,
             )
@@ -3758,17 +3735,10 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             None,
         );
 
-        let compute_allocation_used = state.total_compute_allocation();
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
-            .update_settings(
-                sender,
-                settings,
-                canister,
-                compute_allocation_used,
-                &mut round_limits,
-            )
+            .update_settings(sender, settings, canister, &mut round_limits)
             .unwrap();
 
         install_code(
