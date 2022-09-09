@@ -107,6 +107,44 @@ pub(crate) struct TransportImpl {
     pub weak_self: std::sync::RwLock<Weak<TransportImpl>>,
 }
 
+pub(crate) struct TransportImplH2 {
+    /// The node ID of this replica
+    pub _node_id: NodeId,
+    /// The IP address of this node
+    pub _node_ip: IpAddr,
+    /// Configuration
+    pub _config: TransportConfig,
+
+    /// Port used to accept connections for this transport-client
+    pub _accept_port: Mutex<Option<ServerPortState>>,
+    /// Mapping of peers to their corresponding state
+    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerState>>>,
+    /// Event handler to report back to the transport client
+    pub event_handler: Mutex<Option<TransportEventHandler>>,
+
+    // Crypto and data required for TLS handshakes
+    /// Clients that are allowed to connect to this node
+    pub allowed_clients: Arc<RwLock<BTreeSet<NodeId>>>,
+    /// The registry version that is used
+    pub _registry_version: Arc<RwLock<RegistryVersion>>,
+    /// Reference to the crypto component
+    pub _crypto: Arc<dyn TlsHandshake + Send + Sync>,
+
+    /// Data plane metrics
+    pub _data_plane_metrics: DataPlaneMetrics,
+    /// Control plane metrics
+    pub _control_plane_metrics: ControlPlaneMetrics,
+    /// Send queue metrics
+    pub _send_queue_metrics: SendQueueMetrics,
+
+    /// The tokio runtime
+    pub rt_handle: Handle,
+    /// Logger
+    pub log: ReplicaLogger,
+    /// Guarded self weak-reference
+    pub weak_self: std::sync::RwLock<Weak<TransportImplH2>>,
+}
+
 /// Our role in a connection
 #[derive(Debug, PartialEq, Eq, Copy, Clone, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
