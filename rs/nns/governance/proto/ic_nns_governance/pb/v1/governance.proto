@@ -485,6 +485,11 @@ enum NnsFunction {
   /// The nodes that are being added to the subnet must be currently unassigned.
   /// The nodes that are being removed from the subnet must be currently assigned to the subnet.
   NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP = 31;
+  // Updates the available subnet types in the cycles minting canister.
+  NNS_FUNCTION_UPDATE_SUBNET_TYPE = 32;
+  // Changes the assignment of subnets to subnet types in the cycles minting
+  // canister.
+  NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT = 33;
 }
 
 // Payload of a proposal that calls a function on another NNS

@@ -514,6 +514,29 @@ fn remove_subnets_from_type(
     })
 }
 
+#[candid_method(query, rename = "get_subnet_types_to_subnets")]
+fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
+    with_state(|state| {
+        let subnet_types_to_subnets: Vec<(String, Vec<SubnetId>)> = state
+            .subnet_types_to_subnets
+            .as_ref()
+            .expect("subnet types to subnets mapping is not `None`")
+            .iter()
+            .map(|(k, v)| (k.clone(), v.iter().copied().collect()))
+            .collect();
+
+        SubnetTypesToSubnetsResponse {
+            data: subnet_types_to_subnets,
+        }
+    })
+}
+
+/// Retrieves the current mapping of subnet types to subnets.
+#[export_name = "canister_query get_subnet_types_to_subnets"]
+fn get_subnet_types_to_subnets_() {
+    over(candid_one, |_: ()| get_subnet_types_to_subnets())
+}
+
 /// Constructs a hash tree that can be used to certify requests for the
 /// conversion rate (both the current and the average, if they are set).
 ///

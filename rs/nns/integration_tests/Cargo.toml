@@ -64,6 +64,7 @@ ic-registry-transport = { path = "../../registry/transport" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 libsecp256k1 = "0.5.0"
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }

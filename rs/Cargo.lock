@@ -6543,6 +6543,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types 0.8.0",
+ "ic-types-test-utils",
  "lazy_static",
  "ledger-canister",
  "libsecp256k1",
