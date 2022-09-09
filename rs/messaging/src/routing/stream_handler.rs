@@ -655,7 +655,12 @@ impl StreamHandlerImpl {
                                 );
                                 let code = reject_code_for_state_error(&err);
                                 let context = RejectContext::new(code, err.to_string());
-                                stream.push(generate_reject_response(msg, context))
+                                // Count response as outgoing cycles. This does not change metric of stream_builder!
+                                let reject_rep = generate_reject_response(msg, context);
+                                stream.set_sum_cycles_out(
+                                        stream.sum_cycles_out().add(reject_rep.cycles()),
+                                );
+                                stream.push(reject_rep)
                             }
                             RequestOrResponse::Response(response) => {
                                 // Critical error, responses should always be inducted successfully.
@@ -685,7 +690,12 @@ impl StreamHandlerImpl {
                                     host_subnet
                                 ),
                             );
-                            stream.push(generate_reject_response(msg, context));
+                            // Count response as outgoing cycles. This does not change metric of stream_builder!
+                            let reject_rep = generate_reject_response(msg, context);
+                            stream.set_sum_cycles_out(
+                                    stream.sum_cycles_out().add(reject_rep.cycles()),
+                            );
+                            stream.push(reject_rep);
                         }
 
                         RequestOrResponse::Response(_) => {
