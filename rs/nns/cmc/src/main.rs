@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::{max, min};
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -117,6 +117,24 @@ struct State {
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
     maturity_modulation_permyriad: Option<i32>,
+
+    /// Maintains the mapping of subnet types to subnet ids. Users can choose to
+    /// deploy their canisters on subnets with specific characteristics by
+    /// selecting one of these types.
+    ///
+    ///
+    /// These user facing subnet types capture common useful characteristics of
+    /// the subnets and should not be confused with the existing concept of
+    /// subnet types that exists in the registry (system/verified/application).
+    /// The idea is that these types provide an easy way for users to set their
+    /// preferences during canister creation. If no subnet type is provided
+    /// during canister creation, an application subnet will be picked at random
+    /// as it happens today, as no special requirements were provided.
+    ///
+    /// Each subnet can be assigned to at most one type and cannot be part of
+    /// the default or authorised subnets. Essentially, a subnet can either have
+    /// some specialization or it's one of the common subnets.
+    subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
 }
 
 impl State {
@@ -180,6 +198,7 @@ impl Default for State {
             blocks_notified: Some(BTreeMap::new()),
             last_purged_notification: Some(0),
             maturity_modulation_permyriad: Some(0),
+            subnet_types_to_subnets: Some(BTreeMap::new()),
         }
     }
 }
@@ -1332,7 +1351,12 @@ fn post_upgrade() {
             bytes.len(),
         ));
 
-        STATE.with(|state| state.replace(Some(State::decode(&bytes).unwrap())));
+        let mut new_state = State::decode(&bytes).unwrap();
+        if new_state.subnet_types_to_subnets.is_none() {
+            new_state.subnet_types_to_subnets = Some(BTreeMap::new());
+        }
+
+        STATE.with(|state| state.replace(Some(new_state)));
     })
 }
 
