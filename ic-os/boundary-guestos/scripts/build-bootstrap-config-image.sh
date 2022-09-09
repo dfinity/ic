@@ -251,12 +251,12 @@ EOF
     fi
 
     # setup the deny list
-    if [[ -f ${DENYLIST} ]]; then
+    if [[ -f "${DENYLIST}" ]]; then
         echo "Using deny list ${DENYLIST}"
-        cp ${DENYLIST} ${BOOTSTRAP_TMPDIR}/denylist.map
+        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.map"
     else
         echo "Using empty denylist"
-        touch ${BOOTSTRAP_TMPDIR}/denylist.map
+        touch "${BOOTSTRAP_TMPDIR}/denylist.map"
     fi
 
     # setup the bn_vars
@@ -272,10 +272,12 @@ ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
 EOF
 
     # setup the prober identity
-    if [[ -f ${PROBER_IDENTITY} ]]; then
+    mkdir -p "${BOOTSTRAP_TMPDIR}/prober"
+    if [[ -f "${PROBER_IDENTITY}" ]]; then
         echo "Using prober identity ${PROBER_IDENTITY}"
-        mkdir -p ${BOOTSTRAP_TMPDIR}/prober
-        cp ${PROBER_IDENTITY} ${BOOTSTRAP_TMPDIR}/prober/identity.pem
+        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober/identity.pem"
+    else
+        touch "${BOOTSTRAP_TMPDIR}/prober/prober.disabled"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .

@@ -53,5 +53,3 @@ function main() {
 }
 
 main "$@"
-
-echo "{{FOO}}" | sed -e "s|{{FOO}}|foo|g"

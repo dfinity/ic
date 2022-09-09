@@ -17,6 +17,17 @@ function read_variables() {
 
     if [[ -f "${BOOT_CONFIG}/prober.disabled" ]]; then
         PROBER_DISABLED="true"
+        return
+    fi
+
+    if [ ! -f "${BOOT_CONFIG}/identity.pem" ]; then
+        err "missing prober identity: ${BOOT_CONFIG}/identity.pem"
+        exit 1
+    fi
+
+    if [ ! -f "${BOOT_CONFIG}/nns_public_key.pem" ]; then
+        err "missing nns public key: ${BOOT_CONFIG}/nns_public_key.pem"
+        exit 1
     fi
 }
 
@@ -34,7 +45,7 @@ function generate_prober_config() {
     cp "${BOOT_CONFIG}/identity.pem" "${RUN_DIR}/identity.pem"
 
     # Setup network key
-    cat "${RUN_DIR}/ic_public_key.pem" \
+    cat "${BOOT_CONFIG}/nns_public_key.pem" \
         | sed '1d;$d' \
         | tr -d '\n' \
         | base64 -d \

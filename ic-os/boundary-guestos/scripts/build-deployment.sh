@@ -198,7 +198,7 @@ function create_tarball_structure() {
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            mkdir -p "${CONFIG_DIR}/$NODE_PREFIX/node/replica_config"
+            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/node/replica_config"
         fi
     done
 }
@@ -214,13 +214,13 @@ function generate_logging_config() {
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
             if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
-                echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
+                echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/${NODE_PREFIX}/journalbeat.conf"
             fi
             if [ "${JOURNALBEAT_TAGS}" != "" ]; then
-                echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
+                echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/journalbeat.conf"
             fi
 
-            echo "ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-https://elasticsearch.testnet.dfinity.systems}" >>"${CONFIG_DIR}/$NODE_PREFIX/vector.conf"
+            echo "ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-https://elasticsearch.testnet.dfinity.systems}" >>"${CONFIG_DIR}/${NODE_PREFIX}/vector.conf"
         fi
     done
 }
@@ -260,18 +260,18 @@ function generate_boundary_node_config() {
         fi
 
         if [ -f "${IC_PREP_DIR}/nns_public_key.pem" ]; then
-            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
+            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/${NODE_PREFIX}/nns_public_key.pem"
         fi
 
-        echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
-        mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/buildinfo
-        cat >"${CONFIG_DIR}/$NODE_PREFIX/buildinfo/version.prom" <<EOF
+        echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/${NODE_PREFIX}/nns.conf"
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/buildinfo"
+        cat >"${CONFIG_DIR}/${NODE_PREFIX}/buildinfo/version.prom" <<EOF
 # HELP bn_version_info version information for the boundary node
 # TYPE bn_version_info counter
 bn_version_info{git_revision="${GIT_REVISION}"} 1
 EOF
 
-        echo "$BN_VARS" >"${CONFIG_DIR}/$NODE_PREFIX/bn_vars.conf"
+        echo "$BN_VARS" >"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
 
@@ -306,30 +306,30 @@ function generate_network_config() {
 
             # Define hostname
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            echo "hostname=${hostname}" >"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            echo "hostname=${hostname}" >"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
             # Set name servers
-            echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
-            echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
             # Set ipv4 address
             if [ -z ${ipv4_address:-} ]; then
                 echo "ipv4_address is unset"
             else
-                echo "ipv4_address=${ipv4_address}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+                echo "ipv4_address=${ipv4_address}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             fi
 
             # Set ipv4 gateway
             if [ -z ${ipv4_gateway:-} ]; then
                 echo "ipv4_gateway is unset"
             else
-                echo "ipv4_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+                echo "ipv4_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             fi
 
             # Set ipv6 replicas
-            echo "ipv6_replica_ips=${REPLICAS_IPV6}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            echo "ipv6_replica_ips=${REPLICAS_IPV6}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
-            cat "${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            cat "${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             # IPv6 network configuration is obtained from the Router Advertisement.
         fi
     done
@@ -346,18 +346,18 @@ function generate_prober_config() {
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
+            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/prober"
+
             # copy_prober_identity
-            if [[ -f ${PROBER_IDENTITY} ]]; then
+            if [[ -f "${PROBER_IDENTITY}" ]]; then
                 echo "Using prober identity ${PROBER_IDENTITY}"
-                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
-                cp ${PROBER_IDENTITY} ${CONFIG_DIR}/$NODE_PREFIX/prober/identity.pem
+                cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober/identity.pem"
             fi
 
             # enable/disable prober
             if [ -z ${prober:-} ]; then
                 echo "Disabling prober"
-                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
-                touch ${CONFIG_DIR}/$NODE_PREFIX/prober/prober.disabled
+                touch "${CONFIG_DIR}/${NODE_PREFIX}/prober/prober.disabled"
             fi
         fi
     done
@@ -371,12 +371,12 @@ function generate_denylist_config() {
             local node_idx=${NODE["node_idx"]}
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [[ -f ${DENY_LIST} ]]; then
+            if [[ -f "${DENY_LIST}" ]]; then
                 echo "Using deny list ${DENY_LIST}"
-                cp ${DENY_LIST} ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
+                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
             else
                 echo "Using empty denylist"
-                touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
+                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
             fi
         fi
     done
@@ -396,13 +396,13 @@ function copy_ssh_keys() {
             # Symlinks must be refused by the config injection script (they
             # can lead to confusion and side effects when overwriting one
             # file changes another).
-            cp -Lr "${SSH}" "${CONFIG_DIR}/$NODE_PREFIX/accounts_ssh_authorized_keys"
+            cp -Lr "${SSH}" "${CONFIG_DIR}/${NODE_PREFIX}/accounts_ssh_authorized_keys"
         fi
     done
 }
 
 function setup_certs() {
-    if [[ -f ${CERT_DIR}/fullchain.pem ]] && [[ -f ${CERT_DIR}/privkey.pem ]] && [[ -f ${CERT_DIR}/chain.pem ]]; then
+    if [[ -f "${CERT_DIR}/fullchain.pem" ]] && [[ -f "${CERT_DIR}/privkey.pem" ]] && [[ -f "${CERT_DIR}/chain.pem" ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
         for n in $NODES; do
             declare -n NODE=$n
@@ -411,10 +411,10 @@ function setup_certs() {
                 local node_idx=${NODE["node_idx"]}
 
                 NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/certs
-                cp ${CERT_DIR}/fullchain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
-                cp ${CERT_DIR}/privkey.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
-                cp ${CERT_DIR}/chain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+                mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/certs"
+                cp "${CERT_DIR}/fullchain.pem" "${CONFIG_DIR}/${NODE_PREFIX}/certs"
+                cp "${CERT_DIR}/privkey.pem" "${CONFIG_DIR}/${NODE_PREFIX}/certs"
+                cp "${CERT_DIR}/chain.pem" "${CONFIG_DIR}/${NODE_PREFIX}/certs"
             fi
         done
     else
@@ -427,7 +427,7 @@ function setup_certs() {
 
                 NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
-                echo "invalid_ssl=true" >>"${CONFIG_DIR}/$NODE_PREFIX/icx-proxy.conf"
+                echo "invalid_ssl=true" >>"${CONFIG_DIR}/${NODE_PREFIX}/icx-proxy.conf"
             fi
         done
     fi
@@ -442,11 +442,11 @@ function build_tarball() {
 
             # Create temporary tarball directory per node
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            mkdir -p "${TARBALL_DIR}/$NODE_PREFIX"
+            mkdir -p "${TARBALL_DIR}/${NODE_PREFIX}"
             (
-                cd "${CONFIG_DIR}/$NODE_PREFIX"
+                cd "${CONFIG_DIR}/${NODE_PREFIX}"
                 tar c .
-            ) >${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar
+            ) >"${TARBALL_DIR}/${NODE_PREFIX}/ic-bootstrap.tar"
         fi
     done
     tar czf "${OUTPUT}/config.tgz" -C "${CONFIG_DIR}" .
@@ -461,9 +461,9 @@ function build_removable_media() {
 
             #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            truncate --size 4M "${OUTPUT}/$NODE_PREFIX.img"
-            mkfs.vfat "${OUTPUT}/$NODE_PREFIX.img"
-            mcopy -i "${OUTPUT}/$NODE_PREFIX.img" -o -s ${TARBALL_DIR}/$NODE_PREFIX/ic-bootstrap.tar ::
+            truncate --size 4M "${OUTPUT}/${NODE_PREFIX}.img"
+            mkfs.vfat "${OUTPUT}/${NODE_PREFIX}.img"
+            mcopy -i "${OUTPUT}/${NODE_PREFIX}.img" -o -s "${TARBALL_DIR}/${NODE_PREFIX}/ic-bootstrap.tar" ::
         fi
     done
 }
