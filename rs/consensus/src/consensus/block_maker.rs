@@ -198,7 +198,7 @@ impl BlockMaker {
         rank: Rank,
         parent: Block,
     ) -> Option<BlockProposal> {
-        let parent_hash = ic_crypto::crypto_hash(&parent);
+        let parent_hash = ic_types::crypto::crypto_hash(&parent);
         let height = parent.height.increment();
         let certified_height = self.state_manager.latest_certified_height();
 
@@ -298,7 +298,7 @@ impl BlockMaker {
         .ok()?;
 
         let payload = Payload::new(
-            ic_crypto::crypto_hash,
+            ic_types::crypto::crypto_hash,
             match dkg_payload {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
@@ -371,7 +371,7 @@ impl BlockMaker {
             },
         );
         let block = Block::new(parent_hash, payload, height, rank, context);
-        let hashed_block = hashed::Hashed::new(ic_crypto::crypto_hash, block);
+        let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
         match self
             .crypto
             .sign(&hashed_block, self.replica_config.node_id, registry_version)
@@ -551,7 +551,7 @@ impl BlockMaker {
                                 let mut new_block = original_block.clone();
                                 new_block.context.time += Duration::from_nanos(i);
                                 let hashed_block =
-                                    hashed::Hashed::new(ic_crypto::crypto_hash, new_block);
+                                    hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
                                 if let Ok(signature) = self.crypto.sign(
                                     &hashed_block,
                                     self.replica_config.node_id,
@@ -599,7 +599,7 @@ impl BlockMaker {
         rank: Rank,
         parent: Block,
     ) -> Option<BlockProposal> {
-        let parent_hash = ic_crypto::crypto_hash(&parent);
+        let parent_hash = ic_types::crypto::crypto_hash(&parent);
         let height = parent.height.increment();
         let certified_height = self.state_manager.latest_certified_height();
         let context = parent.context.clone();
@@ -762,7 +762,7 @@ mod tests {
             };
             let expected_block = Block::new(
                 start_hash.clone(),
-                Payload::new(ic_crypto::crypto_hash, returned_payload.into()),
+                Payload::new(ic_types::crypto::crypto_hash, returned_payload.into()),
                 next_height,
                 Rank(1),
                 expected_context.clone(),

@@ -1,7 +1,7 @@
 use ed25519_dalek::{Keypair, Signer, KEYPAIR_LENGTH};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
-use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
+use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use std::{error::Error, sync::Arc};
 

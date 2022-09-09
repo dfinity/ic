@@ -6,13 +6,14 @@ use ic_crypto_test_utils_threshold_sigs::non_interactive::{
     RandomNiDkgConfig,
 };
 use ic_interfaces::crypto::{
-    LoadTranscriptResult, NiDkgAlgorithm, Signable, SignableMock, ThresholdSigVerifier,
-    ThresholdSigner,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::{CombinedThresholdSigOf, CryptoError, ThresholdSigShareOf};
+use ic_types::crypto::{
+    CombinedThresholdSigOf, CryptoError, Signable, SignableMock, ThresholdSigShareOf,
+};
 use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};

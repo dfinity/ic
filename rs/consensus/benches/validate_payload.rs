@@ -258,7 +258,7 @@ fn add_past_blocks(
         block.rank = Rank(i as u64);
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
         block.payload = Payload::new(
-            ic_crypto::crypto_hash,
+            ic_types::crypto::crypto_hash,
             (
                 BatchPayload {
                     ingress,
@@ -329,7 +329,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
                 let ingress = prepare_ingress_payload(now, message_count, seed as u8);
                 let payload = Payload::new(
-                    ic_crypto::crypto_hash,
+                    ic_types::crypto::crypto_hash,
                     (
                         BatchPayload {
                             ingress,

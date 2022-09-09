@@ -756,7 +756,7 @@ pub(crate) mod test_utils {
         let support = IDkgDealingSupport {
             transcript_id,
             dealer_id,
-            dealing_hash: ic_crypto::crypto_hash(&dealing),
+            dealing_hash: ic_types::crypto::crypto_hash(&dealing),
             sig_share: BasicSignature::fake(signer),
         };
         (dealing, support)

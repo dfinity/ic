@@ -107,7 +107,7 @@ where
         signer: NodeId,
         selector: RegistryVersion,
     ) -> CryptoResult<BasicSignature<CryptoHashOf<Message>>> {
-        self.sign_basic(&ic_crypto::crypto_hash(message), signer, selector)
+        self.sign_basic(&ic_types::crypto::crypto_hash(message), signer, selector)
             .map(|signature| BasicSignature { signature, signer })
     }
 
@@ -118,7 +118,7 @@ where
     ) -> ValidationResult<CryptoError> {
         self.verify_basic_sig(
             &message.signature.signature,
-            &ic_crypto::crypto_hash(&message.content),
+            &ic_types::crypto::crypto_hash(&message.content),
             message.signature.signer,
             selector,
         )
@@ -165,7 +165,7 @@ where
         signer: NodeId,
         selector: RegistryVersion,
     ) -> CryptoResult<MultiSignatureShare<CryptoHashOf<Message>>> {
-        self.sign_multi(&ic_crypto::crypto_hash(message), signer, selector)
+        self.sign_multi(&ic_types::crypto::crypto_hash(message), signer, selector)
             .map(|signature| MultiSignatureShare { signature, signer })
     }
 
@@ -176,7 +176,7 @@ where
     ) -> ValidationResult<CryptoError> {
         self.verify_multi_sig_individual(
             &message.signature.signature,
-            &ic_crypto::crypto_hash(&message.content),
+            &ic_types::crypto::crypto_hash(&message.content),
             message.signature.signer,
             selector,
         )
@@ -363,7 +363,7 @@ where
     ) -> ValidationResult<CryptoError> {
         self.verify_multi_sig_combined(
             &message.signature.signature,
-            &ic_crypto::crypto_hash(&message.content),
+            &ic_types::crypto::crypto_hash(&message.content),
             message.signature.signers.iter().cloned().collect(),
             selector,
         )

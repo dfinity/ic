@@ -8,7 +8,6 @@ rust_library(
     crate_name = "ic_ecdsa_object",
     version = "0.8.0",
     deps = [
-        "//rs/crypto/hash",
         "//rs/interfaces",
         "//rs/types/types",
     ],

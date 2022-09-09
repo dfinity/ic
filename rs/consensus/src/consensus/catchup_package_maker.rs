@@ -202,8 +202,8 @@ impl<'a> CatchUpPackageMaker {
             }
             Ok(state_hash) => {
                 let content = CatchUpContent::new(
-                    HashedBlock::new(ic_crypto::crypto_hash, start_block),
-                    HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon),
+                    HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
                     state_hash,
                 );
                 let share_content = CatchUpShareContent::from(&content);
@@ -299,7 +299,7 @@ mod tests {
             let mut proposal = pool.make_next_block();
             let mut block = proposal.content.as_mut();
             block.context.certified_height = block.height();
-            proposal.content = HashedBlock::new(ic_crypto::crypto_hash, block.clone());
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(proposal.clone());
             pool.notarize(&proposal);
             pool.finalize(&proposal);

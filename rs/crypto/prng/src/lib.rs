@@ -1,7 +1,7 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
-use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::{RandomBeacon, RandomTape};
+use ic_types::crypto::CryptoHashable;
 use ic_types::Randomness;
 use rand::{CryptoRng, Error, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;

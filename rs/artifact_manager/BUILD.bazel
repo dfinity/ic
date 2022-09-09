@@ -6,7 +6,6 @@ DEPENDENCIES = [
     "//rs/consensus/ecdsa_object",
     "//rs/consensus/message",
     "//rs/constants",
-    "//rs/crypto/hash",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

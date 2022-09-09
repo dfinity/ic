@@ -1,8 +1,7 @@
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey, CspSecretKey};
-use ic_interfaces::crypto::SignableMock;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{
-    BasicSig, BasicSigOf, IndividualMultiSig, IndividualMultiSigOf, KeyPurpose,
+    BasicSig, BasicSigOf, IndividualMultiSig, IndividualMultiSigOf, KeyPurpose, SignableMock,
 };
 use ic_types::{NodeId, RegistryVersion};
 use strum_macros::EnumIter;

@@ -1,8 +1,9 @@
 mod crypto_hash_tests {
     use super::super::*;
     use ic_crypto_sha::{DomainSeparationContext, Sha256};
-    use ic_interfaces::crypto::{CryptoHashDomain, CryptoHashableTestDummy};
     use std::hash::Hash;
+    use CryptoHashDomain;
+    use CryptoHashableTestDummy;
 
     const TEST_INPUT: &[u8; 445] = b"Lorem ipsum dolor sit amet, consectetur \
         adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut \

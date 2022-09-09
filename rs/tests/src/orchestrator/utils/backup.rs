@@ -186,7 +186,7 @@ impl Backup {
             Block::new(
                 hash.clone(),
                 Payload::new(
-                    ic_crypto::crypto_hash,
+                    ic_types::crypto::crypto_hash,
                     (ic_types::consensus::dkg::Summary::fake(), None).into(),
                 ),
                 height,
