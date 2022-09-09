@@ -1,8 +1,8 @@
 [Unit]
-Description=Set variable files (i.e. ELASTICSEARCH_URL) for vector
+Description=Set variable files (i.e. DENYLIST_URL) for denylist-updater
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=vector.service
+Before=denylist-updater.service
 
 [Install]
 WantedBy=multi-user.target
@@ -10,7 +10,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-vector.sh
+ExecStart=/opt/ic/bin/setup-denylist-updater.sh
 
 [Install]
 WantedBy=multi-user.target

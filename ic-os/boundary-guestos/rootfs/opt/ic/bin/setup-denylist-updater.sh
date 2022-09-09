@@ -3,7 +3,7 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/vector'
+readonly TMPLT_FILE='/etc/default/denylist-updater'
 readonly RUN_DIR='/run/ic-node/etc/default'
 
 function err() {
@@ -27,29 +27,29 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
-            "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
+            "denylist_url") DENYLIST_URL="${value}" ;;
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
-    if [[ -z "$ELASTICSEARCH_URL" ]]; then
-        err "missing vector configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
+    if [[ -z "$DENYLIST_URL" ]]; then
+        err "missing denylist updater configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
         exit 1
     fi
 }
 
-function generate_vector_config() {
+function generate_denylist_updater_config() {
     # Create config dir
     mkdir -p "${RUN_DIR}"
 
     # Move active configuration and prepare it (use `|` in the `sed` command
     # because it's not a valid URL character)
-    cp -a "${TMPLT_FILE}" "${RUN_DIR}/vector"
-    sed -i -e "s|{{ELASTICSEARCH_URL}}|${ELASTICSEARCH_URL}|g" "${RUN_DIR}/vector"
+    cp -a "${TMPLT_FILE}" "${RUN_DIR}/denylist-updater"
+    sed -i -e "s|{{DENYLIST_URL}}|${DENYLIST_URL}|g" "${RUN_DIR}/denylist-updater"
 }
 
 function main() {
     read_variables
-    generate_vector_config
+    generate_denylist_updater_config
 }
 
 main "$@"
