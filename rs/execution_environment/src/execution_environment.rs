@@ -1946,31 +1946,36 @@ impl ExecutionEnvironment {
         id
     }
 
+    /// Aborts paused execution in the given state.
+    pub fn abort_canister(&self, canister: &mut CanisterState) {
+        if !canister.system_state.task_queue.is_empty() {
+            canister.apply_priority_credit();
+            let task_queue = std::mem::take(&mut canister.system_state.task_queue);
+            canister.system_state.task_queue = task_queue
+                .into_iter()
+                .map(|task| match task {
+                    ExecutionTask::AbortedExecution(..)
+                    | ExecutionTask::AbortedInstallCode(..)
+                    | ExecutionTask::Heartbeat => task,
+                    ExecutionTask::PausedExecution(id) => {
+                        let paused = self.take_paused_execution(id).unwrap();
+                        let message = paused.abort();
+                        ExecutionTask::AbortedExecution(message)
+                    }
+                    ExecutionTask::PausedInstallCode(id) => {
+                        let paused = self.take_paused_install_code(id).unwrap();
+                        let message = paused.abort();
+                        ExecutionTask::AbortedInstallCode(message)
+                    }
+                })
+                .collect();
+        };
+    }
+
     /// Aborts all paused execution in the given state.
-    pub fn abort_paused_executions(&self, state: &mut ReplicatedState) {
+    pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState) {
         for canister in state.canisters_iter_mut() {
-            if !canister.system_state.task_queue.is_empty() {
-                canister.apply_priority_credit();
-                let task_queue = std::mem::take(&mut canister.system_state.task_queue);
-                canister.system_state.task_queue = task_queue
-                    .into_iter()
-                    .map(|task| match task {
-                        ExecutionTask::AbortedExecution(..)
-                        | ExecutionTask::AbortedInstallCode(..)
-                        | ExecutionTask::Heartbeat => task,
-                        ExecutionTask::PausedExecution(id) => {
-                            let paused = self.take_paused_execution(id).unwrap();
-                            let message = paused.abort();
-                            ExecutionTask::AbortedExecution(message)
-                        }
-                        ExecutionTask::PausedInstallCode(id) => {
-                            let paused = self.take_paused_install_code(id).unwrap();
-                            let message = paused.abort();
-                            ExecutionTask::AbortedInstallCode(message)
-                        }
-                    })
-                    .collect();
-            };
+            self.abort_canister(canister);
         }
     }
 

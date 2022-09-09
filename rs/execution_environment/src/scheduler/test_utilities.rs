@@ -397,6 +397,24 @@ impl SchedulerTest {
         self.increment_round();
     }
 
+    /// Executes ordinary rounds until there is no more progress,
+    /// calling closure `f` after each round.
+    pub fn execute_all_with<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut Self),
+    {
+        let mut number_of_executed_slices = 0;
+        loop {
+            self.execute_round(ExecutionRoundType::OrdinaryRound);
+            f(self);
+            let prev_number_of_executed_slices = number_of_executed_slices;
+            number_of_executed_slices = self.executed_schedule().len();
+            if prev_number_of_executed_slices == number_of_executed_slices {
+                break;
+            }
+        }
+    }
+
     pub fn drain_subnet_messages(
         &mut self,
         long_running_canister_ids: &BTreeSet<CanisterId>,

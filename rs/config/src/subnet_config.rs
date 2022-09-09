@@ -81,6 +81,17 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 //    If you change this number please adjust other constants as well.
 const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 
+/// Maximum number of concurrent long-running executions.
+/// In the worst case there will be no more than 11 running canisters during the round:
+///
+///   long installs + long updates + scheduler cores + query threads = 1 + 4 + 4 + 2 = 11
+///
+/// And no more than 7 running canisters in between the rounds:
+///
+///   long installs + long updates + query threads = 1 + 4 + 2 = 7
+///
+const MAX_PAUSED_EXECUTIONS: usize = 4;
+
 /// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
 /// second, that would come to  26k SDR per month if we spent the whole time
 /// creating signatures. At 13 nodes and 2k SDR per node per month this would
@@ -98,6 +109,14 @@ pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
     pub scheduler_cores: usize,
+
+    /// Maximum number of concurrent paused long-running install updates.
+    /// After each round there might be some pending long update executions.
+    /// Pending executions above this limit will be aborted and restarted later,
+    /// once scheduled.
+    ///
+    /// Note: this number does not limit the number of queries or short executions.
+    pub max_paused_executions: usize,
 
     /// Maximum amount of instructions a single round can consume (on one
     /// thread).
@@ -162,6 +181,7 @@ impl SchedulerConfig {
     pub fn application_subnet() -> Self {
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
@@ -182,6 +202,7 @@ impl SchedulerConfig {
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
@@ -205,6 +226,7 @@ impl SchedulerConfig {
     pub fn verified_application_subnet() -> Self {
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
+            max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,

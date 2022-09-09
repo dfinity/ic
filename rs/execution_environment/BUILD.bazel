@@ -72,7 +72,9 @@ DEV_DEPENDENCIES = [
     "@wabt_rs//:wabt",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:test-strategy",
+]
 
 ALIASES = {}
 
