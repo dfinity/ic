@@ -9,7 +9,7 @@ use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{call_with_cleanup, caller, set_certified_data},
-    over, over_async, over_init, stable, BytesS,
+    over, over_async, over_init, over_may_reject, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
 use ic_crypto_tree_hash::{
@@ -271,6 +271,76 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
             state.default_subnets = subnets;
         }
     });
+}
+
+#[export_name = "canister_update update_subnet_type"]
+fn update_subnet_type_() {
+    over_may_reject(candid_one, |args: UpdateSubnetTypeArgs| {
+        update_subnet_type(args).map_err(|err| err.to_string())
+    })
+}
+
+/// Updates the set of available subnet types.
+///
+/// Preconditions:
+//   * Only the governance canister can call this method
+//   * Add: type does not already exist
+//   * Remove: type exists and no assigned subnets to this type exist
+fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
+    let governance_canister_id = with_state(|state| state.governance_canister_id);
+
+    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        panic!("Only the governance canister can update the available subnet types.");
+    }
+
+    match args {
+        UpdateSubnetTypeArgs::Add(subnet_type) => add_subnet_type(subnet_type),
+        UpdateSubnetTypeArgs::Remove(subnet_type) => remove_subnet_type(subnet_type),
+    }
+}
+
+fn add_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Vacant(entry) => {
+                print(format!("[cycles] Adding new subnet type: {}", subnet_type));
+                entry.insert(BTreeSet::new());
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(UpdateSubnetTypeError::Duplicate(subnet_type)),
+        }
+    })
+}
+
+fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.get(&subnet_type) {
+            Some(subnets) => {
+                if !subnets.is_empty() {
+                    Err(UpdateSubnetTypeError::TypeHasAssignedSubnets((
+                        subnet_type,
+                        subnets.iter().copied().collect(),
+                    )))
+                } else {
+                    print(format!("[cycles] Removing subnet type: {}", subnet_type));
+                    // Type does not have any assigned subnets, so it can be removed.
+                    subnet_types_to_subnets.remove(&subnet_type);
+                    Ok(())
+                }
+            }
+            None => Err(UpdateSubnetTypeError::TypeDoesNotExist(subnet_type)),
+        }
+    })
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -1745,6 +1815,36 @@ mod tests {
         let maturity_modulation = (term1 + term2 + term3 + term4) / 4;
 
         assert_eq!(maturity_modulation, computed_maturity_modulation);
+    }
+
+    #[test]
+    fn test_add_subnet_type() {
+        init_test_state();
+
+        assert_eq!(add_subnet_type("Fiduciary".to_string()), Ok(()));
+        assert_eq!(add_subnet_type("Storage".to_string()), Ok(()));
+
+        assert_eq!(
+            add_subnet_type("Storage".to_string()),
+            Err(UpdateSubnetTypeError::Duplicate("Storage".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_remove_subnet_type() {
+        init_test_state();
+
+        assert_eq!(add_subnet_type("Fiduciary".to_string()), Ok(()));
+        assert_eq!(add_subnet_type("Storage".to_string()), Ok(()));
+
+        assert_eq!(remove_subnet_type("Storage".to_string()), Ok(()));
+
+        assert_eq!(
+            remove_subnet_type("MyType".to_string()),
+            Err(UpdateSubnetTypeError::TypeDoesNotExist(
+                "MyType".to_string()
+            ))
+        );
     }
 
     #[test]
