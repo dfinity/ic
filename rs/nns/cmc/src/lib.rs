@@ -274,6 +274,11 @@ impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
 pub type ChangeSubnetTypeAssignmentResult = Result<(), ChangeSubnetTypeAssignmentError>;
 
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+pub struct SubnetTypesToSubnetsResponse {
+    pub data: Vec<(String, Vec<SubnetId>)>,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
 pub struct IcpXdrConversionRate {
     /// The time for which the market data was queried, expressed in UNIX epoch
     /// time in seconds.
