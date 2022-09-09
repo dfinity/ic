@@ -577,16 +577,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )],
     ));
 
-    let xnet_120_subnets = message_routing::xnet_slo_test::config_120_subnets();
     m.add_suite(
         suite(
             "staging", //runs nightly, allowed to fail
             vec![
-                pot(
-                    "xnet_120_subnets_pot",
-                    xnet_120_subnets.build(),
-                    par(vec![t("xnet_120_subnets_test", xnet_120_subnets.test())]),
-                ),
                 pot_with_setup(
                     "boundary_nodes_pot",
                     boundary_nodes_integration::boundary_nodes::config,
@@ -712,6 +706,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();
+    let xnet_nightly_120_subnets = message_routing::xnet_slo_test::config_nightly_120_subnets();
     m.add_suite(suite(
         "nightly_short_duration",
         vec![
@@ -729,6 +724,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![t(
                     "xnet_slo_29_subnets_test",
                     xnet_nightly_29_subnets.test(),
+                )]),
+            ),
+            pot(
+                "xnet_120_subnets_pot",
+                xnet_nightly_120_subnets.build(),
+                par(vec![t(
+                    "xnet_slo_120_subnets_test",
+                    xnet_nightly_120_subnets.test(),
                 )]),
             ),
             pot_with_setup(
