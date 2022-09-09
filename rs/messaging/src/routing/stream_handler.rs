@@ -658,7 +658,7 @@ impl StreamHandlerImpl {
                                 // Count response as outgoing cycles. This does not change metric of stream_builder!
                                 let reject_rep = generate_reject_response(msg, context);
                                 stream.set_sum_cycles_out(
-                                        stream.sum_cycles_out().add(reject_rep.cycles()),
+                                    stream.sum_cycles_out().add(reject_rep.cycles()),
                                 );
                                 stream.push(reject_rep)
                             }
@@ -693,7 +693,7 @@ impl StreamHandlerImpl {
                             // Count response as outgoing cycles. This does not change metric of stream_builder!
                             let reject_rep = generate_reject_response(msg, context);
                             stream.set_sum_cycles_out(
-                                    stream.sum_cycles_out().add(reject_rep.cycles()),
+                                stream.sum_cycles_out().add(reject_rep.cycles()),
                             );
                             stream.push(reject_rep);
                         }

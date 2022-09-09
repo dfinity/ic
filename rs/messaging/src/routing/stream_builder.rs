@@ -433,10 +433,10 @@ impl StreamBuilderImpl {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
                                     );
-                                    self.metrics
-                                        .out_cycles
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(stream.sum_cycles_out().get() as f64);
+                                    // self.metrics
+                                    //     .out_cycles
+                                    //     .with_label_values(&[&dst_net_id.to_string()])
+                                    //     .set(stream.sum_cycles_out().get() as f64);
                                 }
                                 None => {}
                             }
@@ -455,10 +455,10 @@ impl StreamBuilderImpl {
                                     stream.set_sum_cycles_out(
                                         stream.sum_cycles_out().add(cycles_in_msg),
                                     );
-                                    self.metrics
-                                        .out_cycles
-                                        .with_label_values(&[&dst_net_id.to_string()])
-                                        .set(stream.sum_cycles_out().get() as f64);
+                                    // self.metrics
+                                    //     .out_cycles
+                                    //     .with_label_values(&[&dst_net_id.to_string()])
+                                    //     .set(stream.sum_cycles_out().get() as f64);
                                     // if cycles_in_msg.get() != 10 {
                                     //     self.metrics
                                     //         .msg_cycles_test
@@ -528,10 +528,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.sum_cycles_out(),
                 )
             })
-            .for_each(
-                |(subnet, len, size_bytes, begin)| {
+            .for_each(|(subnet, len, size_bytes, begin, cycles_out)| {
                     self.metrics
                         .stream_messages
                         .with_label_values(&[&subnet])
@@ -544,6 +544,10 @@ impl StreamBuilderImpl {
                         .stream_begin
                         .with_label_values(&[&subnet])
                         .set(begin.get() as i64);
+                    self.metrics
+                        .out_cycles
+                        .with_label_values(&[&subnet])
+                        .set(cycles_out.get() as f64);
                 },
             );
 

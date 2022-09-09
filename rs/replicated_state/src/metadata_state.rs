@@ -984,6 +984,16 @@ impl Stream {
         self.signals_end.inc_assign()
     }
 
+    /// Returns the sum of cycles received.
+    pub fn sum_cycles_inc(&self) -> Cycles {
+        self.sum_cycles_inc
+    }
+
+    /// Returns the sum of cycles sent.
+    pub fn sum_cycles_out(&self) -> Cycles {
+        self.sum_cycles_out
+    }
+
     /// Sets the amount of cycles received.
     pub fn set_sum_cycles_inc(&mut self, new_sum_cycles_inc: Cycles) {
         self.sum_cycles_inc = new_sum_cycles_inc;
