@@ -72,7 +72,6 @@ const METRIC_OUT_CYCLES: &str = "mr_out_cycles";
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
 const LABEL_REMOTE: &str = "remote";
-const LABEL_LOCAL: &str = "local";
 
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
@@ -116,7 +115,7 @@ impl StreamBuilderMetrics {
         let out_cycles = metrics_registry.gauge_vec(
             METRIC_OUT_CYCLES,
             "Outgoing cycles, by receiving subnet.",
-            &[LABEL_REMOTE, LABEL_LOCAL],
+            &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
@@ -437,7 +436,7 @@ impl StreamBuilderImpl {
                                     );
                                     self.metrics
                                         .out_cycles
-                                        .with_label_values(&[&dst_net_id.to_string(),&self.subnet_id.to_string()])
+                                        .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.sum_cycles_out().get() as f64);
                                 }
                                 None => {}
@@ -460,7 +459,7 @@ impl StreamBuilderImpl {
                                     );
                                     self.metrics
                                         .out_cycles
-                                        .with_label_values(&[&dst_net_id.to_string(),&self.subnet_id.to_string()])
+                                        .with_label_values(&[&dst_net_id.to_string()])
                                         .set(stream.sum_cycles_out().get() as f64);
                                     // if cycles_in_msg.get() != 10 {
                                     //     self.metrics
