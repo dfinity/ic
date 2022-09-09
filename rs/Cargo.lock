@@ -2151,6 +2151,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-types 0.8.0",
+ "ic-types-test-utils",
  "lazy_static",
  "ledger-canister",
  "on_wire",

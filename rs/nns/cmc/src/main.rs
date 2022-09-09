@@ -258,6 +258,26 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
             panic!("Only the governance canister can set authorized subnetwork lists.");
         }
 
+        let assigned_to_types: BTreeSet<&SubnetId> = state
+            .subnet_types_to_subnets
+            .as_ref()
+            .expect("subnet types to subnets mapping is not `None`")
+            .values()
+            .flatten()
+            .collect();
+        let mut already_assigned = vec![];
+        for subnet in subnets.iter() {
+            if assigned_to_types.contains(subnet) {
+                already_assigned.push(*subnet);
+            }
+        }
+        if !already_assigned.is_empty() {
+            panic!(
+                "Subnets {:?} are already assigned to a type and cannot be authorized.",
+                already_assigned
+            );
+        }
+
         if let Some(who) = who {
             if subnets.is_empty() {
                 print(format!("[cycles] removing subnet list for {}", who));
@@ -339,6 +359,157 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
                 }
             }
             None => Err(UpdateSubnetTypeError::TypeDoesNotExist(subnet_type)),
+        }
+    })
+}
+
+#[export_name = "canister_update change_subnet_type_assignment"]
+fn change_subnet_type_assignment_() {
+    over_may_reject(candid_one, |args: ChangeSubnetTypeAssignmentArgs| {
+        change_subnet_type_assignment(args).map_err(|err| err.to_string())
+    })
+}
+
+/// Changes the assignment of provided subnets to subnet types.
+///
+/// Preconditions:
+///  * Only the governance canister can call this method
+///  * Add: type exists and all subnet ids should be currently unassigned and not part of the authorized subnets
+///  * Remove: type exists and all subnet ids are currently assigned to this type
+fn change_subnet_type_assignment(
+    args: ChangeSubnetTypeAssignmentArgs,
+) -> ChangeSubnetTypeAssignmentResult {
+    let governance_canister_id = with_state(|state| state.governance_canister_id);
+
+    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        panic!(
+            "Only the governance canister can change the assignment of subnets to subnet types."
+        );
+    }
+
+    match args {
+        ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+            subnets,
+            subnet_type,
+        }) => add_subnets_to_type(subnets, subnet_type),
+        ChangeSubnetTypeAssignmentArgs::Remove(SubnetListWithType {
+            subnets,
+            subnet_type,
+        }) => remove_subnets_from_type(subnets, subnet_type),
+    }
+}
+
+fn add_subnets_to_type(
+    subnets: Vec<SubnetId>,
+    subnet_type: String,
+) -> ChangeSubnetTypeAssignmentResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        // Check that the subnets we are trying to assign to `subnet_type` are
+        // not already assigned to another type.
+        let mut assigned_subnets = vec![];
+        for (subnet_type_tmp, subnets_tmp) in subnet_types_to_subnets.iter() {
+            let mut tmp = vec![];
+            for subnet in subnets.iter() {
+                if subnets_tmp.contains(subnet) {
+                    tmp.push(*subnet);
+                }
+            }
+            if !tmp.is_empty() {
+                assigned_subnets.push(SubnetListWithType {
+                    subnets: tmp,
+                    subnet_type: subnet_type_tmp.clone(),
+                });
+            }
+        }
+
+        if !assigned_subnets.is_empty() {
+            return Err(ChangeSubnetTypeAssignmentError::SubnetsAreAssigned(
+                assigned_subnets,
+            ));
+        }
+
+        // Check that the subnets we are trying to assign to `subnet_type` are
+        // not already in the authorized subnet set.
+        let mut all_authorized_subnets: BTreeSet<&SubnetId> =
+            state.default_subnets.iter().collect();
+        let tmp: BTreeSet<&SubnetId> = state.authorized_subnets.values().flatten().collect();
+        all_authorized_subnets.extend(tmp);
+        let mut already_authorized_subnets = vec![];
+        for subnet in subnets.iter() {
+            if all_authorized_subnets.contains(subnet) {
+                already_authorized_subnets.push(*subnet);
+            }
+        }
+        if !already_authorized_subnets.is_empty() {
+            return Err(ChangeSubnetTypeAssignmentError::SubnetsAreAuthorized(
+                already_authorized_subnets,
+            ));
+        }
+
+        // We can now safely assign the subnets.
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Occupied(mut entry) => {
+                print(format!(
+                    "[cycles] Adding subnets {:?} to type: {}",
+                    subnets, subnet_type
+                ));
+                let existing_subnets = entry.get_mut();
+                existing_subnets.extend(subnets);
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                subnet_type,
+            )),
+        }
+    })
+}
+
+fn remove_subnets_from_type(
+    subnets: Vec<SubnetId>,
+    subnet_type: String,
+) -> ChangeSubnetTypeAssignmentResult {
+    with_state_mut(|state| {
+        let subnet_types_to_subnets = &mut state
+            .subnet_types_to_subnets
+            .as_mut()
+            .expect("subnet types to subnets mapping is not `None`");
+
+        match subnet_types_to_subnets.entry(subnet_type.clone()) {
+            Entry::Occupied(mut entry) => {
+                let mut not_assigned_subnets = vec![];
+                for subnet in subnets.iter() {
+                    if !entry.get().contains(subnet) {
+                        not_assigned_subnets.push(*subnet);
+                    }
+                }
+
+                if !not_assigned_subnets.is_empty() {
+                    return Err(ChangeSubnetTypeAssignmentError::SubnetsAreNotAssigned(
+                        SubnetListWithType {
+                            subnets: not_assigned_subnets,
+                            subnet_type,
+                        },
+                    ));
+                }
+
+                print(format!(
+                    "[cycles] Removing subnets {:?} from type: {}",
+                    subnets, subnet_type
+                ));
+                let existing_subnets = entry.get_mut();
+                for subnet in subnets.iter() {
+                    existing_subnets.remove(subnet);
+                }
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                subnet_type,
+            )),
         }
     })
 }
@@ -1474,6 +1645,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
 
     fn init_test_state() {
@@ -1834,8 +2006,11 @@ mod tests {
     fn test_remove_subnet_type() {
         init_test_state();
 
-        assert_eq!(add_subnet_type("Fiduciary".to_string()), Ok(()));
-        assert_eq!(add_subnet_type("Storage".to_string()), Ok(()));
+        add_subnet_type("Fiduciary".to_string()).unwrap();
+        add_subnet_type("Storage".to_string()).unwrap();
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        add_subnets_to_type(vec![subnet1, subnet2], "Fiduciary".to_string()).unwrap();
 
         assert_eq!(remove_subnet_type("Storage".to_string()), Ok(()));
 
@@ -1844,6 +2019,131 @@ mod tests {
             Err(UpdateSubnetTypeError::TypeDoesNotExist(
                 "MyType".to_string()
             ))
+        );
+
+        assert_eq!(
+            remove_subnet_type("Fiduciary".to_string()),
+            Err(UpdateSubnetTypeError::TypeHasAssignedSubnets((
+                "Fiduciary".to_string(),
+                vec![subnet1, subnet2]
+            )))
+        );
+    }
+
+    #[test]
+    fn test_add_subnets_to_type() {
+        let type1 = "Type1".to_string();
+        let type2 = "Type2".to_string();
+        let type3 = "Type3".to_string();
+
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        let subnet3 = subnet_test_id(2);
+        let subnet4 = subnet_test_id(3);
+        let subnet5 = subnet_test_id(4);
+        let subnet6 = subnet_test_id(5);
+
+        let mut authorized_subnets = BTreeMap::new();
+        authorized_subnets.insert(user_test_id(0).get(), vec![subnet5]);
+        STATE.with(|state| {
+            state.replace(Some(State {
+                authorized_subnets,
+                default_subnets: vec![subnet6],
+                ..Default::default()
+            }))
+        });
+
+        add_subnet_type(type1.clone()).unwrap();
+        add_subnet_type(type2.clone()).unwrap();
+        add_subnet_type(type3.clone()).unwrap();
+
+        // Add subnet1 and subnet2 to "Type1".
+        assert_eq!(
+            add_subnets_to_type(vec![subnet1, subnet2], type1.clone()),
+            Ok(())
+        );
+
+        // Add subnet3 to "Type2".
+        assert_eq!(add_subnets_to_type(vec![subnet3], type2.clone()), Ok(()));
+
+        // Attempt to add subnet2 and subnet3 to "Type3". Should fail because they are
+        // already assigned to other types.
+        assert_eq!(
+            add_subnets_to_type(vec![subnet2, subnet3], type3.clone()),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreAssigned(vec![
+                SubnetListWithType {
+                    subnets: vec![subnet2],
+                    subnet_type: type1,
+                },
+                SubnetListWithType {
+                    subnets: vec![subnet3],
+                    subnet_type: type2,
+                }
+            ]))
+        );
+
+        assert_eq!(
+            add_subnets_to_type(vec![subnet4], "unknown".to_string()),
+            Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                "unknown".to_string()
+            ))
+        );
+
+        assert_eq!(
+            add_subnets_to_type(vec![subnet5, subnet6], type3),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreAuthorized(vec![
+                subnet5, subnet6
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_remove_subnets_from_type() {
+        init_test_state();
+
+        let type1 = "Type1".to_string();
+        let type2 = "Type2".to_string();
+        let type3 = "Type3".to_string();
+
+        add_subnet_type(type1.clone()).unwrap();
+        add_subnet_type(type2.clone()).unwrap();
+        add_subnet_type(type3.clone()).unwrap();
+
+        let subnet1 = subnet_test_id(0);
+        let subnet2 = subnet_test_id(1);
+        let subnet3 = subnet_test_id(2);
+        let subnet4 = subnet_test_id(3);
+
+        // Add subnet1 and subnet2 to "Type1".
+        add_subnets_to_type(vec![subnet1, subnet2], type1.clone()).unwrap();
+        add_subnets_to_type(vec![subnet3, subnet4], type2.clone()).unwrap();
+
+        // Remove a subnet from an existing type.
+        assert_eq!(remove_subnets_from_type(vec![subnet4], type2), Ok(()));
+
+        // Attempt to remove a subnet from an non-existing type.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet3], "unknown".to_string()),
+            Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
+                "unknown".to_string()
+            ))
+        );
+
+        // Attempt to remove subnets from a type they do not belong to.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet2, subnet3], type3.clone()),
+            Err(ChangeSubnetTypeAssignmentError::SubnetsAreNotAssigned(
+                SubnetListWithType {
+                    subnets: vec![subnet2, subnet3],
+                    subnet_type: type3,
+                }
+            ))
+        );
+
+        // Remove multiple subnets from an existing type.
+        assert_eq!(
+            remove_subnets_from_type(vec![subnet1, subnet2], type1),
+            Ok(())
         );
     }
 
