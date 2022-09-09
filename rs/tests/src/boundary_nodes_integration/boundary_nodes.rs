@@ -181,7 +181,7 @@ pub fn config(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(bn.nns_node_urls.clone());
+    let registry = RegistryCanister::new(bn.nns_node_urls);
     let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
             .context("Failed to `get_value` from registry")?;
