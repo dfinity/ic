@@ -447,42 +447,6 @@ impl TempCryptoComponent {
         (temp_crypto, dkg_dealing_encryption_pubkey)
     }
 
-    // TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-    pub fn new_with_signing_idkg_dealing_encryption_and_multisigning_keys_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, IDkgMEGaAndMultisignPublicKeys) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate {
-                generate_node_signing_keys: true,
-                generate_committee_signing_keys: true,
-                generate_idkg_dealing_encryption_keys: true,
-                ..NodeKeysToGenerate::none()
-            })
-            .build();
-        let node_public_keys = temp_crypto.node_public_keys();
-
-        let node_signing_pk = node_public_keys
-            .node_signing_pk
-            .expect("missing node_signing_pk");
-        let committee_signing_pk = node_public_keys
-            .committee_signing_pk
-            .expect("missing committee_signing_pk");
-        let idkg_dealing_encryption_pk = node_public_keys
-            .idkg_dealing_encryption_pk
-            .expect("missing idkg_dealing_encryption_pk");
-        (
-            temp_crypto,
-            IDkgMEGaAndMultisignPublicKeys {
-                node_signing_pubkey: node_signing_pk,
-                mega_pubkey: idkg_dealing_encryption_pk,
-                multisign_pubkey: committee_signing_pk,
-            },
-        )
-    }
-
     pub fn new_with_tls_key_generation(
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -564,14 +528,6 @@ impl TempCryptoComponent {
             .as_ref()
             .map(|env| env.vault_client_runtime.handle())
     }
-}
-
-/// Bundles the public keys needed for canister threshold signature protocol
-// TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-pub struct IDkgMEGaAndMultisignPublicKeys {
-    pub node_signing_pubkey: PublicKeyProto,
-    pub mega_pubkey: PublicKeyProto,
-    pub multisign_pubkey: PublicKeyProto,
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.

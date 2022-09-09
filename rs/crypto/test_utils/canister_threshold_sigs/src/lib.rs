@@ -467,24 +467,31 @@ impl CanisterThresholdSigTestEnvironment {
         }
 
         let registry = Arc::clone(&self.registry) as Arc<_>;
-        let (temp_crypto, node_keys) =
-            TempCryptoComponent::new_with_signing_idkg_dealing_encryption_and_multisigning_keys_generation(
-                registry, node_id,
-            );
+        let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+            registry,
+            node_id,
+            ic_crypto::utils::NodeKeysToGenerate {
+                generate_node_signing_keys: true,
+                generate_committee_signing_keys: true,
+                generate_dkg_dealing_encryption_keys: false,
+                generate_idkg_dealing_encryption_keys: true,
+                generate_tls_keys_and_certificate: false,
+            },
+        );
         self.crypto_components.insert(node_id, temp_crypto);
 
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
                 registry_version,
-                Some(node_keys.node_signing_pubkey),
+                node_keys.node_signing_pk,
             )
             .expect("failed to add committee public key to registry");
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
                 registry_version,
-                Some(node_keys.multisign_pubkey),
+                node_keys.committee_signing_pk,
             )
             .expect("failed to add committee public key to registry");
 
@@ -492,7 +499,7 @@ impl CanisterThresholdSigTestEnvironment {
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
                 registry_version,
-                Some(node_keys.mega_pubkey),
+                node_keys.idkg_dealing_encryption_pk,
             )
             .expect("Could not add MEGa public key to registry");
     }
