@@ -42,7 +42,9 @@ BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "//rs/types/types_test_utils",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

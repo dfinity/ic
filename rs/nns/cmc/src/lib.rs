@@ -217,6 +217,62 @@ impl std::fmt::Display for UpdateSubnetTypeError {
 /// The result to a call to `update_subnet_type`.
 pub type UpdateSubnetTypeResult = Result<(), UpdateSubnetTypeError>;
 
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct SubnetListWithType {
+    pub subnets: Vec<SubnetId>,
+    pub subnet_type: String,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentArgs {
+    Add(SubnetListWithType),
+    Remove(SubnetListWithType),
+}
+
+/// Errors that can happen when attempting to change the assignment of a subnet
+/// to a subnet type.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentError {
+    TypeDoesNotExist(String),
+    SubnetsAreAssigned(Vec<SubnetListWithType>),
+    SubnetsAreAuthorized(Vec<SubnetId>),
+    SubnetsAreNotAssigned(SubnetListWithType),
+}
+
+impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TypeDoesNotExist(subnet_type) => {
+                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+            }
+            Self::SubnetsAreAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "The provided subnets are already assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+            Self::SubnetsAreAuthorized(subnet_ids) => {
+                write!(
+                    f,
+                    "The provided subnets {:?} are authorized for public access and cannot be assigned a type.",
+                    subnet_ids
+                )
+            }
+            Self::SubnetsAreNotAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "The provided subnets are not assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+        }
+    }
+}
+
+/// The result to a call to `change_subnet_type_assignment`.
+pub type ChangeSubnetTypeAssignmentResult = Result<(), ChangeSubnetTypeAssignmentError>;
+
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
 pub struct IcpXdrConversionRate {
     /// The time for which the market data was queried, expressed in UNIX epoch
