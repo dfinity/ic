@@ -65,6 +65,33 @@ pub fn test(env: TestEnv) {
             )
             .await,
         );
+        // Test: check that transform is actually executed
+        test_results.push(
+            test_canister_http_property(
+                "Check that transform is executed",
+                &logger,
+                &proxy_canister,
+                RemoteHttpRequest {
+                    request: CanisterHttpRequestArgs {
+                        url: format!("https://[{webserver_ipv6}]:20443"),
+                        headers: vec![],
+                        method: HttpMethod::GET,
+                        body: Some("".as_bytes().to_vec()),
+                        transform: Some(TransformType::Function(candid::Func {
+                            principal: proxy_canister.canister_id().get().0,
+                            method: "test_transform".to_string(),
+                        })),
+                        max_response_bytes: None,
+                    },
+                    cycles: 500_000_000_000,
+                },
+                |response| {
+                    let r = response.clone().expect("Http call should suceed");
+                    r.headers.len() == 1 && r.headers[0].0 == "hello" && r.headers[0].1 == "bonjour"
+                },
+            )
+            .await,
+        );
         // Test: No cycles
         test_results.push(
             test_canister_http_property(
