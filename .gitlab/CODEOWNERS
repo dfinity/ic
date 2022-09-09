@@ -57,19 +57,12 @@
 /testnet/release/                                          @dfinity-lab/teams/release-team
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/tools/                                      @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/tools/nns_state_deployment.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/nns_state_deployment_test.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/maximum_capacity_rejoin.sh          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
-/testnet/tests/scripts/maximum_capacity_subnet_query.sh    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/runtime-owners
-/testnet/tests/scripts/maximum_capacity_subnet_update.sh   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/maximum_capacity_xnet_slo.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
-/testnet/tests/scripts/network_reliability_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
-/testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
+/testnet/tests/tools/nns_state_deployment.sh               @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/nns_state_deployment_test.sh        @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/message-routing-owners
+/testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/networking-team
 
-/testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/orchestrator-owners
 /testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
 # [Rust]
