@@ -55,6 +55,7 @@ rust_test(
         "1",
     ],
     crate_root = "src/main.rs",
+    flaky = True,  # TODO(NET-1195): remove when the test will be fixed.
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
