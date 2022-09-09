@@ -4,7 +4,7 @@ use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_internal_test_vectors::iccsa;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
-use ic_interfaces::crypto::Signable;
+use ic_types::crypto::Signable;
 use ic_types::{messages::Delegation, time::Time, CanisterId};
 use std::str::FromStr;
 

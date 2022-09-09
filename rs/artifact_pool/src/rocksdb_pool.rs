@@ -12,7 +12,6 @@ use ic_interfaces::artifact_pool::ValidatedArtifact;
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
 };
-use ic_interfaces::crypto::CryptoHashable;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -26,6 +25,7 @@ use ic_types::{
         Finalization, FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload,
         RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
+    crypto::CryptoHashable,
     Height, Time,
 };
 use rocksdb::{
@@ -1035,7 +1035,10 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         value: &T,
     ) {
         let info = T::info();
-        let key = make_key(value.height().get(), &ic_crypto::crypto_hash(value).get().0);
+        let key = make_key(
+            value.height().get(),
+            &ic_types::crypto::crypto_hash(value).get().0,
+        );
         let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
         check_ok!(self
             .db

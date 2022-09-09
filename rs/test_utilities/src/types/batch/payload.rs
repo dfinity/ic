@@ -68,7 +68,7 @@ fn payload_serialize_then_deserialize() {
 
     // Test default empty payload
     let payload_0 = Payload::new(
-        ic_crypto::crypto_hash,
+        ic_types::crypto::crypto_hash,
         (
             BatchPayload::default(),
             dkg::Dealings::new_empty(Height::from(0)),
@@ -95,7 +95,7 @@ fn payload_serialize_then_deserialize() {
         ..BatchPayload::default()
     };
     let payload_0 = Payload::new(
-        ic_crypto::crypto_hash,
+        ic_types::crypto::crypto_hash,
         (
             batch_payload_0,
             dkg::Dealings::new_empty(Height::from(0)),

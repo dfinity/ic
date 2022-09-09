@@ -15,7 +15,6 @@ mod sign;
 mod tls;
 
 pub use common::utils;
-pub use ic_crypto_hash::crypto_hash;
 pub use sign::get_tecdsa_master_public_key;
 pub use sign::utils::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,

@@ -1,7 +1,6 @@
-use crate::crypto::Signable;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
-use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, ThresholdSigShareOf};
+use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, Signable, ThresholdSigShareOf};
 use ic_types::RegistryVersion;
 use std::collections::BTreeMap;
 

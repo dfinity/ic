@@ -4,9 +4,8 @@
 //! Static IDKM-compatible functions for threshold signatures
 use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes as BlsPublicKeyBytes;
-use ic_interfaces::crypto::Signable;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult};
+use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, Signable};
 use std::convert::TryFrom;
 
 #[cfg(test)]

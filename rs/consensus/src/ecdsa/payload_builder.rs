@@ -1759,8 +1759,8 @@ mod tests {
         pool.advance_round_normal_operation_n(advance_by - 1);
         let mut block_proposal = pool.make_next_block();
         let mut block = block_proposal.content.as_mut();
-        block.payload = Payload::new(ic_crypto::crypto_hash, block_payload);
-        block_proposal.content = HashedBlock::new(ic_crypto::crypto_hash, block.clone());
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
+        block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
         pool.advance_round_with_block(&block_proposal);
         block_proposal.content.as_ref().clone()
     }

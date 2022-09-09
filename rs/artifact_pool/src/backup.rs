@@ -609,7 +609,7 @@ impl BackupArtifact {
                 format!(
                     "finalization_{}_{}.bin",
                     bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_crypto::crypto_hash(artifact.as_ref())),
+                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
                 ),
             ),
             Notarization(artifact) => (
@@ -617,7 +617,7 @@ impl BackupArtifact {
                 format!(
                     "notarization_{}_{}.bin",
                     bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_crypto::crypto_hash(artifact.as_ref())),
+                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
                 ),
             ),
             BlockProposal(artifact) => (
@@ -625,7 +625,7 @@ impl BackupArtifact {
                 format!(
                     "block_proposal_{}_{}.bin",
                     bytes_to_hex_str(artifact.content.get_hash()),
-                    bytes_to_hex_str(&ic_crypto::crypto_hash(artifact.as_ref())),
+                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
                 ),
             ),
             RandomTape(artifact) => (artifact.height(), "random_tape.bin".to_string()),
@@ -710,7 +710,7 @@ mod tests {
             Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
-                    ic_crypto::crypto_hash,
+                    ic_types::crypto::crypto_hash,
                     (ic_types::consensus::dkg::Summary::fake(), None).into(),
                 ),
                 Height::from(123),

@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus/message",
     "//rs/crypto",
-    "//rs/crypto/hash",
     "//rs/crypto/prng",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/interfaces",

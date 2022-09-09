@@ -8,12 +8,12 @@ mod construction_preprocess;
 mod construction_submit;
 
 use crate::{convert, models, API_VERSION, NODE_VERSION};
-use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
 use ledger_canister::{Block, BlockHeight};

@@ -110,7 +110,7 @@ impl IngressHandler for IngressManager {
                 "ingress_message_insert_validated";
                 ingress_message.message_id => format!("{}", ingress_object.message_id),
             );
-            let integrity_hash = ic_crypto::crypto_hash(ingress_message.binary()).get();
+            let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
             MoveToValidated((
                 IngressMessageId::from(ingress_object),
                 artifact.peer_id,
@@ -202,7 +202,7 @@ mod tests {
                     .build();
                 let attribute = IngressMessageAttribute::new(&ingress_message);
                 let message_id = IngressMessageId::from(&ingress_message);
-                let integrity_hash = ic_crypto::crypto_hash(ingress_message.binary()).get();
+                let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
 
                 let change_set = access_ingress_pool(&ingress_pool, |mut ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -414,7 +414,8 @@ mod tests {
                     .sign_for_randomly_generated_sender()
                     .build();
                 let attribute = IngressMessageAttribute::new(&good_msg);
-                let good_msg_integrity_hash = ic_crypto::crypto_hash(good_msg.binary()).get();
+                let good_msg_integrity_hash =
+                    ic_types::crypto::crypto_hash(good_msg.binary()).get();
                 let bad_msg = SignedIngressBuilder::new()
                     .expiry_time(current_time + MAX_INGRESS_TTL)
                     .sign_for_randomly_generated_sender()

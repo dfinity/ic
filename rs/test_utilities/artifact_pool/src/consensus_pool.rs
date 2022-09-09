@@ -198,7 +198,7 @@ impl TestConsensusPool {
         let mut block = Block::from_parent(parent);
         block.context.registry_version = self.registry_client.get_latest_version();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
-        block.payload = Payload::new(ic_crypto::crypto_hash, dkg_payload.into());
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
         BlockProposal::fake(block, node_test_id(0))
     }
 
@@ -248,8 +248,8 @@ impl TestConsensusPool {
             .unwrap();
         CatchUpPackage {
             content: CatchUpContent::new(
-                HashedBlock::new(ic_crypto::crypto_hash, block),
-                HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon.clone()),
+                HashedBlock::new(ic_types::crypto::crypto_hash, block),
+                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon.clone()),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
             ),
             signature: ThresholdSignature {
@@ -489,7 +489,7 @@ impl TestConsensusPool {
 
         // create RB shares for new blocks
         for i in 0..rb_shares {
-            let content = RandomBeaconContent::new(height, ic_crypto::crypto_hash(&beacon));
+            let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
                     .sign_threshold(&content, DkgId::IDkgId(dkg_id))
@@ -562,7 +562,8 @@ impl TestConsensusPool {
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
-        let content = FinalizationContent::new(block.height(), ic_crypto::crypto_hash(block));
+        let content =
+            FinalizationContent::new(block.height(), ic_types::crypto::crypto_hash(block));
         self.insert_validated(Finalization::fake(content))
     }
 

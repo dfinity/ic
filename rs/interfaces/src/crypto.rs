@@ -4,13 +4,6 @@ mod keygen;
 use ic_types::canister_http::CanisterHttpResponseMetadata;
 pub use keygen::{KeyManager, PublicKeyRegistrationStatus};
 
-mod hash;
-
-pub use hash::CryptoHashDomain;
-pub use hash::CryptoHashable;
-pub use hash::CryptoHashableTestDummy;
-pub use hash::DOMAIN_IC_REQUEST;
-
 mod errors;
 
 mod dkg;
@@ -29,7 +22,6 @@ pub use sign::MultiSigner;
 pub use sign::ThresholdSigVerifier;
 pub use sign::ThresholdSigVerifierByPublicKey;
 pub use sign::ThresholdSigner;
-pub use sign::{Signable, SignableMock};
 
 pub use sign::canister_threshold_sig::*;
 

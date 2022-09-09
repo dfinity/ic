@@ -1,7 +1,6 @@
 use crate::types::ids::{node_test_id, subnet_test_id};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
-    crypto::CryptoHashable,
     validation::ValidationResult,
 };
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
@@ -115,7 +114,8 @@ impl<T: CryptoHashable + Clone> FakeContentUpdate
     for Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<T>>
 {
     fn update_content(&mut self) {
-        self.content = hashed::Hashed::new(ic_crypto::crypto_hash, self.content.as_ref().clone());
+        self.content =
+            hashed::Hashed::new(ic_types::crypto::crypto_hash, self.content.as_ref().clone());
     }
 }
 
@@ -140,7 +140,7 @@ impl<T: CryptoHashable> FakeContentSigner<T>
         signer: NodeId,
     ) -> Signed<hashed::Hashed<CryptoHashOf<T>, T>, BasicSignature<T>> {
         Signed {
-            content: hashed::Hashed::new(ic_crypto::crypto_hash, content),
+            content: hashed::Hashed::new(ic_types::crypto::crypto_hash, content),
             signature: BasicSignature::fake(signer),
         }
     }
@@ -149,7 +149,7 @@ impl<T: CryptoHashable> FakeContentSigner<T>
 impl FakeContentSigner<&Block> for NotarizationShare {
     fn fake(block: &Block, signer: NodeId) -> NotarizationShare {
         Signed {
-            content: NotarizationContent::new(block.height, ic_crypto::crypto_hash(block)),
+            content: NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block)),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -158,7 +158,7 @@ impl FakeContentSigner<&Block> for NotarizationShare {
 impl FakeContentSigner<&Block> for FinalizationShare {
     fn fake(block: &Block, signer: NodeId) -> FinalizationShare {
         let height = block.height;
-        let block = ic_crypto::crypto_hash(block);
+        let block = ic_types::crypto::crypto_hash(block);
         Signed {
             content: FinalizationContent::new(height, block),
             signature: MultiSignatureShare::fake(signer),
@@ -173,7 +173,7 @@ impl FakeContentSigner<&RandomBeacon> for RandomBeaconShare {
             signer,
         };
         let height = parent.content.height.increment();
-        let beacon = RandomBeaconContent::new(height, ic_crypto::crypto_hash(parent));
+        let beacon = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(parent));
         Signed {
             content: beacon,
             signature,
@@ -202,9 +202,9 @@ impl FromParent for Block {
     fn from_parent(parent: &Self) -> Self {
         let dkg_start = parent.payload.as_ref().dkg_interval_start_height();
         Block::new(
-            ic_crypto::crypto_hash(parent),
+            ic_types::crypto::crypto_hash(parent),
             Payload::new(
-                ic_crypto::crypto_hash,
+                ic_types::crypto::crypto_hash,
                 (
                     BatchPayload::default(),
                     Dealings::new_empty(dkg_start),
@@ -223,7 +223,7 @@ impl FromParent for RandomBeacon {
     fn from_parent(parent: &Self) -> Self {
         Self::fake(RandomBeaconContent::new(
             parent.content.height.increment(),
-            ic_crypto::crypto_hash(parent),
+            ic_types::crypto::crypto_hash(parent),
         ))
     }
 }
@@ -257,7 +257,7 @@ fn test_fake_block_is_binary_compatible() {
     let block = Block::new(
         CryptoHashOf::from(CryptoHash(Vec::new())),
         Payload::new(
-            ic_crypto::crypto_hash,
+            ic_types::crypto::crypto_hash,
             (
                 batch::BatchPayload::default(),
                 ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
@@ -285,7 +285,7 @@ fn test_fake_block() {
     let block = Block::new(
         CryptoHashOf::from(CryptoHash(Vec::new())),
         Payload::new(
-            ic_crypto::crypto_hash,
+            ic_types::crypto::crypto_hash,
             (
                 batch::BatchPayload::default(),
                 ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),

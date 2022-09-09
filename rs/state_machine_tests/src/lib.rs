@@ -17,7 +17,6 @@ use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Pay
 pub use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
-    crypto::Signable,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
     registry::RegistryClient,
@@ -60,7 +59,7 @@ use ic_test_utilities_registry::{
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed};
+use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signable, Signed};
 use ic_types::messages::Certificate;
 use ic_types::signature::ThresholdSignature;
 use ic_types::{

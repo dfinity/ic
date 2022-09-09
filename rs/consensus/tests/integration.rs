@@ -58,7 +58,7 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
         let reach_n_rounds = move |inst: &ConsensusInstance<'_>| {
             let pool = inst.driver.consensus_pool.write().unwrap();
             for nota in pool.validated().notarization().get_highest_iter() {
-                let hash = ic_crypto::crypto_hash(&nota);
+                let hash = ic_types::crypto::crypto_hash(&nota);
                 let hash = hash.get_ref();
                 if !hashes_clone.borrow().contains(hash) {
                     hashes_clone.borrow_mut().push(hash.clone());

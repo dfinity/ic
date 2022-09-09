@@ -6,7 +6,6 @@ use mockall::*;
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_base_types::RegistryVersion;
 use ic_consensus_message::ConsensusMessageHashable;
-use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus::*,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache},
@@ -14,6 +13,7 @@ use ic_interfaces::{
     validation::*,
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::*,
     batch::ValidationContext,

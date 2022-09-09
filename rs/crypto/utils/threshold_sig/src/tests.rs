@@ -4,8 +4,8 @@ use ic_crypto_internal_csp::types::{CspSignature, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381::types::CombinedSignatureBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_interfaces::crypto::SignableMock;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::SignableMock;
 use std::convert::TryFrom;
 
 /// Test vectors for verifying individual or combined threshold signatures

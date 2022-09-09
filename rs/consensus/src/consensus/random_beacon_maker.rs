@@ -70,7 +70,7 @@ impl<'a> RandomBeaconMaker {
                         .any(|s| s.signature.signer == my_node_id) =>
             {
                 let content =
-                    RandomBeaconContent::new(next_height, ic_crypto::crypto_hash(&beacon));
+                    RandomBeaconContent::new(next_height, ic_types::crypto::crypto_hash(&beacon));
                 // One might wonder whether it is appropriate to use the
                 // dkg_id from the start_block at h to generate the
                 // random beacon at height h. The reason this is
@@ -148,7 +148,7 @@ mod tests {
             let beacon_share = beacon_maker
                 .on_state_change(&PoolReader::new(&pool))
                 .expect("Expecting RandomBeaconShare");
-            assert!(beacon_share.content.parent == ic_crypto::crypto_hash(&beacon));
+            assert!(beacon_share.content.parent == ic_types::crypto::crypto_hash(&beacon));
         })
     }
 }

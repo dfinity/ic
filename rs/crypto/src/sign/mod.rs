@@ -10,7 +10,7 @@ use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    MultiSigVerifier, MultiSigner, Signable, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_logger::{debug, new_logger};
@@ -27,7 +27,7 @@ use ic_types::crypto::KeyPurpose::CommitteeSigning;
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSigOf, CryptoError, CryptoResult, IndividualMultiSig, IndividualMultiSigOf,
-    ThresholdSigShareOf, UserPublicKey,
+    Signable, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
