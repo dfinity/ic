@@ -3,8 +3,8 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly VECTOR_CONFIG='/etc/default/vector'
-readonly RUN_CONFIG="/run/ic-node/etc/default/vector"
+readonly TMPLT_DIR='/etc/default/'
+readonly RUN_DIR='/run/ic-node/etc/default'
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
@@ -38,9 +38,13 @@ function read_variables() {
 }
 
 function generate_vector_config() {
-    # Move active configuration and prepare it
-    cp -a "${VECTOR_CONFIG}" "${RUN_CONFIG}"
-    sed -i -e "s/{{ELASTICSEARCH_URL}}/${ELASTICSEARCH_URL}/g" "${RUN_CONFIG}"
+    # Create config dir
+    mkdir -p "${RUN_DIR}"
+
+    # Move active configuration and prepare it (use `|` in the `sed` command
+    # because it's not a valid URL character)
+    cp -a "${TMPLT_DIR}/vector" "${RUN_DIR}/vector"
+    sed -i -e "s|{{ELASTICSEARCH_URL}}|${ELASTICSEARCH_URL}|g" "${RUN_DIR}/vector"
 }
 
 function main() {
@@ -49,3 +53,5 @@ function main() {
 }
 
 main "$@"
+
+echo "{{FOO}}" | sed -e "s|{{FOO}}|foo|g"

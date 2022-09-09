@@ -92,15 +92,15 @@ fi
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
 
-# Read all the
+# Read all the BN vars
 BN_VARS=$(
-    echo ${CONFIG} | jq -r '.bn_vars | to_entries | map(' +
-    '    .key as $key | (' +                # Save the key
-    '        [.value] |' +                  # Force value to be an array
-    '        flatten |' +                   # Flatten so we can create pairs
-    '        map( [$key, (. | tostring)] )' # Create pairs
-    '    )' +
-    ')[][] | join("=")'
+    echo ${CONFIG} | jq -r '.bn_vars | to_entries | map(
+        .key as $key | (                   # Save the key
+            [.value] |                     # Force value to be an array
+            flatten |                      # Flatten so we can create pairs
+            map( [$key, (. | tostring)] )  # Create pairs
+        )
+    )[][] | join("=")'
 )
 
 # Read all the top-level values out in one swoop
@@ -109,7 +109,7 @@ VALUES=$(echo ${CONFIG} | jq -r -c '[
     (.name_servers | join(" ")),
     (.name_servers_fallback | join(" ")),
     (.journalbeat_hosts | join(" ")),
-    (.journalbeat_tags | join(" ")),
+    (.journalbeat_tags | join(" "))
 ] | join("\u0001")')
 IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
 
@@ -164,6 +164,7 @@ function prepare_build_directories() {
 BN_BINARIES=(
     "boundary-node-control-plane"
     "boundary-node-prober"
+    "denylist-updater"
     "ic-balance-exporter"
 )
 
@@ -233,10 +234,7 @@ function generate_boundary_node_config() {
 
             local ipv6_address=${NODE["ipv6_address"]}
 
-            if [[ "${NODE["type"]}" != "replica" ]]; then
-                continue
-            fi
-            if [[ "${NODE["subnet_type"]}" != "root_subnet" ]]; then
+            if [[ "${NODE["type"]}" != "replica" ]] || [[ "${NODE["subnet_type"]}" != "root_subnet" ]]; then
                 continue
             fi
 
@@ -245,21 +243,19 @@ function generate_boundary_node_config() {
     else
         NNS_URL=$(cat ${NNS_URL_OVERRIDE} | awk '$1=$1' ORS=',')
     fi
-    NNS_URL=$(echo ${FOO} | sed 's/,$//g')
-    #echo ${NNS_URL}
+    NNS_URL=$(echo ${NNS_URL} | sed 's/,$//g')
+    #echo "nns_url=${NNS_URL}"
 
     # nns config for boundary nodes
     for n in $NODES; do
         declare -n NODE=$n
 
-        local ipv6_address=${NODE["ipv6_address"]}
         local subnet_idx=${NODE["subnet_idx"]}
         local node_idx=${NODE["node_idx"]}
-        local subnet_type=${NODE["subnet_type"]}
 
         NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
-        if [[ "$type" != "boundary" ]]; then
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
             continue
         fi
 
@@ -274,6 +270,8 @@ function generate_boundary_node_config() {
 # TYPE bn_version_info counter
 bn_version_info{git_revision="${GIT_REVISION}"} 1
 EOF
+
+        echo "$BN_VARS" >"${CONFIG_DIR}/$NODE_PREFIX/bn_vars.conf"
     done
 }
 
@@ -380,8 +378,6 @@ function generate_denylist_config() {
                 echo "Using empty denylist"
                 touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
             fi
-
-            echo "denylist_url=${DENYLIST_URL}" >>"${CONFIG_DIR}/$NODE_PREFIX/icx-proxy.conf"
         fi
     done
 }

@@ -3,8 +3,8 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly ICX_PROXY_CONFIG_DIR='/etc/icx-proxy'
-readonly RUN_DIR="/run/ic-node/etc/icx-proxy"
+readonly TMPLT_DIR='/etc/icx-proxy'
+readonly RUN_DIR='/run/ic-node/etc/icx-proxy'
 
 INVALID_SSL="false"
 
@@ -50,13 +50,16 @@ function read_variables() {
 }
 
 function generate_icx_proxy_config() {
+    # Create config dir
+    mkdir -p "${RUN_DIR}"
+
     # Move configuration and prepare it
-    cp -a "${ICX_PROXY_CONFIG_DIR}/options" "$RUN_DIR/options"
+    cp -a "${TMPLT_DIR}/options" "$RUN_DIR/options"
     sed -i -e "s/{{DOMAIN}}/${DOMAIN}/g" "$RUN_DIR/options"
 
     # Setup any extra configuration options
     if [ "${INVALID_SSL}" == "true" ]; then
-        cp -a "${ICX_PROXY_CONFIG_DIR}/invalid-ssl.options" "$RUN_DIR/ssl.options"
+        cp -a "${TMPLT_DIR}/invalid-ssl.options" "$RUN_DIR/ssl.options"
     else
         echo "SSL_OPTIONS=" >"${RUN_DIR}/ssl.options"
     fi

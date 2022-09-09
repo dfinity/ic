@@ -1,5 +1,5 @@
 [Unit]
-Description=Set variable files, i.e., nns key, for nginx
+Description=Setup variable files (e.g. domain) for nginx
 Before=systemd-networkd.target
 DefaultDependencies=no
 After=bootstrap-ic-node.service

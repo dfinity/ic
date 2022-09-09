@@ -1,5 +1,5 @@
 [Unit]
-Description=Set variable files, i.e., nns key, for icx-proxy
+Description=Setup environment files for icx-proxy
 Before=systemd-networkd.target
 DefaultDependencies=no
 After=bootstrap-ic-node.service
