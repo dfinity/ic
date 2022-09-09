@@ -182,14 +182,31 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
     }
 }
 
+impl CanisterHttpRequestContext {
+    /// Calculate the size of all unbounded struct elements.
+    pub fn variable_parts_size(&self) -> NumBytes {
+        let request_size = self.url.len()
+            + self
+                .headers
+                .iter()
+                .map(|h| h.name.len() + h.value.len())
+                .sum::<usize>()
+            + self.body.as_ref().map_or(0, |b| b.len())
+            + self.transform_method_name.as_ref().map_or(0, |b| b.len());
+        NumBytes::from(request_size as u64)
+    }
+}
+
 /// The error that occurs when an end-user specifies an invalid
 /// [`max_response_bytes`].
+#[derive(Debug)]
 pub struct InvalidMaxResponseBytes {
     min: u64,
     max: u64,
     given: u64,
 }
 
+#[derive(Debug)]
 pub struct InvalidTransformPrincipalId {
     expected_principal_id: PrincipalId,
     actual_principal_id: PrincipalId,
@@ -197,6 +214,7 @@ pub struct InvalidTransformPrincipalId {
 
 /// Errors that can occur when converting from (time, request, [`CanisterHttpRequestArgs`]) to
 /// an [`CanisterHttpRequestContext`].
+#[derive(Debug)]
 pub enum CanisterHttpRequestContextError {
     MaxResponseBytes(InvalidMaxResponseBytes),
     TransformPrincipalId(InvalidTransformPrincipalId),
@@ -377,4 +395,83 @@ pub enum CanisterHttpResponseAttribute {
         CallbackId,
         CryptoHashOf<CanisterHttpResponse>,
     ),
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{time::UNIX_EPOCH, Cycles};
+
+    use super::*;
+
+    #[test]
+    fn test_request_arg_variable_size() {
+        let context = CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: vec![CanisterHttpHeader {
+                name: "hi".to_string(),
+                value: "bye".to_string(),
+            }],
+            body: Some(vec![0; 1024]),
+            max_response_bytes: None,
+            http_method: CanisterHttpMethod::GET,
+            transform_method_name: Some("willchange".to_string()),
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "tansform".to_string(),
+                method_payload: Vec::new(),
+            },
+            time: UNIX_EPOCH,
+        };
+
+        let expected_size = context.url.len()
+            + context
+                .headers
+                .iter()
+                .map(|h| h.name.len() + h.value.len())
+                .sum::<usize>()
+            + context.body.as_ref().map_or(0, |b| b.len())
+            + context
+                .transform_method_name
+                .as_ref()
+                .map_or(0, |b| b.len());
+
+        assert_eq!(
+            context.variable_parts_size(),
+            NumBytes::from(expected_size as u64)
+        );
+    }
+
+    #[test]
+    fn test_request_arg_variable_size_some_empty() {
+        let context = CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: vec![],
+            body: None,
+            max_response_bytes: None,
+            http_method: CanisterHttpMethod::GET,
+            transform_method_name: Some("willchange".to_string()),
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "tansform".to_string(),
+                method_payload: Vec::new(),
+            },
+            time: UNIX_EPOCH,
+        };
+
+        let expected_size = context.url.len()
+            + context
+                .transform_method_name
+                .as_ref()
+                .map_or(0, |b| b.len());
+        assert_eq!(
+            context.variable_parts_size(),
+            NumBytes::from(expected_size as u64)
+        );
+    }
 }

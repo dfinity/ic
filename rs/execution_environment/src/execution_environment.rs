@@ -616,7 +616,7 @@ impl ExecutionEnvironment {
                                 Ok(mut canister_http_request_context) => {
                                     let http_request_fee =
                                         self.cycles_account_manager.http_request_fee(
-                                            request.payload_size_bytes(),
+                                            canister_http_request_context.variable_parts_size(),
                                             canister_http_request_context.max_response_bytes,
                                             registry_settings.subnet_size
                                         );
