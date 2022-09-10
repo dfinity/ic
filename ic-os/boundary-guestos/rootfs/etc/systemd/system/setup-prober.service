@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=setup-prober.service
 
 [Install]
+RequiredBy=prober.service
 WantedBy=multi-user.target
 
 [Service]

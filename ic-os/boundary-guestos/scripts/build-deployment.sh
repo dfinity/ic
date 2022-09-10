@@ -80,11 +80,9 @@ done
 INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
-CERT_DIR="${CERT_DIR:=""}"
-DENY_LIST="${DENY_LIST:=""}"
-GIT_REVISION="${GIT_REVISION:=}"
+CERT_DIR="${CERT_DIR:-}"
 
-if [[ -z "$GIT_REVISION" ]]; then
+if [[ -z "${GIT_REVISION:-}" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
     exit 1
 fi
@@ -369,7 +367,7 @@ function generate_denylist_config() {
             local node_idx=${NODE["node_idx"]}
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [[ -f "${DENY_LIST}" ]]; then
+            if [[ -f "${DENY_LIST:-}" ]]; then
                 echo "Using deny list ${DENY_LIST}"
                 cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
             else

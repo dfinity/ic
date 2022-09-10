@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=icx-proxy.service
 
 [Install]
+RequiredBy=icx-proxy.service
 WantedBy=multi-user.target
 
 [Service]

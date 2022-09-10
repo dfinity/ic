@@ -40,7 +40,7 @@ function read_variables() {
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
-    if [[ -z "$DOMAIN" ]]; then
+    if [[ -z "${DOMAIN:-}" ]]; then
         err "missing domain configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
         exit 1
     fi

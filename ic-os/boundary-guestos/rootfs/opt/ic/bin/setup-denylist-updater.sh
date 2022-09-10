@@ -31,7 +31,7 @@ function read_variables() {
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
-    if [[ -z "$DENYLIST_URL" ]]; then
+    if [[ -z "${DENYLIST_URL:-}" ]]; then
         err "missing denylist updater configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
         exit 1
     fi

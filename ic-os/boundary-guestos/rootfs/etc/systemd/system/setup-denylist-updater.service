@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=denylist-updater.service
 
 [Install]
+RequiredBy=denylist-updater.service
 WantedBy=multi-user.target
 
 [Service]

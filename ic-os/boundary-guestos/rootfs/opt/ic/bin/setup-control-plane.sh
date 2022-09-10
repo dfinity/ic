@@ -31,7 +31,7 @@ function read_variables() {
         esac
     done <"${BOOT_CONFIG}/nns.conf"
 
-    if [[ -z "$NNS_URL" ]]; then
+    if [[ -z "${NNS_URL:-}" ]]; then
         err "missing NNS configuration value(s): $(cat "${BOOT_CONFIG}/nns.conf")"
         exit 1
     fi

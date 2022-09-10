@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=control-plane.service
 
 [Install]
+RequiredBy=control-plane.service
 WantedBy=multi-user.target
 
 [Service]

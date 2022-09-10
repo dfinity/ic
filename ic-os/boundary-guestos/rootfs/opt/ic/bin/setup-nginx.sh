@@ -34,7 +34,7 @@ function read_variables() {
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
-    if [[ -z "${DOMAIN}" ]]; then
+    if [[ -z "${DOMAIN:-}" ]]; then
         echo "\${DOMAIN} variable not set. Nginx won't be configured. " 1>&2
         exit 1
     fi

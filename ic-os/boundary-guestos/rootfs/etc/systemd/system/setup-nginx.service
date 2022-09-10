@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=nginx.service
 
 [Install]
+RequiredBy=nginx.service
 WantedBy=multi-user.target
 
 [Service]

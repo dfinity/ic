@@ -31,7 +31,7 @@ function read_variables() {
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
 
-    if [[ -z "$ELASTICSEARCH_URL" ]]; then
+    if [[ -z "${ELASTICSEARCH_URL:-}" ]]; then
         err "missing vector configuration value(s): $(cat "${BOOT_CONFIG}/bn_vars.conf")"
         exit 1
     fi

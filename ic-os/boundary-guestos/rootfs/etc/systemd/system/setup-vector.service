@@ -5,6 +5,7 @@ After=bootstrap-ic-node.service
 Before=vector.service
 
 [Install]
+RequiredBy=vector.service
 WantedBy=multi-user.target
 
 [Service]
