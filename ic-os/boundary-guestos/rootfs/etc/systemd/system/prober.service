@@ -1,6 +1,5 @@
 [Unit]
 Description=Boundary Node Prober
-After=setup-prober.service
 ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
 
 [Service]

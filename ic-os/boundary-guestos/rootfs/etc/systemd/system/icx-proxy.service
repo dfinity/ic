@@ -1,6 +1,5 @@
 [Unit]
 Description=ICX Proxy Service
-After=setup-icx-proxy.service
 
 [Service]
 User=root

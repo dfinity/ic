@@ -1,9 +1,8 @@
 [Unit]
 Description=Setup variable files (e.g. domain) for nginx
-Before=systemd-networkd.target
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=systemd-networkd.service
+Before=nginx.service
 
 [Install]
 WantedBy=multi-user.target
@@ -12,6 +11,3 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-nginx.sh
-
-[Install]
-WantedBy=multi-user.target

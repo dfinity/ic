@@ -11,6 +11,3 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-vector.sh
-
-[Install]
-WantedBy=multi-user.target

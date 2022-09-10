@@ -1086,7 +1086,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
         .resolve("cid.ic0.app", vm_addr.into())
-        .resolve("CID.raw.ic0.app", vm_addr.into())
+        .resolve("cid.raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -1123,7 +1123,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.raw.ic0.app/").send().await?;
+            let res = client.get("https://cid.raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
                 bail!("{name} failed: {}", res.status())

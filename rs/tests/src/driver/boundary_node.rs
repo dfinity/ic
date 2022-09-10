@@ -272,6 +272,14 @@ fn create_and_upload_config_disk_image(
         .arg(format!("system_test {}", group_name))
         .arg("--ipv6_replica_ips")
         .arg(&boundary_node.replica_ipv6_rule)
+        .arg("--ipv4_http_ips")
+        .arg("0.0.0.0/0")
+        .arg("--ipv6_http_ips")
+        .arg("::/0")
+        .arg("--ipv6_debug_ips")
+        .arg("::/0")
+        .arg("--ipv6_monitoring_ips")
+        .arg("::/0")
         .arg("--name_servers")
         .arg("2606:4700:4700::1111 2606:4700:4700::1001");
 
