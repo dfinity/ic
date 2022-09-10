@@ -2,7 +2,6 @@
 Description=Generate network config
 After=bootstrap-ic-node.service
 Before=systemd-networkd.service
-Before=nftables.service
 
 [Install]
 WantedBy=systemd-networkd.service
