@@ -3,7 +3,7 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/vector'
+readonly TMPLT_FILE='/etc/default/vector.tmplt'
 readonly RUN_DIR='/run/ic-node/etc/default'
 
 function err() {

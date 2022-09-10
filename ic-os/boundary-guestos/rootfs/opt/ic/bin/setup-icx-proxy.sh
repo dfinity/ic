@@ -3,10 +3,10 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_DIR='/etc/icx-proxy'
-readonly RUN_DIR='/run/ic-node/etc/icx-proxy'
+readonly TMPLT_FILE='/etc/default/icx-proxy.tmplt'
+readonly RUN_DIR='/run/ic-node/etc/default'
 
-INVALID_SSL="false"
+INVALID_SSL=
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
@@ -29,7 +29,7 @@ function read_variables() {
 
     # Disable SSL checking if we don't have real certs
     if [[ ! -f "${CERT_DIR}/fullchain.pem" ]] || [[ ! -f "${CERT_DIR}/privkey.pem" ]] || [[ ! -f "${CERT_DIR}/chain.pem" ]]; then
-        INVALID_SSL="true"
+        SSL_OPTIONS="--danger-accept-invalid-ssl"
     fi
 
     # Read limited set of keys. Be extra-careful quoting values as it could
@@ -51,15 +51,11 @@ function generate_icx_proxy_config() {
     mkdir -p "${RUN_DIR}"
 
     # Move configuration and prepare it
-    cp -a "${TMPLT_DIR}/options" "$RUN_DIR/options"
-    sed -i -e "s/{{DOMAIN}}/${DOMAIN}/g" "$RUN_DIR/options"
-
-    # Setup any extra configuration options
-    if [ "${INVALID_SSL}" == "true" ]; then
-        cp -a "${TMPLT_DIR}/invalid-ssl.options" "$RUN_DIR/ssl.options"
-    else
-        echo "SSL_OPTIONS=" >"${RUN_DIR}/ssl.options"
-    fi
+    cp -a "${TMPLT_FILE}" "$RUN_DIR/icx-proxy"
+    sed -i \
+        -e "s/{{DOMAIN}}/${DOMAIN}/g" \
+        -e "s/{{SSL_OPTIONS}}/${SSL_OPTIONS:-}/g" \
+        "$RUN_DIR/icx-proxy"
 }
 
 function main() {

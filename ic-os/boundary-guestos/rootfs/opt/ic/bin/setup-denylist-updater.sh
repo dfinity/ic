@@ -3,7 +3,7 @@
 set -euox pipefail
 
 readonly BOOT_CONFIG='/boot/config'
-readonly TMPLT_FILE='/etc/default/denylist-updater'
+readonly TMPLT_FILE='/etc/default/denylist-updater.tmplt'
 readonly RUN_DIR='/run/ic-node/etc/default'
 
 function err() {

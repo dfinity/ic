@@ -6,13 +6,13 @@ ConditionPathExists=!/run/ic-node/etc/prober/prober.disabled
 User=prober
 Group=prober
 Restart=always
-ExecStart=/opt/ic/bin/boundary-node-prober \
-    --routes-dir "/var/cache/ic_routes" \
-    --wallets-path "/etc/prober/wallets.json" \
+ExecStart=/opt/ic/bin/boundary-node-prober                 \
+    --routes-dir "/var/cache/ic_routes"                    \
+    --wallets-path "/etc/prober/wallets.json"              \
     --identity-path "/run/ic-node/etc/prober/identity.pem" \
     --root-key-path "/run/ic-node/etc/prober/root_key.der" \
-    --canister-ttl "24h" \
-    --probe-interval "1m" \
+    --canister-ttl "24h"                                   \
+    --probe-interval "1m"                                  \
     --metrics-addr "[::]:9313"
 
 [Install]

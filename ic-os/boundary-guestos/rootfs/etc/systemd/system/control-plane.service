@@ -1,6 +1,5 @@
 [Unit]
 Description=Boundary Node Control Plane
-After=setup-control-plane.service
 
 [Service]
 LogRateLimitIntervalSec=1ms
