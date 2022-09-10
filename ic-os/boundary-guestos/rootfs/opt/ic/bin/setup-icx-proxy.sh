@@ -16,12 +16,10 @@ function err() {
 # "key=value" for each line with a specific set of keys permissible (see
 # code below).
 function read_variables() {
+    local -r CERT_DIR="${BOOT_CONFIG}/certs"
+
     if [[ ! -d "${BOOT_CONFIG}" ]]; then
         err "missing node configuration directory: ${BOOT_CONFIG}"
-        exit 1
-    fi
-    if [[ ! -f "${BOOT_CONFIG}/icx-proxy.conf" ]]; then
-        err "missing icx-proxy configuration: ${BOOT_CONFIG}/icx-proxy.conf"
         exit 1
     fi
     if [ ! -f "${BOOT_CONFIG}/bn_vars.conf" ]; then
@@ -29,14 +27,13 @@ function read_variables() {
         exit 1
     fi
 
+    # Disable SSL checking if we don't have real certs
+    if [[ ! -f "${CERT_DIR}/fullchain.pem" ]] || [[ ! -f "${CERT_DIR}/privkey.pem" ]] || [[ ! -f "${CERT_DIR}/chain.pem" ]]; then
+        INVALID_SSL="true"
+    fi
+
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "invalid_ssl") INVALID_SSL="${value}" ;;
-        esac
-    done <"${BOOT_CONFIG}/icx-proxy.conf"
-
     while IFS="=" read -r key value; do
         case "${key}" in
             "domain") DOMAIN="${value}" ;;

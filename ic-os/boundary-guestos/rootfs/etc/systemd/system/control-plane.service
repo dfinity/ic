@@ -10,7 +10,7 @@ Group=root
 Restart=always
 EnvironmentFile=/run/ic-node/etc/default/control-plane
 ExecStart=/opt/ic/bin/boundary-node-control-plane \
-    --nns-urls "$NNS_URLS" \
+    --nns-urls "${NNS_URLS}" \
     --routes-dir "/var/cache/ic_routes" \
     --metrics-addr "[::]:9312"
 

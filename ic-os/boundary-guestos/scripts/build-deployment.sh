@@ -219,8 +219,6 @@ function generate_logging_config() {
             if [ "${JOURNALBEAT_TAGS}" != "" ]; then
                 echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/journalbeat.conf"
             fi
-
-            echo "ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-https://elasticsearch.testnet.dfinity.systems}" >>"${CONFIG_DIR}/${NODE_PREFIX}/vector.conf"
         fi
     done
 }
@@ -419,17 +417,6 @@ function setup_certs() {
         done
     else
         echo "Not copying certificates"
-        for n in $NODES; do
-            declare -n NODE=$n
-            if [[ "${NODE["type"]}" == "boundary" ]]; then
-                local subnet_idx=${NODE["subnet_idx"]}
-                local node_idx=${NODE["node_idx"]}
-
-                NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-
-                echo "invalid_ssl=true" >>"${CONFIG_DIR}/${NODE_PREFIX}/icx-proxy.conf"
-            fi
-        done
     fi
 }
 

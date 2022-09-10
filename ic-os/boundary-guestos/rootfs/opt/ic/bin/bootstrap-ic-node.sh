@@ -59,7 +59,7 @@ function process_bootstrap() {
 
     # stash a couple of things away to config store
     FILES=(
-        bn_vars.conf denylist.conf domain.conf icx-proxy.conf journalbeat.conf network.conf nns.conf vector.conf
+        bn_vars.conf journalbeat.conf network.conf nns.conf
         nns_public_key.pem denylist.map
     )
     for FILE in ${FILES[@]}; do
