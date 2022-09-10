@@ -2,7 +2,6 @@ pub(crate) mod chunkable;
 
 use super::StateManagerImpl;
 use crate::EXTRA_CHECKPOINTS_TO_KEEP;
-use ic_crypto_hash::crypto_hash;
 use ic_interfaces::{
     artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
     artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
@@ -16,6 +15,7 @@ use ic_types::{
         StateSyncArtifactId, StateSyncAttribute, StateSyncFilter, StateSyncMessage,
     },
     chunkable::Chunkable,
+    crypto::crypto_hash,
     Height, NodeId,
 };
 

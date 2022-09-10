@@ -102,7 +102,7 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
 impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
         self.unvalidated
-            .insert(ic_crypto::crypto_hash(&artifact.message), artifact);
+            .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
     }
 
     fn apply_changes(&mut self, change_set: CanisterHttpChangeSet) {
@@ -110,14 +110,14 @@ impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
                     self.validated.insert(
-                        ic_crypto::crypto_hash(&share),
+                        ic_types::crypto::crypto_hash(&share),
                         ValidatedArtifact {
                             msg: share,
                             timestamp: current_time(),
                         },
                     );
                     self.content
-                        .insert(ic_crypto::crypto_hash(&content), content);
+                        .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
                 CanisterHttpChangeAction::MoveToValidated(id) => {
                     match self.unvalidated.remove(&id) {

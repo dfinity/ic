@@ -789,7 +789,7 @@ impl EcdsaPreSignerImpl {
                     let dealing_support = IDkgDealingSupport {
                         transcript_id: dealing.transcript_id,
                         dealer_id: signed_dealing.dealer_id(),
-                        dealing_hash: ic_crypto::crypto_hash(signed_dealing),
+                        dealing_hash: ic_types::crypto::crypto_hash(signed_dealing),
                         sig_share: multi_sig_share,
                     };
                     self.metrics.pre_sign_metrics_inc("dealing_support_sent");

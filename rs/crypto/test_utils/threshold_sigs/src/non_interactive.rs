@@ -2,7 +2,7 @@ use crate::common::crypto_for;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_types::NodeIndex;
-use ic_interfaces::crypto::{NiDkgAlgorithm, Signable, ThresholdSigner};
+use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigner};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -11,7 +11,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigDa
 use ic_types::crypto::threshold_sig::ni_dkg::{
     DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
 };
-use ic_types::crypto::{KeyPurpose, ThresholdSigShareOf};
+use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::cmp;

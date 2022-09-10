@@ -21,8 +21,8 @@ use ic_crypto_tls_interfaces::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgProtocol, KeyManager,
-    MultiSigVerifier, Signable, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+    MultiSigVerifier, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -49,7 +49,7 @@ use ic_types::crypto::canister_threshold_sig::{
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
-    IndividualMultiSigOf, KeyPurpose, ThresholdSigShareOf, UserPublicKey,
+    IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};

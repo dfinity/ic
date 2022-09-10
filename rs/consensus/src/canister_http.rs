@@ -3,7 +3,6 @@ use crate::consensus::{
     utils::{group_shares, registry_version_at_height},
     ConsensusCrypto, Membership,
 };
-use ic_crypto::crypto_hash;
 use ic_interfaces::{
     canister_http::{
         CanisterHttpGossip, CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
@@ -27,7 +26,7 @@ use ic_types::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
-    crypto::Signed,
+    crypto::{crypto_hash, Signed},
     messages::CallbackId,
     registry::RegistryClientError,
     signature::BasicSignature,

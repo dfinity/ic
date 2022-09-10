@@ -6,7 +6,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/artifact_manager",
     "//rs/config",
-    "//rs/crypto/hash",
     "//rs/interfaces",
     "//rs/interfaces/p2p",
     "//rs/interfaces/transport",

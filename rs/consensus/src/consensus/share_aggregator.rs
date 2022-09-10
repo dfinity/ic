@@ -304,8 +304,11 @@ mod tests {
                 let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
                 CatchUpPackageShare {
                     content: (&CatchUpContent::new(
-                        HashedBlock::new(ic_crypto::crypto_hash, start_block.clone()),
-                        HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon.clone()),
+                        HashedBlock::new(ic_types::crypto::crypto_hash, start_block.clone()),
+                        HashedRandomBeacon::new(
+                            ic_types::crypto::crypto_hash,
+                            random_beacon.clone(),
+                        ),
                         state_hash,
                     ))
                         .into(),

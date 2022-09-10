@@ -279,9 +279,11 @@ upgrade-compatibility-pre-master:
       gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
       chmod +x "${IC_ADMIN}"
 
-      # sets the variable $TARGET_VERSION
-      # shellcheck source=/dev/null
-      source ic-os/guestos/tests/scripts/mainnet-revision.sh
+      # read target version from testnet/mainnet_revisions.json
+      # the target version is updated by the release team upon release
+      ROOT_SUBNET_ID="tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+      TARGET_VERSION=$(jq -r ".subnets.\"${ROOT_SUBNET_ID}\"" testnet/mainnet_revisions.json)
+      export TARGET_VERSION
     - *run-farm-based-test
 
 spec-compliance-pre-master:

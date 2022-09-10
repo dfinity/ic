@@ -3257,6 +3257,89 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
     }
 }
 
+#[test_strategy::proptest]
+fn complete_concurrent_long_executions(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+    #[strategy(0..10_usize)] num_canisters: usize,
+    #[strategy(1..10_u64)] num_slices: u64,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100 * num_slices),
+            max_instructions_per_message: NumInstructions::from(100 * num_slices),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_paused_executions: num_canisters,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let mut message_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = test.create_canister();
+        let message_id = test.send_ingress(canister_id, ingress(100 * num_slices));
+        message_ids.push(message_id);
+    }
+
+    // There are no aborts, as `max_paused_executions == num_canisters`
+    let number_of_rounds_to_complete =
+        num_canisters as u64 * num_slices / scheduler_cores as u64 + num_slices;
+    for _ in 0..number_of_rounds_to_complete {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    for message_id in message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        assert_eq!(message_error, ErrorCode::CanisterDidNotReply,);
+    }
+}
+
+#[test_strategy::proptest]
+fn respect_max_paused_executions(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+    #[strategy(1..10_usize)] num_canisters: usize,
+    #[strategy(1..10_u64)] num_slices: u64,
+    #[strategy(1..2.max(#num_canisters - 1))] max_paused_executions: usize,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(100 * num_slices),
+            max_instructions_per_message: NumInstructions::from(100 * num_slices),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_paused_executions,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let mut message_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = test.create_canister();
+        let message_id = test.send_ingress(canister_id, ingress(100 * num_slices));
+        message_ids.push(message_id);
+    }
+
+    test.execute_all_with(|test| {
+        let paused_executions = test
+            .state()
+            .canisters_iter()
+            .filter(|canister| canister.has_paused_execution())
+            .count();
+        // Make sure there the `max_paused_executions` is respected after each round
+        assert!(paused_executions <= max_paused_executions);
+    });
+
+    // Make sure all the messages are complete
+    for message_id in message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        assert_eq!(message_error, ErrorCode::CanisterDidNotReply,);
+    }
+}
+
 #[test]
 fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     let mut test = SchedulerTestBuilder::new()

@@ -33,7 +33,7 @@ impl ArtifactKind for ConsensusArtifact {
             id: msg.get_id(),
             attribute,
             size,
-            integrity_hash: ic_crypto_hash::crypto_hash(msg).get(),
+            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
         }
     }
 }
@@ -58,7 +58,7 @@ impl ArtifactKind for IngressArtifact {
             id: IngressMessageId::from(msg),
             attribute: IngressMessageAttribute::new(msg),
             size: msg.count_bytes(),
-            integrity_hash: ic_crypto_hash::crypto_hash(msg.binary()).get(),
+            integrity_hash: ic_types::crypto::crypto_hash(msg.binary()).get(),
         }
     }
 }
@@ -86,7 +86,7 @@ impl ArtifactKind for CertificationArtifact {
                 CertificationMessageId {
                     height: cert.height,
                     hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                        ic_crypto_hash::crypto_hash(cert).get(),
+                        ic_types::crypto::crypto_hash(cert).get(),
                     )),
                 },
             ),
@@ -95,7 +95,7 @@ impl ArtifactKind for CertificationArtifact {
                 CertificationMessageId {
                     height: share.height,
                     hash: CertificationMessageHash::CertificationShare(CryptoHashOf::from(
-                        ic_crypto_hash::crypto_hash(share).get(),
+                        ic_types::crypto::crypto_hash(share).get(),
                     )),
                 },
             ),
@@ -104,7 +104,7 @@ impl ArtifactKind for CertificationArtifact {
             id,
             attribute,
             size: bincode::serialize(msg).unwrap().len(),
-            integrity_hash: ic_crypto_hash::crypto_hash(msg).get(),
+            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
         }
     }
 }
@@ -129,7 +129,7 @@ impl ArtifactKind for DkgArtifact {
         let attribute = DkgMessageAttribute {
             interval_start_height: msg.content.dkg_id.start_block_height,
         };
-        let hash = ic_crypto_hash::crypto_hash(msg);
+        let hash = ic_types::crypto::crypto_hash(msg);
         Advert {
             id: hash.clone(),
             attribute,
@@ -161,7 +161,7 @@ impl ArtifactKind for EcdsaArtifact {
             id: ecdsa_msg_id(msg),
             attribute: EcdsaMessageAttribute::from(msg),
             size,
-            integrity_hash: ic_crypto_hash::crypto_hash(msg).get(),
+            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
         }
     }
 }
@@ -184,7 +184,7 @@ impl ArtifactKind for CanisterHttpArtifact {
     fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
         // TODO: use serialize_len() in all the clients
         let size = bincode::serialize(msg).unwrap().len();
-        let hash = ic_crypto_hash::crypto_hash(msg);
+        let hash = ic_types::crypto::crypto_hash(msg);
         Advert {
             id: hash.clone(),
             attribute: CanisterHttpResponseAttribute::Share(

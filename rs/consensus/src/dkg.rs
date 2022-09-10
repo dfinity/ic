@@ -9,7 +9,6 @@ use crate::ecdsa::{
     make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
     utils::inspect_ecdsa_initializations,
 };
-use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     dkg::{ChangeAction, ChangeSet, Dkg, DkgGossip, DkgPool},
@@ -35,6 +34,7 @@ use ic_types::{
         HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
+        crypto_hash,
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
             errors::{
@@ -417,7 +417,10 @@ fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_i
 }
 
 fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T) -> ChangeAction {
-    ChangeAction::HandleInvalid(ic_crypto::crypto_hash(message), reason.as_ref().to_string())
+    ChangeAction::HandleInvalid(
+        ic_types::crypto::crypto_hash(message),
+        reason.as_ref().to_string(),
+    )
 }
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
@@ -3334,7 +3337,7 @@ mod tests {
             // is returned.
             let messages = vec![Message::fake(valid_dealing_content, node_test_id(0))];
             let payload = Payload::new(
-                ic_crypto::crypto_hash,
+                ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),

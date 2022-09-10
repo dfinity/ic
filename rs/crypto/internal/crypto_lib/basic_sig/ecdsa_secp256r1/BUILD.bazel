@@ -28,6 +28,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "@crate_index//:proptest",
+    "@crate_index//:regex",
     "@crate_index//:strum",
     "@crate_index//:wycheproof",
 ]

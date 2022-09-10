@@ -927,7 +927,7 @@ mod tests {
                 Block::new(
                     CryptoHashOf::from(CryptoHash(Vec::new())),
                     Payload::new(
-                        ic_crypto::crypto_hash,
+                        ic_types::crypto::crypto_hash,
                         (ic_types::consensus::dkg::Summary::fake(), None).into(),
                     ),
                     Height::from(4),
@@ -944,7 +944,7 @@ mod tests {
             let genesis_cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
             let mut cup = genesis_cup.clone();
             cup.content.random_beacon = hashed::Hashed::new(
-                ic_crypto::crypto_hash,
+                ic_types::crypto::crypto_hash,
                 RandomBeacon::fake(RandomBeaconContent::new(
                     Height::from(4),
                     CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -1017,7 +1017,7 @@ mod tests {
             let notarization_path = path.join("2").join(format!(
                 "notarization_{}_{}.bin",
                 bytes_to_hex_str(&notarization.content.block),
-                bytes_to_hex_str(&ic_crypto::crypto_hash(&notarization)),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&notarization)),
             ));
             assert!(
                 path.join("2").join("random_tape.bin").exists(),
@@ -1056,7 +1056,7 @@ mod tests {
             let finalization_path = path.join("3").join(format!(
                 "finalization_{}_{}.bin",
                 bytes_to_hex_str(&finalization.content.block),
-                bytes_to_hex_str(&ic_crypto::crypto_hash(&finalization)),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&finalization)),
             ));
             assert!(
                 finalization_path.exists(),
@@ -1082,7 +1082,7 @@ mod tests {
             let proposal_path = path.join("4").join(format!(
                 "block_proposal_{}_{}.bin",
                 bytes_to_hex_str(proposal.content.get_hash()),
-                bytes_to_hex_str(&ic_crypto::crypto_hash(&proposal)),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal)),
             ));
             assert!(
                 path.join("4").join("catch_up_package.bin").exists(),
@@ -1222,7 +1222,7 @@ mod tests {
                 Block::new(
                     CryptoHashOf::from(CryptoHash(Vec::new())),
                     Payload::new(
-                        ic_crypto::crypto_hash,
+                        ic_types::crypto::crypto_hash,
                         (ic_types::consensus::dkg::Summary::fake(), None).into(),
                     ),
                     Height::from(4),

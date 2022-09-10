@@ -1,13 +1,13 @@
 //! Definitions for the ECDSA objects that are stored in the ECDSA artifact
 //! pool.
 
-use ic_crypto_hash::crypto_hash;
-use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::ecdsa::{
     complaint_prefix, dealing_prefix, dealing_support_prefix, opening_prefix, sig_share_prefix,
     EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::crypto_hash;
+use ic_types::crypto::CryptoHashable;
 
 /// EcdsaObject should be implemented by the ECDSA message types
 /// (e.g) EcdsaSignedDealing, EcdsaDealingSupport, etc

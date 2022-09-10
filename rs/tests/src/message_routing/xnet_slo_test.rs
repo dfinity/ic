@@ -114,7 +114,7 @@ pub fn config_prod_slo_3_subnets() -> Config {
     Config::new(3, 4, Duration::from_secs(1200), 10)
 }
 
-pub fn config_120_subnets() -> Config {
+pub fn config_nightly_120_subnets() -> Config {
     Config::new(120, 1, Duration::from_secs(600), 10) // 600s = 10min
 }
 

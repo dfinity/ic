@@ -175,6 +175,109 @@ pub struct RemoveSubnetFromAuthorizedSubnetListArgs {
     pub subnet: SubnetId,
 }
 
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum UpdateSubnetTypeArgs {
+    Add(String),
+    Remove(String),
+}
+
+/// Errors that can happen when attempting to update an available subnet type.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum UpdateSubnetTypeError {
+    Duplicate(String),
+    TypeDoesNotExist(String),
+    TypeHasAssignedSubnets((String, Vec<SubnetId>)),
+}
+
+impl std::fmt::Display for UpdateSubnetTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Duplicate(subnet_type) => {
+                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+            }
+            Self::TypeDoesNotExist(subnet_type) => {
+                write!(
+                    f,
+                    "The subnet type provided {} does not exist and cannot be removed.",
+                    subnet_type
+                )
+            }
+            Self::TypeHasAssignedSubnets((subnet_type, subnet_ids)) => {
+                write!(
+                    f,
+                    "The subnet type provided {} has the following assigned subnets {:?} and cannot be removed.",
+                    subnet_type,
+                    subnet_ids
+                )
+            }
+        }
+    }
+}
+
+/// The result to a call to `update_subnet_type`.
+pub type UpdateSubnetTypeResult = Result<(), UpdateSubnetTypeError>;
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct SubnetListWithType {
+    pub subnets: Vec<SubnetId>,
+    pub subnet_type: String,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentArgs {
+    Add(SubnetListWithType),
+    Remove(SubnetListWithType),
+}
+
+/// Errors that can happen when attempting to change the assignment of a subnet
+/// to a subnet type.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum ChangeSubnetTypeAssignmentError {
+    TypeDoesNotExist(String),
+    SubnetsAreAssigned(Vec<SubnetListWithType>),
+    SubnetsAreAuthorized(Vec<SubnetId>),
+    SubnetsAreNotAssigned(SubnetListWithType),
+}
+
+impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TypeDoesNotExist(subnet_type) => {
+                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+            }
+            Self::SubnetsAreAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "The provided subnets are already assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+            Self::SubnetsAreAuthorized(subnet_ids) => {
+                write!(
+                    f,
+                    "The provided subnets {:?} are authorized for public access and cannot be assigned a type.",
+                    subnet_ids
+                )
+            }
+            Self::SubnetsAreNotAssigned(subnets_with_type) => {
+                write!(
+                    f,
+                    "The provided subnets are not assigned to a type {:?}.",
+                    subnets_with_type
+                )
+            }
+        }
+    }
+}
+
+/// The result to a call to `change_subnet_type_assignment`.
+pub type ChangeSubnetTypeAssignmentResult = Result<(), ChangeSubnetTypeAssignmentError>;
+
+#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+pub struct SubnetTypesToSubnetsResponse {
+    pub data: Vec<(String, Vec<SubnetId>)>,
+}
+
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
 pub struct IcpXdrConversionRate {
     /// The time for which the market data was queried, expressed in UNIX epoch

@@ -8,9 +8,10 @@ use ic_crypto_test_utils_threshold_sigs::non_interactive::{
     load_transcript, run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,
     NiDkgTestEnvironment, RandomNiDkgConfig,
 };
-use ic_interfaces::crypto::{NiDkgAlgorithm, SignableMock, ThresholdSigVerifier, ThresholdSigner};
+use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner};
 use ic_types::consensus::Threshold;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgId, NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::SignableMock;
 use ic_types::{Height, NodeId};
 use rand::prelude::*;
 use rand::seq::SliceRandom;

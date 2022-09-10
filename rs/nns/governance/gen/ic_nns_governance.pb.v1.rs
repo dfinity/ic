@@ -2294,6 +2294,11 @@ pub enum NnsFunction {
     //// The nodes that are being added to the subnet must be currently unassigned.
     //// The nodes that are being removed from the subnet must be currently assigned to the subnet.
     ChangeSubnetMembership = 31,
+    /// Updates the available subnet types in the cycles minting canister.
+    UpdateSubnetType = 32,
+    /// Changes the assignment of subnets to subnet types in the cycles minting
+    /// canister.
+    ChangeSubnetTypeAssignment = 33,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

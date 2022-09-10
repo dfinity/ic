@@ -459,7 +459,7 @@ fn random_beacon_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let height = Height::from(i);
         for j in 0..3 {
             let random_beacon = fake_random_beacon(Height::from(i));
-            let parent = ic_crypto::crypto_hash(&random_beacon);
+            let parent = ic_types::crypto::crypto_hash(&random_beacon);
             let content = RandomBeaconContent::new(height, parent);
             let signature = ThresholdSigShareOf::new(ThresholdSigShare(vec![]));
             let signer = node_test_id(j);

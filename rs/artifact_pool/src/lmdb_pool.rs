@@ -9,7 +9,6 @@ use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
-    crypto::CryptoHashable,
     ecdsa::{EcdsaPoolSection, EcdsaPoolSectionOp, EcdsaPoolSectionOps, MutableEcdsaPoolSection},
 };
 use ic_logger::{error, info, ReplicaLogger};
@@ -31,7 +30,7 @@ use ic_types::{
         NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
     Height, Time,
 };
 use lmdb::{
@@ -1245,12 +1244,12 @@ impl crate::certification_pool::MutablePoolSection
     fn insert(&self, message: CertificationMessage) {
         match message {
             CertificationMessage::Certification(value) => log_err!(
-                self.insert_message(ic_crypto::crypto_hash(&value), value),
+                self.insert_message(ic_types::crypto::crypto_hash(&value), value),
                 self.log,
                 "CertificationMessage::Certification::insert"
             ),
             CertificationMessage::CertificationShare(value) => log_err!(
-                self.insert_message(ic_crypto::crypto_hash(&value), value),
+                self.insert_message(ic_types::crypto::crypto_hash(&value), value),
                 self.log,
                 "CertificationMessage::CertificationShare::insert"
             ),

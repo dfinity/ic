@@ -53,7 +53,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             .method_payload(vec![0; 128 * 1024])
             .build()]);
         block.payload = Payload::new(
-            ic_crypto::crypto_hash,
+            ic_types::crypto::crypto_hash,
             (
                 BatchPayload {
                     ingress,

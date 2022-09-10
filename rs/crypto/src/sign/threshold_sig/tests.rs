@@ -12,12 +12,10 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts;
-use ic_interfaces::crypto::SignableMock;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
-use ic_types::crypto::ThresholdSigShare;
-use ic_types::crypto::{CombinedThresholdSig, KeyId};
+use ic_types::crypto::{CombinedThresholdSig, KeyId, SignableMock, ThresholdSigShare};
 use ic_types::Height;
 use ic_types::SubnetId;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_0, SUBNET_1};

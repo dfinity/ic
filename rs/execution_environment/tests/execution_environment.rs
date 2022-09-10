@@ -1472,7 +1472,6 @@ fn execute_canister_http_request() {
     // Create request to HTTP_REQUEST method.
     let payment = Cycles::new(1_000_000_000);
     let payload = args.encode();
-    let request_payload_size = NumBytes::from(payload.len() as u64);
     test.inject_call_to_ic00(Method::HttpRequest, payload, payment);
     test.execute_all();
     // Check that the SubnetCallContextManager contains the request.
@@ -1497,7 +1496,7 @@ fn execute_canister_http_request() {
         http_request_context.request.payment,
         payment
             - test.http_request_fee(
-                NumBytes::from(Method::HttpRequest.to_string().len() as u64) + request_payload_size,
+                http_request_context.variable_parts_size(),
                 Some(NumBytes::from(response_size_limit))
             )
     );

@@ -91,6 +91,10 @@ type IcpXdrConversionRateResponse = record {
   certificate : blob;
 };
 
+type SubnetTypesToSubnetsResponse = record {
+  data: vec record { text; vec principal };
+}
+
 service : {
   // Propmts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
@@ -101,4 +105,7 @@ service : {
 
   // Returns the ICP/XDR conversion rate.
   get_icp_xdr_conversion_rate : () -> (IcpXdrConversionRateResponse) query;
+
+  // Returns the current mapping of subnet types to subnets.
+  get_subnet_types_to_subnets : () -> (SubnetTypesToSubnetsResponse) query;
 }

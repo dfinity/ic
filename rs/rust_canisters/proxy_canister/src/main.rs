@@ -7,7 +7,7 @@
 //!
 use candid::{candid_method, Principal};
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpResponsePayload, Payload};
+use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -89,6 +89,17 @@ async fn check_response(
 fn transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
     let mut transformed = raw;
     transformed.headers = vec![];
+    transformed
+}
+
+#[ic_cdk_macros::query(name = "test_transform")]
+#[candid_method(query, rename = "test_transform")]
+fn test_transform(raw: CanisterHttpResponsePayload) -> CanisterHttpResponsePayload {
+    let mut transformed = raw;
+    transformed.headers = vec![HttpHeader {
+        name: "hello".to_string(),
+        value: "bonjour".to_string(),
+    }];
     transformed
 }
 

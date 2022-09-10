@@ -2151,6 +2151,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-types 0.8.0",
+ "ic-types-test-utils",
  "lazy_static",
  "ledger-canister",
  "on_wire",
@@ -3896,7 +3897,6 @@ dependencies = [
  "ic-config",
  "ic-consensus-message",
  "ic-constants",
- "ic-crypto-hash",
  "ic-ecdsa-object",
  "ic-interfaces",
  "ic-logger",
@@ -4581,7 +4581,6 @@ dependencies = [
  "ic-consensus-message",
  "ic-constants",
  "ic-crypto",
- "ic-crypto-hash",
  "ic-crypto-prng",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
@@ -4633,7 +4632,6 @@ dependencies = [
 name = "ic-consensus-message"
 version = "0.8.0"
 dependencies = [
- "ic-crypto-hash",
  "ic-interfaces",
  "ic-types 0.8.0",
 ]
@@ -4662,7 +4660,6 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-config",
- "ic-crypto-hash",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -4747,16 +4744,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-hash"
-version = "0.8.0"
-dependencies = [
- "hex",
- "ic-crypto-sha",
- "ic-interfaces",
- "ic-types 0.8.0",
-]
-
-[[package]]
 name = "ic-crypto-internal-basic-sig-cose"
 version = "0.1.0"
 dependencies = [
@@ -4796,6 +4783,7 @@ dependencies = [
  "openssl",
  "proptest 0.9.6",
  "proptest-derive",
+ "regex",
  "serde",
  "serde_bytes",
  "simple_asn1 0.6.1",
@@ -4818,6 +4806,7 @@ dependencies = [
  "openssl",
  "proptest 0.9.6",
  "proptest-derive",
+ "regex",
  "serde",
  "serde_bytes",
  "simple_asn1 0.6.1",
@@ -5516,7 +5505,6 @@ dependencies = [
 name = "ic-ecdsa-object"
 version = "0.8.0"
 dependencies = [
- "ic-crypto-hash",
  "ic-interfaces",
  "ic-types 0.8.0",
 ]
@@ -5627,7 +5615,7 @@ dependencies = [
  "num-traits",
  "phantom_newtype",
  "prometheus 0.12.0",
- "proptest 0.9.6",
+ "proptest 1.0.0",
  "rand 0.8.5",
  "scoped_threadpool",
  "serde",
@@ -5635,6 +5623,7 @@ dependencies = [
  "slog",
  "strum 0.23.0",
  "tempfile",
+ "test-strategy",
  "threadpool",
  "tokio",
  "tower",
@@ -6554,6 +6543,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types 0.8.0",
+ "ic-types-test-utils",
  "lazy_static",
  "ledger-canister",
  "libsecp256k1",
@@ -6640,7 +6630,6 @@ dependencies = [
  "ic-canister-http-adapter-client",
  "ic-config",
  "ic-consensus-message",
- "ic-crypto-hash",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
@@ -8060,7 +8049,6 @@ dependencies = [
  "ic-btc-types-internal",
  "ic-canonical-state",
  "ic-config",
- "ic-crypto-hash",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-error-types",
@@ -12951,6 +12939,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
+name = "structmeta"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd9c2155aa89fb2c2cb87d99a610c689e7c47099b3e9f1c8a8f53faf4e3d2e3"
+dependencies = [
+ "proc-macro2 1.0.39",
+ "quote 1.0.17",
+ "structmeta-derive",
+ "syn 1.0.96",
+]
+
+[[package]]
+name = "structmeta-derive"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bafede0d0a2f21910f36d47b1558caae3076ed80f6f3ad0fc85a91e6ba7e5938"
+dependencies = [
+ "proc-macro2 1.0.39",
+ "quote 1.0.17",
+ "syn 1.0.96",
+]
+
+[[package]]
 name = "strum"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13250,6 +13261,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f0fcee7b24a25675de40d5bb4de6e41b0df07bc9856295e7e2b3a3600c400c2"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "test-strategy"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c18b325ca048e49683d5cb9166a50191fc862e36020706bbd7723c22a05d4ffa"
+dependencies = [
+ "proc-macro2 1.0.39",
+ "quote 1.0.17",
+ "structmeta",
+ "syn 1.0.96",
 ]
 
 [[package]]

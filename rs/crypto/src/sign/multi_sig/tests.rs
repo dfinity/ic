@@ -47,7 +47,7 @@ mod test_multi_sig_verification {
         STABILITY_1, STABILITY_2,
     };
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
-    use ic_interfaces::crypto::SignableMock;
+    use ic_types::crypto::SignableMock;
 
     #[test]
     fn should_correctly_verify_multi_sig_individual() {

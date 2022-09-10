@@ -192,8 +192,8 @@ pub enum ExecutionTask {
     Heartbeat,
 
     // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedExecution`
-    // before the checkpoint.
+    // checkpoints). It is never serialized, and it turns into `AbortedExecution`
+    // before the checkpoint or when there are too many long-running executions.
     PausedExecution(PausedExecutionId),
 
     // A paused `install_code` task exists only within an epoch (between

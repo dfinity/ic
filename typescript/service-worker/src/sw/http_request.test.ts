@@ -94,31 +94,23 @@ it('should not set content-type: application/cbor and x-content-type-options: no
   expect(response.status).toEqual(200);
 });
 
-it('should set content-type: application/cbor and x-content-type-options: nosniff on ic calls to /api', async () => {
-  fetch.mockResponse('test response');
+it.each([
+  `https://${CANISTER_ID}.ic0.app/api/foo`,
+  `https://ic0.app/api/${CANISTER_ID}/foo`,
+  `https://dscvr.one/api/foo`,
+])(
+  'should set content-type: application/cbor and x-content-type-options: nosniff on ic calls to %s',
+  async (url) => {
+    fetch.mockResponse('test response');
 
-  const response = await handleRequest(
-    new Request(`https://${CANISTER_ID}.ic0.app/api/foo`)
-  );
+    const response = await handleRequest(new Request(url));
 
-  expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
-  expect(response.headers.get('content-type')).toEqual('application/cbor');
-  expect(await response.text()).toEqual('test response');
-  expect(response.status).toEqual(200);
-});
-
-it('should set content-type: application/cbor and x-content-type-options: nosniff on hostname ic calls to /api', async () => {
-  fetch.mockResponse('test response');
-
-  const response = await handleRequest(
-    new Request(`https://dscvr.one/api/foo`)
-  );
-
-  expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
-  expect(response.headers.get('content-type')).toEqual('application/cbor');
-  expect(await response.text()).toEqual('test response');
-  expect(response.status).toEqual(200);
-});
+    expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
+    expect(response.headers.get('content-type')).toEqual('application/cbor');
+    expect(await response.text()).toEqual('test response');
+    expect(response.status).toEqual(200);
+  }
+);
 
 it('should reject invalid certification (body hash mismatch)', async () => {
   jest.setSystemTime(TEST_DATA.queryData.certificate_time);

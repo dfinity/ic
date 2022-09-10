@@ -1,8 +1,6 @@
-use crate::api::CspThresholdSignError;
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
 };
 use ic_types::crypto::CryptoError;
 
@@ -11,70 +9,6 @@ pub mod local_csp_vault;
 pub mod remote_csp_vault;
 #[cfg(test)]
 mod test_utils;
-
-impl From<tarpc::client::RpcError> for CspThresholdSignError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspThresholdSignError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspThresholdSignatureKeygenError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspThresholdSignatureKeygenError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspMultiSignatureError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspMultiSignatureError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspMultiSignatureKeygenError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspMultiSignatureKeygenError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspBasicSignatureError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspBasicSignatureError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspBasicSignatureKeygenError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspBasicSignatureKeygenError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspTlsKeygenError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspTlsKeygenError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
-
-impl From<tarpc::client::RpcError> for CspTlsSignError {
-    fn from(e: tarpc::client::RpcError) -> Self {
-        CspTlsSignError::InternalError {
-            internal_error: e.to_string(),
-        }
-    }
-}
 
 impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {

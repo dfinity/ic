@@ -1,10 +1,12 @@
-use ic_types::artifact::StateSyncMessage;
-use ic_types::canister_http::{
+//! Defines hash types.
+
+use crate::artifact::StateSyncMessage;
+use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
-use ic_types::consensus::certification::CertificationMessage;
-use ic_types::consensus::dkg as consensus_dkg;
-use ic_types::consensus::{
+use crate::consensus::certification::CertificationMessage;
+use crate::consensus::dkg as consensus_dkg;
+use crate::consensus::{
     certification::{Certification, CertificationContent, CertificationShare},
     ecdsa::{
         EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
@@ -13,16 +15,20 @@ use ic_types::consensus::{
     ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent, RandomBeaconContent,
     RandomTapeContent,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
+use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
 };
-use ic_types::crypto::Signed;
-use ic_types::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
-use ic_types::signature::{
+use crate::crypto::{CryptoHash, CryptoHashOf, Signed};
+use crate::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
+use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
+use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
+
+#[cfg(test)]
+mod tests;
 
 /// The domain separator to be used when calculating the sender signature for a
 /// request to the Internet Computer according to the
@@ -91,10 +97,6 @@ pub(crate) const DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA: &str =
 pub(crate) const DOMAIN_CANISTER_HTTP_RESPONSE_SHARE: &str =
     "ic-canister-http-response-share-domain";
 
-/// A cryptographically hashable type.
-pub trait CryptoHashable: CryptoHashDomain + Hash {}
-impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
-
 /// A type that specifies a domain for a cryptographic hash.
 ///
 /// This trait is sealed and can only be implemented by types that are
@@ -108,8 +110,8 @@ pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
 }
 mod private {
 
-    use ic_types::canister_http::CanisterHttpResponseShare;
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+    use crate::canister_http::CanisterHttpResponseShare;
+    use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 
     use super::*;
 
@@ -476,3 +478,28 @@ impl CryptoHashDomain for CryptoHashableTestDummy {
 /// of this crate where it is needed.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CryptoHashableTestDummy(pub Vec<u8>);
+
+/// A cryptographically hashable type.
+pub trait CryptoHashable: CryptoHashDomain + Hash {}
+impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
+
+/// Creates a (typed) domain-separated cryptographic hash.
+///
+/// The bytes that are hashed are a combination of
+/// * the byte representation of the hash domain obtained via `CryptoHashable`s
+///   supertrait `CryptoHashDomain`
+/// * the bytes fed to the hasher state via `CryptoHashable`s supertrait `Hash`
+///
+/// Note that the trait `CryptoHashDomain` is sealed for security reasons. To
+/// implement this trait for a new struct that shall be cryptographically
+/// hashed, contact the crypto team.
+///
+/// The (secure) hashing algorithm that is used internally is intentionally
+/// unspecified because it may be subject to change across registry/protocol
+/// versions. Use `Sha256` instead if the algorithm used for producing
+/// the hash must not change across registry/protocol versions.
+pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
+    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
+    data.hash(&mut hash);
+    CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
+}

@@ -1084,7 +1084,7 @@ impl Validator {
     where
         Signed<RandomBeaconContent, S>: SignatureVerify + ConsensusMessageHashable + Clone,
     {
-        let last_hash: CryptoHashOf<RandomBeacon> = ic_crypto::crypto_hash(last_beacon);
+        let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(last_beacon);
         let last_height = last_beacon.content.height();
         beacons
             .filter_map(|beacon| {
@@ -1344,7 +1344,7 @@ impl Validator {
             .get_finalized_block(height)
             .ok_or(TransientError::FinalizedBlockNotFound(height))?;
 
-        if ic_crypto::crypto_hash(&block) != share_content.block {
+        if ic_types::crypto::crypto_hash(&block) != share_content.block {
             warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
             Err(PermanentError::MismatchedBlockInCatchUpPackageShare)?
         }
@@ -1583,9 +1583,10 @@ pub mod test {
 
             // Manually construct a cup share
             let random_beacon = pool.make_next_beacon();
-            let random_beacon_hash = HashedRandomBeacon::new(ic_crypto::crypto_hash, random_beacon);
+            let random_beacon_hash =
+                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon);
             let block = Block::from(pool.make_next_block());
-            let block_hash = HashedBlock::new(ic_crypto::crypto_hash, block);
+            let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
@@ -2752,8 +2753,10 @@ pub mod test {
             block.content.as_mut().rank = Rank(0);
 
             block.update_content();
-            let content =
-                NotarizationContent::new(block.height(), ic_crypto::crypto_hash(block.as_ref()));
+            let content = NotarizationContent::new(
+                block.height(),
+                ic_types::crypto::crypto_hash(block.as_ref()),
+            );
             let mut notarization = Notarization::fake(content);
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];

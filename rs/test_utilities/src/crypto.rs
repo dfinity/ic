@@ -15,7 +15,7 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
     ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
-use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
+use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -34,7 +34,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
-    IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
+    IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;

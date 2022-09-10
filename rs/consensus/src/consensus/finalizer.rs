@@ -203,7 +203,8 @@ impl Finalizer {
         // If notarization shares exists created by this replica at height `h`
         // that sign a block different than `notarized_block`, do not finalize.
         let other_notarizaed_shares_exists = pool.get_notarization_shares(h).any(|x| {
-            x.signature.signer == me && x.content.block != ic_crypto::crypto_hash(&notarized_block)
+            x.signature.signer == me
+                && x.content.block != ic_types::crypto::crypto_hash(&notarized_block)
         });
         if other_notarizaed_shares_exists {
             return None;
@@ -217,7 +218,7 @@ impl Finalizer {
     fn finalize_height(&self, pool: &PoolReader<'_>, height: Height) -> Option<FinalizationShare> {
         let content = FinalizationContent::new(
             height,
-            ic_crypto::crypto_hash(&self.pick_block_to_finality_sign(pool, height)?),
+            ic_types::crypto::crypto_hash(&self.pick_block_to_finality_sign(pool, height)?),
         );
         let signature = self
             .crypto
@@ -292,7 +293,7 @@ impl Finalizer {
         pool: &PoolReader<'_>,
         block: &Block,
     ) -> Option<FinalizationShare> {
-        let content = FinalizationContent::new(block.height, ic_crypto::crypto_hash(block));
+        let content = FinalizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
         let signature = self
             .crypto
             .sign(
@@ -477,7 +478,7 @@ mod tests {
                 RegistryVersion::from(1)
             );
             assert_eq!(block.context.registry_version, RegistryVersion::from(10));
-            block_proposal.content = HashedBlock::new(ic_crypto::crypto_hash, block.clone());
+            block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(block_proposal.clone());
             pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());

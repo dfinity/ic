@@ -33,8 +33,10 @@
 //! peer for Gossip.
 
 mod control_plane;
+mod control_plane_h2;
 mod data_plane;
 mod metrics;
 pub mod transport;
+pub mod transport_h2;
 mod types;
 mod utils;

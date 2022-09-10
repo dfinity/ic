@@ -12,10 +12,10 @@ use ic_crypto_tree_hash::{
     WitnessGenerator,
 };
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
-use ic_interfaces::crypto::Signable;
 use ic_types::messages::Blob;
 use ic_types::{
     consensus::certification::CertificationContent,
+    crypto::Signable,
     crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
     CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
