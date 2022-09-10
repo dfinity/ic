@@ -102,6 +102,46 @@ EOF
 }
 
 # Arguments:
+# - $1 the comma seperated list of IPv4 addresses/prefixes
+function check_ipv4_prefixes() {
+    local ipv4_prefixes="$1"
+    local fail=0
+    for ipv4_prefix in ${ipv4_prefixes//,/ }; do
+        IFS=/ read -r ipv4_address ipv4_length <<<${ipv4_prefix}
+
+        if [[ ! ${ipv4_address} =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$ ]]; then
+            echo "Incorrectly formatted IPv4 address: ${ipv4_address}"
+            fail=1
+        fi
+
+        if [[ ! -z "${ipv4_length:-}" ]] && ((ipv4_length < 0 || ipv4_length > 32)); then
+            echo "IPv4 prefix length out of bounds: ${ipv4_length}"
+            fail=1
+        fi
+    done
+    return ${fail}
+}
+
+# Arguments:
+# - $1 the comma seperated list of IPv6 addresses/prefixes
+function check_ipv6_prefixes() {
+    local ipv6_prefixes="$1"
+    local fail=0
+    for ipv6_prefix in ${ipv6_prefixes//,/ }; do
+        IFS=/ read -r ipv6_address ipv6_length <<<${ipv6_prefix}
+        if [[ ! ${ipv6_address} =~ ^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$ ]]; then
+            echo "Incorrectly formatted IPv6 address: ${ipv6_address}"
+            fail=1
+        fi
+        if [[ ! -z "${ipv6_length:-}" ]] && ((ipv6_length < 0 || ipv6_length > 128)); then
+            echo "IPv6 prefix length out of bounds: ${ipv6_length}"
+            fail=1
+        fi
+    done
+    return ${fail}
+}
+
+# Arguments:
 # - $1 the tar file to build
 # - all remaining arguments: parameters to encode into the bootstrap
 function build_ic_bootstrap_tar() {
@@ -203,11 +243,31 @@ function build_ic_bootstrap_tar() {
     DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
     ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
-    IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:=""}"
+    IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:="::/128"}"
     IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
     IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
     IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
     IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
+
+    local fail=0
+    if ! check_ipv4_prefixes ${IPV4_HTTP_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_REPLICA_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_HTTP_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_DEBUG_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_MONITORING_IPS}; then
+        fail=1
+    fi
+    if [[ $fail == 1 ]]; then
+        exit 1
+    fi
 
     if ! echo $DOMAIN | grep -q ".*\..*"; then
         echo "malformed domain name $DOMAIN"
