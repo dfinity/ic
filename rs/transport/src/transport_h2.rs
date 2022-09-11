@@ -72,7 +72,7 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportError, TransportEventHandler, TransportPayload,
+    Transport, TransportChannelId, TransportError, TransportEventHandler, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -188,7 +188,7 @@ impl Transport for TransportImplH2 {
     fn send(
         &self,
         peer_id: &NodeId,
-        _flow_tag: FlowTag,
+        _channel_id: TransportChannelId,
         message: TransportPayload,
     ) -> Result<(), TransportError> {
         let peer_map = self.peer_map.blocking_read();

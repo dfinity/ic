@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
+use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
@@ -171,8 +171,8 @@ impl Drop for ServerPortState {
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
     log: ReplicaLogger,
-    /// Flow tag as a metrics label
-    flow_tag_label: String,
+    /// Transport channel label, used for metrics
+    pub channel_id_label: String,
     /// Peer label, used for metrics
     pub peer_label: String,
     /// Connection state
@@ -186,7 +186,7 @@ pub(crate) struct PeerState {
 impl PeerState {
     pub(crate) fn new(
         log: ReplicaLogger,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
         peer_label: String,
         connection_state: ConnectionState,
         queue_size: QueueSize,
@@ -195,13 +195,13 @@ impl PeerState {
     ) -> Self {
         let send_queue = Box::new(SendQueueImpl::new(
             peer_label.clone(),
-            &flow_tag,
+            channel_id,
             queue_size,
             send_queue_metrics,
         ));
         let ret = Self {
             log,
-            flow_tag_label: flow_tag.to_string(),
+            channel_id_label: channel_id.to_string(),
             peer_label,
             connection_state,
             send_queue,
@@ -221,7 +221,7 @@ impl PeerState {
     fn report_connection_state(&self) {
         self.control_plane_metrics
             .flow_state
-            .with_label_values(&[&self.peer_label, &self.flow_tag_label])
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
             .set(self.connection_state.idx());
     }
 
@@ -238,7 +238,7 @@ impl Drop for PeerState {
         if self
             .control_plane_metrics
             .flow_state
-            .remove_label_values(&[&self.peer_label, &self.flow_tag_label])
+            .remove_label_values(&[&self.peer_label, &self.channel_id_label])
             .is_err()
         {
             warn!(

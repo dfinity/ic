@@ -40,7 +40,7 @@ use ic_config::{
     transport::TransportConfig,
 };
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportError, TransportEvent, TransportPayload,
+    Transport, TransportChannelId, TransportError, TransportEvent, TransportPayload,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -68,7 +68,7 @@ const ARG_MSG_COUNT: &str = "count";
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const SUBNET_ID: u8 = 100;
-const FLOW_TAG: u32 = 1234;
+const TRANSPORT_CHANNEL: u32 = 1234;
 
 const TEST_MESSAGE_LEN: usize = 1_000_000;
 
@@ -222,7 +222,11 @@ impl TestClient {
 
             let msg_len = msg.payload.0.len();
             self.transport
-                .send(&self.next, FlowTag::from(FLOW_TAG), msg.payload)
+                .send(
+                    &self.next,
+                    TransportChannelId::from(TRANSPORT_CHANNEL),
+                    msg.payload,
+                )
                 .map_err(|e| {
                     warn!(
                         self.log,
@@ -241,14 +245,14 @@ impl TestClient {
     fn send_receive_compare(
         &self,
         count: usize,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
     ) -> Result<(), TestClientErrorCode> {
         let send_peer_id = self.next;
         let receive_peer_id = self.prev;
         let send_msg = TestClient::build_message();
         let send_copy = send_msg.clone();
         self.transport
-            .send(&send_peer_id, flow_tag, send_msg)
+            .send(&send_peer_id, channel_id, send_msg)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -317,7 +321,7 @@ impl TestClient {
     // Compares the two messages(hdr and payload parts)
     fn compare(&self, peer_id: NodeId, payload: TransportPayload, rcv_msg: TestMessage) -> bool {
         if rcv_msg.peer_id != peer_id {
-            warn!(self.log, "compare(): FlowTag mismatch");
+            warn!(self.log, "compare(): TransportChannelId mismatch");
             return false;
         }
 
@@ -435,7 +439,7 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndPeerSockets {
         if *node_id == n.0 {
             config = Some(TransportConfig {
                 node_ip: n.1.clone(),
-                legacy_flow_tag: FLOW_TAG,
+                legacy_flow_tag: TRANSPORT_CHANNEL,
                 listening_port: n.2,
                 send_queue_size: 1024,
             });
@@ -484,7 +488,7 @@ fn do_work_source(
 
     for i in 1..=message_count {
         test_client
-            .send_receive_compare(i, FlowTag::from(FLOW_TAG))
+            .send_receive_compare(i, TransportChannelId::from(TRANSPORT_CHANNEL))
             .map_err(|e| println!("send_receive_compare(): failed with error: {:?}", e))
             .unwrap();
     }

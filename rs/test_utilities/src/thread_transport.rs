@@ -1,6 +1,6 @@
 use ic_interfaces_transport::{
-    FlowTag, Transport, TransportError, TransportEvent, TransportEventHandler, TransportMessage,
-    TransportPayload,
+    Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
+    TransportMessage, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{NodeId, RegistryVersion};
@@ -202,7 +202,7 @@ impl Transport for ThreadPort {
     fn send(
         &self,
         peer_id: &NodeId,
-        _flow_tag: FlowTag,
+        _channel_id: TransportChannelId,
         message: TransportPayload,
     ) -> Result<(), TransportError> {
         let peer_id = *peer_id;
