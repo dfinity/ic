@@ -9,6 +9,7 @@ WorkingDirectory=/etc/nginx/ic
 Environment="RUST_BACKTRACE=1"
 EnvironmentFile=/run/ic-node/etc/default/icx-proxy
 ExecStart=/usr/bin/icx-proxy                                           \
+    --address 127.0.0.1:9500                                           \
     --replica "https://${DOMAIN}/"                                     \
     --replica-resolve "${DOMAIN}=127.0.0.1:443"                        \
     --ignore-url-canister-param                                        \
