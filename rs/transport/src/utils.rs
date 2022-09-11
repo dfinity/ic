@@ -4,7 +4,7 @@ use crate::metrics::SendQueueMetrics;
 use crate::types::{QueueSize, SendQueue, SendQueueReader};
 use async_trait::async_trait;
 use ic_base_types::NodeId;
-use ic_interfaces_transport::{FlowTag, TransportPayload};
+use ic_interfaces_transport::{TransportChannelId, TransportPayload};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
@@ -85,8 +85,8 @@ pub(crate) struct SendQueueImpl {
     /// Peer label, string for use as the value for a metric label
     peer_label: String,
 
-    /// Flow Tag, string for use as the value for a metric label
-    flow_tag: String,
+    /// Channel id string for use as the value for a metric label
+    channel_id: String,
 
     /// Size of queue
     queue_size: QueueSize,
@@ -104,7 +104,7 @@ impl SendQueueImpl {
     /// Initializes and returns a send queue
     pub(crate) fn new(
         peer_label: String,
-        flow_tag: &FlowTag,
+        channel_id: TransportChannelId,
         queue_size: QueueSize,
         metrics: SendQueueMetrics,
     ) -> Self {
@@ -112,7 +112,7 @@ impl SendQueueImpl {
         let receieve_end_wrapper = ReceiveEndContainer::new(receive_end);
         Self {
             peer_label,
-            flow_tag: flow_tag.to_string(),
+            channel_id: channel_id.to_string(),
             queue_size,
             send_end,
             receive_end: Arc::new(receieve_end_wrapper),
@@ -132,7 +132,7 @@ impl SendQueue for SendQueueImpl {
 
         let reader = SendQueueReaderImpl {
             peer_label: self.peer_label.clone(),
-            flow_tag: self.flow_tag.clone(),
+            channel_id: self.channel_id.clone(),
             receive_end_container: self.receive_end.clone(),
             cur_receive_end: None,
             metrics: self.metrics.clone(),
@@ -143,11 +143,11 @@ impl SendQueue for SendQueueImpl {
     fn enqueue(&self, message: TransportPayload) -> Option<TransportPayload> {
         self.metrics
             .add_count
-            .with_label_values(&[&self.peer_label, &self.flow_tag])
+            .with_label_values(&[&self.peer_label, &self.channel_id])
             .inc();
         self.metrics
             .add_bytes
-            .with_label_values(&[&self.peer_label, &self.flow_tag])
+            .with_label_values(&[&self.peer_label, &self.channel_id])
             .inc_by(message.0.len() as u64);
 
         match self.send_end.try_send((Instant::now(), message)) {
@@ -155,14 +155,14 @@ impl SendQueue for SendQueueImpl {
             Err(TrySendError::Full((_, unsent))) => {
                 self.metrics
                     .queue_full
-                    .with_label_values(&[&self.peer_label, &self.flow_tag])
+                    .with_label_values(&[&self.peer_label, &self.channel_id])
                     .inc();
                 Some(unsent)
             }
             Err(TrySendError::Closed((_, unsent))) => {
                 self.metrics
                     .no_receiver
-                    .with_label_values(&[&self.peer_label, &self.flow_tag])
+                    .with_label_values(&[&self.peer_label, &self.channel_id])
                     .inc();
                 Some(unsent)
             }
@@ -175,7 +175,7 @@ impl SendQueue for SendQueueImpl {
         self.receive_end.update(receive_end);
         self.metrics
             .queue_clear
-            .with_label_values(&[&self.peer_label, &self.flow_tag])
+            .with_label_values(&[&self.peer_label, &self.channel_id])
             .inc();
     }
 }
@@ -183,7 +183,7 @@ impl SendQueue for SendQueueImpl {
 /// Send queue implementation
 struct SendQueueReaderImpl {
     peer_label: String,
-    flow_tag: String,
+    channel_id: String,
     receive_end_container: Arc<ReceiveEndContainer>,
     cur_receive_end: Option<ReceiveEnd>,
     metrics: SendQueueMetrics,
@@ -216,7 +216,7 @@ impl SendQueueReader for SendQueueReaderImpl {
             self.cur_receive_end = Some(receive_end);
             self.metrics
                 .receive_end_updates
-                .with_label_values(&[&self.peer_label, &self.flow_tag])
+                .with_label_values(&[&self.peer_label, &self.channel_id])
                 .inc();
         }
         let cur_receive_end = self.cur_receive_end.as_mut().unwrap();
@@ -231,7 +231,7 @@ impl SendQueueReader for SendQueueReaderImpl {
         {
             self.metrics
                 .queue_time_msec
-                .with_label_values(&[&self.peer_label, &self.flow_tag])
+                .with_label_values(&[&self.peer_label, &self.channel_id])
                 .observe(enqueue_time.elapsed().as_millis() as f64);
             removed += 1;
             removed_bytes += payload.0.len();
@@ -263,11 +263,11 @@ impl SendQueueReader for SendQueueReaderImpl {
 
         self.metrics
             .remove_count
-            .with_label_values(&[&self.peer_label, &self.flow_tag])
+            .with_label_values(&[&self.peer_label, &self.channel_id])
             .inc_by(removed as u64);
         self.metrics
             .remove_bytes
-            .with_label_values(&[&self.peer_label, &self.flow_tag])
+            .with_label_values(&[&self.peer_label, &self.channel_id])
             .inc_by(removed_bytes as u64);
         result
     }
