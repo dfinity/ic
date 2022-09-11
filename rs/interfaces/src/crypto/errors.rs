@@ -5,6 +5,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
@@ -114,13 +116,59 @@ impl ErrorReplication for DkgCreateTranscriptError {
     }
 }
 
+impl ErrorReplication for DkgLoadTranscriptError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+        match self {
+            // true, as the registry is guaranteed to be consistent across replicas
+            DkgLoadTranscriptError::FsEncryptionPublicKeyNotInRegistry(_) => true,
+            DkgLoadTranscriptError::Registry(registry_client_error) => {
+                error_replication_of_registry_client_error(registry_client_error)
+            }
+            // true, as validity checks of arguments are stable across replicas
+            DkgLoadTranscriptError::InvalidTranscript(_) => true,
+            // true, as the encryption public key is fetched from the registry and the
+            // registry is guaranteed to be consistent across replicas
+            DkgLoadTranscriptError::MalformedFsEncryptionPublicKey(_) => true,
+            // false, as a transient error is not replicated by definition
+            DkgLoadTranscriptError::TransientInternalError(_) => false,
+        }
+    }
+}
+
+impl ErrorReplication for DkgKeyRemovalError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+        match self {
+            // true, as validity checks of arguments are stable across replicas
+            DkgKeyRemovalError::InputValidationError(_) => true,
+            // true, as the registry is guaranteed to be consistent across replicas
+            DkgKeyRemovalError::FsEncryptionPublicKeyNotInRegistry(_) => true,
+            // true, as the encryption public key is fetched from the registry and the
+            // registry is guaranteed to be consistent across replicas
+            DkgKeyRemovalError::MalformedFsEncryptionPublicKey(_) => true,
+            DkgKeyRemovalError::Registry(registry_client_error) => {
+                error_replication_of_registry_client_error(registry_client_error)
+            }
+            // true, as the private key remains missing despite retrying
+            DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(_) => true,
+            // false, as a transient error is not replicated by definition
+            DkgKeyRemovalError::TransientInternalError(_) => false,
+        }
+    }
+}
+
 impl ErrorReplication for IDkgVerifyTranscriptError {
     fn is_replicated(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
         match self {
-            // rue, as validity checks of arguments are stable across replicas
+            // true, as validity checks of arguments are stable across replicas
             IDkgVerifyTranscriptError::InvalidArgument(_) => true,
             // Whether this is a replicated error depends on the underlying crypto error
             IDkgVerifyTranscriptError::InvalidDealingSignatureBatch { crypto_error, .. } => {
