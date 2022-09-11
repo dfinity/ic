@@ -14,7 +14,7 @@ pub enum DkgLoadTranscriptError {
     Registry(RegistryClientError),
     InvalidTranscript(InvalidArgumentError),
     MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError),
-    InternalError(InternalError),
+    TransientInternalError(InternalError),
     // Reminder: document error definition changes on `NiDkgAlgorithm::load_transcript`.
 }
 
@@ -30,7 +30,9 @@ impl fmt::Display for DkgLoadTranscriptError {
                 write!(f, "{}{}", prefix, error)
             }
             DkgLoadTranscriptError::InvalidTranscript(error) => write!(f, "{}{}", prefix, error),
-            DkgLoadTranscriptError::InternalError(error) => write!(f, "{}{}", prefix, error),
+            DkgLoadTranscriptError::TransientInternalError(error) => {
+                write!(f, "{}{}", prefix, error)
+            }
         }
     }
 }
