@@ -7,8 +7,7 @@ use crate::driver::{
     // TODO: Uncomment this once spm41 is fixed for virsh
     //farm::HostFeature,
     ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
-    pot_dsl::get_ic_handle_and_ctx,
-    test_env::{HasIcPrepDir, TestEnv},
+    test_env::TestEnv,
     test_env_api::{
         retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
         RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
@@ -48,8 +47,6 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
-
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -58,25 +55,16 @@ pub fn config(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let nns_urls: Vec<_> = handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| ep.is_root_subnet)
-        .map(|ep| ep.url.clone())
-        .collect();
-
-    BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))
-        .with_nns_urls(nns_urls.clone())
-        .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
+    let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))
+        .for_ic(&env, "")
         .with_vm_resources(VmResources {
             vcpus: None,
             memory_kibibytes: Some(AmountOfMemoryKiB::new(4194304)),
             boot_image_minimal_size_gibibytes: None,
         })
         .enable_sev()
-        .with_snp_boot_img(&env)
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+        .with_snp_boot_img(&env);
+    bn.start(&env).expect("failed to setup BoundaryNode VM");
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
@@ -90,7 +78,7 @@ pub fn config(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(nns_urls);
+    let registry = RegistryCanister::new(bn.nns_node_urls);
     let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
             .context("Failed to `get_value` from registry")?;
