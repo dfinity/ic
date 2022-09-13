@@ -28,6 +28,9 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use std::collections::{BTreeMap, HashSet};
 
+#[cfg(feature = "test")]
+use std::str::FromStr;
+
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
 
@@ -176,6 +179,25 @@ impl SnsInitPayload {
         Ok(governance)
     }
 
+    #[cfg(feature = "test")]
+    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
+        // Testing has hardcoded the public key of principal
+        // jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe
+        // for the button to retrieve tokens.
+        let tester = "jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe";
+        let principal = PrincipalId::from_str(tester).unwrap();
+        let account = Account {
+            owner: principal,
+            subaccount: None,
+        };
+        vec![(account, /* 10k tokens */ 10_000 * /* E8 */ 100_000_000)]
+    }
+
+    #[cfg(not(feature = "test"))]
+    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
+        vec![]
+    }
+
     /// Construct the params used to initialize a SNS Ledger canister.
     fn ledger_init_args(
         &self,
@@ -197,10 +219,12 @@ impl SnsInitPayload {
             owner: sns_canister_ids.governance,
             subaccount: None,
         };
+
         let initial_balances = self
             .get_all_ledger_accounts(sns_canister_ids)?
             .into_iter()
             .map(|(a, t)| (a, t.get_e8s()))
+            .chain(self.maybe_test_balances())
             .collect();
         let transfer_fee = self
             .transaction_fee_e8s
