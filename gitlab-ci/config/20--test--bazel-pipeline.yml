@@ -56,6 +56,21 @@ bazel-test-all:
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /cache/bazel-output/${CI_CONCURRENT_ID}"
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+  
+bazel-test-all-rebuild:
+  extends:
+    - .ubuntu-docker
+    - .bazel-test-all
+    - .bazel-rules-post-master
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+    # Run in ZH since BuildFarm is in ZH
+    - zh
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base /tmp/bazel-output"
+    BAZEL_EXTRA_ARGS: "--repository_cache= --remote_cache= --disk_cache=/tmp/bazel-no-cache"
 
 bazel-test-all-macos:
   extends:
