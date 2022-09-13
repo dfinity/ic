@@ -67,8 +67,9 @@ variables:
 
     export GIT_TRACE=1
     export GIT_CURL_VERBOSE=1
-
+    git config --global --add safe.directory "@{GIT_CACHE_PATH}"
     pushd "@{GIT_CACHE_PATH}"
+    
     # Step 1. Seed the repo if it doesn't exit or has been corrupted.
     # On CI we've observed partial downloads of the repo [e.g. missing .git dir]
     if ! git fsck; then
