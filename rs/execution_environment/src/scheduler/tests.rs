@@ -3329,7 +3329,7 @@ fn respect_max_paused_executions(
             .canisters_iter()
             .filter(|canister| canister.has_paused_execution())
             .count();
-        // Make sure there the `max_paused_executions` is respected after each round
+        // Make sure the `max_paused_executions` is respected after each round
         assert!(paused_executions <= max_paused_executions);
     });
 
@@ -3337,6 +3337,123 @@ fn respect_max_paused_executions(
     for message_id in message_ids.iter() {
         let message_error = test.ingress_error(message_id).code();
         assert_eq!(message_error, ErrorCode::CanisterDidNotReply,);
+    }
+}
+
+/// Scenario:
+/// 1. One canister with many long messages `slice + 1` instructions each.
+/// 2. Many canisters with 4 short messages `slice` instructions each.
+///
+/// Expectations:
+/// 1. As all the canisters have the same compute allocation (0), they all
+///    should be scheduled the same number of times.
+/// 2. All short executions should be done.
+#[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
+fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) {
+    let max_instructions_per_slice = SchedulerConfig::application_subnet()
+        .max_instructions_per_slice
+        .get();
+    let num_short_messages = 4;
+    let num_long_messages = 10;
+    let num_canisters = scheduler_cores * 2;
+    let num_rounds = num_canisters * num_short_messages / scheduler_cores;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_message: (max_instructions_per_slice * 2).into(),
+            max_paused_executions: num_canisters,
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    // Create one canister with many long messages
+    let long_canister_id = test.create_canister();
+    let mut long_message_ids = vec![];
+    for _ in 0..num_long_messages {
+        let long_message_id =
+            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
+        long_message_ids.push(long_message_id);
+    }
+
+    // Create many canisters with 4 short messages each
+    let mut short_message_ids = vec![];
+    // The minus one long canister
+    for _ in 0..num_canisters - 1 {
+        let short_canister_id = test.create_canister();
+        for _ in 0..num_short_messages {
+            let short_message_id =
+                test.send_ingress(short_canister_id, ingress(max_instructions_per_slice));
+            short_message_ids.push(short_message_id);
+        }
+    }
+
+    for _round in 0..num_rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    // As all the canisters have the same compute allocation (0), they all
+    // should be scheduled the same number of times.
+    for canister in test.state().canisters_iter() {
+        if canister.canister_id() == long_canister_id {
+            continue;
+        }
+        prop_assert_eq!(
+            canister.system_state.canister_metrics.executed,
+            num_short_messages as u64
+        );
+    }
+    // All short executions should be done.
+    for message_id in short_message_ids.iter() {
+        let message_error = test.ingress_error(message_id).code();
+        prop_assert_eq!(message_error, ErrorCode::CanisterDidNotReply);
+    }
+}
+
+/// Scenario:
+/// 1. One canister with two long messages `slice + 1` instructions each.
+///
+/// Expectations:
+/// 1. After the first round the canister should have a paused long execution.
+/// 2. After the second round the canister should have no executions, i.e. the
+///    finish the paused execution and should not start any new executions.
+#[test]
+fn filter_after_long_executions() {
+    let max_instructions_per_slice = SchedulerConfig::application_subnet()
+        .max_instructions_per_slice
+        .get();
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            max_instructions_per_message: (max_instructions_per_slice * 2).into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    // Create a canister with long messages
+    let mut long_message_ids = vec![];
+    let long_canister_id = test.create_canister();
+    for _ in 0..2 {
+        let long_message_id =
+            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
+        long_message_ids.push(long_message_id);
+    }
+
+    // After the first round the canister should have a paused long execution.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.canister_metrics.executed, 1);
+        assert!(canister.has_paused_execution());
+    }
+
+    // After the second round the canister should have no executions, i.e. the
+    // finish the paused execution and should not start any new executions.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.canister_metrics.executed, 2);
+        assert!(!canister.has_paused_execution());
     }
 }
 

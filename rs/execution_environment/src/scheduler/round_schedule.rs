@@ -110,12 +110,17 @@ impl RoundSchedule {
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
     ) -> (Vec<CanisterId>, Self) {
+        enum ExpectedExecution {
+            New,
+            Long,
+        }
         fn filter(
             ordered_canister_ids: &[CanisterId],
             canisters: &BTreeMap<CanisterId, CanisterState>,
             rate_limited_canister_ids: &mut Vec<CanisterId>,
             heap_delta_rate_limit: NumBytes,
             rate_limiting_of_heap_delta: FlagStatus,
+            expected_execution: ExpectedExecution,
         ) -> Vec<CanisterId> {
             ordered_canister_ids
                 .iter()
@@ -130,7 +135,22 @@ impl RoundSchedule {
                     }
                     match canister.next_execution() {
                         NextExecution::None | NextExecution::ContinueInstallCode => false,
-                        NextExecution::StartNew | NextExecution::ContinueLong => true,
+                        NextExecution::StartNew => {
+                            match expected_execution {
+                                ExpectedExecution::New => true,
+                                // We expect long execution, but there is none,
+                                // so the long execution was finished in the
+                                // previous inner round.
+                                //
+                                // We should avoid scheduling this canister to:
+                                // 1. Avoid the canister to bypass the logic in
+                                //    `apply_scheduling_strategy()`.
+                                // 2. Charge canister for resources at the end
+                                //    of the round.
+                                ExpectedExecution::Long => false,
+                            }
+                        }
+                        NextExecution::ContinueLong => true,
                     }
                 })
                 .cloned()
@@ -145,6 +165,7 @@ impl RoundSchedule {
             &mut rate_limited_canister_ids,
             heap_delta_rate_limit,
             rate_limiting_of_heap_delta,
+            ExpectedExecution::New,
         );
 
         let ordered_long_execution_canister_ids = filter(
@@ -153,6 +174,7 @@ impl RoundSchedule {
             &mut rate_limited_canister_ids,
             heap_delta_rate_limit,
             rate_limiting_of_heap_delta,
+            ExpectedExecution::Long,
         );
 
         (
