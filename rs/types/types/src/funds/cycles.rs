@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Mul, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
 };
 
 /// Struct to handle cycles on the IC. They are maintained as a
@@ -138,6 +138,22 @@ impl Mul<usize> for Cycles {
 
     fn mul(self, rhs: usize) -> Self {
         Self(self.0.saturating_mul(Cycles::from(rhs as u128).0))
+    }
+}
+
+impl Div<u64> for Cycles {
+    type Output = Self;
+
+    fn div(self, rhs: u64) -> Self {
+        Self(self.0.saturating_div(Cycles::from(rhs).0))
+    }
+}
+
+impl Div<usize> for Cycles {
+    type Output = Self;
+
+    fn div(self, rhs: usize) -> Self {
+        Self(self.0.saturating_div(Cycles::from(rhs as u128).0))
     }
 }
 
