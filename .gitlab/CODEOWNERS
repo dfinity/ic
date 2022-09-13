@@ -91,6 +91,7 @@
 /rs/constants/                          @dfinity-lab/teams/interface-owners
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/             @dfinity-lab/teams/execution-owners
+/rs/cup_explorer                        @dfinity-lab/teams/orchestrator-owners
 /rs/depcheck/                           @dfinity-lag/teams/interface-owners
 /rs/determinism_test                    @dfinity-lab/teams/execution-owners
 /rs/drun/                               @dfinity-lab/teams/execution-owners
