@@ -73,7 +73,7 @@ mock! {
             scope: CertificationScope,
         );
 
-        fn report_diverged_state(&self, height: Height);
+        fn report_diverged_checkpoint(&self, height: Height);
     }
 }
 
@@ -299,7 +299,7 @@ impl StateManager for FakeStateManager {
         *tip = Some((height, state));
     }
 
-    fn report_diverged_state(&self, height: Height) {
+    fn report_diverged_checkpoint(&self, height: Height) {
         panic!("Diverged at height {}", height)
     }
 }
@@ -624,8 +624,8 @@ impl StateManager for RefMockStateManager {
             .commit_and_certify(state, height, scope)
     }
 
-    fn report_diverged_state(&self, height: Height) {
-        self.mock.read().unwrap().report_diverged_state(height)
+    fn report_diverged_checkpoint(&self, height: Height) {
+        self.mock.read().unwrap().report_diverged_checkpoint(height)
     }
 }
 

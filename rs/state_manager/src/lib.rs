@@ -2886,26 +2886,26 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn report_diverged_state(&self, height: Height) {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["report_diverged_state"])
-            .start_timer();
-
+    fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
-        let mut heights = self.checkpoint_heights();
+        let heights = self.checkpoint_heights();
 
-        while let Some(h) = heights.pop() {
-            info!(self.log, "Removing potentially diverged checkpoint @{}", h);
-            if let Err(err) = self.state_layout.mark_checkpoint_diverged(h) {
-                error!(
-                    self.log,
-                    "Failed to mark checkpoint @{} diverged: {}", h, err
-                );
-            }
-            if h <= height {
-                break;
+        info!(self.log, "Moving diverged checkpoint @{}", height);
+        if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
+            error!(
+                self.log,
+                "Failed to mark checkpoint @{} diverged: {}", height, err
+            );
+        }
+        for h in heights {
+            if h > height {
+                info!(self.log, "Removing diverged checkpoint @{}", h);
+                if let Err(err) = self.state_layout.remove_checkpoint(h) {
+                    error!(
+                        self.log,
+                        "Failed to remove diverged checkpoint @{}: {}", h, err
+                    );
+                }
             }
         }
 
