@@ -1823,19 +1823,17 @@ impl StateManagerImpl {
 
         let states = self.states.read();
         if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                metadata.certified_state_hash.clone(),
-            ));
+            assert_eq!(
+                state.metadata.prev_state_hash,
+                Some(CryptoHashOfPartialState::from(
+                    metadata.certified_state_hash.clone(),
+                ))
+            );
         } else {
-            let checkpoint_heights = self.checkpoint_heights();
-            fatal!(
+            info!(
                 self.log,
-                "Couldn't populate previous state hash for height {}.\nLatest state: {:?}\nLoaded states: {:?}\nHave metadata for states: {:?}\nCheckpoints: {:?}",
-                height,
-                self.latest_state_height.load(Ordering::Relaxed),
-                states.snapshots.iter().map(|s| s.height).collect::<Vec<_>>(),
-                states.certifications_metadata.keys().collect::<Vec<_>>(),
-                checkpoint_heights,
+                "The previous certification metadata at height {} has been removed. This can happen when the replica syncs a newer state concurrently and removes the states below.",
+                prev_height,
             );
         }
     }
@@ -2278,12 +2276,37 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
+        let populate_prev_state_hash_in_tip =
+            |tip_height: Height,
+             tip: &mut ReplicatedState,
+             certifications_metadata: &CertificationsMetadata| {
+                if tip_height > Self::INITIAL_STATE_HEIGHT {
+                    let tip_metadata =
+                        certifications_metadata.get(&tip_height).unwrap_or_else(|| {
+                            fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
+                        });
+
+                    // Since the state machine will use this tip to compute the *next* state,
+                    // we populate the prev_state_hash with the hash of the current tip.
+                    tip.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
+                        tip_metadata.certified_state_hash.clone(),
+                    ));
+                }
+            };
+
         let mut states = self.states.write();
-        let (tip_height, tip) = states.tip.take().expect("failed to get TIP");
+        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
 
         let target_snapshot = match states.snapshots.back() {
             Some(snapshot) if snapshot.height > tip_height => snapshot.clone(),
-            _ => return (tip_height, tip),
+            _ => {
+                populate_prev_state_hash_in_tip(
+                    tip_height,
+                    &mut tip,
+                    &states.certifications_metadata,
+                );
+                return (tip_height, tip);
+            }
         };
 
         // The latest checkpoint is newer than tip.
@@ -2304,7 +2327,8 @@ impl StateManager for StateManagerImpl {
         // take_tip() and commit_and_certify() — the state machine thread.
         std::mem::drop(states);
 
-        let new_tip = load_checkpoint_as_tip(
+        let states = self.states.read();
+        let mut new_tip = load_checkpoint_as_tip(
             #[cfg(debug_assertions)]
             &self.load_checkpoint_as_tip_guard,
             &self.log,
@@ -2312,6 +2336,13 @@ impl StateManager for StateManagerImpl {
             &self.state_layout,
             &target_snapshot,
             self.own_subnet_type,
+        );
+
+        let new_tip_height = target_snapshot.height;
+        populate_prev_state_hash_in_tip(
+            new_tip_height,
+            &mut new_tip,
+            &states.certifications_metadata,
         );
 
         // This might still not be the latest version: there might have been
