@@ -2690,8 +2690,10 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
     })
 }
 
+// For a divergence we expect the first of the diverged state to get stored for troubleshooting
+// and the state to reset to the pre-divergence checkpoint.
 #[test]
-fn deletes_diverged_states() {
+fn report_diverged_state() {
     state_manager_crash_test(
         |state_manager| {
             let (_, state) = state_manager.take_tip();
@@ -2703,15 +2705,26 @@ fn deletes_diverged_states() {
             wait_for_checkpoint(&state_manager, height(2));
 
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
-            state_manager.report_diverged_state(height(3))
+            // This could only happen if calculating the manifest and certification of height 2
+            // completed after reaching height 3
+            state_manager.report_diverged_checkpoint(height(2))
         },
         |metrics, state_manager| {
             assert_eq!(
                 height(1),
                 state_manager.get_latest_state().height(),
-                "Expected diverged checkpoint@2 to go away"
+                "Expected diverged checkpoint@2 and checkpoint@3 to go away"
+            );
+            // We have diverged at state 2. This implies that height 3 diverges as a result but only
+            // height 2 is valuable for debugging.
+            assert_eq!(
+                vec![height(2)],
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
             );
             let last_diverged = fetch_int_gauge(
                 metrics,

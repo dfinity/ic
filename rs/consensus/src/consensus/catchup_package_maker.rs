@@ -97,7 +97,7 @@ impl<'a> CatchUpPackageMaker {
             if catch_up_package.height().get() > 0 && hash != catch_up_package.content.state_hash {
                 // This will delete the diverged states and panic.
                 self.state_manager
-                    .report_diverged_state(catch_up_package.height())
+                    .report_diverged_checkpoint(catch_up_package.height())
             }
         }
     }
@@ -450,7 +450,7 @@ mod tests {
 
             state_manager
                 .get_mut()
-                .expect_report_diverged_state()
+                .expect_report_diverged_checkpoint()
                 .times(1)
                 .return_const(());
             cup_maker.on_state_change(&PoolReader::new(&pool));
