@@ -22,6 +22,13 @@
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
 
+.bazel-rules-post-master:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+
 .cargo-rules-autorun-on-trigger:
   # References (anchors) do not work for 'rules' (yet), so we need to copy the `.cargo-rules`
   # https://docs.gitlab.com/ee/ci/yaml/#yaml-anchors-for-scripts
@@ -106,10 +113,6 @@
 .rules-any-schedule:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
-
-.rules-run-all-master-schedule:
-  rules:
-    - if: '$SCHEDULE_NAME == "run-all-master"'
 
 .rules-rc-cut-schedule:
   rules:
