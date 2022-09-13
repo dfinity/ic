@@ -5,7 +5,10 @@ use crate::{
 };
 use candid::CandidType;
 use canister_test::{Canister, Runtime};
-use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
+use cycles_minting_canister::{
+    ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
+    UpdateSubnetTypeArgs,
+};
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
@@ -497,6 +500,84 @@ pub async fn set_authorized_subnetwork_list(
 
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
     Ok(())
+}
+
+pub async fn set_authorized_subnetwork_list_with_failure(
+    nns_api: &'_ Runtime,
+    who: Option<PrincipalId>,
+    subnets: Vec<SubnetId>,
+    error: String,
+) {
+    let governance_canister = get_governance_canister(nns_api);
+    let proposal_payload = SetAuthorizedSubnetworkListArgs { who, subnets };
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &governance_canister,
+        NnsFunction::SetAuthorizedSubnetworks,
+        proposal_payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_failed(&governance_canister, proposal_id, error).await;
+}
+
+pub async fn update_subnet_type(nns_api: &'_ Runtime, subnet_type: String) -> Result<(), String> {
+    let governance_canister = get_governance_canister(nns_api);
+    let proposal_payload = UpdateSubnetTypeArgs::Add(subnet_type);
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &governance_canister,
+        NnsFunction::UpdateSubnetType,
+        proposal_payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    Ok(())
+}
+
+pub async fn change_subnet_type_assignment(
+    nns_api: &'_ Runtime,
+    subnet_type: String,
+    subnets: Vec<SubnetId>,
+) -> Result<(), String> {
+    let governance_canister = get_governance_canister(nns_api);
+    let proposal_payload = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+        subnets,
+        subnet_type,
+    });
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &governance_canister,
+        NnsFunction::ChangeSubnetTypeAssignment,
+        proposal_payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    Ok(())
+}
+
+pub async fn change_subnet_type_assignment_with_failure(
+    nns_api: &'_ Runtime,
+    subnet_type: String,
+    subnets: Vec<SubnetId>,
+    error: String,
+) {
+    let governance_canister = get_governance_canister(nns_api);
+    let proposal_payload = ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+        subnets,
+        subnet_type,
+    });
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &governance_canister,
+        NnsFunction::ChangeSubnetTypeAssignment,
+        proposal_payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_failed(&governance_canister, proposal_id, error).await;
 }
 
 async fn remove_nodes(handle: &IcHandle, node_ids: &[NodeId]) -> Result<(), String> {

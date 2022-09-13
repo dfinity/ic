@@ -461,6 +461,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot(
+                "cycles_minting_pot_with_multiple_app_subnets",
+                nns_tests::cycles_minting::config_with_multiple_app_subnets(),
+                par(vec![t(
+                    "cycles_minting_with_subnet_types_test",
+                    nns_tests::cycles_minting::create_canister_on_specific_subnet_type,
+                )]),
+            ),
+            pot(
                 "nns_voting_fuzzing_poc_pot",
                 nns_tests::nns_voting_fuzzing_poc_test::config(),
                 par(vec![t(

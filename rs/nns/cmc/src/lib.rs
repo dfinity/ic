@@ -31,6 +31,7 @@ pub struct NotifyTopUp {
 pub struct NotifyCreateCanister {
     pub block_index: BlockHeight,
     pub controller: PrincipalId,
+    pub subnet_type: Option<String>,
 }
 
 /// Error for notify endpoints

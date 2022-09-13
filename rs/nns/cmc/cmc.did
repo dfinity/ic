@@ -17,6 +17,10 @@ type NotifyCreateCanisterArg = record {
 
   // The controller of canister to create.
   controller : principal;
+
+  // An optional subnet type that, if set, determines what type of subnet
+  // the new canister will be created on.
+  subnet_type: opt text;
 };
 
 type NotifyError = variant {
