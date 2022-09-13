@@ -66,10 +66,14 @@ const NODE_INDEX: NodeIndex = 100;
 const SUBNET_ID: u64 = 0;
 
 fn main() -> Result<()> {
-    let logger = LoggerImpl::new(&LoggerConfig::default(), "starter_slog".to_string());
+    let config = CliArgs::parse().validate()?;
+    let logger_config = LoggerConfig {
+        level: config.log_level,
+        ..LoggerConfig::default()
+    };
+    let logger = LoggerImpl::new(&logger_config, "starter_slog".to_string());
     let log = logger.root.new(slog::o!("Application" => "starter"));
 
-    let config = CliArgs::parse().validate()?;
     info!(log, "ic-starter. Configuration: {:?}", config);
     let config_path = config.state_dir.join("ic.json5");
 
@@ -258,7 +262,7 @@ struct CliArgs {
     #[clap(short = 'c', long = "create-funds-whitelist")]
     provisional_whitelist: Option<String>,
 
-    /// Run replica with the provided log level. Default is Warning
+    /// Run replica and ic-starter with the provided log level. Default is Warning
     #[clap(long = "log-level",
                 possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
                 ignore_case = true)]
