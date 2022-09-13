@@ -292,10 +292,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
             vec![pot_with_setup(
                 "boundary_nodes_sev_snp_pot",
                 boundary_nodes_snp_tests::boundary_nodes_snp::config,
-                par(vec![sys_t(
-                    "boundary_nodes_sev_snp_kernel_test",
-                    boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
-                )]),
+                par(vec![
+                    sys_t(
+                        "boundary_nodes_sev_snp_kernel_test",
+                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_sev_snp_basic_test",
+                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_basic_test,
+                    ),
+                ]),
             )
             .with_alert(ENG_NODE_CHANNEL)],
         )
