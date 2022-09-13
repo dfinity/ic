@@ -42,6 +42,8 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Outgoing cycles float 64bit of 128bit cycles, by receiving subnet.
     pub out_cycles: GaugeVec,
+    /// Checksum for outgoing cycles and stream index, by sending subnet.
+    pub out_cycle_index_checksum: GaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -68,6 +70,7 @@ const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_OUT_CYCLES: &str = "mr_out_cycles";
+const METRIC_OUT_CHECKSUM: &str = "mr_out_cycle_index_checksum";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -117,6 +120,11 @@ impl StreamBuilderMetrics {
             "Outgoing cycles, by receiving subnet.",
             &[LABEL_REMOTE],
         );
+        let out_cycle_index_checksum = metrics_registry.gauge_vec(
+            METRIC_INC_CHECKSUM,
+            "Checksum for outgoing cycles and stream index, by sending subnet",
+            &[LABEL_REMOTE],
+        );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
@@ -147,6 +155,7 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             out_cycles,
+            out_cycle_index_checksum,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -532,24 +541,27 @@ impl StreamBuilderImpl {
                 )
             })
             .for_each(|(subnet, len, size_bytes, begin, cycles_out)| {
-                    self.metrics
-                        .stream_messages
-                        .with_label_values(&[&subnet])
-                        .set(len as i64);
-                    self.metrics
-                        .stream_bytes
-                        .with_label_values(&[&subnet])
-                        .set(size_bytes as i64);
-                    self.metrics
-                        .stream_begin
-                        .with_label_values(&[&subnet])
-                        .set(begin.get() as i64);
-                    self.metrics
-                        .out_cycles
-                        .with_label_values(&[&subnet])
-                        .set(cycles_out.get() as f64);
-                },
-            );
+                self.metrics
+                    .stream_messages
+                    .with_label_values(&[&subnet])
+                    .set(len as i64);
+                self.metrics
+                    .stream_bytes
+                    .with_label_values(&[&subnet])
+                    .set(size_bytes as i64);
+                self.metrics
+                    .stream_begin
+                    .with_label_values(&[&subnet])
+                    .set(begin.get() as i64);
+                self.metrics
+                    .out_cycles
+                    .with_label_values(&[&subnet])
+                    .set(cycles_out.get() as f64);
+                self.metrics
+                    .out_cycles
+                    .with_label_values(&[&subnet])
+                    .set((begin.get() as i64 + cycles_out.get() as f64) as f64);
+            });
 
         {
             // Record the enqueuing time of any messages newly enqueued into `streams`.

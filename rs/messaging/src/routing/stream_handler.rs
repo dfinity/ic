@@ -55,6 +55,8 @@ struct StreamHandlerMetrics {
     pub inc_stream_index: IntGaugeVec,
     /// Incoming cycles as float 64 of 128bit cycles, by sending subnet.
     pub inc_cycles: GaugeVec,
+    /// Checksum for incoming cycles and stream index, by sending subnet.
+    pub inc_cycle_index_checksum: GaugeVec,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking the
     /// receival of reject signals for requests.
     pub critical_error_reject_signals_for_request: IntCounter,
@@ -79,6 +81,7 @@ const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count"
 const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
 const METRIC_INC_CYCLES: &str = "mr_inc_cycles";
+const METRIC_INC_CHECKSUM: &str = "mr_inc_cycle_index_checksum";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
@@ -134,6 +137,11 @@ impl StreamHandlerMetrics {
             "Incoming cycles, by sending subnet.",
             &[LABEL_REMOTE],
         );
+        let inc_cycle_index_checksum = metrics_registry.gauge_vec(
+            METRIC_INC_CHECKSUM,
+            "Checksum for incoming cycles and stream index, by sending subnet",
+            &[LABEL_REMOTE],
+        );
         let critical_error_reject_signals_for_request =
             metrics_registry.error_counter(CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST);
         let critical_error_induct_response_failed =
@@ -171,6 +179,7 @@ impl StreamHandlerMetrics {
             xnet_message_backlog,
             inc_stream_index,
             inc_cycles,
+            inc_cycle_index_checksum,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
@@ -628,6 +637,10 @@ impl StreamHandlerImpl {
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
+            self.metrics
+                .inc_cycle_index_checksum
+                .with_label_values(&[&remote_subnet_id.to_string()])
+                .set((stream.signals_end().get() as i64 + new_cycles_sum.get() as f64) as f64);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -761,6 +774,10 @@ impl StreamHandlerImpl {
             .with_label_values(&[&remote_subnet_id.to_string()])
             //.set(stream_index.get().try_into().unwrap()); // this option is -1 compared to stream_begin
             .set(stream.signals_end().get() as i64); // option to mirror what is being sent // might be useful, current state of incoming
+        self.metrics
+            .inc_cycle_index_checksum
+            .with_label_values(&[&remote_subnet_id.to_string()])
+            .set((stream.signals_end().get() as i64 + stream.sum_cycles_inc().get() as f64) as f64);
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
