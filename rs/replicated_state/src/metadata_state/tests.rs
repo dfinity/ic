@@ -1070,7 +1070,7 @@ fn stream_discard_messages_before() {
     // Note that the `generate_stream` testing fixture only generates requests
     // while in the normal case reject signals are not expected to be generated for requests.
     // It does not matter here for the purpose of testing `discard_messages_before`.
-    let rejected_messages =
+    let (rejected_messages, _) =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
     assert_eq!(rejected_messages, expected_rejected_messages);

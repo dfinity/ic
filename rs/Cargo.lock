@@ -6141,6 +6141,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
+ "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-registry-keys",

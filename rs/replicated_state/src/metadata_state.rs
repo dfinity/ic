@@ -915,7 +915,7 @@ impl Stream {
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+    ) -> (Vec<RequestOrResponse>, Vec<RequestOrResponse>) {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -941,6 +941,7 @@ impl Stream {
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
+        let mut collected_messages = Vec::new();
         while self.messages.begin() < new_begin {
             let (index, msg) = self.messages.pop().unwrap();
 
@@ -953,9 +954,11 @@ impl Stream {
             if next_reject_signal == &index {
                 rejected_messages.push(msg);
                 next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            } else {
+                collected_messages.push(msg);
             }
         }
-        rejected_messages
+        (collected_messages, rejected_messages)
     }
 
     /// Garbage collects signals before `new_signals_begin`.
@@ -1243,7 +1246,7 @@ impl<'a> StreamHandle<'a> {
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+    ) -> (Vec<RequestOrResponse>, Vec<RequestOrResponse>) {
         // Update stats for each discarded message.
         for (index, msg) in self.stream.messages().iter() {
             if index >= new_begin {
