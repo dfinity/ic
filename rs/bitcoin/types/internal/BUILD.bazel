@@ -8,7 +8,9 @@ rust_library(
     crate_name = "ic_btc_types_internal",
     version = "0.1.0",
     deps = [
+        "//rs/bitcoin/types/public",
         "//rs/protobuf",
+        "@crate_index//:candid",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],

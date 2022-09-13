@@ -443,7 +443,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
-                return self.execute_install_code(msg, state, instruction_limits, round_limits, registry_settings.subnet_size);
+                return self.execute_install_code(
+                    msg,
+                    state,
+                    instruction_limits,
+                    round_limits,
+                    registry_settings.subnet_size,
+                );
             }
 
             Ok(Ic00Method::UninstallCode) => {
@@ -488,7 +494,7 @@ impl ExecutionEnvironment {
                                     .cycles_account_manager
                                     .ingress_induction_cost_from_bytes(
                                         NumBytes::from(bytes_to_charge as u64),
-                                        registry_settings.subnet_size
+                                        registry_settings.subnet_size,
                                     );
                                 let memory_usage = canister.memory_usage(self.own_subnet_type);
                                 // This call may fail with `CanisterOutOfCyclesError`,
@@ -498,7 +504,7 @@ impl ExecutionEnvironment {
                                     memory_usage,
                                     canister.scheduler_state.compute_allocation,
                                     induction_cost,
-                                    registry_settings.subnet_size
+                                    registry_settings.subnet_size,
                                 );
                             }
                         }
@@ -536,9 +542,12 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::CanisterStatus) => {
                 let res = match CanisterIdRecord::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
-                    Ok(args) => {
-                        self.get_canister_status(*msg.sender(), args.get_canister_id(), &mut state, registry_settings.subnet_size)
-                    }
+                    Ok(args) => self.get_canister_status(
+                        *msg.sender(),
+                        args.get_canister_id(),
+                        &mut state,
+                        registry_settings.subnet_size,
+                    ),
                 };
                 Some((res, msg.take_cycles()))
             }
@@ -618,7 +627,7 @@ impl ExecutionEnvironment {
                                         self.cycles_account_manager.http_request_fee(
                                             canister_http_request_context.variable_parts_size(),
                                             canister_http_request_context.max_response_bytes,
-                                            registry_settings.subnet_size
+                                            registry_settings.subnet_size,
                                         );
                                     if request.payment < http_request_fee {
                                         let err = Err(UserError::new(
@@ -643,14 +652,7 @@ impl ExecutionEnvironment {
                         }
                     }
                     RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to HttpRequest should've been filtered earlier.");
-                        let error_string = format!(
-                                "HttpRequest is called by user {}. It can only be called by a canister.",
-                                msg.sender()
-                            );
-                        let user_error =
-                            UserError::new(ErrorCode::CanisterContractViolation, error_string);
-                        Some((Err(user_error), msg.take_cycles()))
+                        self.reject_unexpected_ingress(Ic00Method::HttpRequest)
                     }
                 },
                 false => {
@@ -668,17 +670,9 @@ impl ExecutionEnvironment {
                         .setup_initial_dkg(*msg.sender(), &args, request, &mut state, rng)
                         .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
                 },
-                RequestOrIngress::Ingress(_) => Some((
-                    Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        format!(
-                            "{} is called by {}. It can only be called by NNS.",
-                            Ic00Method::SetupInitialDKG,
-                            msg.sender()
-                        ),
-                    )),
-                    msg.take_cycles(),
-                )),
+                RequestOrIngress::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SetupInitialDKG)
+                }
             },
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
@@ -737,79 +731,77 @@ impl ExecutionEnvironment {
                     }
                 }
                 RequestOrIngress::Ingress(_) => {
-                    error!(self.log, "[EXC-BUG] Ingress messages to SignWithECDSA should've been filtered earlier.");
-                    let error_string = format!(
-                        "SignWithECDSA is called by user {}. It can only be called by a canister.",
-                        msg.sender()
-                    );
-                    let user_error =
-                        UserError::new(ErrorCode::CanisterContractViolation, error_string);
-                    Some((Err(user_error), msg.take_cycles()))
+                    self.reject_unexpected_ingress(Ic00Method::SignWithECDSA)
                 }
             },
 
             Ok(Ic00Method::ECDSAPublicKey) => {
+                let cycles = msg.take_cycles();
                 match &msg {
-                    RequestOrIngress::Request(_request) => {
-                            match ECDSAPublicKeyArgs::decode(payload) {
-                                Err(err) => Some(Err(candid_error_to_user_error(err))),
-                                Ok(args) => match get_master_ecdsa_public_key(ecdsa_subnet_public_keys, self.own_subnet_id, &args.key_id) {
-                                    Err(err) => Some(Err(err)),
-                                    Ok(pubkey) => {
-                                      let canister_id = match args.canister_id {
+                    RequestOrIngress::Request(request) => {
+                        let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
+                            Err(err) => Some(Err(candid_error_to_user_error(err))),
+                            Ok(args) => match get_master_ecdsa_public_key(
+                                ecdsa_subnet_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Err(err) => Some(Err(err)),
+                                Ok(pubkey) => {
+                                    let canister_id = match args.canister_id {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
-                                      };
-                                      Some(self.get_ecdsa_public_key(
-                                        pubkey,
-                                        canister_id,
-                                        args.derivation_path,
-                                        &args.key_id,
-                                        ).map(|res| res.encode()))
-                                    }
+                                    };
+                                    Some(
+                                        self.get_ecdsa_public_key(
+                                            pubkey,
+                                            canister_id,
+                                            args.derivation_path,
+                                            &args.key_id,
+                                        )
+                                        .map(|res| res.encode()),
+                                    )
                                 }
-                            }
+                            },
+                        };
+                        res.map(|res| (res, cycles))
                     }
                     RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to ECDSAPublicKey should've been filtered earlier.");
-                        let error_string = format!(
-                            "ECDSAPublicKey is called by user {}. It can only be called by a canister.",
-                            msg.sender()
-                        );
-                        Some(Err(UserError::new(ErrorCode::CanisterContractViolation, error_string)))
+                        self.reject_unexpected_ingress(Ic00Method::ECDSAPublicKey)
                     }
-                }.map(|res| (res, msg.take_cycles()))
+                }
             }
 
             Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
+                let cycles = msg.take_cycles();
                 match &msg {
                     RequestOrIngress::Request(request) => {
-                            match ComputeInitialEcdsaDealingsArgs::decode(payload) {
+                        let res =
+                            match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload())
+                            {
                                 Err(err) => Some(candid_error_to_user_error(err)),
-                                Ok(args) => {
-                                    match get_master_ecdsa_public_key(ecdsa_subnet_public_keys,
-                                            self.own_subnet_id,
-                                            &args.key_id) {
-                                        Err(err) => Some(err),
-                                        Ok(_) => self.compute_initial_ecdsa_dealings(
+                                Ok(args) => match get_master_ecdsa_public_key(
+                                    ecdsa_subnet_public_keys,
+                                    self.own_subnet_id,
+                                    &args.key_id,
+                                ) {
+                                    Err(err) => Some(err),
+                                    Ok(_) => self
+                                        .compute_initial_ecdsa_dealings(
                                             &mut state,
                                             msg.sender(),
                                             args,
-                                            request)
-                                            .map_or_else(Some, |()| None)
-                                    }
-                                }
-                            }
+                                            request,
+                                        )
+                                        .map_or_else(Some, |()| None),
+                                },
+                            };
+                        res.map(|err| (Err(err), cycles))
                     }
                     RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to ComputeInitialEcdsaDealings should've been filtered earlier.");
-                        let error_string = format!(
-                            "ComputeInitialEcdsaDealings is called by user {}. It can only be called by a canister.",
-                            msg.sender()
-                        );
-                        Some(UserError::new(ErrorCode::CanisterContractViolation, error_string))
+                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
-                }.map(|err| (Err(err), msg.take_cycles()))
+                }
             }
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
@@ -827,7 +819,7 @@ impl ExecutionEnvironment {
                                     &mut state,
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
-                                    round_limits
+                                    round_limits,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -882,8 +874,29 @@ impl ExecutionEnvironment {
                 Some(res)
             }
 
-            // NOTE: The BitcoinGetSuccessors method is currently a scaffold and not implemented yet.
-            Ok(Ic00Method::BitcoinGetSuccessors) |
+            Ok(Ic00Method::BitcoinGetSuccessors) => {
+                let cycles = msg.take_cycles();
+                if !self.config.bitcoin_canisters.contains(msg.sender()) {
+                    Some((
+                        Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            String::from("Permission denied."),
+                        )),
+                        cycles,
+                    ))
+                } else {
+                    match &msg {
+                        RequestOrIngress::Request(request) => {
+                            let res = crate::bitcoin::get_successors(request, &mut state);
+                            Some((res, cycles))
+                        }
+                        RequestOrIngress::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
+                        }
+                    }
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2019,6 +2032,23 @@ impl ExecutionEnvironment {
                 (canister, NumBytes::from(0), None)
             }
         }
+    }
+
+    fn reject_unexpected_ingress(
+        &self,
+        method: Ic00Method,
+    ) -> Option<(Result<Vec<u8>, UserError>, Cycles)> {
+        error!(
+            self.log,
+            "[EXC-BUG] Ingress messages to {} should've been filtered earlier.", method
+        );
+        Some((
+            Err(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("{} cannot be called by a user.", method),
+            )),
+            Cycles::zero(),
+        ))
     }
 
     /// For testing purposes only.

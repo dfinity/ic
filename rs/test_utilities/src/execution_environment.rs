@@ -1204,6 +1204,7 @@ pub struct ExecutionTestBuilder {
     deterministic_time_slicing: bool,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
+    bitcoin_canisters: Vec<PrincipalId>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1239,6 +1240,7 @@ impl Default for ExecutionTestBuilder {
             deterministic_time_slicing: false,
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
+            bitcoin_canisters: Vec::default(),
         }
     }
 }
@@ -1392,6 +1394,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_bitcoin_canister(mut self, bitcoin_canister: PrincipalId) -> Self {
+        self.bitcoin_canisters.push(bitcoin_canister);
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
@@ -1492,6 +1499,7 @@ impl ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
+            bitcoin_canisters: self.bitcoin_canisters,
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(

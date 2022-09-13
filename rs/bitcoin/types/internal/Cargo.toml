@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+candid = "0.7.4"
+ic-btc-types = { path = "../public" }
 ic-protobuf = { path = "../../../protobuf" }
 serde = "1.0.132"
 serde_bytes = "0.11"
