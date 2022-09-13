@@ -558,7 +558,7 @@ impl StreamBuilderImpl {
                     .with_label_values(&[&subnet])
                     .set(cycles_out.get() as f64);
                 self.metrics
-                    .out_cycles
+                    .out_cycle_index_checksum
                     .with_label_values(&[&subnet])
                     .set((begin.get() as f64 + cycles_out.get() as f64) as f64);
             });
