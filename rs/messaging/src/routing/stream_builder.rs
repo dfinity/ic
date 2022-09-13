@@ -121,7 +121,7 @@ impl StreamBuilderMetrics {
             &[LABEL_REMOTE],
         );
         let out_cycle_index_checksum = metrics_registry.gauge_vec(
-            METRIC_INC_CHECKSUM,
+            METRIC_OUT_CHECKSUM,
             "Checksum for outgoing cycles and stream index, by sending subnet",
             &[LABEL_REMOTE],
         );
@@ -560,7 +560,7 @@ impl StreamBuilderImpl {
                 self.metrics
                     .out_cycles
                     .with_label_values(&[&subnet])
-                    .set((begin.get() as i64 + cycles_out.get() as f64) as f64);
+                    .set((begin.get() as f64 + cycles_out.get() as f64) as f64);
             });
 
         {

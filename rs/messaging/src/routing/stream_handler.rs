@@ -640,7 +640,7 @@ impl StreamHandlerImpl {
             self.metrics
                 .inc_cycle_index_checksum
                 .with_label_values(&[&remote_subnet_id.to_string()])
-                .set((stream.signals_end().get() as i64 + new_cycles_sum.get() as f64) as f64);
+                .set((stream.signals_end().get() as f64 + new_cycles_sum.get() as f64) as f64);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -777,7 +777,7 @@ impl StreamHandlerImpl {
         self.metrics
             .inc_cycle_index_checksum
             .with_label_values(&[&remote_subnet_id.to_string()])
-            .set((stream.signals_end().get() as i64 + stream.sum_cycles_inc().get() as f64) as f64);
+            .set((stream.signals_end().get() as f64 + stream.sum_cycles_inc().get() as f64) as f64);
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
