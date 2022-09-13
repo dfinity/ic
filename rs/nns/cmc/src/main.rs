@@ -991,6 +991,7 @@ async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
+        subnet_type,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
@@ -1026,7 +1027,7 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_create_canister(controller, from, amount).await;
+            let result = process_create_canister(controller, from, amount, subnet_type).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -1192,7 +1193,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_create_canister(controller, from, tn.amount).await {
+        match process_create_canister(controller, from, tn.amount, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
                 Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
@@ -1294,6 +1295,7 @@ async fn process_create_canister(
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
+    subnet_type: Option<String>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -1307,7 +1309,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles).await {
+    match create_canister(controller, cycles, subnet_type).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -1468,8 +1470,37 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
     Ok(())
 }
 
-async fn create_canister(controller_id: PrincipalId, cycles: Cycles) -> Result<CanisterId, String> {
-    let subnets = get_permuted_subnets_for(&controller_id).await?;
+async fn create_canister(
+    controller_id: PrincipalId,
+    cycles: Cycles,
+    subnet_type: Option<String>,
+) -> Result<CanisterId, String> {
+    // If subnet_type is `Some`, then use it to determine the eligible list
+    // of subnets. Otherwise, fall back to the list of subnets for the
+    // provided controller id.
+    let mut subnets: Vec<SubnetId> = match subnet_type {
+        Some(subnet_type) => with_state(|state| {
+            let subnet_types_to_subnets = state
+                .subnet_types_to_subnets
+                .as_ref()
+                .expect("subnet types to subnets mapping is not `None`");
+            match subnet_types_to_subnets.get(&subnet_type) {
+                Some(s) => Ok(s.iter().copied().collect()),
+                None => {
+                    return Err(format!(
+                        "Provided subnet type {} does not exist",
+                        subnet_type
+                    ))
+                }
+            }
+        }),
+        None => Ok(get_subnets_for(&controller_id)),
+    }?;
+
+    // Perform a random permutation of the eligible list of subnets to ensure
+    // that we load balance canister creations among them.
+    let mut rng = get_rng().await?;
+    subnets.shuffle(&mut rng);
 
     let mut last_err = None;
 
@@ -1559,21 +1590,14 @@ fn total_supply_() {
 
 /// Return the list of subnets in which this controller is allowed to create
 /// canisters
-async fn get_permuted_subnets_for(controller_id: &PrincipalId) -> Result<Vec<SubnetId>, String> {
-    let mut subnets = {
-        with_state(|state| {
-            if let Some(subnets) = state.authorized_subnets.get(controller_id) {
-                subnets.clone()
-            } else {
-                state.default_subnets.clone()
-            }
-        })
-    };
-
-    let mut rng = get_rng().await?;
-    subnets.shuffle(&mut rng);
-
-    Ok(subnets)
+fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
+    with_state(|state| {
+        if let Some(subnets) = state.authorized_subnets.get(controller_id) {
+            subnets.clone()
+        } else {
+            state.default_subnets.clone()
+        }
+    })
 }
 
 async fn get_rng() -> Result<StdRng, String> {
