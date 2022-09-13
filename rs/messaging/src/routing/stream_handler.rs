@@ -1,5 +1,4 @@
 use crate::message_routing::LatencyMetrics;
-use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -9,6 +8,7 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
@@ -467,8 +467,12 @@ impl StreamHandlerImpl {
 
         for msg in collected_messages {
             match msg {
-                RequestOrResponse::Request(req) if (req.sender == CYCLES_MINTING_CANISTER_ID && req.method_name == "deposit_cycles") => {
-                    let old_val = self.metrics
+                RequestOrResponse::Request(req)
+                    if (req.sender == CYCLES_MINTING_CANISTER_ID
+                        && req.method_name == "deposit_cycles") =>
+                {
+                    let old_val = self
+                        .metrics
                         .cycles_minted
                         .with_label_values(&[&remote_subnet.to_string()])
                         .get();
@@ -476,13 +480,12 @@ impl StreamHandlerImpl {
                         .cycles_minted
                         .with_label_values(&[&remote_subnet.to_string()])
                         .set(old_val + req.payment.get() as f64);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
         rejected_messages
-
     }
 
     /// Garbage collects the signals of an outgoing `Stream` based on the
