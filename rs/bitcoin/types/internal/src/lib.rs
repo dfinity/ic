@@ -4,6 +4,8 @@
 //! Their protobuf counterpart (defined in rs/protobuf/def/bitcoin) are used
 //! only for serialization/deserialization of the ReplicatedState.
 
+use candid::CandidType;
+use ic_btc_types::NetworkSnakeCase as Network;
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -532,4 +534,94 @@ impl BitcoinAdapterResponse {
     pub fn count_bytes(&self) -> usize {
         self.response.count_bytes() + std::mem::size_of::<u64>()
     }
+}
+
+// A blob representing a block in the standard bitcoin format.
+type BlockBlob = Vec<u8>;
+
+// A blob representing a block header in the standard bitcoin format.
+type BlockHeaderBlob = Vec<u8>;
+
+type BlockHash = Vec<u8>;
+
+type PageNumber = u8;
+
+/// A request to retrieve more blocks from the Bitcoin network.
+///
+/// ```text
+/// variant {
+///   initial : record {
+///     network: network;
+///     processed_block_hashes: vec blob
+///   };
+///   follow_up : nat8;
+/// };
+/// ```
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CanisterGetSuccessorsRequest {
+    /// A request containing the hashes of blocks we'd like to retrieve succeessors for.
+    #[serde(rename = "initial")]
+    Initial(CanisterGetSuccessorsRequestInitial),
+
+    /// A follow-up request to retrieve the `FollowUp` response associated with the given page.
+    #[serde(rename = "follow_up")]
+    FollowUp(PageNumber),
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanisterGetSuccessorsRequestInitial {
+    pub network: Network,
+    pub processed_block_hashes: Vec<BlockHash>,
+}
+
+/// A response containing new successor blocks from the Bitcoin network.
+///
+/// ```text
+/// variant {
+///   complete : record {
+///     blocks: vec blob;
+///     next: vec blob;
+///   };
+///
+///   partial : record {
+///     partial_block: blob;
+///     next: vec blob;
+///     num_pages: nat8;
+///   };
+///
+///   follow_up : blob;
+/// };
+/// ```
+#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CanisterGetSuccessorsResponse {
+    /// A complete response that doesn't require pagination.
+    #[serde(rename = "complete")]
+    Complete(CanisterGetSuccessorsResponseComplete),
+
+    /// A partial response that requires `FollowUp` responses to get the rest of it.
+    #[serde(rename = "partial")]
+    Partial(CanisterGetSuccessorsResponsePartial),
+
+    /// A follow-up response containing a blob of bytes to be appended to the partial response.
+    #[serde(rename = "follow_up")]
+    FollowUp(BlockBlob),
+}
+
+#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanisterGetSuccessorsResponseComplete {
+    pub blocks: Vec<BlockBlob>,
+    pub next: Vec<BlockHeaderBlob>,
+}
+
+#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanisterGetSuccessorsResponsePartial {
+    /// A block that is partial (i.e. the full blob has not been sent).
+    pub partial_block: BlockBlob,
+
+    /// Hashes of next block headers.
+    pub next: Vec<BlockHeaderBlob>,
+
+    /// The number of pages in this response. The remaining pages need to be retrieved
+    /// via `FollowUp` requests/responses.
+    pub num_pages: u8,
 }

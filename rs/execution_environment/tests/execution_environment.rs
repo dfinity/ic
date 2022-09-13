@@ -1,16 +1,17 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::{NumBytes, NumSeconds, PrincipalId};
+use ic_btc_types::NetworkSnakeCase;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::ExecutionResponse;
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    TransformType, IC_00,
+    self as ic00, BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial,
+    BitcoinGetSuccessorsResponse, BitcoinGetSuccessorsResponseComplete, CanisterHttpRequestArgs,
+    CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
+    EmptyBlob, HttpMethod, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, TransformType, IC_00,
 };
 use ic_interfaces::execution_environment::HypervisorError;
-
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
@@ -39,6 +40,7 @@ use ic_types::{
     CanisterId, Cycles, RegistryVersion, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
+use std::str::FromStr;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 
@@ -2342,7 +2344,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
 }
 
 #[test]
-fn bitcoin_get_successors_returns_not_found() {
+fn bitcoin_get_successors_cannot_be_called_by_non_bitcoin_canisters() {
     let mut test = ExecutionTestBuilder::new()
         .with_provisional_whitelist_all()
         .build();
@@ -2358,10 +2360,51 @@ fn bitcoin_get_successors_returns_not_found() {
         .build();
 
     let result = test.ingress(uni, "update", call).unwrap();
+    assert_eq!(result, WasmResult::Reject("Permission denied.".to_string()));
+}
+
+#[test]
+fn bitcoin_get_successors_can_be_called_by_bitcoin_canisters() {
+    let bitcoin_canister_id = PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+
+    let mut test = ExecutionTestBuilder::new()
+        // Set the bitcoin canister to be the ID of the canister about to be created.
+        .with_bitcoin_canister(bitcoin_canister_id)
+        .with_provisional_whitelist_all()
+        .build();
+
+    let uni = test.universal_canister().unwrap();
     assert_eq!(
-        result,
-        WasmResult::Reject(
-            "Management canister has no method 'bitcoin_get_successors'".to_string()
+        uni.get_ref(),
+        &bitcoin_canister_id,
+        "id of universal canister doesn't match expected id"
+    );
+
+    let call = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::BitcoinGetSuccessors,
+            call_args()
+                .other_side(
+                    BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
+                        network: NetworkSnakeCase::Regtest,
+                        processed_block_hashes: vec![],
+                    })
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
         )
+        .build();
+
+    // Verify that the stub response is received.
+    assert_eq!(
+        test.ingress(uni, "update", call),
+        Ok(WasmResult::Reply(
+            BitcoinGetSuccessorsResponse::Complete(BitcoinGetSuccessorsResponseComplete {
+                blocks: vec![],
+                next: vec![]
+            })
+            .encode()
+        ))
     );
 }

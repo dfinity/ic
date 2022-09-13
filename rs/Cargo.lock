@@ -4171,6 +4171,8 @@ dependencies = [
 name = "ic-btc-types-internal"
 version = "0.1.0"
 dependencies = [
+ "candid",
+ "ic-btc-types",
  "ic-protobuf",
  "serde",
  "serde_bytes",
@@ -5767,6 +5769,7 @@ dependencies = [
  "float-cmp 0.9.0",
  "ic-base-types",
  "ic-btc-types",
+ "ic-btc-types-internal",
  "ic-error-types",
  "ic-protobuf",
  "num-traits",

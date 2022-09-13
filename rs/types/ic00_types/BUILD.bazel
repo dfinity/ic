@@ -11,6 +11,7 @@ rust_library(
     ],
     version = "0.8.0",
     deps = [
+        "//rs/bitcoin/types/internal",
         "//rs/bitcoin/types/public",
         "//rs/protobuf",
         "//rs/types/base_types",

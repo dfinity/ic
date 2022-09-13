@@ -3,12 +3,13 @@ use candid::Encode;
 use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
+    BitcoinGetSuccessorsResponse, BitcoinGetSuccessorsResponseComplete, BitcoinGetUtxosArgs,
     BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob, Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
-use ic_types::Cycles;
+use ic_types::{messages::Request, Cycles};
 
 // A number of last transactions in a block chain to calculate fee percentiles.
 // Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
@@ -180,6 +181,27 @@ pub fn send_transaction(
                 .map(|()| EmptyBlob.encode())
         },
     )
+}
+
+/// Handles a `bitcoin_get_successors` request.
+// TODO(EXC-1236, EXC-1237): Implement this endpoint.
+pub fn get_successors(
+    request: &Request,
+    _state: &mut ReplicatedState,
+) -> Result<Vec<u8>, UserError> {
+    match BitcoinGetSuccessorsArgs::decode(request.method_payload()) {
+        Ok(_get_successors_request) => {
+            // Return a stub response for now.
+            Ok(
+                BitcoinGetSuccessorsResponse::Complete(BitcoinGetSuccessorsResponseComplete {
+                    blocks: vec![],
+                    next: vec![],
+                })
+                .encode(),
+            )
+        }
+        Err(err) => Err(candid_error_to_user_error(err)),
+    }
 }
 
 fn is_feature_enabled(state: &mut ReplicatedState) -> bool {

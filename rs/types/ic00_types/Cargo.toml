@@ -7,6 +7,7 @@ edition = "2021"
 candid = "0.7.14"
 ic-base-types = { path = "../base_types" }
 ic-btc-types = { path = "../../bitcoin/types/public" }
+ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
 ic-error-types = { path = "../error_types" }
 ic-protobuf = { path = "../../protobuf" }
 num-traits = "0.2.12"
