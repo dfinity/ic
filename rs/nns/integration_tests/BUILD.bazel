@@ -177,6 +177,7 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

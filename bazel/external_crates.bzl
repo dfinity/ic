@@ -634,6 +634,9 @@ def external_crates_repository(name, annotations):
             "rand-0_7_3": crate.spec(
                 package = "rand",
                 version = "^0.7.3",
+                features = [
+                    "small_rng",
+                ],
             ),
             "rand-0_8_4": crate.spec(
                 package = "rand",
