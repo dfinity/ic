@@ -52,8 +52,8 @@
   },
   "scripts": {
     "clean": "rm -fr dist dist-dev dist-prod coverage",
-    "build": "rm -fr dist dist-prod && ./bin/portable-webpack && mv dist dist-prod",
-    "build-dev": "rm -fr dist dist-dev && FORCE_FETCH_ROOT_KEY=1 ./bin/portable-webpack --mode development && mv dist dist-dev",
+    "build": "./bin/portable-webpack --output-clean",
+    "build-dev": "./bin/portable-webpack --env development --output-clean",
     "start": "npm run build-dev && http-server dist-dev --proxy https://ic0.app/",
     "start-testnet": "npm run build-dev && http-server dist-dev --proxy https://identity.dfinity.network/",
     "lint": "npx eslint src",
