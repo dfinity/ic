@@ -69,6 +69,8 @@
 /rs/                                    @dfinity-lab/teams/interface-owners
 /rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
+/rs/async_utils                         @dfinity-lab/teams/networking-team
+/rs/bazelifier                          @dfinity-lab/teams/idx
 /rs/bitcoin/adapter/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners
 /rs/bitcoin/ckbtc/                      @dfinity-lab/teams/financial-integrations
@@ -90,13 +92,16 @@
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/             @dfinity-lab/teams/execution-owners
 /rs/depcheck/                           @dfinity-lag/teams/interface-owners
+/rs/determinism_test                    @dfinity-lab/teams/execution-owners
 /rs/drun/                               @dfinity-lab/teams/execution-owners
+/rs/elastic_common_schema               @dfinity-lab/teams/ic-testing-verification
 /rs/embedders/                          @dfinity-lab/teams/runtime-owners
 /rs/execution_environment/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/gitlab-ci-config.yml                @dfinity-lab/teams/idx
 /rs/guestos_vsock_agent/                @dfinity-lab/teams/node-team
 /rs/http_handler/                       @dfinity-lab/teams/networking-team
 /rs/ic_fondue/                          @dfinity-lab/teams/ic-testing-verification
+/rs/ic_p8s_service_discovery            @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/bitcoin_adapter_client/  @dfinity-lab/teams/networking-team
@@ -114,6 +119,7 @@
 /rs/interfaces/src/registry.rs          @dfinity-lab/teams/node-team
 /rs/interfaces/state_manager/           @dfinity-lab/teams/message-routing-owners
 /rs/interfaces/transport/               @dfinity-lab/teams/networking-team
+/rs/log_analyzer                        @dfinity-lab/teams/ic-testing-verification
 /rs/memory_tracker/                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                          @dfinity-lab/teams/message-routing-owners
 /rs/nervous_system/                     @dfinity-lab/teams/nns-team
@@ -147,6 +153,7 @@
 /rs/registry/regedit/                                 @dfinity-lab/teams/ic-testing-verification
 /rs/registry/transport/                 @dfinity-lab/teams/nns-team
 /rs/replay/                             @dfinity-lab/teams/orchestrator-owners
+/rs/replica_tests                       @dfinity-lab/teams/execution-owners
 /rs/replica/                            @dfinity-lab/teams/networking-team
 /rs/replicated_state/                   @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/replicated_state/src/page_map.rs    @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
