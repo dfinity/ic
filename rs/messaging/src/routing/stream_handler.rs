@@ -1,5 +1,5 @@
 use crate::message_routing::LatencyMetrics;
-use ic_base_types::NumBytes;
+use ic_base_types::{CanisterId, NumBytes};
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
@@ -8,7 +8,6 @@ use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
 };
-use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
@@ -462,14 +461,17 @@ impl StreamHandlerImpl {
         // Remove the consumed messages from our outgoing stream.
         self.observe_gced_messages(stream.messages_begin(), signals_end);
         // stream.discard_messages_before(signals_end, reject_signals)
-        // Test
+        // #### TODO: REPLACE THIS CODE
+        let cmc_index_in_nns: u64 = 4;
+        let cmc_id: CanisterId = CanisterId::from_u64(cmc_index_in_nns);
+        // ####
         let (collected_messages, rejected_messages) =
             stream.discard_messages_before(signals_end, reject_signals);
 
         for msg in collected_messages {
             match msg {
                 RequestOrResponse::Request(req)
-                    if (req.sender == CYCLES_MINTING_CANISTER_ID
+                    if (req.sender == cmc_id
                         && req.method_name == "deposit_cycles") =>
                 {
                     let old_val = self
