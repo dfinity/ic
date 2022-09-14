@@ -128,12 +128,11 @@ struct State {
     /// subnet types that exists in the registry (system/verified/application).
     /// The idea is that these types provide an easy way for users to set their
     /// preferences during canister creation. If no subnet type is provided
-    /// during canister creation, an application subnet will be picked at random
-    /// as it happens today, as no special requirements were provided.
+    /// during canister creation, a subnet without a special type will be picked
+    /// at random as no special requirements were provided.
     ///
-    /// Each subnet can be assigned to at most one type and cannot be part of
-    /// the default or authorised subnets. Essentially, a subnet can either have
-    /// some specialization or it's one of the common subnets.
+    /// Each subnet can be assigned to at most one type and cannot be a default
+    /// or an authorized subnet.
     subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
 }
 
@@ -434,14 +433,14 @@ fn add_subnets_to_type(
         }
 
         // Check that the subnets we are trying to assign to `subnet_type` are
-        // not already in the authorized subnet set.
-        let mut all_authorized_subnets: BTreeSet<&SubnetId> =
+        // not already in the authorized or default subnet list.
+        let mut authorized_and_default_subnets: BTreeSet<&SubnetId> =
             state.default_subnets.iter().collect();
         let tmp: BTreeSet<&SubnetId> = state.authorized_subnets.values().flatten().collect();
-        all_authorized_subnets.extend(tmp);
+        authorized_and_default_subnets.extend(tmp);
         let mut already_authorized_subnets = vec![];
         for subnet in subnets.iter() {
-            if all_authorized_subnets.contains(subnet) {
+            if authorized_and_default_subnets.contains(subnet) {
                 already_authorized_subnets.push(*subnet);
             }
         }
@@ -481,6 +480,8 @@ fn remove_subnets_from_type(
 
         match subnet_types_to_subnets.entry(subnet_type.clone()) {
             Entry::Occupied(mut entry) => {
+                // Check that the provided subnets are assigned to the type
+                // that we're trying to remove them from.
                 let mut not_assigned_subnets = vec![];
                 for subnet in subnets.iter() {
                     if !entry.get().contains(subnet) {
@@ -497,6 +498,7 @@ fn remove_subnets_from_type(
                     ));
                 }
 
+                // Subnets can now safely be removed from the type.
                 print(format!(
                     "[cycles] Removing subnets {:?} from type: {}",
                     subnets, subnet_type
@@ -507,6 +509,7 @@ fn remove_subnets_from_type(
                 }
                 Ok(())
             }
+            // Type not found.
             Entry::Vacant(_) => Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
                 subnet_type,
             )),
@@ -2129,6 +2132,7 @@ mod tests {
             ]))
         );
 
+        // Attempt to add subnet4 to subnet type "unknown" that does not exist.
         assert_eq!(
             add_subnets_to_type(vec![subnet4], "unknown".to_string()),
             Err(ChangeSubnetTypeAssignmentError::TypeDoesNotExist(
@@ -2136,6 +2140,8 @@ mod tests {
             ))
         );
 
+        // Attempt to add subnet5 and subnet6 to type3 but they are already
+        // authorized for public access.
         assert_eq!(
             add_subnets_to_type(vec![subnet5, subnet6], type3),
             Err(ChangeSubnetTypeAssignmentError::SubnetsAreAuthorized(vec![
@@ -2162,6 +2168,7 @@ mod tests {
         let subnet4 = subnet_test_id(3);
 
         // Add subnet1 and subnet2 to "Type1".
+        // Add subnet3 and subnet4 to "Type2".
         add_subnets_to_type(vec![subnet1, subnet2], type1.clone()).unwrap();
         add_subnets_to_type(vec![subnet3, subnet4], type2.clone()).unwrap();
 
