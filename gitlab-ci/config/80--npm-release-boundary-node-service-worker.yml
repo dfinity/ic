@@ -1,6 +1,6 @@
 release-boundary-node-service-worker:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-service-worker-release
   stage: npm-release
   needs: [boundary-node-service-worker]

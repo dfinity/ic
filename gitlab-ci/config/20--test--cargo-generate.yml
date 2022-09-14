@@ -1,5 +1,5 @@
 cargo-lock-generate:
-  extends: .ubuntu-nix-docker
+  extends: .ubuntu-nix-docker-k8s
   needs: []  # don't wait on other jobs
   stage: test
   script:

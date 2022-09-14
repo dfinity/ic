@@ -241,6 +241,15 @@ after_script:
     - docker
     - ubuntu
 
+.ubuntu-docker-k8s:
+  extends: .build-env-base
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+  tags:
+    # distribute jobs between docker and k8s runners
+    - dfinity
+    - ubuntu
+
 .ubuntu-nix-docker:
   extends:
     - .nix-build-env-base
@@ -261,7 +270,7 @@ after_script:
 .ubuntu-nix-docker-k8s:
   extends: .ubuntu-nix-docker
   tags:
-    # We dynamically set tags to distribute jobs between docker and k8s runners
+    # distribute jobs between docker and k8s runners
     - dfinity
     - ubuntu
 

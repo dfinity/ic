@@ -8,7 +8,7 @@
 
 cargo-clippy-fast-path-linux:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .cargo-clippy-fast-path
 
 cargo-clippy-fast-path-darwin:

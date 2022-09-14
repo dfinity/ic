@@ -1,6 +1,6 @@
 gen-cargo-pipeline:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .cargo-rules-autorun-on-trigger
   # Child pipeline must be generated in a stage prior to the one where it runs
   stage: init
