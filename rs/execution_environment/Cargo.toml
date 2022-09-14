@@ -93,3 +93,8 @@ harness = false
 [[bench]]
 name = "execute_update"
 harness = false
+
+
+[[test]]
+name = "execution"
+path = "tests/execution/lib.rs"

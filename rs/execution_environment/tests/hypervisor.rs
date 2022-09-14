@@ -3,9 +3,7 @@ use candid::{Decode, Encode};
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_execution_environment::CompilationCostHandling;
-use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
-};
+use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{AvailableMemory, HypervisorError};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -33,7 +31,6 @@ use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::time::Duration;
-use wabt::wat2wasm_with_features;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
@@ -4152,149 +4149,6 @@ fn dts_abort_works_in_update_call() {
     let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
-}
-
-const DTS_INSTALL_WAT: &str = r#"
-    (module
-        (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-        (import "ic0" "stable_read"
-            (func $stable_read (param $dst i32) (param $offset i32) (param $size i32))
-        )
-        (import "ic0" "stable_write"
-            (func $stable_write (param $offset i32) (param $src i32) (param $size i32))
-        )
-        (import "ic0" "msg_reply" (func $msg_reply))
-        (import "ic0" "msg_reply_data_append"
-            (func $msg_reply_data_append (param i32 i32))
-        )
-        (func (export "canister_query read")
-            (call $stable_read (i32.const 0) (i32.const 0) (i32.const 10))
-            (call $msg_reply_data_append
-                (i32.const 0) ;; the counter from heap[0]
-                (i32.const 10)) ;; length
-            (call $msg_reply)
-        )
-        (func $start
-            (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 12) (i32.const 1000))
-            (memory.fill (i32.const 0) (i32.const 23) (i32.const 1000))
-        )
-        (func (export "canister_init")
-            (drop (memory.grow (i32.const 1)))
-            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
-            (drop (call $stable_grow (i32.const 1)))
-            (call $stable_write (i32.const 0) (i32.const 0) (i32.const 1000))
-        )
-        (start $start)
-        (memory 0 20)
-    )"#;
-
-#[test]
-fn dts_resume_works_in_install_code() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
-        .with_manual_execution()
-        .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
-        query_allocation: None,
-    };
-    let original_system_state = test.canister_state(canister_id).system_state.clone();
-    let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    for _ in 0..4 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
-        );
-        test.execute_slice(canister_id);
-    }
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None
-    );
-    // TODO(RUN-286): Make this assertion more precise.
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
-    );
-    let ingress_status = test.ingress_status(ingress_id);
-    let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-}
-
-#[test]
-fn dts_abort_works_in_install_code() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
-        .with_manual_execution()
-        .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
-        query_allocation: None,
-    };
-    let original_system_state = test.canister_state(canister_id).system_state.clone();
-    let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    for _ in 0..3 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
-        );
-        test.execute_slice(canister_id);
-    }
-
-    test.abort_all_paused_executions();
-
-    for _ in 0..5 {
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueInstallCode
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance(),
-        );
-        test.execute_slice(canister_id);
-    }
-
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None,
-    );
-    // TODO(RUN-286): Make this assertion more precise.
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
-    );
-
-    let ingress_status = test.ingress_status(ingress_id);
-    let result = check_ingress_status(ingress_status).unwrap();
-    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
 
 #[test]
