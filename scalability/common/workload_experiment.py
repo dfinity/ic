@@ -358,14 +358,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         f_stdout = os.path.join(curr_outdir, "workload-generator-%s-{}.stdout.txt" % uuid.uuid4())
         f_stderr = os.path.join(curr_outdir, "workload-generator-%s-{}.stderr.txt" % uuid.uuid4())
 
-        # To handle stragglers we allow the workload generator to run longer than "duration".
-        # We don't really care about requests that took longer than 2min to complete, so
-        # we timeout the workload generator after duration + 120s.
-        #
-        # Note that otherwise, CD jobs run significantly longer unnecessarily.
-        timeout = max(duration + 120, 300)
-        print(f"Setting workload generator timeout to: {timeout}")
-
         print(f"Running on {targets}")
         workload_description = workload.WorkloadDescription(
             canister_ids,
@@ -386,7 +378,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             workload_description,
             f_stdout,
             f_stderr,
-            timeout,
         )
         commands, load_generators = load.get_commands()
 

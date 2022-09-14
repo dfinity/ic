@@ -250,6 +250,18 @@ async fn main() {
                 .takes_value(true)
                 .help("If specified, sets this option when building the hyper http client."),
         )
+        .arg(
+            Arg::new("query-timeout-secs")
+                .long("query-timeout-secs")
+                .takes_value(true)
+                .help("The number of seconds to wait before timing out queries."),
+        )
+        .arg(
+            Arg::new("ingress-timeout-secs")
+                .long("ingress-timeout-secs")
+                .takes_value(true)
+                .help("The number of seconds to wait before timing out ingress messages."),
+        )
 
         .get_matches();
 
@@ -369,6 +381,13 @@ async fn main() {
     }
     let host = matches.value_of("host").map(ToString::to_string);
 
+    let query_timeout = matches
+        .value_of("query-timeout-secs")
+        .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
+    let ingress_timeout = matches
+        .value_of("ingress-timeout-secs")
+        .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
+
     let http_client = HttpClient::new();
     let (sender, pubkey_bytes) = match principal_id {
         None => (
@@ -423,8 +442,15 @@ async fn main() {
                 }
                 _ => {}
             }
-            let eng =
-                engine::Engine::new(sender.clone(), sender_field, &url, http_client_config, host);
+            let eng = engine::Engine::new(
+                sender.clone(),
+                sender_field,
+                &url,
+                http_client_config,
+                host,
+                query_timeout,
+                ingress_timeout,
+            );
 
             if !matches.is_present("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;

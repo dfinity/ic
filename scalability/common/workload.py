@@ -69,7 +69,6 @@ class Workload(threading.Thread):
         workload: WorkloadDescription,
         f_stdout: str,
         f_stderr: str,
-        timeout: int,
     ):
         """Initialize workload."""
         threading.Thread.__init__(self)
@@ -79,7 +78,9 @@ class Workload(threading.Thread):
         self.workload = workload
         self.f_stdout = f_stdout
         self.f_stderr = f_stderr
-        self.timeout = timeout
+
+        self.query_timeout_secs = 30
+        self.ingress_timeout_secs = 6 * 60
 
         if not isinstance(self.workload.canister_ids, list):
             raise Exception(
@@ -105,6 +106,8 @@ class Workload(threading.Thread):
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
         cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} -p 9090 --no-status-check"
         cmd += " " + " ".join(self.workload.arguments)
+        cmd += "--query-timeout-secs " + str(self.query_timeout_secs)
+        cmd += "--ingress-timeout-secs " + str(self.ingress_timeout_secs)
 
         # Dump worklod generator command in output directory.
         if self.workload.raw_payload is not None:
@@ -146,7 +149,7 @@ class Workload(threading.Thread):
         """Start running the given workloads as a thread."""
         time.sleep(self.workload.start_delay)
         commands, machines = self.get_commands()
-        ssh.run_all_ssh_in_parallel(machines, commands, self.f_stdout, self.f_stderr, self.timeout)
+        ssh.run_all_ssh_in_parallel(machines, commands, self.f_stdout, self.f_stderr)
 
     def fetch_results(self, destinations, out_dir):
         """Fetch results from workload generators."""

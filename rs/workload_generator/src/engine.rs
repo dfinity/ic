@@ -45,6 +45,7 @@ struct WaitRequest {
 const START_OFFSET: Duration = Duration::from_millis(500);
 
 const QUERY_TIMEOUT: Duration = Duration::from_secs(60 * 5);
+const INGRESS_TIMEOUT: Duration = Duration::from_secs(60 * 6);
 
 #[derive(PartialEq, Eq, Hash)]
 enum CallFailure {
@@ -75,6 +76,8 @@ impl Engine {
         urls: &[String],
         http_client_config: HttpClientConfig,
         host: Option<String>,
+        query_timeout: Option<Duration>,
+        ingress_timeout: Option<Duration>,
     ) -> Engine {
         let mut agents = Vec::with_capacity(urls.len());
         let current_batch = urls.iter().map(|url| {
@@ -104,7 +107,8 @@ impl Engine {
                 agent_sender.clone(),
                 http_client_config.clone(),
             )
-            .with_query_timeout(QUERY_TIMEOUT);
+            .with_query_timeout(query_timeout.unwrap_or(QUERY_TIMEOUT))
+            .with_ingress_timeout(ingress_timeout.unwrap_or(INGRESS_TIMEOUT));
             agent.sender_field = sender_field.clone();
             agent
         });
