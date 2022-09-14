@@ -223,7 +223,9 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
 
     fork(
         FiniteMap::default()
-            .with("metadata", move || system_metadata_as_tree(&state.metadata))
+            .with("metadata", move || {
+                system_metadata_as_tree(&state.metadata, certification_version)
+            })
             .with("streams", move || {
                 streams_as_tree(state.streams(), certification_version)
             })
@@ -283,8 +285,11 @@ fn streams_as_tree(
     })
 }
 
-fn system_metadata_as_tree(m: &SystemMetadata) -> LazyTree<'_> {
-    blob(move || encode_metadata(m))
+fn system_metadata_as_tree(
+    m: &SystemMetadata,
+    certification_version: CertificationVersion,
+) -> LazyTree<'_> {
+    blob(move || encode_metadata(m, certification_version))
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);
