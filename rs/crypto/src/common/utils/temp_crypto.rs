@@ -9,11 +9,9 @@ use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_seed::Seed;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
@@ -54,7 +52,6 @@ use ic_types::crypto::{
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
-use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -549,7 +546,7 @@ impl TempCryptoComponent {
             .collect()
     }
 
-    pub fn temp_dir_path(&self) -> &std::path::Path {
+    pub fn temp_dir_path(&self) -> &Path {
         self.temp_dir.path()
     }
 
@@ -651,30 +648,6 @@ impl NodeKeysToGenerate {
         NodeKeysToGenerate {
             generate_tls_keys_and_certificate: true,
             ..Self::none()
-        }
-    }
-}
-
-impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
-    pub fn new_from_seed(
-        seed: Seed,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> Self {
-        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let csprng = seed.into_rng();
-        let crypto_component = CryptoComponentFatClient::new_with_rng_and_fake_node_id(
-            csprng,
-            &config,
-            no_op_logger(),
-            registry_client,
-            node_id,
-        );
-
-        TempCryptoComponentGeneric {
-            crypto_component,
-            remote_vault_environment: None,
-            temp_dir,
         }
     }
 }
