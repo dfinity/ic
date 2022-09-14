@@ -14,11 +14,6 @@ cargo-build-debug-linux:
   variables:
     BUILD_COMMAND: "cargo build"
 
-cargo-build-debug-darwin:
-  extends: .cargo-build-macos
-  variables:
-    BUILD_COMMAND: "cargo build"
-
 # Warning! If you rename this job, you update ALL `gitlab-artifacts-download` invocations.
 cargo-build-release-linux:
   extends: 
