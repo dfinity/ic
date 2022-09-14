@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 futures = "0.3.13"
+ic-btc-types = { path = "../bitcoin/types/public" }
+ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-error-types = { path = "../types/error_types" }

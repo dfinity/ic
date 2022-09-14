@@ -10,8 +10,11 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+};
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
@@ -21,7 +24,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::Ingress;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{CallbackId, MessageId, RequestOrResponse, Response},
+    messages::{CallbackId, MessageId, Payload, RequestOrResponse, Response},
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
@@ -798,25 +801,57 @@ impl ReplicatedState {
         }
     }
 
-    /// Pushes a response from the Bitcoin Adapter to the testnet `BitcoinState`
-    /// iff the bitcoin testnet feature is not disabled and returns a `StateError`
-    /// otherwise.
-    ///
-    /// See documentation of `BitcoinState::push_response` for more information.
+    /// Pushes a response from the Bitcoin Adapter into the state.
     pub fn push_response_bitcoin(
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
-        match self.metadata.own_subnet_features.bitcoin().status {
-            BitcoinFeatureStatus::Enabled
-            | BitcoinFeatureStatus::Syncing
-            | BitcoinFeatureStatus::Paused => self
-                .bitcoin
-                .push_response(response)
-                .map_err(StateError::BitcoinStateError),
-            BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
-                BitcoinStateError::FeatureNotEnabled,
-            )),
+        match response.response {
+            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => {
+                // Received a response to a request from the bitcoin wasm canister.
+                // Retrieve the associated request.
+                let callback_id = CallbackId::from(response.callback_id);
+                let context = self
+                    .metadata
+                    .subnet_call_context_manager
+                    .bitcoin_get_successors_contexts
+                    .get_mut(&callback_id)
+                    .ok_or_else(|| {
+                        StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
+                            callback_id: callback_id.get(),
+                        })
+                    })?;
+
+                // Encode the response and insert it into the consensus queue.
+                let response = Response {
+                    originator: context.request.sender(),
+                    respondent: CanisterId::ic_00(),
+                    originator_reply_callback: callback_id,
+                    refund: context.request.take_cycles(),
+                    response_payload: Payload::Data(
+                        BitcoinGetSuccessorsResponse::Complete(r).encode(),
+                    ),
+                };
+
+                // Add response to the consensus queue.
+                self.consensus_queue.push(response);
+
+                Ok(())
+            }
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
+            | BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
+                match self.metadata.own_subnet_features.bitcoin().status {
+                    BitcoinFeatureStatus::Enabled
+                    | BitcoinFeatureStatus::Syncing
+                    | BitcoinFeatureStatus::Paused => self
+                        .bitcoin
+                        .push_response(response)
+                        .map_err(StateError::BitcoinStateError),
+                    BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
+                        BitcoinStateError::FeatureNotEnabled,
+                    )),
+                }
+            }
         }
     }
 

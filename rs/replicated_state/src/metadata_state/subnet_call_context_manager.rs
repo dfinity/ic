@@ -1,3 +1,4 @@
+use ic_btc_types_internal::CanisterGetSuccessorsRequestInitial;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
@@ -23,6 +24,7 @@ pub struct SubnetCallContextManager {
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
+    pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
 }
 
 impl SubnetCallContextManager {
@@ -65,6 +67,18 @@ impl SubnetCallContextManager {
         self.next_callback_id += 1;
 
         self.ecdsa_dealings_contexts.insert(callback_id, context);
+    }
+
+    pub fn push_bitcoin_get_successors_request(
+        &mut self,
+        context: BitcoinGetSuccessorsContext,
+    ) -> u64 {
+        let callback_id = CallbackId::new(self.next_callback_id);
+        self.next_callback_id += 1;
+
+        self.bitcoin_get_successors_contexts
+            .insert(callback_id, context);
+        callback_id.get()
     }
 
     pub fn retrieve_request(
@@ -121,6 +135,19 @@ impl SubnetCallContextManager {
                         context.request
                     })
             })
+            .or_else(|| {
+                self.bitcoin_get_successors_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for BitcoinGetSuccessors with callback id {:?} from {:?}",
+                            context.request.sender_reply_callback,
+                            context.request.sender
+                        );
+                        context.request
+                    })
+            })
     }
 }
 
@@ -168,6 +195,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            bitcoin_get_successors_contexts: item
+                .bitcoin_get_successors_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::BitcoinGetSuccessorsContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -204,12 +241,23 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
             ecdsa_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut bitcoin_get_successors_contexts =
+            BTreeMap::<CallbackId, BitcoinGetSuccessorsContext>::new();
+        for entry in item.bitcoin_get_successors_contexts {
+            let context: BitcoinGetSuccessorsContext = try_from_option_field(
+                entry.context,
+                "SystemMetadata::BitcoinGetSuccessorsContext",
+            )?;
+            bitcoin_get_successors_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
             canister_http_request_contexts,
             ecdsa_dealings_contexts,
+            bitcoin_get_successors_contexts,
         })
     }
 }
@@ -354,5 +402,31 @@ impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
             nodes,
             registry_version: RegistryVersion::from(context.registry_version),
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BitcoinGetSuccessorsContext {
+    pub request: Request,
+    pub payload: CanisterGetSuccessorsRequestInitial,
+}
+
+impl From<&BitcoinGetSuccessorsContext> for pb_metadata::BitcoinGetSuccessorsContext {
+    fn from(context: &BitcoinGetSuccessorsContext) -> Self {
+        pb_metadata::BitcoinGetSuccessorsContext {
+            request: Some((&context.request).into()),
+            payload: Some((&context.payload).into()),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::BitcoinGetSuccessorsContext> for BitcoinGetSuccessorsContext {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::BitcoinGetSuccessorsContext) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
+        let payload: CanisterGetSuccessorsRequestInitial =
+            try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
+        Ok(BitcoinGetSuccessorsContext { request, payload })
     }
 }

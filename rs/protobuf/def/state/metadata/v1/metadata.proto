@@ -1,5 +1,6 @@
 syntax = "proto3";
 package state.metadata.v1;
+import "bitcoin/v1/bitcoin.proto";
 import "types/v1/types.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
@@ -120,6 +121,16 @@ message EcdsaDealingsContextTree {
     EcdsaDealingsContext context = 2;
 }
 
+message BitcoinGetSuccessorsContext {
+    state.queues.v1.Request request = 1;
+    bitcoin.v1.CanisterGetSuccessorsRequestInitial payload = 2;
+}
+
+message BitcoinGetSuccessorsContextTree {
+    uint64 callback_id = 1;
+    BitcoinGetSuccessorsContext context = 2;
+}
+
 message SubnetCallContextManager {
     uint64 next_callback_id = 1;
     reserved 2;
@@ -130,6 +141,7 @@ message SubnetCallContextManager {
     reserved "sign_with_mock_ecdsa_contexts";
     repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
     repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
+    repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
 }
 
 message TimeOfLastAllocationCharge {

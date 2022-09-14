@@ -875,20 +875,21 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::BitcoinGetSuccessors) => {
-                let cycles = msg.take_cycles();
                 if !self.config.bitcoin_canisters.contains(msg.sender()) {
                     Some((
                         Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
                             String::from("Permission denied."),
                         )),
-                        cycles,
+                        Cycles::zero(),
                     ))
                 } else {
                     match &msg {
                         RequestOrIngress::Request(request) => {
-                            let res = crate::bitcoin::get_successors(request, &mut state);
-                            Some((res, cycles))
+                            match crate::bitcoin::get_successors(request, &mut state) {
+                                Ok(_) => None,
+                                Err(err) => Some((Err(err), Cycles::zero())),
+                            }
                         }
                         RequestOrIngress::Ingress(_) => {
                             self.reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)

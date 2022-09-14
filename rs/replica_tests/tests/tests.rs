@@ -1,5 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_base_types::PrincipalId;
+use ic_btc_types_internal::CanisterGetSuccessorsResponseComplete;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
@@ -13,6 +15,7 @@ use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     time::current_time_and_expiry_time, CanisterId, NumBytes, RegistryVersion,
 };
+use std::str::FromStr;
 
 const WASM_PAGE_SIZE: usize = 65536;
 
@@ -2138,5 +2141,49 @@ fn setup_initial_dkg_method_interface() {
             }
             response => panic!("Unexpected response {:?}", response),
         }
+    });
+}
+
+#[test]
+fn bitcoin_get_successors() {
+    let (mut config, _tmpdir) = ic_config::Config::temp_config();
+    config.hypervisor.bitcoin_canisters =
+        vec![PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()];
+    utils::canister_test_with_config(config, |runtime| {
+        let canister_id = runtime.create_universal_canister();
+        let canister = ic_replica_tests::UniversalCanister {
+            runtime,
+            canister_id,
+        };
+
+        let response = canister
+            .update(
+                wasm().call_simple(
+                    ic00::IC_00,
+                    Method::BitcoinGetSuccessors,
+                    call_args()
+                        .other_side(
+                            // Send a dummy request.
+                            ic00::BitcoinGetSuccessorsArgs::Initial(
+                                ic00::BitcoinGetSuccessorsRequestInitial {
+                                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                                    processed_block_hashes: vec![vec![]],
+                                },
+                            )
+                            .encode(),
+                        )
+                        .on_reject(wasm().reject_message().reject()),
+                ),
+            )
+            .unwrap();
+
+        // Expect a dummy response.
+        let expected_response =
+            ic00::BitcoinGetSuccessorsResponse::Complete(CanisterGetSuccessorsResponseComplete {
+                blocks: vec![],
+                next: vec![],
+            });
+
+        assert_eq!(response, WasmResult::Reply(expected_response.encode()));
     });
 }

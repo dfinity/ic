@@ -449,6 +449,10 @@ impl SendTransactionResponse {
 pub enum BitcoinAdapterResponseWrapper {
     GetSuccessorsResponse(GetSuccessorsResponse),
     SendTransactionResponse(SendTransactionResponse),
+    // A response for the bitcoin wasm canister.
+    // This supersedes `GetSuccessorsResponse`, which will be deleted
+    // once the Bitcoin replica canister is phased out.
+    CanisterGetSuccessorsResponse(CanisterGetSuccessorsResponseComplete),
 }
 
 impl BitcoinAdapterResponseWrapper {
@@ -457,6 +461,7 @@ impl BitcoinAdapterResponseWrapper {
         match self {
             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => r.count_bytes(),
             BitcoinAdapterResponseWrapper::SendTransactionResponse(r) => r.count_bytes(),
+            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => r.count_bytes(),
         }
     }
 }
@@ -482,6 +487,15 @@ impl From<&BitcoinAdapterResponseWrapper> for v1::BitcoinAdapterResponseWrapper 
                     ),
                 }
             }
+            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(response) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::CanisterGetSuccessorsResponse(
+                            response.into(),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -498,6 +512,9 @@ impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrappe
             v1::bitcoin_adapter_response_wrapper::R::SendTransactionResponse(r) => Ok(
                 BitcoinAdapterResponseWrapper::SendTransactionResponse(r.try_into()?),
             ),
+            v1::bitcoin_adapter_response_wrapper::R::CanisterGetSuccessorsResponse(r) => {
+                Ok(BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r.try_into()?))
+            }
         }
     }
 }
@@ -574,6 +591,38 @@ pub struct CanisterGetSuccessorsRequestInitial {
     pub processed_block_hashes: Vec<BlockHash>,
 }
 
+impl From<&CanisterGetSuccessorsRequestInitial> for v1::CanisterGetSuccessorsRequestInitial {
+    fn from(request: &CanisterGetSuccessorsRequestInitial) -> Self {
+        Self {
+            network: match request.network {
+                Network::Testnet => 1,
+                Network::Mainnet => 2,
+                Network::Regtest => 3,
+            },
+            processed_block_hashes: request.processed_block_hashes.clone(),
+        }
+    }
+}
+
+impl TryFrom<v1::CanisterGetSuccessorsRequestInitial> for CanisterGetSuccessorsRequestInitial {
+    type Error = ProxyDecodeError;
+    fn try_from(request: v1::CanisterGetSuccessorsRequestInitial) -> Result<Self, Self::Error> {
+        Ok(CanisterGetSuccessorsRequestInitial {
+            network: match request.network {
+                1 => Network::Testnet,
+                2 => Network::Mainnet,
+                3 => Network::Regtest,
+                _ => {
+                    return Err(ProxyDecodeError::MissingField(
+                        "CanisterGetSuccessorsRequestInitial::network",
+                    ))
+                }
+            },
+            processed_block_hashes: request.processed_block_hashes,
+        })
+    }
+}
+
 /// A response containing new successor blocks from the Bitcoin network.
 ///
 /// ```text
@@ -613,6 +662,33 @@ pub struct CanisterGetSuccessorsResponseComplete {
     pub next: Vec<BlockHeaderBlob>,
 }
 
+impl CanisterGetSuccessorsResponseComplete {
+    /// Returns the size of this `SendTransactionResponse` in bytes.
+    pub fn count_bytes(&self) -> usize {
+        self.blocks.iter().map(|b| b.len()).sum::<usize>()
+            + self.next.iter().map(|n| n.len()).sum::<usize>()
+    }
+}
+
+impl From<&CanisterGetSuccessorsResponseComplete> for v1::CanisterGetSuccessorsResponseComplete {
+    fn from(request: &CanisterGetSuccessorsResponseComplete) -> Self {
+        v1::CanisterGetSuccessorsResponseComplete {
+            blocks: request.blocks.clone(),
+            next: request.next.clone(),
+        }
+    }
+}
+
+impl TryFrom<v1::CanisterGetSuccessorsResponseComplete> for CanisterGetSuccessorsResponseComplete {
+    type Error = ProxyDecodeError;
+    fn try_from(response: v1::CanisterGetSuccessorsResponseComplete) -> Result<Self, Self::Error> {
+        Ok(CanisterGetSuccessorsResponseComplete {
+            blocks: response.blocks,
+            next: response.next,
+        })
+    }
+}
+
 #[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterGetSuccessorsResponsePartial {
     /// A block that is partial (i.e. the full blob has not been sent).
@@ -624,4 +700,30 @@ pub struct CanisterGetSuccessorsResponsePartial {
     /// The number of pages in this response. The remaining pages need to be retrieved
     /// via `FollowUp` requests/responses.
     pub num_pages: u8,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn get_successors_response_complete_count_bytes() {
+        assert_eq!(
+            CanisterGetSuccessorsResponseComplete {
+                blocks: vec![],
+                next: vec![],
+            }
+            .count_bytes(),
+            0
+        );
+
+        assert_eq!(
+            CanisterGetSuccessorsResponseComplete {
+                blocks: vec![vec![1, 2, 3], vec![4, 5, 6]],
+                next: vec![vec![7, 8, 9, 10], vec![11, 12]],
+            }
+            .count_bytes(),
+            12
+        );
+    }
 }
