@@ -45,11 +45,10 @@
 
 bazel-test-all:
   extends:
-    - .ubuntu-docker
+    - .ubuntu-docker-k8s
     - .bazel-test-all
   tags:
     - dfinity
-    - docker
     - ubuntu
     # Run in ZH since BuildFarm is in ZH
     - zh
@@ -64,7 +63,6 @@ bazel-test-all-rebuild:
     - .bazel-rules-post-master
   tags:
     - dfinity
-    - docker
     - ubuntu
     # Run in ZH since BuildFarm is in ZH
     - zh

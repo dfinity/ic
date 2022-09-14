@@ -3,7 +3,7 @@ pre-commit:
     # Set the pre-commit home to this directory so we can cache it
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
-  extends: .ubuntu-nix-docker
+  extends: .ubuntu-nix-docker-k8s
   needs: []  # don't wait on other jobs
   stage: test
   script:
