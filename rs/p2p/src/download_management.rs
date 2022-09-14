@@ -513,12 +513,20 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Add the artifact hash to the receive check set.
         let charged_peer = artifact_tracker.peer_id;
-        self.receive_check_caches
-            .write()
-            .unwrap()
-            .get_mut(&charged_peer)
-            .unwrap()
-            .put(advert.integrity_hash.clone(), ());
+
+        let mut receive_check_caches = self.receive_check_caches.write().unwrap();
+        if receive_check_caches.contains_key(&charged_peer) {
+            receive_check_caches
+                .get_mut(&charged_peer)
+                .unwrap()
+                .put(advert.integrity_hash.clone(), ());
+        } else {
+            warn!(
+                every_n_seconds => 5,
+                self.log,
+                "Peer {:?} has no receive check cache", charged_peer
+            );
+        }
 
         // The artifact is complete and the integrity hash is okay.
         // Clean up the adverts for all peers:
