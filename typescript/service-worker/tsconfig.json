@@ -9,13 +9,7 @@
     "outDir": "./lib/esm",
     "rootDir": "."
   },
-  "files": [],
-  "references": [
-    { "path": "packages/agent" },
-    { "path": "packages/authentication" },
-    { "path": "packages/identity" }
-  ],
-  "include": ["packages/**/types/*"],
+  "include": ["src/**/*.ts"],
   "resolveJsonModule": true,
-  "exclude": ["**/src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts"]
 }
