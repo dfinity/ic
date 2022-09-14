@@ -1012,8 +1012,8 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
     if let Some(code_section) = module.code_section() {
         for func_body in code_section.bodies().iter() {
             let instructions = func_body.code().elements();
-            let function_size = instructions.len();
-            let complexity_count = instructions
+            let size = instructions.len();
+            let complexity = instructions
                 .iter()
                 .filter(|instruction| {
                     matches!(
@@ -1030,17 +1030,20 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
                 })
                 .count();
 
-            if complexity_count >= WASM_FUNCTION_COMPLEXITY_LIMIT {
-                return Err(WasmValidationError::FunctionComplexityTooHigh);
+            if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
+                return Err(WasmValidationError::FunctionComplexityTooHigh {
+                    complexity,
+                    allowed: WASM_FUNCTION_COMPLEXITY_LIMIT,
+                });
             }
 
-            if function_size >= WASM_FUNCTION_SIZE_LIMIT {
-                return Err(WasmValidationError::FunctionTooLarge);
+            if size > WASM_FUNCTION_SIZE_LIMIT {
+                return Err(WasmValidationError::FunctionTooLarge {
+                    size,
+                    allowed: WASM_FUNCTION_SIZE_LIMIT,
+                });
             } else {
-                max_function_size = cmp::max(
-                    max_function_size,
-                    NumInstructions::new(function_size as u64),
-                );
+                max_function_size = cmp::max(max_function_size, NumInstructions::new(size as u64));
             }
         }
     }
