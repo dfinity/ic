@@ -462,6 +462,7 @@ impl StreamHandlerImpl {
         // Remove the consumed messages from our outgoing stream.
         self.observe_gced_messages(stream.messages_begin(), signals_end);
         // stream.discard_messages_before(signals_end, reject_signals)
+        // Test
         let (collected_messages, rejected_messages) =
             stream.discard_messages_before(signals_end, reject_signals);
 
