@@ -123,6 +123,10 @@
 /rs/log_analyzer                        @dfinity-lab/teams/ic-testing-verification
 /rs/memory_tracker/                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                          @dfinity-lab/teams/message-routing-owners
+/rs/monitoring/adapter_metrics          @dfinity-lab/teams/networking-team
+/rs/monitoring/adapter_metrics_server   @dfinity-lab/teams/networking-team
+/rs/monitoring/adapter_metrics_service  @dfinity-lab/teams/networking-team
+/rs/monitoring/metrics_exporter         @dfinity-lab/teams/networking-team
 /rs/nervous_system/                     @dfinity-lab/teams/nns-team
 /rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
