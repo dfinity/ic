@@ -449,11 +449,25 @@ fn canonical_encoding_reject_response() {
 /// ```
 #[test]
 fn canonical_encoding_system_metadata() {
-    let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
-    metadata.generated_id_counter = 14;
-    metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
+    for certification_version in all_supported_versions() {
+        let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
+        metadata.generated_id_counter = 14;
+        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
 
-    assert_eq!("A2 00 0E 01 81 0F", as_hex(&encode_metadata(&metadata)));
+        if certification_version <= CertificationVersion::V9 {
+            // `generated_id_counter` encoded up to and including V9.
+            assert_eq!(
+                "A2 00 0E 01 81 0F",
+                as_hex(&encode_metadata(&metadata, certification_version))
+            );
+        } else {
+            // `generated_id_counter` not encoded starting with V10.
+            assert_eq!(
+                "A1 01 81 0F",
+                as_hex(&encode_metadata(&metadata, certification_version))
+            );
+        }
+    }
 }
 
 //

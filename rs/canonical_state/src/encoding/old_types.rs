@@ -191,3 +191,36 @@ impl From<StreamHeaderV6> for StreamHeader {
         }
     }
 }
+
+/// Canonical representation of state metadata leaf, before dropping `id_counter`.
+#[derive(Debug, Serialize)]
+pub struct SystemMetadataV9 {
+    /// The counter used to allocate canister ids.
+    pub id_counter: u64,
+    /// Hash bytes of the previous (partial) canonical state.
+    pub prev_state_hash: Option<Vec<u8>>,
+}
+
+impl
+    From<(
+        &ic_replicated_state::metadata_state::SystemMetadata,
+        CertificationVersion,
+    )> for SystemMetadataV9
+{
+    fn from(
+        (metadata, _certification_version): (
+            &ic_replicated_state::metadata_state::SystemMetadata,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        Self {
+            // When `generated_id_counter` is removed, initialize with the value of some
+            // other `SystemMetadata` field (as we need some arbitrary value for testing).
+            id_counter: metadata.generated_id_counter,
+            prev_state_hash: metadata
+                .prev_state_hash
+                .as_ref()
+                .map(|h| h.get_ref().0.clone()),
+        }
+    }
+}
