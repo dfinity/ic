@@ -37,6 +37,14 @@ For example:
 * Internet Identity: http://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
 * DSCVR: http://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
 
+### Developing locally on Safari
+
+Safari does not allow service workers to be served on non-secure connections, even on localhost. So to test the service worker locally first follow the setup instructions on [web.dev](https://web.dev/how-to-use-local-https/) (except for the final step to generate SSL certs), then generate SSL certificates by running `npm run create-ssl-certs`. This will create self-signed certificates that will be stored in a temporary folder called `certs`. Now you can run `npm run start-ssl`. Now you can test using HTTPS.
+
+For example:
+* Internet Identity: https://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
+* DSCVR: https://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
+
 ## Release
 1. Create MR that updates `version` in `package.json`
 2. Test the built artifact using testnet boundary node VMs
