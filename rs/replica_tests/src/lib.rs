@@ -799,8 +799,8 @@ impl LocalTestRuntime {
 
 /// A simple wrapper for bundling the universal canister and the test runtime.
 pub struct UniversalCanister {
-    runtime: LocalTestRuntime,
-    canister_id: CanisterId,
+    pub runtime: LocalTestRuntime,
+    pub canister_id: CanisterId,
 }
 
 impl<'a> UniversalCanister {

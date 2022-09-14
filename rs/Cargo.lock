@@ -7333,6 +7333,8 @@ dependencies = [
  "canister-test",
  "futures",
  "ic-base-types",
+ "ic-btc-types",
+ "ic-btc-types-internal",
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto",
