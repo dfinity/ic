@@ -144,10 +144,10 @@ if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
         mkdir -p "$PATH0" "$PATH1" artifacts
         curl -sfS --retry 5 --retry-delay 10 \
             "https://download.dfinity.systems/ic/$PATH0/$ARTIFACT" \
-            -o "$PATH0/update-img.tar.gz"
+            -o "$PATH0/$ARTIFACT"
         curl -sfS --retry 5 --retry-delay 10 \
             "https://download.dfinity.systems/ic/$PATH1/$ARTIFACT" \
-            -o "$PATH1/update-img.tar.gz"
+            -o "$PATH1/$ARTIFACT"
 
         pushd "$PATH0"
         tar -xzf "$ARTIFACT"
