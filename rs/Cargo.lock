@@ -2630,15 +2630,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ed25519"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37c66a534cbb46ab4ea03477eae19d5c22c01da8258030280b7bd9d8433fb6ef"
-dependencies = [
- "signature",
-]
-
-[[package]]
 name = "ed25519-consensus"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2650,20 +2641,6 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
-dependencies = [
- "curve25519-dalek",
- "ed25519",
- "rand 0.7.3",
- "serde",
- "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -3790,7 +3767,6 @@ dependencies = [
  "chrono",
  "clap 3.2.14",
  "cycles-minting-canister",
- "ed25519-dalek",
  "futures",
  "hex",
  "ic-admin-derive",
@@ -4192,7 +4168,6 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "backoff",
- "ed25519-dalek",
  "futures-util",
  "hex",
  "hyper",
@@ -4207,12 +4182,12 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-validator",
  "itertools 0.10.3",
- "libsecp256k1",
+ "libsecp256k1 0.7.1",
  "native-tls",
  "openssl",
  "prost",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -4226,12 +4201,13 @@ dependencies = [
 name = "ic-canister-client-sender"
 version = "0.8.0"
 dependencies = [
- "ed25519-dalek",
+ "ed25519-consensus",
  "ic-base-types",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-sha",
- "ic-interfaces",
  "ic-types 0.8.0",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -6056,7 +6032,6 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.1.0"
 dependencies = [
- "ed25519-dalek",
  "ic-canister-client",
  "ic-cdk 0.5.5",
  "ic-ledger-canister-blocks-synchronizer",
@@ -6065,8 +6040,8 @@ dependencies = [
  "ledger-canister",
  "log",
  "log4rs",
- "rand 0.7.3",
- "rand_distr 0.3.0",
+ "rand 0.8.5",
+ "rand_distr 0.4.3",
  "tempfile",
  "tokio",
 ]
@@ -6238,12 +6213,12 @@ dependencies = [
 name = "ic-nervous-system-common-test-keys"
 version = "0.8.0"
 dependencies = [
- "ed25519-dalek",
  "ic-base-types",
+ "ic-canister-client-sender",
  "ic-types 0.8.0",
  "lazy_static",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -6389,7 +6364,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "lazy_static",
  "ledger-canister",
- "libsecp256k1",
+ "libsecp256k1 0.5.0",
  "prost",
  "rand 0.8.5",
  "serde",
@@ -6517,7 +6492,6 @@ dependencies = [
  "dfn_core",
  "dfn_json",
  "dfn_protobuf",
- "ed25519-dalek",
  "futures",
  "futures-util",
  "hex",
@@ -6551,14 +6525,13 @@ dependencies = [
  "ic-types-test-utils",
  "lazy_static",
  "ledger-canister",
- "libsecp256k1",
+ "libsecp256k1 0.5.0",
  "lifeline",
  "maplit",
  "on_wire",
  "phantom_newtype",
  "prost",
- "rand 0.7.3",
- "rand_core 0.5.1",
+ "rand 0.8.5",
  "randomkit",
  "registry-canister",
  "rustc-hash",
@@ -6797,14 +6770,13 @@ dependencies = [
 name = "ic-prober"
 version = "0.8.0"
 dependencies = [
- "ed25519-dalek",
  "ic-canister-client",
  "ic-metrics",
  "ic-types 0.8.0",
  "lazy_static",
  "prometheus 0.12.0",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "reqwest",
  "slog",
  "slog-term",
@@ -7478,7 +7450,6 @@ name = "ic-rosetta-test-utils"
 version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
- "ed25519-dalek",
  "hex",
  "ic-canister-client",
  "ic-canister-client-sender",
@@ -7489,8 +7460,8 @@ dependencies = [
  "ledger-canister",
  "log",
  "nix 0.23.0",
- "rand 0.7.3",
- "rand_distr 0.3.0",
+ "rand 0.8.5",
+ "rand_distr 0.4.3",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -7513,7 +7484,6 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_json",
- "ed25519-dalek",
  "futures",
  "hex",
  "ic-base-types",
@@ -7551,8 +7521,6 @@ dependencies = [
  "nix 0.23.0",
  "on_wire",
  "prost",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest",
  "serde",
@@ -8186,13 +8154,13 @@ dependencies = [
 name = "ic-test-identity"
 version = "0.8.0"
 dependencies = [
- "ed25519-dalek",
+ "ic-canister-client-sender",
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
  "ic-types 0.8.0",
  "lazy_static",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -8543,7 +8511,6 @@ dependencies = [
  "chrono",
  "clap 3.2.14",
  "console 0.11.3",
- "ed25519-dalek",
  "futures",
  "hex",
  "hyper",
@@ -8560,8 +8527,6 @@ dependencies = [
  "lazy_static",
  "leaky-bucket",
  "prometheus 0.12.0",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
  "regex",
  "serde",
  "serde_cbor",
@@ -9088,7 +9053,6 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "digest 0.9.0",
- "ed25519-dalek",
  "hex",
  "ic-base-types",
  "ic-canister-client-sender",
@@ -9108,8 +9072,8 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "prost-derive",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -9215,10 +9179,29 @@ dependencies = [
  "base64 0.12.3",
  "digest 0.9.0",
  "hmac-drbg",
- "libsecp256k1-core",
- "libsecp256k1-gen-ecmult",
- "libsecp256k1-gen-genmult",
+ "libsecp256k1-core 0.2.1",
+ "libsecp256k1-gen-ecmult 0.2.0",
+ "libsecp256k1-gen-genmult 0.2.0",
  "rand 0.7.3",
+ "serde",
+ "sha2 0.9.9",
+ "typenum",
+]
+
+[[package]]
+name = "libsecp256k1"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95b09eff1b35ed3b33b877ced3a691fc7a481919c7e29c53c906226fcf55e2a1"
+dependencies = [
+ "arrayref",
+ "base64 0.13.0",
+ "digest 0.9.0",
+ "hmac-drbg",
+ "libsecp256k1-core 0.3.0",
+ "libsecp256k1-gen-ecmult 0.3.0",
+ "libsecp256k1-gen-genmult 0.3.0",
+ "rand 0.8.5",
  "serde",
  "sha2 0.9.9",
  "typenum",
@@ -9236,12 +9219,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "libsecp256k1-core"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5be9b9bb642d8522a44d533eab56c16c738301965504753b03ad1de3425d5451"
+dependencies = [
+ "crunchy",
+ "digest 0.9.0",
+ "subtle",
+]
+
+[[package]]
 name = "libsecp256k1-gen-ecmult"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32239626ffbb6a095b83b37a02ceb3672b2443a87a000a884fc3c4d16925c9c0"
 dependencies = [
- "libsecp256k1-core",
+ "libsecp256k1-core 0.2.1",
+]
+
+[[package]]
+name = "libsecp256k1-gen-ecmult"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3038c808c55c87e8a172643a7d87187fc6c4174468159cb3090659d55bcb4809"
+dependencies = [
+ "libsecp256k1-core 0.3.0",
 ]
 
 [[package]]
@@ -9250,7 +9253,16 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76acb433e21d10f5f9892b1962c2856c58c7f39a9e4bd68ac82b9436a0ffd5b9"
 dependencies = [
- "libsecp256k1-core",
+ "libsecp256k1-core 0.2.1",
+]
+
+[[package]]
+name = "libsecp256k1-gen-genmult"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
+dependencies = [
+ "libsecp256k1-core 0.3.0",
 ]
 
 [[package]]
@@ -13314,7 +13326,6 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_protobuf",
- "ed25519-dalek",
  "flate2",
  "fs_extra",
  "futures",
@@ -13396,10 +13407,7 @@ dependencies = [
  "proxy_canister",
  "quickcheck",
  "rand 0.8.5",
- "rand_chacha 0.2.2",
  "rand_chacha 0.3.1",
- "rand_core 0.5.1",
- "rand_core 0.6.3",
  "rayon",
  "regex",
  "registry-canister",

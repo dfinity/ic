@@ -27,7 +27,6 @@ use ledger_canister::{
 use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
-use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcHandle;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
@@ -1604,7 +1603,7 @@ async fn raw_construction(ros: &RosettaApiHandle, operation: &str, req: Value) -
 fn sign(payload: &Value, keypair: &Arc<EdKeypair>) -> Value {
     let hex_bytes: &str = payload.get("hex_bytes").unwrap().as_str().unwrap();
     let bytes = from_hex(hex_bytes).unwrap();
-    let signature_bytes = keypair.sign(&bytes).to_bytes();
+    let signature_bytes = keypair.sign(&bytes);
     let hex_bytes = to_hex(&signature_bytes);
     json!(hex_bytes)
 }

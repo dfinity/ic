@@ -392,20 +392,20 @@ async fn main() {
     let (sender, pubkey_bytes) = match principal_id {
         None => (
             AgentSender::from_keypair(&TEST_IDENTITY_KEYPAIR),
-            TEST_IDENTITY_KEYPAIR.public.to_bytes(),
+            TEST_IDENTITY_KEYPAIR.public_key.to_vec(),
         ),
         Some(_principal_id) => match matches.value_of("pem-file") {
             Some(f) => {
                 let pem_file = fs::read_to_string(f).unwrap();
-                let keypair: ed25519_dalek::Keypair = { get_pair(Some(&pem_file)) };
+                let keypair: ic_canister_client::Ed25519KeyPair = { get_pair(Some(&pem_file)) };
                 (
                     AgentSender::from_keypair(&keypair),
-                    keypair.public.to_bytes(),
+                    keypair.public_key.to_vec(),
                 )
             }
             None => (
                 AgentSender::from_keypair(&TEST_IDENTITY_KEYPAIR_HARD_CODED),
-                TEST_IDENTITY_KEYPAIR_HARD_CODED.public.to_bytes(),
+                TEST_IDENTITY_KEYPAIR_HARD_CODED.public_key.to_vec(),
             ),
         },
     };

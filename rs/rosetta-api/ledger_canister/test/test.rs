@@ -31,11 +31,11 @@ struct TestQueryBlocksArgs {
 }
 
 fn create_sender(i: u64) -> Sender {
+    use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng;
     let keypair = {
         let mut rng = ChaChaRng::seed_from_u64(i);
-        ed25519_dalek::Keypair::generate(&mut rng)
+        ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng)
     };
     Sender::from_keypair(&keypair)
 }

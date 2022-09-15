@@ -434,7 +434,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.4",
             ),
             "libsecp256k1": crate.spec(
-                version = "^0.5.0",
+                version = "^0.7.0",
             ),
             "linked-hash-map": crate.spec(
                 version = "^0.5.3",

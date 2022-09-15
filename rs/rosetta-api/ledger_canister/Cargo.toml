@@ -48,12 +48,11 @@ path = "src/archive_node.rs"
 
 [dev-dependencies]
 canister-test = {path = "../../rust_canisters/canister_test"}
-ed25519-dalek = "1.0.1"
 ic-canister-client-sender = {path = "../../canister_client/sender"}
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
-rand_chacha = "0.2.2"
-rand_core = "0.5.1"
+rand = "0.8"
+rand_chacha = "0.3"
 tempfile = "3.1.0"
 
 [[test]]

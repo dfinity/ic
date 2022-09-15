@@ -34,7 +34,6 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
-ic-nervous-system-common-test-keys = {path = "../../nervous_system/common/test_keys"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
@@ -69,6 +68,7 @@ proptest = "1.0"
 pretty_assertions = "1.0"
 ic-base-types = { path = "../../types/base_types" }
 ic-nns-common = { path = "../../nns/common" }
+ic-nervous-system-common-test-keys = {path = "../../nervous_system/common/test_keys"}
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }

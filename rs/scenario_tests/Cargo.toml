@@ -14,7 +14,6 @@ crossbeam-channel = "0.5.5"
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
-ed25519-dalek = "1.0.1"
 futures = "0.3.6"
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types"}
@@ -48,8 +47,6 @@ lazy_static = "1.4.0"
 nix = "0.23.0"
 on_wire = { path = "../rust_canisters/on_wire" }
 prost = "0.10.4"
-rand = "0.8"
-rand_chacha = "0.3"
 registry-canister = { path = "../registry/canister" }
 reqwest = "0.11.1"
 serde = { version = "1.0.99", features = [ "derive" ] }

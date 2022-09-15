@@ -18,7 +18,7 @@ use cycles_minting_canister::{
 };
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
 use ic_certification::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
@@ -1059,7 +1059,7 @@ impl UserHandle {
     pub fn new(
         ic_url: &Url,
         http_client: &HttpClient,
-        user_keypair: &ed25519_dalek::Keypair,
+        user_keypair: &Ed25519KeyPair,
         ledger_id: CanisterId,
         cmc_id: CanisterId,
     ) -> Self {

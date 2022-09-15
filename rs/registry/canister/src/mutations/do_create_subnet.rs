@@ -444,7 +444,7 @@ mod test {
     #[test]
     #[should_panic(
         expected = "The requested ECDSA key 'Secp256k1:fake_key_id' is not available in targeted \
-                    subnet '57ljl-u5ybi-e2u64-rw6bp-jsfyf-u5ibb-phmax-pfhff-fbfkx-5l3vl-mae'"
+                    subnet 'l5ckc-b6p6l-4o5gj-fkfvl-3sq56-7vw6s-d6nof-q4j4j-jzead-nnwim-vqe'"
     )]
     fn should_panic_if_ecdsa_keys_non_existing_from_requested_subnet() {
         let key_id = EcdsaKeyId {
