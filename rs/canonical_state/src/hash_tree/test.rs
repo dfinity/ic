@@ -1,11 +1,10 @@
 use super::*;
 use crate::lazy_tree::LazyFork;
 use ic_crypto_tree_hash::{
-    flatmap, lookup_path, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
-    MixedHashTree, Witness, WitnessGenerator, WitnessGeneratorImpl,
+    flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
+    Witness, WitnessGenerator, WitnessGeneratorImpl,
 };
 use proptest::prelude::*;
-use std::convert::TryInto;
 use std::sync::Arc;
 
 fn arbitrary_leaf() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
@@ -161,19 +160,18 @@ fn test_non_existence_proof() {
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 
-    let t: LabeledTree<_> = ht_witness.clone().try_into().unwrap();
     assert!(
-        lookup_path(&t, &[b"Z"]).is_none(),
+        ht_witness.lookup(&[b"Z"]).is_absent(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"a"]).is_some(),
+        ht_witness.lookup(&[b"a"]).is_found(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"c"]).is_none(),
+        ht_witness.lookup(&[b"c"]).is_unknown(),
         "witness: {:?}",
         ht_witness
     );
@@ -184,19 +182,18 @@ fn test_non_existence_proof() {
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 
-    let t: LabeledTree<_> = ht_witness.clone().try_into().unwrap();
     assert!(
-        lookup_path(&t, &[b"a"]).is_some(),
+        ht_witness.lookup(&[b"a"]).is_found(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"b"]).is_none(),
+        ht_witness.lookup(&[b"b"]).is_absent(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"c"]).is_some(),
+        ht_witness.lookup(&[b"c"]).is_found(),
         "witness: {:?}",
         ht_witness
     );
@@ -207,19 +204,18 @@ fn test_non_existence_proof() {
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 
-    let t: LabeledTree<_> = ht_witness.clone().try_into().unwrap();
     assert!(
-        lookup_path(&t, &[b"a"]).is_none(),
+        ht_witness.lookup(&[b"a"]).is_unknown(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"c"]).is_some(),
+        ht_witness.lookup(&[b"c"]).is_found(),
         "witness: {:?}",
         ht_witness
     );
     assert!(
-        lookup_path(&t, &[b"d"]).is_none(),
+        ht_witness.lookup(&[b"d"]).is_absent(),
         "witness: {:?}",
         ht_witness
     );
