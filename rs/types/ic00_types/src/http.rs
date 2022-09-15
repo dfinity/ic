@@ -1,12 +1,37 @@
 use crate::Payload;
-use candid::{CandidType, Deserialize};
+use candid::{
+    parser::types::FuncMode,
+    types::{Function, Serializer, Type},
+    CandidType, Deserialize,
+};
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 
+/// Encapsulating the corresponding candid `func` type.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransformFunc(pub candid::Func);
+
+impl CandidType for TransformFunc {
+    fn _ty() -> Type {
+        Type::Func(Function {
+            modes: vec![FuncMode::Query],
+            args: vec![CanisterHttpResponsePayload::ty()],
+            rets: vec![CanisterHttpResponsePayload::ty()],
+        })
+    }
+
+    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
+        serializer.serialize_function(self.0.principal.as_slice(), &self.0.method)
+    }
+}
+
+/// Enum used for encoding/decoding:
+/// `variant { function: func (http_response) -> (http_response) query }`
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum TransformType {
+    /// Reference function with signature: `func (http_response) -> (http_response) query`.
     #[serde(rename = "function")]
-    Function(candid::Func),
+    Function(TransformFunc),
 }
 
 /// Struct used for encoding/decoding
@@ -37,7 +62,7 @@ impl CanisterHttpRequestArgs {
         self.transform
             .as_ref()
             .map(|transform_type| match transform_type {
-                TransformType::Function(func) => PrincipalId::from(func.principal),
+                TransformType::Function(func) => PrincipalId::from(func.0.principal),
             })
     }
 
@@ -46,7 +71,7 @@ impl CanisterHttpRequestArgs {
         self.transform
             .as_ref()
             .map(|transform_type| match transform_type {
-                TransformType::Function(func) => func.method.clone(),
+                TransformType::Function(func) => func.0.method.clone(),
             })
     }
 }
