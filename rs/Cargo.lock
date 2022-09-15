@@ -963,6 +963,7 @@ dependencies = [
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus",
  "prometheus 0.13.1",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_cbor",

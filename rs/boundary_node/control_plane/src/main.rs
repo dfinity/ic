@@ -24,6 +24,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use opentelemetry::{baggage::BaggageExt, global, sdk::Resource, trace::FutureExt, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
+use rand::seq::SliceRandom;
 use registry::{RoutingTable, Subnet};
 use tokio::{sync::Semaphore, task};
 use tracing::info;
@@ -62,6 +63,8 @@ struct Cli {
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
+    let mut rng = rand::thread_rng();
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt()
             .json()
@@ -81,9 +84,22 @@ async fn main() -> Result<(), Error> {
 
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
 
+    // Choose a random subset of NNS endpoints
+    // Explanation:
+    //      This is a compromise between the risk of a faulty replica and not querying enough replicas.
+    //      The `nns_data_provider` fails when encountering a bad replica, in which case the control-plane will fail to start.
+    let nns_urls: Vec<Url> = cli
+        .nns_urls
+        .choose_multiple(
+            &mut rng, // rng
+            3,        // amount
+        )
+        .cloned()
+        .collect();
+
     let registry_data_provider = ic_registry_nns_data_provider::create_nns_data_provider(
         tokio::runtime::Handle::current(), // rt
-        cli.nns_urls,                      // urls
+        nns_urls,                          // urls
         None,
     );
 
