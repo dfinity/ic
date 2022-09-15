@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution, SwapDistribution,
-    TreasuryDistribution,
+    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+    SwapDistribution, TreasuryDistribution,
 };
-use crate::{AirdropDistribution, SnsCanisterIds};
+use crate::SnsCanisterIds;
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_icrc1::Account;
@@ -15,6 +15,7 @@ use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
 use ic_sns_governance::pb::v1::{
     neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
 };
+use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 
@@ -46,7 +47,7 @@ impl FractionalDeveloperVotingPower {
 
     /// Given the configuration of the different buckets, create the neurons that will be available
     /// at genesis. These neurons will have reduced functionality until after the
-    /// decentralization swap. Return a map of NeuronId to Neuron.
+    /// decentralization sale. Return a map of NeuronId to Neuron.
     pub fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
@@ -91,7 +92,10 @@ impl FractionalDeveloperVotingPower {
     }
 
     /// Validate an instance of FractionalDeveloperVotingPower
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(
+        &self,
+        nervous_system_parameters: &NervousSystemParameters,
+    ) -> anyhow::Result<()> {
         let developer_distribution = self
             .developer_distribution
             .as_ref()
@@ -111,7 +115,11 @@ impl FractionalDeveloperVotingPower {
             .as_ref()
             .ok_or_else(|| anyhow!("Error: airdrop_distribution must be specified"))?;
 
-        self.validate_neurons(developer_distribution, airdrop_distribution)?;
+        self.validate_neurons(
+            developer_distribution,
+            airdrop_distribution,
+            nervous_system_parameters,
+        )?;
 
         match Self::get_total_distributions(&airdrop_distribution.airdrop_neurons) {
             Ok(_) => (),
@@ -147,11 +155,14 @@ impl FractionalDeveloperVotingPower {
         voting_power_percentage_multiplier: u64,
         parameters: &NervousSystemParameters,
     ) -> anyhow::Result<Neuron> {
-        let principal_id = neuron_distribution.controller()?;
-        let stake_e8s = neuron_distribution.stake_e8s;
+        let (principal_id, stake_e8s, subaccount_memo, dissolve_delay_seconds) = (
+            neuron_distribution.controller()?,
+            neuron_distribution.stake_e8s,
+            neuron_distribution.memo,
+            neuron_distribution.dissolve_delay_seconds,
+        );
 
-        let subaccount =
-            compute_neuron_staking_subaccount(principal_id, DEFAULT_NEURON_STAKING_NONCE);
+        let subaccount = compute_neuron_staking_subaccount(principal_id, subaccount_memo);
 
         let permission = NeuronPermission {
             principal: Some(principal_id),
@@ -169,12 +180,6 @@ impl FractionalDeveloperVotingPower {
             .expect("NervousSystemParameters.default_followees must be present")
             .followees
             .clone();
-
-        let dissolve_delay_seconds = parameters
-            .neuron_minimum_dissolve_delay_to_vote_seconds
-            .expect(
-            "NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be present",
-        );
 
         Ok(Neuron {
             id: Some(NeuronId {
@@ -194,7 +199,18 @@ impl FractionalDeveloperVotingPower {
         &self,
         developer_distribution: &DeveloperDistribution,
         airdrop_distribution: &AirdropDistribution,
+        nervous_system_parameters: &NervousSystemParameters,
     ) -> anyhow::Result<()> {
+        let neuron_minimum_dissolve_delay_to_vote_seconds = nervous_system_parameters
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .as_ref()
+            .expect("Expected NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds to be set");
+
+        let max_dissolve_delay_seconds = nervous_system_parameters
+            .max_dissolve_delay_seconds
+            .as_ref()
+            .expect("Expected NervousSystemParameters.max_dissolve_delay_seconds to be set");
+
         let missing_developer_principals_count = developer_distribution
             .developer_neurons
             .iter()
@@ -213,7 +229,7 @@ impl FractionalDeveloperVotingPower {
             .iter()
             .map(|neuron_distribution| {
                 (
-                    neuron_distribution.controller,
+                    (neuron_distribution.controller, neuron_distribution.memo),
                     neuron_distribution.stake_e8s,
                 )
             })
@@ -243,7 +259,7 @@ impl FractionalDeveloperVotingPower {
             .iter()
             .map(|neuron_distribution| {
                 (
-                    neuron_distribution.controller,
+                    (neuron_distribution.controller, neuron_distribution.memo),
                     neuron_distribution.stake_e8s,
                 )
             })
@@ -251,7 +267,7 @@ impl FractionalDeveloperVotingPower {
 
         if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
             return Err(anyhow!(
-                "Error: Duplicate controllers detected in developer_neurons"
+                "Error: Duplicate controllers detected in airdrop_neurons"
             ));
         }
 
@@ -259,7 +275,7 @@ impl FractionalDeveloperVotingPower {
         for developer_principal in deduped_dev_neurons.keys() {
             if deduped_airdrop_neurons.contains_key(developer_principal) {
                 // Safe to unwrap due to the checks done above
-                duplicated_neuron_principals.push(developer_principal.unwrap())
+                duplicated_neuron_principals.push(developer_principal.0.unwrap())
             }
         }
 
@@ -268,6 +284,40 @@ impl FractionalDeveloperVotingPower {
                 "Error: The following controllers are present in AirdropDistribution \
                 and DeveloperDistribution: {:?}",
                 duplicated_neuron_principals
+            ));
+        }
+
+        let configured_at_least_one_voting_neuron = developer_distribution
+            .developer_neurons
+            .iter()
+            .chain(&airdrop_distribution.airdrop_neurons)
+            .any(|neuron_distribution| {
+                neuron_distribution.dissolve_delay_seconds
+                    >= *neuron_minimum_dissolve_delay_to_vote_seconds
+            });
+
+        if !configured_at_least_one_voting_neuron {
+            return Err(anyhow!(
+                "Error: There needs to be at least one voting-eligible neuron configured. To be \
+                 eligible to vote, a neuron must have dissolve_delay_seconds of at least {}",
+                neuron_minimum_dissolve_delay_to_vote_seconds
+            ));
+        }
+
+        let misconfigured_dissolve_delay_principals: Vec<PrincipalId> = developer_distribution
+            .developer_neurons
+            .iter()
+            .chain(&airdrop_distribution.airdrop_neurons)
+            .filter(|neuron_distribution| {
+                neuron_distribution.dissolve_delay_seconds > *max_dissolve_delay_seconds
+            })
+            .map(|neuron_distribution| neuron_distribution.controller.unwrap())
+            .collect();
+
+        if !misconfigured_dissolve_delay_principals.is_empty() {
+            return Err(anyhow!(
+                "Error: The following PrincipalIds have a dissolve_delay_seconds configured greater than \
+                 the allowed max_dissolve_delay_seconds ({}): {:?}", max_dissolve_delay_seconds, misconfigured_dissolve_delay_principals
             ));
         }
 
@@ -438,6 +488,26 @@ impl FractionalDeveloperVotingPower {
             .as_ref()
             .ok_or_else(|| anyhow!("Expected airdrop distribution to exist"))
     }
+
+    /// This gives us some values that work for testing but would not be useful
+    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    pub fn with_valid_values_for_testing() -> Self {
+        FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
+            }),
+            treasury_distribution: Some(TreasuryDistribution {
+                total_e8s: 500_000_000,
+            }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 10_000_000_000,
+                initial_swap_amount_e8s: 10_000_000_000,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        }
+    }
 }
 
 impl NeuronDistribution {
@@ -446,18 +516,27 @@ impl NeuronDistribution {
         self.controller
             .ok_or_else(|| anyhow!("Expected controller to exist"))
     }
+
+    /// This gives us some values that work for testing but would not be useful
+    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    pub fn with_valid_values_for_testing() -> Self {
+        NeuronDistribution {
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            stake_e8s: 100_000_000,
+            memo: 0,
+            dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::distributions::{
-        DEFAULT_NEURON_STAKING_NONCE, SWAP_SUBACCOUNT_NONCE, TREASURY_SUBACCOUNT_NONCE,
-    };
+    use crate::distributions::{SWAP_SUBACCOUNT_NONCE, TREASURY_SUBACCOUNT_NONCE};
     use crate::pb::v1::{
-        DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
-        SwapDistribution, TreasuryDistribution,
+        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
+        NeuronDistribution, SwapDistribution, TreasuryDistribution,
     };
-    use crate::{AirdropDistribution, SnsCanisterIds, Tokens};
+    use crate::{SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1::Account;
     use ic_nervous_system_common::ledger::{
@@ -469,6 +548,7 @@ mod test {
     use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
+    use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -531,10 +611,12 @@ mod test {
                     NeuronDistribution {
                         controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                         stake_e8s: neuron_stake,
+                        ..NeuronDistribution::with_valid_values_for_testing()
                     },
                     NeuronDistribution {
                         controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                         stake_e8s: neuron_stake,
+                        ..NeuronDistribution::with_valid_values_for_testing()
                     },
                 ],
             }),
@@ -549,6 +631,7 @@ mod test {
                 airdrop_neurons: vec![NeuronDistribution {
                     controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
                     stake_e8s: neuron_stake,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 }],
             }),
         };
@@ -625,11 +708,17 @@ mod test {
 
     #[test]
     fn test_initial_neurons() {
+        // Different token values
         let developer_neuron_stake = 100_000_000;
         let airdrop_neuron_stake = 50_000;
         let swap_total = 1_000_000_000;
         let swap_initial_round = 400_000_000;
         let treasury_total = 1_000_000_000;
+
+        // Different dissolve delays
+        let neuron_1_dissolve_delay = 6 * ONE_MONTH_SECONDS;
+        let neuron_2_dissolve_delay = ONE_YEAR_SECONDS;
+        let neuron_3_dissolve_delay = 2 * ONE_YEAR_SECONDS;
 
         let initial_token_distribution = FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
@@ -637,10 +726,14 @@ mod test {
                     NeuronDistribution {
                         controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                         stake_e8s: developer_neuron_stake,
+                        dissolve_delay_seconds: neuron_1_dissolve_delay,
+                        memo: 0,
                     },
                     NeuronDistribution {
                         controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                         stake_e8s: developer_neuron_stake,
+                        dissolve_delay_seconds: neuron_2_dissolve_delay,
+                        memo: 0,
                     },
                 ],
             }),
@@ -655,6 +748,8 @@ mod test {
                 airdrop_neurons: vec![NeuronDistribution {
                     controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
                     stake_e8s: airdrop_neuron_stake,
+                    memo: 0,
+                    dissolve_delay_seconds: neuron_3_dissolve_delay,
                 }],
             }),
         };
@@ -667,15 +762,15 @@ mod test {
 
         let neuron_id_1 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_1_OWNER_PRINCIPAL,
-            DEFAULT_NEURON_STAKING_NONCE,
+            0,
         ));
         let neuron_id_2 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_2_OWNER_PRINCIPAL,
-            DEFAULT_NEURON_STAKING_NONCE,
+            0,
         ));
         let neuron_id_3 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
             *TEST_NEURON_3_OWNER_PRINCIPAL,
-            DEFAULT_NEURON_STAKING_NONCE,
+            0,
         ));
 
         // Validate they exist
@@ -719,22 +814,18 @@ mod test {
         expected_neuron_permission.principal = Some(*TEST_NEURON_3_OWNER_PRINCIPAL);
         assert_eq!(neuron_3.permissions, vec![expected_neuron_permission]);
 
-        // That they have a dissolve delay
-        let expected_dissolve_delay = DissolveState::DissolveDelaySeconds(
-            parameters
-                .neuron_minimum_dissolve_delay_to_vote_seconds
-                .unwrap(),
-        );
-
         assert_eq!(
             neuron_1.dissolve_state,
-            Some(expected_dissolve_delay.clone())
+            Some(DissolveState::DissolveDelaySeconds(neuron_1_dissolve_delay))
         );
         assert_eq!(
             neuron_2.dissolve_state,
-            Some(expected_dissolve_delay.clone())
+            Some(DissolveState::DissolveDelaySeconds(neuron_2_dissolve_delay))
         );
-        assert_eq!(neuron_3.dissolve_state, Some(expected_dissolve_delay));
+        assert_eq!(
+            neuron_3.dissolve_state,
+            Some(DissolveState::DissolveDelaySeconds(neuron_3_dissolve_delay))
+        );
 
         // That they have the correct voting_power_percentage_multiplier. The developer neurons
         // (neuron_1, neuron_2) should have the voting_power_percentage_multiplier, and the airdrop
@@ -760,59 +851,82 @@ mod test {
         // A basic valid FractionalDeveloperVotingPower
         let mut initial_token_distribution = FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
-                developer_neurons: Default::default(),
+                developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
             }),
             treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 100,
-                initial_swap_amount_e8s: 1,
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 100_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
                 airdrop_neurons: Default::default(),
             }),
         };
+
+        // A basic valid NervousSystemParameter
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+
         // Validate that the initial version is valid
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The developer_distribution being absent should fail validation
         initial_token_distribution.developer_distribution = None;
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Check that returning to a default is valid
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
-            developer_neurons: Default::default(),
+            developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
-        // Duplicate principals should fail validation
+        // Duplicate principals + memo combos should fail validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
-        // Unique principals should pass validation
+        // Unique principals + memo combo should pass validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    memo: 1,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The sum of the distributions MUST fit into a u64
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -820,14 +934,18 @@ mod test {
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     stake_e8s: u64::MAX,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                     stake_e8s: u64::MAX,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // The sum of the distributions can equal the swap_distribution.total_e8s
         // which is set to 100 at the beginning of the test
@@ -836,14 +954,18 @@ mod test {
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     stake_e8s: 50,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                     stake_e8s: 50,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The sum of the distributions being greater than swap_distribution.total_e8s should fail
         // validation
@@ -851,39 +973,90 @@ mod test {
             developer_neurons: vec![
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 50,
+                    stake_e8s: 500_000_000,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    stake_e8s: 51,
+                    stake_e8s: 500_000_001,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Reset to a valid developer_distribution
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![NeuronDistribution {
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                 stake_e8s: 50,
+                ..NeuronDistribution::with_valid_values_for_testing()
             }],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
-        // Using the same controller in the AirdropDistribution and DeveloperDistribution should fail
+        // Using the same controller + memo in the AirdropDistribution and DeveloperDistribution should fail
         // validation
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: vec![NeuronDistribution {
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                 stake_e8s: 50,
+                ..NeuronDistribution::with_valid_values_for_testing()
             }],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: Default::default(),
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
+
+        // There must be at least one neuron with the dissolve_delay greater than or equal to
+        // neuron_minimum_dissolve_delay_to_vote_seconds.
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution {
+                dissolve_delay_seconds: nervous_system_parameters
+                    .neuron_minimum_dissolve_delay_to_vote_seconds
+                    .as_ref()
+                    .unwrap()
+                    - 1,
+                ..NeuronDistribution::with_valid_values_for_testing()
+            }],
+        });
+
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
+        });
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
+
+        // Any neurons are configured with a dissolve_delay over the maximum should fail
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution {
+                dissolve_delay_seconds: nervous_system_parameters
+                    .max_dissolve_delay_seconds
+                    .as_ref()
+                    .unwrap()
+                    + 1,
+                ..NeuronDistribution::with_valid_values_for_testing()
+            }],
+        });
+
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
+        });
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
     }
 
     #[test]
@@ -891,34 +1064,49 @@ mod test {
         // A basic valid FractionalDeveloperVotingPower
         let mut initial_token_distribution = FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
-                developer_neurons: Default::default(),
+                developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
             }),
             treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 100,
-                initial_swap_amount_e8s: 1,
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 100_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
                 airdrop_neurons: Default::default(),
             }),
         };
+
+        // A basic valid NervousSystemParameter
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+
         // Validate that the initial version is valid
-        assert!(initial_token_distribution.validate().is_ok());
+        initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .expect("");
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The treasury_distribution being absent should fail validation
         initial_token_distribution.treasury_distribution = None;
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Check that returning to a default is valid
         initial_token_distribution.treasury_distribution =
             Some(TreasuryDistribution { total_e8s: 0 });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // Check that the max value is valid
         initial_token_distribution.treasury_distribution = Some(TreasuryDistribution {
             total_e8s: u64::MAX,
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
     }
 
     #[test]
@@ -926,44 +1114,58 @@ mod test {
         // A basic valid FractionalDeveloperVotingPower
         let mut initial_token_distribution = FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
-                developer_neurons: Default::default(),
+                developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
             }),
             treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 100,
-                initial_swap_amount_e8s: 1,
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 100_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
                 airdrop_neurons: Default::default(),
             }),
         };
+
+        // A basic valid NervousSystemParameter
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+
         // Validate that the initial version is valid
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The swap_distribution being absent should fail validation
         initial_token_distribution.swap_distribution = None;
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Check that returning to a default is valid
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
-            initial_swap_amount_e8s: 1,
-            total_e8s: 1,
+            total_e8s: 1_000_000_000,
+            initial_swap_amount_e8s: 100_000_000,
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // initial_swap_amount_e8s must be greater than 0
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
             initial_swap_amount_e8s: 0,
             total_e8s: 0,
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // initial_swap_amount_e8s cannot be greater than total_e8s
         initial_token_distribution.swap_distribution = Some(SwapDistribution {
             initial_swap_amount_e8s: 10,
             total_e8s: 5,
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
     }
 
     #[test]
@@ -975,55 +1177,78 @@ mod test {
             }),
             treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
             swap_distribution: Some(SwapDistribution {
-                total_e8s: 100,
-                initial_swap_amount_e8s: 1,
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 100_000_000,
             }),
             airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
+                airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
             }),
         };
+
+        // A basic valid NervousSystemParameter
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+
         // Validate that the initial version is valid
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The airdrop_distribution being absent should fail validation
         initial_token_distribution.airdrop_distribution = None;
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Check that returning to a default is valid
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: Default::default(),
+            airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
-        // Duplicate principals should fail validation
+        // Duplicate principals + memo should fail validation
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: vec![
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
-        // Unique principals should pass validation
+        // Unique principals + memo should pass validation
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: vec![
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 0,
+                    ..NeuronDistribution::with_valid_values_for_testing()
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    memo: 1,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    stake_e8s: 1,
+                    memo: 1,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // The sum of the distributions MUST fit into a u64
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
@@ -1031,34 +1256,34 @@ mod test {
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     stake_e8s: u64::MAX,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
                 NeuronDistribution {
                     controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                     stake_e8s: u64::MAX,
+                    ..NeuronDistribution::with_valid_values_for_testing()
                 },
             ],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
 
         // Reset to a valid airdrop_distribution
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![NeuronDistribution {
-                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                stake_e8s: 50,
-            }],
+            airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution.validate().is_ok());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_ok());
 
         // Using the same controller in the AirdropDistribution and DeveloperDistribution should fail
         // validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
-            developer_neurons: vec![NeuronDistribution {
-                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                stake_e8s: 50,
-            }],
+            developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
         });
-        assert!(initial_token_distribution.validate().is_err());
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
     }
-
-    // TODO NNS1-1465: Add tests for fractional developer voting power
 }
