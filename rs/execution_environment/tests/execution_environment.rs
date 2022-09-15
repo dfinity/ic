@@ -6,7 +6,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    TransformType, IC_00,
+    TransformFunc, TransformType, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1426,10 +1426,10 @@ fn execute_canister_http_request() {
         headers: Vec::new(),
         body: None,
         method: HttpMethod::GET,
-        transform: Some(TransformType::Function(candid::Func {
+        transform: Some(TransformType::Function(TransformFunc(candid::Func {
             principal: caller_canister.get().0,
             method: transform_method_name.clone(),
-        })),
+        }))),
     };
 
     // Create request to HTTP_REQUEST method.
@@ -1483,10 +1483,10 @@ fn execute_canister_http_request_disabled() {
         headers: Vec::new(),
         body: None,
         method: HttpMethod::GET,
-        transform: Some(TransformType::Function(candid::Func {
+        transform: Some(TransformType::Function(TransformFunc(candid::Func {
             principal: caller_canister.get().0,
             method: "transform".to_string(),
-        })),
+        }))),
     };
 
     // Create request to HTTP_REQUEST method.
