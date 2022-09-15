@@ -88,9 +88,14 @@ type = "filter"
 inputs = ["nginx"]
 condition = ".SYSLOG_IDENTIFIER == \"error\""
 
+[transforms.nginx_error_clean]
+type = "filter"
+inputs = ["nginx_error"]
+condition = "!contains(string!(.message), \"closed keepalive connection\")"
+
 [transforms.nginx_error_json]
 type = "remap"
-inputs = ["nginx_error"]
+inputs = ["nginx_error_clean"]
 source = """
 .@timestamp, err = to_int(.__REALTIME_TIMESTAMP)
 if err != null {
