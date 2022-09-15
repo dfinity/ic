@@ -21,7 +21,7 @@ ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-sns-governance = { path = "../governance" }
+ic-sns-governance = { path = "../governance", features = ["test"] }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }

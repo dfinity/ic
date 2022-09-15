@@ -51,7 +51,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils/" }
-ic-sns-governance = { path = "../governance" }
+ic-sns-governance = { path = "../governance", features = ["test"] }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
 ic-sns-test-utils = { path = "../test_utils" }
