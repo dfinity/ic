@@ -25,6 +25,9 @@ type By = variant {
   Memo : nat64;
 };
 type Change = variant { ToRemove : NodeProvider; ToAdd : NodeProvider };
+type ChangeAutoStakeMaturity = record {
+  requested_setting_for_auto_stake_maturity : bool;
+};
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshNeuronFromAccount = record {
   controller : opt principal;
@@ -42,6 +45,7 @@ type Command = variant {
   Merge : Merge;
   DisburseToNeuron : DisburseToNeuron;
   MakeProposal : Proposal;
+  StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
@@ -56,6 +60,7 @@ type Command_1 = variant {
   Merge : record {};
   DisburseToNeuron : SpawnResponse;
   MakeProposal : MakeProposalResponse;
+  StakeMaturity : StakeMaturityResponse;
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
 };
@@ -65,6 +70,7 @@ type Command_2 = variant {
   Configure : Configure;
   Merge : Merge;
   DisburseToNeuron : DisburseToNeuron;
+  SyncCommand : record {};
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
@@ -182,6 +188,7 @@ type NetworkEconomics = record {
 };
 type Neuron = record {
   id : opt NeuronId;
+  staked_maturity_e8s_equivalent : opt nat64;
   controller : opt principal;
   recent_ballots : vec BallotInfo;
   kyc_verified : bool;
@@ -189,6 +196,7 @@ type Neuron = record {
   maturity_e8s_equivalent : nat64;
   cached_neuron_stake_e8s : nat64;
   created_timestamp_seconds : nat64;
+  auto_stake_maturity : opt bool;
   aging_since_timestamp_seconds : nat64;
   hot_keys : vec principal;
   account : vec nat8;
@@ -242,6 +250,7 @@ type OpenSnsTokenSwap = record {
 type Operation = variant {
   RemoveHotKey : RemoveHotKey;
   AddHotKey : AddHotKey;
+  ChangeAutoStakeMaturity : ChangeAutoStakeMaturity;
   StopDissolving : record {};
   StartDissolving : record {};
   IncreaseDissolveDelay : IncreaseDissolveDelay;
@@ -343,6 +352,11 @@ type Spawn = record {
 };
 type SpawnResponse = record { created_neuron_id : opt NeuronId };
 type Split = record { amount_e8s : nat64 };
+type StakeMaturity = record { percentage_to_stake : opt nat32 };
+type StakeMaturityResponse = record {
+  maturity_e8s : nat64;
+  staked_maturity_e8s : nat64;
+};
 type Tally = record {
   no : nat64;
   yes : nat64;

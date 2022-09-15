@@ -113,6 +113,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.ChangeAutoStakeMaturity",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.SetDissolveTimestamp",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
@@ -158,6 +162,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.MergeMaturity",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.StakeMaturity",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
@@ -222,6 +230,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuronResponse.MergeMaturityResponse",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuronResponse.StakeMaturityResponse",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
@@ -436,6 +448,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.Governance.NeuronInFlightCommand.command",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.Governance.NeuronInFlightCommand.SyncCommand",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(
