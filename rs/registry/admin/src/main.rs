@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
 use clap::Parser;
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
-use ed25519_dalek::Keypair;
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_sha::Sha256;
@@ -2965,10 +2964,10 @@ async fn main() {
             let contents = read_to_string(secret_key_path).expect("Could not read key file.");
             let (secret_key, public_key) =
                 SecretKey::from_pem(&contents).expect("Invalid secret key.");
-            let mut buf = Vec::new();
-            buf.extend(secret_key.as_bytes());
-            buf.extend(public_key.as_bytes());
-            let keypair = Keypair::from_bytes(&buf).expect("Invalid secret key.");
+            let keypair = ic_canister_client::Ed25519KeyPair {
+                secret_key: secret_key.0,
+                public_key: public_key.0,
+            };
             Sender::from_keypair(&keypair)
         } else if opts.use_hsm {
             make_hsm_sender(

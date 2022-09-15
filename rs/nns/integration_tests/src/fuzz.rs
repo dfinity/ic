@@ -15,8 +15,7 @@ use maplit::hashset;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::rngs::StdRng;
-use rand::Rng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 use randomkit::Sample;
 use statrs::function::erf::erfc;
 use tokio::time::{timeout_at, Instant};
@@ -229,7 +228,7 @@ impl FuzzState {
             .collect::<Vec<&Neuron>>();
         let len = staked_neurons.len();
         if len > 0 {
-            return Some((*staked_neurons.get(rng.gen_range(0, len)).unwrap()).clone());
+            return Some((*staked_neurons.get(rng.gen_range(0..len)).unwrap()).clone());
         }
         None
     }
@@ -244,7 +243,7 @@ impl FuzzState {
             .collect::<Vec<&Neuron>>();
         let len = unstaked_neurons.len();
         if len > 0 {
-            return Some((*unstaked_neurons.get(rng.gen_range(0, len)).unwrap()).clone());
+            return Some((*unstaked_neurons.get(rng.gen_range(0..len)).unwrap()).clone());
         }
         None
     }
@@ -256,7 +255,7 @@ impl FuzzState {
             return Some(
                 self.accounts
                     .values()
-                    .nth(rng.gen_range(0, len))
+                    .nth(rng.gen_range(0..len))
                     .unwrap()
                     .clone(),
             );
@@ -273,7 +272,7 @@ impl FuzzState {
             .collect::<Vec<&Account>>();
         let len = accounts.len();
         if len > 0 {
-            return Some((*accounts.get(rng.gen_range(0, len)).unwrap()).clone());
+            return Some((*accounts.get(rng.gen_range(0..len)).unwrap()).clone());
         }
         None
     }
@@ -534,7 +533,7 @@ impl FuzzGenerator {
         // Generate the initial users.
         let mut users = Vec::new();
         for id in 0..params.initial_num_users {
-            let keypair = { ed25519_dalek::Keypair::generate(&mut rng) };
+            let keypair = { ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng) };
             users.push(User {
                 id,
                 sender: Sender::from_keypair(&keypair),
@@ -587,7 +586,7 @@ impl FuzzGenerator {
         assert!(values.len() - range_begin > params.initial_num_staked_neurons as usize);
         let mut neurons = BTreeMap::new();
         for id in 0..params.initial_num_staked_neurons {
-            let idx = rng.gen_range(range_begin, values.len());
+            let idx = rng.gen_range(range_begin..values.len());
             let value = values.remove(idx);
             let owner = users_iter.next().unwrap().clone();
             neurons.insert(
@@ -622,7 +621,7 @@ impl FuzzGenerator {
         // Create the initial accounts from the distribution above.
         let mut accounts = BTreeMap::new();
         for id in total_neurons..(total_neurons + params.initial_num_ledger_accounts) {
-            let idx = rng.gen_range(0, values.len());
+            let idx = rng.gen_range(0..values.len());
             let value = values.remove(idx);
             let owner = users_iter.next().unwrap().clone();
             let has_main_account = users_with_main_accounts.contains(&owner.id);
@@ -675,7 +674,7 @@ impl FuzzGenerator {
             .random_account_different_than(&mut self.rng, &source)?;
         let amount = Tokens::from_e8s(
             self.rng
-                .gen_range(0, source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s()),
+                .gen_range(0..source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s()),
         );
         let operation = Operation::LedgerTransfer {
             id,
@@ -697,8 +696,7 @@ impl FuzzGenerator {
             return None;
         }
         let amount = Tokens::from_e8s(self.rng.gen_range(
-            self.params.network_economics.neuron_minimum_stake_e8s,
-            source.balance.get_e8s(),
+            self.params.network_economics.neuron_minimum_stake_e8s..source.balance.get_e8s(),
         ));
         let operation = Operation::NeuronStake {
             id,
@@ -719,8 +717,7 @@ impl FuzzGenerator {
         }
         let amount = match self.rng.gen_bool(1.0 / 2.0) {
             true => Some(Tokens::from_e8s(self.rng.gen_range(
-                0,
-                source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s(),
+                0..source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s(),
             ))),
             false => None,
         };
