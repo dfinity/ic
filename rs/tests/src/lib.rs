@@ -4,6 +4,7 @@ pub mod boundary_nodes_integration;
 pub mod boundary_nodes_snp_tests;
 pub mod btc_integration;
 pub mod canister_http;
+pub mod ckbtc;
 pub mod cli;
 pub mod consensus;
 pub mod driver;

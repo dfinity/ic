@@ -25,3 +25,4 @@ pub const ENG_TESTING_CHANNEL: &str = "eng-testing";
 pub const ENG_CONSENSUS_CHANNEL: &str = "eng-consensus-test-failures";
 pub const ENG_ORCHESTRATOR_CHANNEL: &str = "eng-orchestrator-test-failures";
 pub const ENG_NODE_CHANNEL: &str = "eng-node";
+pub const ENG_FINANCIAL_INTEGRATION: &str = "eng-financial-integration";

@@ -27,7 +27,7 @@ pub const NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 8;
 pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 10;
 
 /// The names of all expected .wasm files to set up the NNS.
-pub const NNS_CANISTER_WASMS: [&str; 12] = [
+pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
@@ -41,6 +41,7 @@ pub const NNS_CANISTER_WASMS: [&str; 12] = [
     "nns-ui-canister",
     "sns-wasm-canister",
     "ic-icrc1-ledger",
+    "ic-ckbtc-minter",
 ];
 
 lazy_static! {

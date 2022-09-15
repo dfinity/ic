@@ -6,7 +6,7 @@ use ic_fondue::{
 };
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    btc_integration, canister_http, consensus, execution, icrc1_agent_test, ledger_tests,
+    btc_integration, canister_http, ckbtc, consensus, execution, icrc1_agent_test, ledger_tests,
     message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
@@ -348,6 +348,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )
         .with_alert(ENG_CONSENSUS_CHANNEL),
     );
+
+    m.add_suite(suite(
+        "ckbtc_pre_master",
+        vec![pot_with_setup(
+            "minter_pot",
+            ckbtc::minter::config,
+            par(vec![
+                sys_t(
+                    "minter_get_btc_address_test",
+                    ckbtc::minter::get_btc_address_test,
+                ),
+                sys_t(
+                    "minter_get_withdrawal_account_test",
+                    ckbtc::minter::get_withdrawal_account_test,
+                ),
+            ]),
+        )],
+    ));
 
     m.add_suite(suite(
         "pre_master",
@@ -1031,6 +1049,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )],
         )
+        .with_alert(ENG_FINANCIAL_INTEGRATION)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 

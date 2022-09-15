@@ -13330,6 +13330,7 @@ dependencies = [
  "ic-canister-client",
  "ic-cdk 0.5.5",
  "ic-certification",
+ "ic-ckbtc-minter",
  "ic-config",
  "ic-constants",
  "ic-crypto",
