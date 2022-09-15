@@ -135,3 +135,15 @@ CANISTERS = {
         srcs = [":" + name + ".wasm"],
     ),
 ] for name in CANISTERS]
+
+filegroup(
+    name = "sdk",
+    srcs = [
+        "//rs/bitcoin/adapter:ic-btc-adapter",
+        "//rs/canister_http/adapter:ic-canister-http-adapter",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/replica",
+        "//rs/starter:ic-starter",
+    ],
+)
