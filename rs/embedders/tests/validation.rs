@@ -773,3 +773,21 @@ fn function_with_result_is_invalid() {
         ))
     );
 }
+
+#[test]
+fn complex_function_rejected() {
+    let mut wat = "(module (func) (func".to_string();
+    for _ in 0..10_001 {
+        wat.push_str("(loop)");
+    }
+    wat.push_str("))");
+    let wasm = wat2wasm(&wat).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::FunctionComplexityTooHigh {
+            index: 1,
+            complexity: 10_001,
+            allowed: 10_000
+        })
+    )
+}
