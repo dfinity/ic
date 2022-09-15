@@ -109,6 +109,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
                     airdrop_neurons: vec![NeuronDistribution {
                         controller: Some(user),
                         stake_e8s: 2_000_000_000_000,
+                        memo: 0,
+                        dissolve_delay_seconds: 15780000, // 6 months
                     }],
                 }),
             },
@@ -264,6 +266,8 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     let airdrop_neuron = |number| NeuronDistribution {
         controller: Some(PrincipalId::new_user_test_id(number)),
         stake_e8s: 100_000_000,
+        memo: 0,
+        dissolve_delay_seconds: 15780000, // 6 months
     };
     // We make these to create some extra transactions so an archive will spawn.
     let airdrop_neurons: Vec<NeuronDistribution> =
@@ -292,6 +296,8 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                     airdrop_neurons: vec![NeuronDistribution {
                         controller: Some(user),
                         stake_e8s: 2_000_000_000_000,
+                        memo: 0,
+                        dissolve_delay_seconds: 15780000, // 6 months
                     }]
                     .into_iter()
                     .chain(airdrop_neurons)

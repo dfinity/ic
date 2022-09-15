@@ -3,8 +3,7 @@ pub mod pb;
 
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
-    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
-    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+    FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
 };
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -87,6 +86,8 @@ impl SnsInitPayload {
             token_symbol: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
+            neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
             initial_token_distribution: None,
             fallback_controller_principal_ids: vec![],
             logo: None,
@@ -102,21 +103,9 @@ impl SnsInitPayload {
         Self {
             token_symbol: Some("TEST".to_string()),
             token_name: Some("PlaceHolder".to_string()),
-            initial_token_distribution: Some(FractionalDeveloperVotingPower(FractionalDVP {
-                developer_distribution: Some(DeveloperDistribution {
-                    developer_neurons: Default::default(),
-                }),
-                treasury_distribution: Some(TreasuryDistribution {
-                    total_e8s: 500_000_000,
-                }),
-                swap_distribution: Some(SwapDistribution {
-                    total_e8s: 10_000_000_000,
-                    initial_swap_amount_e8s: 10_000_000_000,
-                }),
-                airdrop_distribution: Some(AirdropDistribution {
-                    airdrop_neurons: Default::default(),
-                }),
-            })),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(
+                FractionalDVP::with_valid_values_for_testing(),
+            )),
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5822).to_string()],
             logo: Some("X".repeat(100)),
             name: Some("ServiceNervousSystemTest".to_string()),
@@ -154,27 +143,12 @@ impl SnsInitPayload {
         governance.swap_canister_id = Some(sns_canister_ids.swap);
         governance.deployed_version = deployed_version;
 
-        let parameters = governance
-            .parameters
-            .as_mut()
-            .expect("NervousSystemParameters not set");
+        let parameters = self.get_nervous_system_parameters();
+        governance.parameters = Some(parameters.clone());
 
-        let all_permissions = NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
-        };
-        parameters.neuron_claimer_permissions = Some(all_permissions.clone());
-        parameters.neuron_grantable_permissions = Some(all_permissions);
-        parameters.neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s;
-        parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
+        governance.sns_metadata = Some(self.get_sns_metadata());
 
-        governance.sns_metadata = Some(SnsMetadata {
-            logo: self.logo.clone(),
-            url: self.url.clone(),
-            name: self.name.clone(),
-            description: self.description.clone(),
-        });
-
-        governance.neurons = self.get_initial_neurons(parameters)?;
+        governance.neurons = self.get_initial_neurons(&parameters)?;
 
         Ok(governance)
     }
@@ -309,6 +283,35 @@ impl SnsInitPayload {
         }
     }
 
+    /// Returns a complete NervousSystemParameter struct with its corresponding SnsInitPayload
+    /// fields filled out.
+    fn get_nervous_system_parameters(&self) -> NervousSystemParameters {
+        let mut nervous_system_parameters = NervousSystemParameters::with_default_values();
+        let all_permissions = NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        };
+        nervous_system_parameters.neuron_claimer_permissions = Some(all_permissions.clone());
+        nervous_system_parameters.neuron_grantable_permissions = Some(all_permissions);
+        nervous_system_parameters.neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s;
+        nervous_system_parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
+        nervous_system_parameters.neuron_minimum_dissolve_delay_to_vote_seconds =
+            self.neuron_minimum_dissolve_delay_to_vote_seconds;
+        nervous_system_parameters.transaction_fee_e8s = self.transaction_fee_e8s;
+        nervous_system_parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
+
+        nervous_system_parameters
+    }
+
+    /// Returns an SnsMetadata struct based on configuration of the `SnsInitPayload`.
+    fn get_sns_metadata(&self) -> SnsMetadata {
+        SnsMetadata {
+            logo: self.logo.clone(),
+            url: self.url.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+        }
+    }
+
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
     /// payload and must pass.
     pub fn validate(&self) -> anyhow::Result<Self> {
@@ -317,6 +320,7 @@ impl SnsInitPayload {
             self.validate_token_name(),
             self.validate_token_distribution(),
             self.validate_neuron_minimum_stake_e8s(),
+            self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
             self.validate_proposal_reject_cost_e8s(),
             self.validate_transaction_fee_e8s(),
             self.validate_fallback_controller_principal_ids(),
@@ -420,8 +424,12 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
 
+        let nervous_system_parameters = self.get_nervous_system_parameters();
+
         match initial_token_distribution {
-            FractionalDeveloperVotingPower(f) => f.validate().map_err(|err| err.to_string())?,
+            FractionalDeveloperVotingPower(f) => f
+                .validate(&nervous_system_parameters)
+                .map_err(|err| err.to_string())?,
         }
 
         Ok(())
@@ -519,6 +527,30 @@ impl SnsInitPayload {
         Ok(())
     }
 
+    fn validate_neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> Result<(), String> {
+        // As this is not currently configurable, pull the default value from
+        let max_dissolve_delay_seconds = *NervousSystemParameters::with_default_values()
+            .max_dissolve_delay_seconds
+            .as_ref()
+            .unwrap();
+
+        let neuron_minimum_dissolve_delay_to_vote_seconds = self
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .ok_or_else(|| {
+                "Error: neuron-minimum-dissolve-delay-to-vote-seconds must be specified".to_string()
+            })?;
+
+        if neuron_minimum_dissolve_delay_to_vote_seconds > max_dissolve_delay_seconds {
+            return Err(format!(
+                "The minimum dissolve delay to vote ({}) cannot be greater than the max \
+                dissolve delay ({})",
+                neuron_minimum_dissolve_delay_to_vote_seconds, max_dissolve_delay_seconds
+            ));
+        }
+
+        Ok(())
+    }
+
     fn validate_fallback_controller_principal_ids(&self) -> Result<(), String> {
         if self.fallback_controller_principal_ids.is_empty() {
             return Err(
@@ -562,56 +594,15 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
-    use crate::pb::v1::{
-        sns_init_payload::InitialTokenDistribution, DeveloperDistribution,
-        FractionalDeveloperVotingPower as FractionalDVP, SwapDistribution, TreasuryDistribution,
-    };
+    use crate::pb::v1::FractionalDeveloperVotingPower as FractionalDVP;
     use crate::{
-        AirdropDistribution, FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload,
-        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+        FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH,
+        MAX_TOKEN_SYMBOL_LENGTH,
     };
-    use ic_base_types::ic_types::Principal;
-    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_base_types::CanisterId;
     use ic_icrc1::Account;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
-
-    fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
-        FractionalDeveloperVotingPower(FractionalDVP {
-            developer_distribution: Some(DeveloperDistribution {
-                developer_neurons: Default::default(),
-            }),
-            treasury_distribution: Some(TreasuryDistribution {
-                total_e8s: 500_000_000,
-            }),
-            swap_distribution: Some(SwapDistribution {
-                total_e8s: 10_000_000_000,
-                initial_swap_amount_e8s: 10_000_000_000,
-            }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
-            }),
-        })
-    }
-
-    fn get_test_sns_init_payload() -> SnsInitPayload {
-        SnsInitPayload {
-            transaction_fee_e8s: Some(10_000),
-            token_name: Some("ServiceNervousSystem".to_string()),
-            token_symbol: Some("SNS".to_string()),
-            proposal_reject_cost_e8s: Some(100_000_000),
-            neuron_minimum_stake_e8s: Some(100_000_000),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
-            fallback_controller_principal_ids: vec![Principal::from(
-                PrincipalId::new_user_test_id(1_552_301),
-            )
-            .to_text()],
-            logo: Some("X".repeat(100)),
-            name: Some("ServiceNervousSystem".to_string()),
-            description: Some("A project that decentralizes a dapp".to_string()),
-            url: Some("https://internetcomputer.org/".to_string()),
-        }
-    }
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
@@ -626,7 +617,7 @@ mod test {
     fn test_sns_init_payload_validate() {
         // Build a payload that passes validation, then test the parts that wouldn't
         let get_sns_init_payload = || {
-            get_test_sns_init_payload()
+            SnsInitPayload::with_valid_values_for_testing()
                 .validate()
                 .expect("Payload did not pass validation.")
         };
@@ -708,8 +699,7 @@ mod test {
             token_symbol: Some("SNS".to_string()),
             proposal_reject_cost_e8s: Some(10_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
-            ..get_test_sns_init_payload()
+            ..SnsInitPayload::with_valid_values_for_testing()
         };
         let sns_canister_ids = create_canister_ids();
 
@@ -761,10 +751,12 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem Coin".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(
+                FractionalDVP::with_valid_values_for_testing(),
+            )),
             proposal_reject_cost_e8s: Some(10_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            ..get_test_sns_init_payload()
+            ..SnsInitPayload::with_valid_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library
@@ -790,8 +782,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
-            ..get_test_sns_init_payload()
+            ..SnsInitPayload::with_valid_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library
@@ -818,8 +809,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
-            ..get_test_sns_init_payload()
+            ..SnsInitPayload::with_valid_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library
@@ -849,9 +839,8 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some(token_name.clone()),
             token_symbol: Some(token_symbol.clone()),
-            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             transaction_fee_e8s: Some(transaction_fee),
-            ..get_test_sns_init_payload()
+            ..SnsInitPayload::with_valid_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library

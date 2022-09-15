@@ -27,6 +27,8 @@ type InitialTokenDistribution = variant {
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
 type NeuronDistribution = record {
   controller : opt principal;
+  dissolve_delay_seconds : nat64;
+  memo : nat64;
   stake_e8s : nat64;
 };
 type Result = variant { Error : SnsWasmError; Hash : vec nat8 };
@@ -43,6 +45,7 @@ type SnsInitPayload = record {
   neuron_minimum_stake_e8s : opt nat64;
   logo : opt text;
   name : opt text;
+  neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   description : opt text;
   transaction_fee_e8s : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
