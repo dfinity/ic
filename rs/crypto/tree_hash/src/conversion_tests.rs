@@ -1,6 +1,6 @@
 use crate::{
-    arbitrary::arbitrary_well_formed_mixed_hash_tree, flatmap, InvalidHashTreeError, Label,
-    LabeledTree, MixedHashTree,
+    arbitrary::arbitrary_well_formed_mixed_hash_tree, flatmap, Label, LabeledTree, MixedHashTree,
+    MixedHashTreeConversionError,
 };
 use proptest::prelude::*;
 use std::convert::TryInto;
@@ -64,6 +64,6 @@ fn convert_small_nested_tree() {
 #[test]
 fn convert_malformed_tree() {
     let malformed_tree = M::Fork(Box::new((M::Leaf(b"1".to_vec()), M::Leaf(b"2".to_vec()))));
-    let r: Result<T, InvalidHashTreeError> = malformed_tree.try_into();
-    assert_eq!(r, Err(InvalidHashTreeError::UnlabeledLeaf));
+    let r: Result<T, MixedHashTreeConversionError> = malformed_tree.try_into();
+    assert_eq!(r, Err(MixedHashTreeConversionError::UnlabeledLeaf));
 }
