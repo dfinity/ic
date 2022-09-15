@@ -308,7 +308,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
                  error_message,
              }| {
                 error_type == ErrorType::PreconditionFailed as i32
-                    && error_message.contains("'t have enough stake to submit proposal")
+                    && error_message.contains("'t have enough minted stake to submit proposal")
             },
         );
         assert_eq!(submit_reject, Result::Err(true));

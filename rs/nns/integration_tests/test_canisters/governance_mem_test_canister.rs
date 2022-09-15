@@ -265,6 +265,8 @@ fn allocate_neuron(id: u64) -> Neuron {
         kyc_verified: false,
         transfer: None,
         maturity_e8s_equivalent: 0,
+        staked_maturity_e8s_equivalent: None,
+        auto_stake_maturity: None,
         dissolve_state: Some(neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: None,

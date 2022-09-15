@@ -6,6 +6,7 @@ use std::fmt;
 use std::ops::RangeInclusive;
 use std::string::ToString;
 
+use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
     governance::neuron_in_flight_command::Command as InFlightCommand,
@@ -49,7 +50,7 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use dfn_core::println;
 
 use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
+use crate::pb::v1::manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::reward_node_provider::RewardToAccount;
 use crate::pb::v1::WaitForQuietState;
@@ -361,6 +362,12 @@ impl ManageNeuronResponse {
     pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::MergeMaturity(response)),
+        }
+    }
+
+    pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::StakeMaturity(response)),
         }
     }
 
@@ -1005,6 +1012,14 @@ impl Neuron {
             manage_neuron::configure::Operation::LeaveCommunityFund(_) => {
                 self.leave_community_fund()
             }
+            manage_neuron::configure::Operation::ChangeAutoStakeMaturity(change) => {
+                if change.requested_setting_for_auto_stake_maturity {
+                    self.auto_stake_maturity = Some(true);
+                } else {
+                    self.auto_stake_maturity = None;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -1029,8 +1044,17 @@ impl Neuron {
     ///
     /// The stake can be decreased by making proposals that are
     /// subsequently rejected, and increased by transferring funds
-    /// to the acccount of this neuron and then refreshing the stake.
+    /// to the acccount of this neuron and then refreshing the stake, or
+    /// by accumulating staked maturity.
     pub fn stake_e8s(&self) -> u64 {
+        self.cached_neuron_stake_e8s
+            .saturating_sub(self.neuron_fees_e8s)
+            .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0))
+    }
+
+    /// Returns the current `minted` stake of the neuron, i.e. the ICP backing the
+    /// neuron, minus the fees. This does not count staked maturity.
+    pub fn minted_stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
     }
@@ -2611,13 +2635,16 @@ impl Governance {
         // accordingly. Make sure no matter what the user disburses we still
         // take the fees into account.
         //
-        // Note that the implementation of stake_e8s is effectively:
+        // Note that the implementation of minted_stake_e8s() is effectively:
         //   neuron.cached_neuron_stake_e8s.saturating_sub(neuron.neuron_fees_e8s)
         // So there is symmetry here in that we are subtracting
         // fees_amount_e8s from both sides of this `map_or`.
-        let mut disburse_amount_e8s = disburse.amount.as_ref().map_or(neuron.stake_e8s(), |a| {
-            a.e8s.saturating_sub(fees_amount_e8s)
-        });
+        let mut disburse_amount_e8s = disburse
+            .amount
+            .as_ref()
+            .map_or(neuron.minted_stake_e8s(), |a| {
+                a.e8s.saturating_sub(fees_amount_e8s)
+            });
 
         // Subtract the transaction fee from the amount to disburse since it'll
         // be deducted from the source (the neuron's) account.
@@ -2762,7 +2789,7 @@ impl Governance {
             ));
         }
 
-        if parent_neuron.stake_e8s() < min_stake + split.amount_e8s {
+        if parent_neuron.minted_stake_e8s() < min_stake + split.amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2772,7 +2799,7 @@ impl Governance {
                      the minimum allowed stake, which is {} e8s. ",
                     split.amount_e8s,
                     parent_nid.id,
-                    parent_neuron.stake_e8s(),
+                    parent_neuron.minted_stake_e8s(),
                     min_stake
                 ),
             ));
@@ -2836,6 +2863,8 @@ impl Governance {
             kyc_verified: parent_neuron.kyc_verified,
             transfer: None,
             maturity_e8s_equivalent: 0,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: parent_neuron.auto_stake_maturity,
             not_for_profit: parent_neuron.not_for_profit,
             // We allow splitting of a neuron that has joined the
             // community fund: both resulting neurons remain members
@@ -3103,7 +3132,7 @@ impl Governance {
         } else {
             source_neuron.age_seconds(now)
         };
-        let source_stake_e8s = source_neuron_mut.stake_e8s();
+        let source_stake_e8s = source_neuron_mut.minted_stake_e8s();
         let source_stake_less_transaction_fee_e8s =
             source_stake_e8s.saturating_sub(transaction_fee_e8s);
 
@@ -3174,6 +3203,8 @@ impl Governance {
         // Set source maturity to zero
         let source_maturity = source_neuron_mut.maturity_e8s_equivalent;
         source_neuron_mut.maturity_e8s_equivalent = 0;
+        let source_staked_maturity = source_neuron_mut.staked_maturity_e8s_equivalent;
+        source_neuron_mut.staked_maturity_e8s_equivalent = None;
 
         let mut target_neuron_mut = self
             .get_neuron_mut(id)
@@ -3212,8 +3243,17 @@ impl Governance {
         target_neuron_mut.cached_neuron_stake_e8s = new_stake_e8s;
         target_neuron_mut.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
 
-        // Move maturity from source neuron to target
+        // Move regular and staked maturity from source neuron to target
         target_neuron_mut.maturity_e8s_equivalent += source_maturity;
+        target_neuron_mut.staked_maturity_e8s_equivalent = match (
+            target_neuron_mut.staked_maturity_e8s_equivalent,
+            source_staked_maturity,
+        ) {
+            (None, None) => None,
+            (Some(x), None) => Some(x),
+            (None, Some(y)) => Some(y),
+            (Some(x), Some(y)) => Some(x.saturating_add(y)),
+        };
 
         println!(
             "{}Merged neuron {} into {} at {:?}",
@@ -3345,6 +3385,8 @@ impl Governance {
             kyc_verified: parent_neuron.kyc_verified,
             transfer: None,
             maturity_e8s_equivalent: maturity_to_spawn,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
             not_for_profit: false,
             // We allow spawning of maturity from a neuron that has
             // joined the community fund: the spawned neuron is not
@@ -3376,6 +3418,8 @@ impl Governance {
     /// - The neuron is not in spawning state.
     /// - The e8s equivalent of the amount of maturity to merge must be more
     ///   than the transaction fee.
+    ///
+    /// Deprecated: This method will be removed in favor of "staking" maturity.
     pub async fn merge_maturity_of_neuron(
         &mut self,
         id: &NeuronId,
@@ -3419,8 +3463,6 @@ impl Governance {
         let mut maturity_to_merge =
             (neuron.maturity_e8s_equivalent * merge_maturity.percentage_to_merge as u64) / 100;
 
-        // Converting u64 to f64 can cause the u64 to be "rounded up", so we
-        // need to account for this possibility.
         if maturity_to_merge > neuron.maturity_e8s_equivalent {
             maturity_to_merge = neuron.maturity_e8s_equivalent;
         }
@@ -3477,6 +3519,85 @@ impl Governance {
         Ok(MergeMaturityResponse {
             merged_maturity_e8s: maturity_to_merge,
             new_stake_e8s,
+        })
+    }
+
+    /// Stakes the maturity of a neuron.
+    ///
+    /// This method allows a neuron controller to stake the currently
+    /// existing maturity of a neuron. The caller can choose a percentage
+    /// of maturity to merge.
+    ///
+    /// Pre-conditions:
+    /// - The neuron is controlled by `caller`
+    /// - The neuron has some maturity to stake.
+    /// - The neuron is not in spawning state.
+    pub fn stake_maturity_of_neuron(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        stake_maturity: &manage_neuron::StakeMaturity,
+    ) -> Result<StakeMaturityResponse, GovernanceError> {
+        let neuron = self.get_neuron(id)?.clone();
+
+        if neuron.state(self.env.now()) == NeuronState::Spawning {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
+
+        let nid = neuron.id.as_ref().expect("Neurons must have an id");
+
+        if !neuron.is_controlled_by(caller) {
+            return Err(GovernanceError::new(ErrorType::NotAuthorized));
+        }
+
+        let percentage_to_stake = stake_maturity.percentage_to_stake.unwrap_or(100);
+
+        if percentage_to_stake > 100 || percentage_to_stake == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive)."));
+        }
+
+        let mut maturity_to_stake = (neuron
+            .maturity_e8s_equivalent
+            .saturating_mul(percentage_to_stake as u64))
+            / 100;
+
+        if maturity_to_stake > neuron.maturity_e8s_equivalent {
+            maturity_to_stake = neuron.maturity_e8s_equivalent;
+        }
+
+        let now = self.env.now();
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+
+        // Lock the neuron so that we're sure that we are not staking the maturity in the middle of another ongoing operation.
+        let _neuron_lock = self.lock_neuron_for_command(nid.id, in_flight_command)?;
+
+        // Adjust the maturity of the neuron
+        let neuron = self
+            .get_neuron_mut(nid)
+            .expect("Expected the neuron to exist");
+
+        neuron.maturity_e8s_equivalent = neuron
+            .maturity_e8s_equivalent
+            .saturating_sub(maturity_to_stake);
+
+        neuron.staked_maturity_e8s_equivalent = Some(
+            neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .saturating_add(maturity_to_stake),
+        );
+
+        Ok(StakeMaturityResponse {
+            maturity_e8s: neuron.maturity_e8s_equivalent,
+            staked_maturity_e8s: neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
         })
     }
 
@@ -3548,7 +3669,7 @@ impl Governance {
             ));
         }
 
-        if parent_neuron.stake_e8s()
+        if parent_neuron.minted_stake_e8s()
             < economics.neuron_minimum_stake_e8s + disburse_to_neuron.amount_e8s
         {
             return Err(GovernanceError::new_with_message(
@@ -3560,7 +3681,7 @@ impl Governance {
                      the minimum allowed stake, which is {} e8s. ",
                     disburse_to_neuron.amount_e8s,
                     parent_nid.id,
-                    parent_neuron.stake_e8s(),
+                    parent_neuron.minted_stake_e8s(),
                     min_stake
                 ),
             ));
@@ -3682,6 +3803,8 @@ impl Governance {
             kyc_verified: disburse_to_neuron.kyc_verified,
             transfer: None,
             maturity_e8s_equivalent: 0,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
             not_for_profit: false,
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
@@ -4319,6 +4442,8 @@ impl Governance {
                     recent_ballots: vec![],
                     kyc_verified: true,
                     maturity_e8s_equivalent: 0,
+                    staked_maturity_e8s_equivalent: None,
+                    auto_stake_maturity: None,
                     not_for_profit: false,
                     transfer: None,
                     joined_community_fund_timestamp_seconds: None,
@@ -4896,12 +5021,12 @@ impl Governance {
                 "Proposer not among the followees of neuron.",
             ));
         }
-        if proposer.stake_e8s() < neuron_management_fee_per_proposal_e8s {
+        if proposer.minted_stake_e8s() < neuron_management_fee_per_proposal_e8s {
             return Err(
                 // Not enough stake to make proposal.
                 GovernanceError::new_with_message(
                     ErrorType::InsufficientFunds,
-                    "Proposer doesn't have enough stake for proposal.",
+                    "Proposer doesn't have enough minted stake for proposal.",
                 ),
             );
         }
@@ -5277,11 +5402,11 @@ impl Governance {
         // If the current stake of this neuron is less than the cost
         // of having a proposal rejected, the neuron cannot vote -
         // because the proposal may be rejected.
-        if proposer.stake_e8s() < reject_cost_e8s {
+        if proposer.minted_stake_e8s() < reject_cost_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Neuron doesn't have enough stake to submit proposal: {:#?}",
+                    "Neuron doesn't have enough minted stake to submit proposal: {:#?}",
                     proposer,
                 ),
             ));
@@ -5943,6 +6068,8 @@ impl Governance {
             followees: self.proto.default_followees.clone(),
             hot_keys: vec![],
             maturity_e8s_equivalent: 0,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
             neuron_fees_e8s: 0,
             not_for_profit: false,
             recent_ballots: vec![],
@@ -6171,6 +6298,9 @@ impl Governance {
                 .merge_maturity_of_neuron(&id, caller, m)
                 .await
                 .map(ManageNeuronResponse::merge_maturity_response),
+            Some(manage_neuron::Command::StakeMaturity(s)) => self
+                .stake_maturity_of_neuron(&id, caller, s)
+                .map(ManageNeuronResponse::stake_maturity_response),
             Some(manage_neuron::Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
@@ -6315,6 +6445,7 @@ impl Governance {
             self.spawn_neurons().await;
         }
 
+        self.maybe_move_staked_maturity();
         self.maybe_gc();
     }
 
@@ -6350,6 +6481,22 @@ impl Governance {
         self.proto.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
         self.proto
             .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
+    }
+
+    /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
+    /// which can be spawned (and is modulated).
+    fn maybe_move_staked_maturity(&mut self) {
+        let now_seconds = self.env.now();
+        // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
+        for neuron in self.proto.neurons.values_mut().filter(|n| {
+            n.state(now_seconds) == NeuronState::Dissolved
+                && n.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
+        }) {
+            neuron.maturity_e8s_equivalent = neuron
+                .maturity_e8s_equivalent
+                .saturating_add(neuron.staked_maturity_e8s_equivalent.unwrap_or(0));
+            neuron.staked_maturity_e8s_equivalent = None;
+        }
     }
 
     fn can_spawn_neurons(&self) -> bool {
@@ -6583,7 +6730,14 @@ impl Governance {
                     // positive (non-zero).
                     let reward = (used_voting_rights * distributed_e8s_equivalent_float
                         / total_voting_rights) as u64;
-                    neuron.maturity_e8s_equivalent += reward;
+                    // If the neuron has auto-stake-maturity on, add the new maturity to the
+                    // staked maturity, otherwise add it to the un-staked maturity.
+                    if neuron.auto_stake_maturity.unwrap_or(false) {
+                        neuron.staked_maturity_e8s_equivalent =
+                            Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
+                    } else {
+                        neuron.maturity_e8s_equivalent += reward;
+                    }
                     actually_distributed_e8s_equivalent += reward;
                 }
                 Err(e) => println!(
@@ -6976,13 +7130,13 @@ fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
 fn validate_set_sns_token_swap_open_time_window(
     action: &SetSnsTokenSwapOpenTimeWindow,
 ) -> Result<(), GovernanceError> {
-    return Err(GovernanceError::new_with_message(
+    Err(GovernanceError::new_with_message(
         ErrorType::InvalidProposal,
         format!(
             "The SetSnsTokenSwapOpenTimeWindow proposal action is obsolete: {:?}",
             action,
         ),
-    ));
+    ))
 }
 
 fn validate_open_sns_token_swap(
@@ -7137,7 +7291,7 @@ fn get_node_provider_reward(
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }
