@@ -1010,7 +1010,7 @@ pub fn validate_custom_section(
 fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidationError> {
     let mut max_function_size = NumInstructions::new(0);
     if let Some(code_section) = module.code_section() {
-        for func_body in code_section.bodies().iter() {
+        for (index, func_body) in code_section.bodies().iter().enumerate() {
             let instructions = func_body.code().elements();
             let size = instructions.len();
             let complexity = instructions
@@ -1032,6 +1032,7 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
 
             if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
                 return Err(WasmValidationError::FunctionComplexityTooHigh {
+                    index,
                     complexity,
                     allowed: WASM_FUNCTION_COMPLEXITY_LIMIT,
                 });
@@ -1039,6 +1040,7 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
 
             if size > WASM_FUNCTION_SIZE_LIMIT {
                 return Err(WasmValidationError::FunctionTooLarge {
+                    index,
                     size,
                     allowed: WASM_FUNCTION_SIZE_LIMIT,
                 });
