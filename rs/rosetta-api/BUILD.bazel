@@ -88,3 +88,23 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
+
+rust_test(
+    name = "rosetta-api-tests",
+    srcs = glob(["test/**/*.rs"]),
+    aliases = ALIASES,
+    crate_root = "test/test_utils.rs",
+    data = glob([
+        "test/*.json",
+        "test/*.ros",
+    ]) + [
+        "@rosetta-cli//:rosetta-cli",
+    ],
+    env = {
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    version = "1.6.1",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
+)
