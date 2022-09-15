@@ -44,6 +44,10 @@ impl Backup {
         }
     }
 
+    pub fn working_dir(&self) -> String {
+        self.backup_dir.clone()
+    }
+
     pub fn replay(&self, replica_version: &str) -> Result<StateParams, ReplayError> {
         let start_height = self.get_start_height(replica_version);
         info!(

@@ -38,6 +38,7 @@ use crate::{
     util::{block_on, get_nns_node},
 };
 use core::time;
+use ic_recovery::file_sync_helper::download_binary;
 use ic_registry_subnet_type::SubnetType;
 use ic_replay::player::ReplayError;
 use ic_types::consensus::ConsensusMessageHash;
@@ -79,6 +80,16 @@ pub fn test(env: TestEnv) {
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
     let backup = Backup::new(node_ip, backup_private_key, subnet_id, env.logger());
+
+    // Make sure we can download the ic-replay binary from this build and we won't break the
+    // backup pods.
+    assert!(block_on(download_binary(
+        &log,
+        ReplicaVersion::try_from(replica_version.clone()).unwrap(),
+        "ic-replay".to_string(),
+        backup.working_dir().into(),
+    ))
+    .is_ok());
 
     info!(
         log,
