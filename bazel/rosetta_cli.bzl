@@ -10,16 +10,12 @@ exports_files(["rosetta-cli"])
 
 BINARIES = {
     "darwin-amd64": {
-        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.9.0/rosetta-cli-0.9.0-darwin-amd64.tar.gz",
-        "sha256": "bab4d431112bdc4cdac30aad6ef9e63ab99553ffc44900b6655076bbc02ade79",
-    },
-    "darwin-arm64": {
-        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.9.0/rosetta-cli-0.9.0-darwin-arm64.tar.gz",
-        "sha256": "1a9a02bd625c39bfa717ffecfdf28db9fd7b6905670c439f58662f08fd334247",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-darwin-amd64.tar.gz",
+        "sha256": "5554227361d60f8b0d18b7e5d37a61d05767e106e4ecd21471abf94822cee810",
     },
     "linux-amd64": {
-        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.9.0/rosetta-cli-0.9.0-linux-amd64.tar.gz",
-        "sha256": "13216a74244053e1ced2adf78bcbefadc36044248ef880dbf79547574b28eff0",
+        "url": "https://github.com/coinbase/rosetta-cli/releases/download/v0.6.7/rosetta-cli-0.6.7-linux-amd64.tar.gz",
+        "sha256": "111c6d4f08f04b3cce2fa075728b834de92c16dfaa8504e1bf81bc2adeb6645f",
     },
 }
 
@@ -35,21 +31,21 @@ def _rosetta_cli_impl(repository_ctx):
     os_arch = repository_ctx.os.arch
     if os_arch == "x86_64":
         platform = os + "-amd64"
-    if os_arch == "amd64":
+    elif os_arch == "amd64":
         platform = os + "-amd64"
     elif os_arch == "aarch64":
         platform = os + "-arm64"
     else:
-        fail("Unsupported architecture: " + os_arch)
+        fail("Unsupported architecture: '" + os_arch + "'")
 
     if platform not in BINARIES:
-        fail("Unsupported platform: " + platform)
+        fail("Unsupported platform: '" + platform + "'")
 
     bin = BINARIES[platform]
 
     repository_ctx.report_progress("Fetching rosetta-cli")
     repository_ctx.download_and_extract(url = bin["url"], sha256 = bin["sha256"])
-    repository_ctx.symlink("rosetta-cli-0.9.0-" + platform, "rosetta-cli")
+    repository_ctx.symlink("rosetta-cli-0.6.7-" + platform, "rosetta-cli")
     repository_ctx.file("BUILD.bazel", ROSETTA_CLI_BUILD, executable = False)
 
 _rosetta_cli = repository_rule(
