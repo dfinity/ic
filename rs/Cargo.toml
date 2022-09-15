@@ -254,6 +254,8 @@ members = [
   "xnet/uri",
 ]
 
+resolver = "2"
+
 exclude = ["universal_canister/impl"]
 
 [profile.release]
