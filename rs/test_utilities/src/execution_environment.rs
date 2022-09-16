@@ -396,6 +396,11 @@ impl ExecutionTest {
         self.subnet_message(Method::InstallCode, args.encode())
     }
 
+    /// Sends an `install_code` message to the IC management canister with DTS.
+    pub fn dts_install_code(&mut self, args: InstallCodeArgs) -> MessageId {
+        self.subnet_message_raw(Method::InstallCode, args.encode())
+    }
+
     /// Sends an `uninstall_code` message to the IC management canister.
     pub fn uninstall_code(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
@@ -543,6 +548,24 @@ impl ExecutionTest {
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
+    }
+
+    /// Installs the given canister with the given Wasm binary with DTS.
+    pub fn dts_upgrade_canister(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> MessageId {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        self.dts_install_code(args)
     }
 
     pub fn upgrade_canister_with_allocation(
