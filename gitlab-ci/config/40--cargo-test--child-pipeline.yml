@@ -58,7 +58,7 @@ check-bins-linux:
     - |
       set -exuo pipefail
 
-      apt-get update && apt-get install --yes --no-install-recommends curl
+      apt-get update && apt-get install --yes --no-install-recommends curl ca-certificates
 
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
       chmod +x /tmp/replica
