@@ -3,6 +3,11 @@ name = "ic-sns-integration-tests"
 version = "0.8.0"
 edition = "2021"
 
+[features]
+# swap_load_test takes a very long time to run, so to run it you have to pass `--features long_bench`.
+long_bench = []
+
+
 [[bin]]
 name = "sns-test-dapp-canister"
 path = "test_canisters/test_dapp_canister.rs"
@@ -65,3 +70,5 @@ tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
+ed25519-dalek = "1.0.1"
+rand_chacha = "0.2.2"

@@ -34,14 +34,21 @@ use ic_sns_swap::pb::v1::{
 };
 use ic_sns_test_utils::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
 use ic_state_machine_tests::StateMachine;
-use ic_types::ingress::WasmResult;
+use ic_types::{
+    crypto::{AlgorithmId, UserPublicKey},
+    ingress::WasmResult,
+};
 use lazy_static::lazy_static;
 use ledger_canister::{
     AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, Memo, TransferArgs,
     DEFAULT_TRANSFER_FEE,
 };
 use num_traits::ToPrimitive;
-use std::collections::HashMap;
+use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
@@ -58,6 +65,14 @@ lazy_static! {
         .unwrap()
         .as_secs()
         + 13 * SECONDS_PER_DAY;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SwapPerformanceResults {
+    instructions_consumed_base: f64,
+    instructions_consumed_swapping: f64,
+    instructions_consumed_finalization: f64,
+    time_to_finalize_swap: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -161,11 +176,11 @@ impl Scenario {
     /// precisely, it builds upon SnsTestsInitPayloadBuilder::new().build(), but
     /// this makes two enhancements:
     ///
-    ///   1. The swap canister is funded (with 100 SNS tokens).
+    ///   1. The swap canister is funded (with the provided number of SNS tokens).
     ///   2. The canister_id fields are populated.
     ///
     /// The dapp canister is owned by TEST_USER1.
-    pub fn new(state_machine: &mut StateMachine) -> Self {
+    pub fn new(state_machine: &mut StateMachine, sns_tokens: Tokens) -> Self {
         let create_canister = || state_machine.create_canister(/* settings= */ None);
 
         let root_canister_id = create_canister();
@@ -206,12 +221,12 @@ impl Scenario {
         );
 
         // Construct base configuration.
-        let account_identifiers = vec![Account {
+        let account_identifier = Account {
             owner: swap_canister_id.into(),
             subaccount: None,
-        }];
+        };
         let mut configuration = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_accounts(account_identifiers, Tokens::from_tokens(100).unwrap())
+            .with_ledger_account(account_identifier, sns_tokens)
             .build();
         populate_canister_ids(
             root_canister_id,
@@ -263,6 +278,30 @@ impl Scenario {
     }
 }
 
+fn make_account(seed: u64) -> ic_base_types::PrincipalId {
+    /// This is copied from ic_canister_client::agent::ed25519_public_key_to_der to
+    /// avoid having to import that crate.
+    fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
+        let mut encoded: Vec<u8> = vec![
+            0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
+        ];
+        encoded.append(&mut key);
+        encoded
+    }
+
+    let keypair: ed25519_dalek::Keypair = {
+        let mut rng = ChaChaRng::seed_from_u64(seed);
+        ed25519_dalek::Keypair::generate(&mut rng)
+    };
+    let pubkey: UserPublicKey = UserPublicKey {
+        key: keypair.public.to_bytes().to_vec(),
+        algorithm_id: AlgorithmId::Ed25519,
+    };
+    let principal_id: PrincipalId =
+        PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key));
+    principal_id
+}
+
 /// Serves as a fixture (factory) for the tests in this file. (The previous
 /// stuff is generic to any SNS test; whereas, this is specifc to swap.)
 ///
@@ -273,19 +312,29 @@ impl Scenario {
 ///
 /// Begins a swap.
 ///
-/// TEST_USER2 has 100 ICP that he can use to buy into the swap.
+/// TEST_USER2 has 100 ICP that they can use to buy into the swap, as well as any accounts listed in `accounts`.
 fn begin_swap(
     state_machine: &mut StateMachine,
+    accounts: &[ic_base_types::PrincipalId],
+    planned_contribution_per_account: u64,
+    planned_cf_contribution: u64,
 ) -> (
     Scenario,
     /* community_fund_nns_neurons */ Vec<nns_governance_pb::Neuron>,
 ) {
-    // Give TEST_USER2 some ICP so that he can buy into the swap.
+    let num_accounts = accounts.len().max(1) as u64;
+    // Give TEST_USER2 and everyone in `accounts` some ICP so that they can buy into the swap.
     let test_user2_principal_id: PrincipalId = *TEST_USER2_PRINCIPAL;
     let mut nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_account(
             test_user2_principal_id.into(),
             *TEST_USER2_ORIGINAL_BALANCE_ICP,
+        )
+        .with_ledger_accounts(
+            accounts
+                .iter()
+                .map(|principal_id| ((*principal_id).into(), *TEST_USER2_ORIGINAL_BALANCE_ICP))
+                .collect(),
         )
         .with_test_neurons()
         .build();
@@ -322,7 +371,10 @@ fn begin_swap(
     setup_nns_canisters(state_machine, nns_init_payloads);
 
     // Create, configure, and init canisters.
-    let mut scenario = Scenario::new(state_machine);
+    let mut scenario = Scenario::new(
+        state_machine,
+        Tokens::from_tokens(100 * num_accounts).unwrap(),
+    );
     // Fill in more swap parameters.
     {
         let swap = &mut scenario.configuration.swap;
@@ -355,6 +407,11 @@ fn begin_swap(
     let neuron_id = nns_common_pb::NeuronId {
         id: TEST_NEURON_1_ID,
     };
+    let goal_tokens_raised = Tokens::from_tokens(
+        planned_contribution_per_account * num_accounts + planned_cf_contribution,
+    )
+    .unwrap()
+    .get_e8s();
     let response = nns_governance_make_proposal(
         state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL, // sender
@@ -366,22 +423,21 @@ fn begin_swap(
             action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
                 target_swap_canister_id: Some(scenario.swap_canister_id.into()),
                 params: Some(swap_pb::Params {
-                    // Succeed as soon as 100 ICP has been raised. In this case,
+                    // Succeed as soon as we raise `goal_tokens_raised`. In this case,
                     // SNS tokens and ICP trade at parity.
-                    max_icp_e8s: 100 * E8,
-                    // Still succeed if 40 ICP has been raised, but only after
-                    // the open time window has passed. At this level of
-                    // participation, the price of an SNS token is 2.5 ICP.
-                    min_icp_e8s: 40 * E8,
+                    max_icp_e8s: goal_tokens_raised,
+                    // We want to make sure our test is exactly right, so we set the
+                    // minimum to be just one e8 less than the maximum.
+                    min_icp_e8s: goal_tokens_raised - 1,
 
                     // We need at least one participant, but they can contribute whatever
                     // amount they want (subject to max_icp_e8s for the whole swap).
                     min_participants: 1,
                     min_participant_icp_e8s: 1,
-                    max_participant_icp_e8s: 100 * E8,
+                    max_participant_icp_e8s: TEST_USER2_ORIGINAL_BALANCE_ICP.get_e8s(),
 
                     swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
-                    sns_token_e8s: 100 * E8,
+                    sns_token_e8s: goal_tokens_raised,
                 }),
                 // This is not sufficient to make the swap an automatic success.
                 community_fund_investment_e8s: Some(COMMUNITY_FUND_INVESTMENT_E8S),
@@ -440,20 +496,60 @@ fn begin_swap(
 
 #[test]
 fn swap_lifecycle_happy() {
+    swap_n_accounts(1);
+}
+
+#[test]
+fn swap_lifecycle_happy_two_neurons() {
+    swap_n_accounts(2);
+}
+
+#[test]
+fn swap_lifecycle_happy_more_neurons() {
+    swap_n_accounts(101);
+}
+
+fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
+    assert!(
+        num_accounts > 0,
+        "Testing the swap lifecycle requires num_accounts > 0"
+    );
+    // Step 0: Constants
+    let planned_contribution_per_account = 70;
+    let planned_cf_contribution = 30;
+
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, community_fund_neurons) = begin_swap(&mut state_machine);
+    let accounts = (0..num_accounts).map(make_account).collect::<Vec<_>>();
+    let (scenario, community_fund_neurons) = begin_swap(
+        &mut state_machine,
+        &accounts,
+        planned_contribution_per_account,
+        planned_cf_contribution,
+    );
+
+    // Step 1.5: initialize variables for the benchmark
+    let instructions_consumed_base = state_machine.instructions_consumed();
+    let mut instructions_consumed_swapping = None;
+    let mut time_finalization_started = None;
 
     // Step 2: Run code under test.
 
-    // Make the swap an immediate success by having TEST_USER2 participate with
-    // a large amount (just enough to hit the max).
-    participate_in_swap(
-        &mut state_machine,
-        scenario.swap_canister_id,
-        *TEST_USER2_PRINCIPAL,
-        Tokens::from_tokens(70).unwrap(),
-    );
+    // Have all the accounts we created participate in the swap
+    for (index, principal_id) in accounts.iter().enumerate() {
+        println!("Swapping user {index}/{num_accounts}");
+        if index == num_accounts as usize - 1 {
+            time_finalization_started = Some(SystemTime::now());
+            instructions_consumed_swapping =
+                Some(state_machine.instructions_consumed() - instructions_consumed_base);
+        }
+        participate_in_swap(
+            &mut state_machine,
+            scenario.swap_canister_id,
+            *principal_id,
+            Tokens::from_tokens(planned_contribution_per_account).unwrap(),
+        );
+    }
 
     // Make sure the swap reached the Committed state.
     {
@@ -492,6 +588,10 @@ fn swap_lifecycle_happy() {
         Decode!(&result, swap_pb::FinalizeSwapResponse).unwrap()
     };
 
+    let instructions_consumed_finalization =
+        state_machine.instructions_consumed() - instructions_consumed_swapping.unwrap();
+    let time_to_finalize_swap = time_finalization_started.unwrap().elapsed().unwrap();
+
     // Step 3: Inspect results.
 
     // Step 3.1: Inspect finalize_swap_response.
@@ -502,17 +602,17 @@ fn swap_lifecycle_happy() {
                 // While, the other fields in the response count 3 successes,
                 // this only counts 1, because 2 of the participants are from
                 // the (maturity of) Community Fund (NNS neurons).
-                success: 1,
+                success: num_accounts as u32,
                 failure: 0,
                 skipped: 0,
             }),
             sweep_sns: Some(swap_pb::SweepResult {
-                success: 3,
+                success: num_accounts as u32 + 2,
                 failure: 0,
                 skipped: 0,
             }),
             create_neuron: Some(swap_pb::SweepResult {
-                success: 3,
+                success: num_accounts as u32 + 2,
                 failure: 0,
                 skipped: 0,
             }),
@@ -537,19 +637,24 @@ fn swap_lifecycle_happy() {
         );
         // TODO(NNS1-1664): ICP from the community fund should also appear in
         // the account of SNS governance, but that hasn't been implemented yet.
-        let expected_balance = (Tokens::from_tokens(70).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
+        let total_transferred =
+            Tokens::from_tokens(planned_contribution_per_account * num_accounts).unwrap();
+        let total_paid_in_transfer_fee =
+            Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * num_accounts);
+        let expected_balance = (total_transferred - total_paid_in_transfer_fee).unwrap();
         assert_eq!(observed_balance, expected_balance);
     }
-    // TEST_USER2 still has the change left over from their participation in the swap/sale.
-    {
+    // All the users still has the change left over from their participation in the swap/sale.
+    for principal_id in accounts.iter() {
         let observed_balance = ledger_account_balance(
             &mut state_machine,
             ICP_LEDGER_CANISTER_ID,
             &AccountBalanceArgs {
-                account: AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None).to_address(),
+                account: AccountIdentifier::new(*principal_id, None).to_address(),
             },
         );
-        let expected_balance = (Tokens::from_tokens(30).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
+        let expected_balance =
+            (Tokens::from_tokens(planned_cf_contribution).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
         assert_eq!(observed_balance, expected_balance);
     }
 
@@ -571,13 +676,12 @@ fn swap_lifecycle_happy() {
 
             (sns_neuron_subaccount, participation_amount_e8s)
         })
-        .chain(
-            vec![(
-                compute_neuron_staking_subaccount_bytes(*TEST_USER2_PRINCIPAL, 0),
-                70 * E8,
-            )]
-            .into_iter(),
-        )
+        .chain(accounts.iter().map(|principal_id| {
+            (
+                compute_neuron_staking_subaccount_bytes(*principal_id, 0),
+                planned_contribution_per_account * E8,
+            )
+        }))
         .collect::<Vec<(
             /* subaccount: */ [u8; 32],
             /* gross_participation_amount_e8s: */ u64,
@@ -614,13 +718,31 @@ fn swap_lifecycle_happy() {
             .collect::<HashMap<_, _>>();
 
     // Step 3.3: Inspect SNS neurons.
-    let observed_sns_neurons = sns_governance_list_neurons(
-        &mut state_machine,
-        scenario.governance_canister_id,
-        &ListNeurons::default(),
-    )
-    .neurons;
-    assert_eq!(observed_sns_neurons.len(), 3, "{:#?}", observed_sns_neurons);
+    // `sns_governance_list_neurons` returns at most 100 neurons.
+    // So we need to page through the results to get them all.
+    let observed_sns_neurons = {
+        let mut observed_sns_neurons = Vec::new();
+        let mut start_page_at: Option<ic_sns_governance::pb::v1::NeuronId> = None;
+        loop {
+            let current_batch = sns_governance_list_neurons(
+                &mut state_machine,
+                scenario.governance_canister_id,
+                &ListNeurons {
+                    start_page_at,
+                    ..ListNeurons::default()
+                },
+            )
+            .neurons;
+            if current_batch.is_empty() {
+                break;
+            } else {
+                start_page_at = Some(current_batch[current_batch.len() - 1].id.clone().unwrap());
+                observed_sns_neurons.extend(current_batch);
+            }
+        }
+        observed_sns_neurons
+    };
+    assert_eq!(observed_sns_neurons.len() as u64, num_accounts + 2);
     for observed_sns_neuron in &observed_sns_neurons {
         assert_eq!(
             observed_sns_neuron.maturity_e8s_equivalent, 0,
@@ -652,13 +774,28 @@ fn swap_lifecycle_happy() {
             observed_sns_neuron
         );
     }
+    SwapPerformanceResults {
+        instructions_consumed_base,
+        instructions_consumed_swapping: instructions_consumed_swapping.unwrap(),
+        instructions_consumed_finalization,
+        time_to_finalize_swap,
+    }
 }
 
 #[test]
 fn swap_lifecycle_sad() {
+    // Step 0: Constants
+    let planned_contribution_per_account = 70;
+    let planned_cf_contribution = 30;
+
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, _community_fund_neurons) = begin_swap(&mut state_machine);
+    let (scenario, _community_fund_neurons) = begin_swap(
+        &mut state_machine,
+        &[],
+        planned_contribution_per_account,
+        planned_cf_contribution,
+    );
 
     // Step 2: Run code under test.
 
@@ -976,4 +1113,55 @@ fn swap_get_state(
         }
     };
     Decode!(&result, swap_pb::GetStateResponse).unwrap()
+}
+
+#[cfg(feature = "long_bench")]
+#[test]
+fn swap_load_test() {
+    use std::fs::OpenOptions;
+    use std::io::prelude::*;
+    let filename = "swap_load_test_results.csv";
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true) // Fail if the file already exists
+        .open(filename)
+        .unwrap();
+
+    if let Err(e) = writeln!(file, "num_accounts,instructions_consumed_base,instructions_consumed_swapping,instructions_consumed_finalization,time_ms") {
+        eprintln!("Couldn't write to file: {}", e);
+    }
+
+    let max_accounts = 100_000;
+    let mut num_accounts = 10;
+    loop {
+        if num_accounts > max_accounts {
+            break;
+        }
+        let SwapPerformanceResults {
+            instructions_consumed_base,
+            instructions_consumed_swapping,
+            instructions_consumed_finalization,
+            time_to_finalize_swap,
+        } = swap_n_accounts(num_accounts);
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(filename)
+            .unwrap();
+
+        if let Err(e) = writeln!(
+            file,
+            "{},{},{},{},{}",
+            num_accounts,
+            instructions_consumed_base,
+            instructions_consumed_swapping,
+            instructions_consumed_finalization,
+            time_to_finalize_swap.as_millis()
+        ) {
+            eprintln!("Couldn't write to file: {}", e);
+        }
+        num_accounts = ((num_accounts as f64) * 2.0) as u64;
+    }
 }
