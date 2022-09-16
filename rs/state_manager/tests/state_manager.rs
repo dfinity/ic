@@ -552,11 +552,17 @@ fn can_commit_same_state_twice() {
     state_manager_test(|_metrics, state_manager| {
         let (tip_height, state) = state_manager.take_tip();
         assert_eq!(tip_height, height(0));
+        let state_copy = state.clone();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
 
-        let (tip_height, state) = state_manager.take_tip();
+        let (tip_height, _state) = state_manager.take_tip();
         assert_eq!(tip_height, height(1));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        // _state and state_copy will differ in metadata.prev_state_height,
+        // so to commit the same state twice we need to commit the copy.
+        state_manager.commit_and_certify(state_copy, height(1), CertificationScope::Metadata);
+
+        let (tip_height, _state) = state_manager.take_tip();
+        assert_eq!(tip_height, height(1));
     });
 }
 
