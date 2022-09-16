@@ -333,4 +333,3 @@ RUN \
 # Install ngx_http_geoip2
 COPY --from=ngx_http_geoip2_module \
     /tmp/ngx_http_geoip2_module.so ${NGINX_MODULES_PATH}
-
