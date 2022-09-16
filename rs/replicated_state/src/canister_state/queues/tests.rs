@@ -1253,6 +1253,130 @@ fn test_garbage_collect_restores_defaults() {
     assert_eq!(CanisterQueues::default(), queues);
 }
 
+#[test]
+fn test_reject_ic00_output_request() {
+    let this = canister_test_id(1);
+
+    let request = RequestBuilder::default()
+        .sender(this)
+        .receiver(IC_00)
+        .build();
+    let reject_context = RejectContext {
+        code: ic_error_types::RejectCode::DestinationInvalid,
+        message: "".into(),
+    };
+
+    let mut queues = CanisterQueues::default();
+
+    // Reject an output request without having enqueued it first.
+    queues
+        .reject_ic00_output_request(request, reject_context.clone())
+        .unwrap();
+
+    // There is now a reject response.
+    assert_eq!(
+        CanisterInputMessage::Response(Arc::new(
+            ResponseBuilder::default()
+                .respondent(IC_00)
+                .originator(this)
+                .response_payload(Payload::Reject(reject_context))
+                .build()
+        )),
+        queues.pop_input().unwrap()
+    );
+
+    // And after popping it, there are no messages or reservations left.
+    queues.garbage_collect();
+    assert!(queues.canister_queues.is_empty());
+}
+
+#[test]
+fn test_output_queues_for_each() {
+    let this = canister_test_id(13);
+    let other_1 = canister_test_id(1);
+    let other_2 = canister_test_id(2);
+
+    // 3 requests to `other_1`, one to `other_2`.
+    let request_1 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_1")
+        .build();
+    let request_2 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_2")
+        .build();
+    let request_3 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_1)
+        .method_name("request_3")
+        .build();
+    let request_4 = RequestBuilder::default()
+        .sender(this)
+        .receiver(other_2)
+        .method_name("request_4")
+        .build();
+
+    let mut queues = CanisterQueues::default();
+    queues
+        .push_output_request(request_1.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_2.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_3.into(), mock_time())
+        .unwrap();
+    queues
+        .push_output_request(request_4.into(), mock_time())
+        .unwrap();
+
+    // Should have 2 queue pairs (one for `other_1`, one for `other_2`).
+    assert_eq!(2, queues.canister_queues.len());
+
+    let mut seen = Vec::new();
+    queues.output_queues_for_each(|canister_id, msg| match msg {
+        RequestOrResponse::Request(req) => {
+            seen.push((*canister_id, req.method_name.clone()));
+            // Turn down `request_2`, accept everything else.
+            if req.method_name == "request_2" {
+                return Err(());
+            }
+            Ok(())
+        }
+        _ => unreachable!(),
+    });
+
+    // Ensure we've seen `request_1` and `request_2` to `other_1`; and
+    // `request_4` to `other_2`; but not `request_3`.
+    assert_eq!(
+        vec![
+            (other_1, "request_1".into()),
+            (other_1, "request_2".into()),
+            (other_2, "request_4".into())
+        ],
+        seen
+    );
+
+    // `request_2` and `request_3` should have been left in place.
+    let mut seen = Vec::new();
+    queues.output_queues_for_each(|canister_id, msg| match msg {
+        RequestOrResponse::Request(req) => {
+            seen.push((*canister_id, req.method_name.clone()));
+            Ok(())
+        }
+        _ => unreachable!(),
+    });
+    assert_eq!(
+        vec![(other_1, "request_2".into()), (other_1, "request_3".into())],
+        seen
+    );
+
+    // No output left.
+    assert!(!queues.has_output());
+}
+
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
 // `CanisterQueues` defined by a its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.
