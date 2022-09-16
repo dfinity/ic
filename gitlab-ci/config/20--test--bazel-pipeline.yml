@@ -68,7 +68,7 @@ bazel-test-all-rebuild:
     - zh
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /tmp/bazel-output"
-    BAZEL_EXTRA_ARGS: "--repository_cache= --remote_cache= --disk_cache=/tmp/bazel-no-cache"
+    BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache=/tmp/bazel-no-cache --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}"
 
 bazel-test-all-macos:
   extends:
