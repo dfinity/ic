@@ -35,8 +35,13 @@ impl<'a> LazyFork<'a> for FlatMapFork<'a> {
     fn edge(&self, l: &Label) -> Option<LazyTree<'a>> {
         self.0.get(l).map(as_lazy)
     }
+
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new(self.0.keys().iter().cloned())
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
+        Box::new(self.0.iter().map(|(l, t)| (l.clone(), as_lazy(t))))
     }
 }
 
