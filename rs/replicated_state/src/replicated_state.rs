@@ -770,6 +770,14 @@ impl ReplicatedState {
         self.canister_states.len()
     }
 
+    /// Garbage collects empty canister and subnet queues.
+    pub fn garbage_collect_canister_queues(&mut self) {
+        for (_canister_id, canister) in self.canister_states.iter_mut() {
+            canister.system_state.garbage_collect_canister_queues();
+        }
+        self.subnet_queues.garbage_collect();
+    }
+
     /// Returns a reference to the `BitcoinState`.
     pub fn bitcoin(&self) -> &BitcoinState {
         &self.bitcoin
