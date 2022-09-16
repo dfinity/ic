@@ -2631,6 +2631,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519"
+version = "1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
+dependencies = [
+ "signature",
+]
+
+[[package]]
 name = "ed25519-consensus"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2642,6 +2651,20 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519",
+ "rand 0.7.3",
+ "serde",
+ "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -7695,6 +7718,7 @@ dependencies = [
  "dfn_core",
  "dfn_json",
  "dfn_protobuf",
+ "ed25519-dalek",
  "hex",
  "ic-base-types",
  "ic-canister-client",
@@ -7727,6 +7751,7 @@ dependencies = [
  "pretty-bytes",
  "prost",
  "rand 0.8.5",
+ "rand_chacha 0.2.2",
  "rand_core 0.6.3",
  "rust_decimal",
  "rust_decimal_macros",
@@ -7836,29 +7861,39 @@ dependencies = [
  "canister-test",
  "dfn_candid",
  "dfn_protobuf",
+ "ed25519-dalek",
  "futures",
+ "ic-base-types",
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-sha",
+ "ic-ic00-types",
  "ic-icrc1",
  "ic-icrc1-client",
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
+ "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance",
+ "ic-nns-test-utils",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
+ "ic-state-machine-tests",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
+ "ledger-canister",
  "maplit",
  "num-traits",
  "on_wire",
  "prost",
+ "rand_chacha 0.2.2",
  "tokio",
 ]
 

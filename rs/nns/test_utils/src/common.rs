@@ -100,6 +100,16 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_ledger_accounts(
+        &mut self,
+        accounts: Vec<(AccountIdentifier, Tokens)>,
+    ) -> &mut Self {
+        for (account, icpts) in accounts {
+            self.with_ledger_account(account, icpts);
+        }
+        self
+    }
+
     pub fn with_neurons_from_csv_file(&mut self, csv_file: &Path) -> &mut Self {
         self.governance.add_all_neurons_from_csv_file(csv_file);
         self
