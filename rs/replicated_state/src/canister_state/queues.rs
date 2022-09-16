@@ -19,12 +19,12 @@ use ic_types::{
     CanisterId, CountBytes, Cycles, QueueIndex, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
-use std::time::Duration;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
+    time::Duration,
 };
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
@@ -607,10 +607,13 @@ impl CanisterQueues {
             request.receiver, IC_00,
             "reject_ic00_output_request can only be used to reject management canister requests"
         );
+
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
         input_queue.reserve_slot()?;
         self.input_queues_stats.reserved_slots += 1;
         self.memory_usage_stats += MemoryUsageStats::response_slot_delta();
+        debug_assert!(self.stats_ok());
+
         let response = RequestOrResponse::Response(Arc::new(Response {
             originator: request.sender,
             respondent: IC_00,
@@ -700,6 +703,7 @@ impl CanisterQueues {
         let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
         self.output_queues_stats -= oq_stats_delta;
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+        debug_assert!(self.stats_ok());
 
         Ok(())
     }
@@ -796,15 +800,13 @@ impl CanisterQueues {
         &mut self,
         canister_id: &CanisterId,
     ) -> (&mut InputQueue, &mut OutputQueue) {
-        let mut queue_bytes = 0;
         let (input_queue, output_queue) =
             self.canister_queues.entry(*canister_id).or_insert_with(|| {
                 let input_queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
                 let output_queue = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-                queue_bytes = input_queue.calculate_size_bytes();
+                self.input_queues_stats.size_bytes += input_queue.calculate_size_bytes();
                 (input_queue, output_queue)
             });
-        self.input_queues_stats.size_bytes += queue_bytes;
         (input_queue, output_queue)
     }
 
@@ -870,6 +872,10 @@ impl CanisterQueues {
         debug_assert_eq!(
             Self::calculate_input_queues_stats(&self.canister_queues),
             self.input_queues_stats
+        );
+        debug_assert_eq!(
+            Self::calculate_output_queues_stats(&self.canister_queues),
+            self.output_queues_stats
         );
         debug_assert_eq!(
             Self::calculate_memory_usage_stats(&self.canister_queues),
