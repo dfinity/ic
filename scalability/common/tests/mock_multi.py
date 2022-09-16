@@ -11,6 +11,7 @@ import common.misc as misc  # noqa
 from common.base_experiment import BaseExperiment  # noqa
 from experiments.run_mixed_workload_experiment import MixedWorkloadExperiment  # noqa
 from common import ssh  # noqa
+from common.workload import Workload  # noqa
 
 
 class ExperimentMock(MixedWorkloadExperiment):
@@ -67,6 +68,7 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
         ExperimentMock.get_ic_version = MagicMock(return_value="42")
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
+        Workload.fetch_results = Mock(return_value=[0, 0])
 
         exp = ExperimentMock()
         exp.canister_ids = {"canistername": ["canisterid"]}

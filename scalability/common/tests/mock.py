@@ -68,7 +68,7 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
         ExperimentMock.get_ic_version = MagicMock(return_value="deadbeef")
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
-        Workload.fetch_results = MagicMock()
+        Workload.fetch_results = Mock(return_value=[0, 0])
         report.evaluate_summaries = MagicMock()
 
         exp = ExperimentMock()
