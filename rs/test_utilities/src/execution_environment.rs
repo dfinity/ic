@@ -1205,6 +1205,7 @@ pub struct ExecutionTestBuilder {
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
     bitcoin_canisters: Vec<PrincipalId>,
+    cost_to_compile_wasm_instruction: u64,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1241,6 +1242,9 @@ impl Default for ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
             bitcoin_canisters: Vec::default(),
+            cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
+                .cost_to_compile_wasm_instruction
+                .get(),
         }
     }
 }
@@ -1399,6 +1403,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_cost_to_compile_wasm_instruction(mut self, cost: u64) -> Self {
+        self.cost_to_compile_wasm_instruction = cost;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
@@ -1500,6 +1509,7 @@ impl ExecutionTestBuilder {
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
             bitcoin_canisters: self.bitcoin_canisters,
+            cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(
