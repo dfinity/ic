@@ -20,7 +20,9 @@ use ic_types::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-// tag::change_set[]
+/// The height, at which we consider a replica to be behind
+pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
+
 pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
@@ -35,7 +37,6 @@ pub enum ChangeAction {
     PurgeValidatedBelow(Height),
     PurgeUnvalidatedBelow(Height),
 }
-// end::change_set[]
 
 impl From<ChangeAction> for ChangeSet {
     fn from(action: ChangeAction) -> Self {
@@ -306,6 +307,15 @@ pub trait ConsensusPoolCache: Send + Sync {
         let certified_height = self.finalized_block().context.certified_height;
         let catchup_package_height = self.catch_up_package().height();
         certified_height.max(catchup_package_height)
+    }
+
+    /// Returns true if the `certified_height` provided is significantly behind the
+    /// `certified_height` referenced by the current finalized block.
+    ///
+    /// This indicates that the node does not have a recent certified state.
+    fn is_replica_behind(&self, certified_height: Height) -> bool {
+        certified_height + HEIGHT_CONSIDERED_BEHIND
+            < self.finalized_block().context.certified_height
     }
 }
 
