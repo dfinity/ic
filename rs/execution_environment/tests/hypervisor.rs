@@ -3575,7 +3575,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
 
     // Execute canister C and all the replies.
     test.execute_all();
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
 
     let reject_message = match result {
@@ -3689,7 +3689,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
 
     // Execute canister C and all the replies.
     test.execute_all();
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     let reject_message = match result {
         WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
@@ -3821,7 +3821,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // Execute method #2 of canister B and all the replies.
     test.execute_all();
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     let reject_message = match result {
         WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
@@ -4000,7 +4000,7 @@ fn cannot_stop_canister_with_open_call_context() {
     // Get the reply back to canister A and execute it.
     test.induct_messages();
     test.execute_message(a_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(b));
 
@@ -4073,7 +4073,7 @@ fn dts_pause_resume_works_in_update_call() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
 }
@@ -4146,7 +4146,7 @@ fn dts_abort_works_in_update_call() {
     assert!(
         test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 2, 3, 4, 5]));
 }
@@ -4180,7 +4180,7 @@ fn dts_concurrent_subnet_available_change() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let err = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
 }
@@ -4237,7 +4237,7 @@ fn system_state_apply_change_fails() {
         test.canister_state(a_id).next_execution(),
         NextExecution::None,
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     match result {
         WasmResult::Reply(_) => unreachable!("Expected the canister to reject the message"),
@@ -4331,7 +4331,7 @@ fn dts_abort_works_in_response_callback() {
 
     // Execute the response callback again and it should succeeed.
     test.execute_message(a_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(b));
 }
@@ -4421,7 +4421,7 @@ fn dts_abort_works_in_cleanup_callback() {
         );
         i += 1;
     }
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let err = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
 }
@@ -4469,7 +4469,7 @@ fn cycles_correct_if_response_fails() {
             - test.call_fee("update", &b)
             - test.reply_fee(&b)
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
 }
@@ -4519,7 +4519,7 @@ fn cycles_correct_if_cleanup_fails() {
             - test.call_fee("update", &b)
             - test.reply_fee(&b)
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
     assert_eq!(result.code(), ErrorCode::CanisterCalledTrap);
 }

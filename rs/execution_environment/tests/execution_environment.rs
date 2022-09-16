@@ -160,7 +160,7 @@ fn ingress_can_reply_and_produce_output_request() {
     let canister_id = test.canister_from_wat(CALL_SIMPLE_AND_REPLY_WAT).unwrap();
     let ingress_id = test.ingress_raw(canister_id, "test", vec![]).0;
     test.execute_message(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     assert_eq!(1, system_state.queues().output_queues_len());
     assert_eq!(1, system_state.queues().output_message_count());
@@ -182,7 +182,7 @@ fn ingress_can_reject() {
     let canister_id = test.canister_from_wat(REJECT_WAT).unwrap();
     let ingress_id = test.ingress_raw(canister_id, "test", vec![]).0;
     test.execute_message(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     assert_eq!(0, system_state.queues().output_queues_len());
     assert_eq!(0, system_state.queues().output_message_count());
@@ -577,7 +577,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
     test.process_stopping_canisters();
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     assert_eq!(
         ingress_status,
         IngressStatus::Known {
@@ -588,7 +588,7 @@ fn stopping_an_already_stopped_canister_succeeds() {
         }
     );
     let ingress_id = test.stop_canister(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     test.process_stopping_canisters();
     assert_eq!(
         ingress_status,
@@ -606,7 +606,7 @@ fn stopping_a_running_canister_does_not_update_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     assert_eq!(ingress_status, IngressStatus::Unknown);
 }
 
@@ -615,10 +615,10 @@ fn stopping_a_stopping_canister_does_not_update_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     assert_eq!(ingress_status, IngressStatus::Unknown);
     let ingress_id = test.stop_canister(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     assert_eq!(ingress_status, IngressStatus::Unknown);
 }
 
@@ -629,7 +629,7 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     let controller = test.user_id();
     test.set_user_id(user_test_id(13));
     let ingress_id = test.stop_canister(canister_id);
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     assert_eq!(
         ingress_status,
         IngressStatus::Known {
@@ -856,7 +856,7 @@ fn stop_canister_from_another_canister() {
     assert!(test.canister_state(canister).system_state.ready_to_stop());
     test.process_stopping_canisters();
     test.execute_all();
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
 }
@@ -878,7 +878,7 @@ fn starting_a_stopping_canister_succeeds() {
     );
     // Assert that stop messages have been cancelled.
     for ingress_id in [ingress_id1, ingress_id2] {
-        let ingress_status = test.ingress_status(ingress_id);
+        let ingress_status = test.ingress_status(&ingress_id);
         let err = check_ingress_status(ingress_status).unwrap_err();
         assert_eq!(ErrorCode::CanisterStoppingCancelled, err.code());
     }

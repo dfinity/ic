@@ -300,8 +300,8 @@ impl ExecutionTest {
         self.time += duration;
     }
 
-    pub fn ingress_status(&self, message_id: MessageId) -> IngressStatus {
-        self.state().get_ingress_status(&message_id)
+    pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+        self.state().get_ingress_status(message_id)
     }
 
     pub fn get_call_context(
@@ -665,7 +665,7 @@ impl ExecutionTest {
         if !self.manual_execution {
             self.execute_all();
         }
-        (ingress_id.clone(), self.ingress_status(ingress_id))
+        (ingress_id.clone(), self.ingress_status(&ingress_id))
     }
 
     /// Executes the heartbeat method of the given canister.
@@ -787,7 +787,7 @@ impl ExecutionTest {
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let ingress_id = self.subnet_message_raw(method_name, method_payload);
-        check_ingress_status(self.ingress_status(ingress_id))
+        check_ingress_status(self.ingress_status(&ingress_id))
     }
 
     // Similar to `subnet_message()` but does not check the ingress status of
@@ -984,7 +984,7 @@ impl ExecutionTest {
                     .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
-                    self.instruction_limits.message(),
+                    self.install_code_instruction_limits.message(),
                     instructions_executed,
                 );
             }

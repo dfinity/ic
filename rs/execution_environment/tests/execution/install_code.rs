@@ -113,7 +113,7 @@ fn dts_resume_works_in_install_code() {
     assert!(
         test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
@@ -175,7 +175,7 @@ fn dts_abort_works_in_install_code() {
         test.canister_state(canister_id).system_state.balance() < original_system_state.balance(),
     );
 
-    let ingress_status = test.ingress_status(ingress_id);
+    let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }
