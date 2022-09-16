@@ -223,6 +223,44 @@ mod tests {
         });
     }
 
+    /*
+    Establish connection with 2 peers, A and B.  Confirm that connection stays alive even when
+    no messages are being sent. (In current implementation, this is ensured by heartbeats)
+    */
+    #[test]
+    fn test_idle_connection_active() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            let (peer_a_sender, _peer_a_receiver) = channel(1);
+            let peer_a_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+            let (peer_b_sender, mut peer_b_receiver) = channel(1);
+            let peer_b_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_b_sender);
+
+            let (peer_a, _peer_b) = start_connection_between_two_peers(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                1,
+                peer_a_event_handler,
+                peer_b_event_handler,
+            );
+            std::thread::sleep(Duration::from_secs(20));
+
+            let msg_1 = TransportPayload(vec![0xa; 1000000]);
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+
+            // A sends message to B to verify that the connection is still alive
+            let res = peer_a.send(&NODE_ID_2, channel_id, msg_1.clone());
+            assert_eq!(res, Ok(()));
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
+        });
+    }
+
     // helper functions
 
     fn setup_peer_up_ack_event_handler(
