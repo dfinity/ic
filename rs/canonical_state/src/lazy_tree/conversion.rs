@@ -72,6 +72,10 @@ impl<'a> LazyFork<'a> for FiniteMap<'a> {
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new(self.0.keys().cloned())
     }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        Box::new(self.0.iter().map(|(l, lazy)| (l.clone(), lazy.force())))
+    }
 }
 
 /// LabelLike defines a (partial) conversion between a type and a label.
@@ -156,7 +160,7 @@ where
 
 impl<'a, K, V, F> LazyFork<'a> for MapTransformFork<'a, K, V, F>
 where
-    K: Ord + LabelLike,
+    K: Ord + LabelLike + Clone,
     F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a>,
 {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
@@ -168,6 +172,15 @@ where
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new(self.map.keys().map(|l| l.to_label()))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        Box::new(self.map.iter().map(move |(k, v)| {
+            (
+                k.to_label(),
+                (self.mk_tree)(k.clone(), v, self.certification_version),
+            )
+        }))
     }
 }
 
@@ -189,6 +202,15 @@ impl<'a, T> LazyFork<'a> for StreamQueueFork<'a, T> {
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new((self.queue.begin().get()..self.queue.end().get()).map(|i| i.to_label()))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        Box::new(self.queue.iter().map(move |(idx, v)| {
+            (
+                idx.to_label(),
+                (self.mk_tree)(idx, v, self.certification_version),
+            )
+        }))
     }
 }
 
@@ -303,6 +325,14 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
         Box::new(self.0.statuses().map(|(id, _)| Label::from(id.as_bytes())))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        Box::new(
+            self.0
+                .statuses()
+                .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status))),
+        )
     }
 }
 

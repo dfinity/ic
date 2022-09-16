@@ -12,11 +12,10 @@ fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(),
         }
         LazyTree::LazyFork(f) => {
             v.start_subtree()?;
-            for l in f.labels() {
+            for (l, t) in f.children() {
                 match v.enter_edge(l.as_bytes())? {
                     Control::Skip => continue,
                     Control::Continue => {
-                        let t = f.edge(&l).expect("fork edge disappeared");
                         traverse_lazy_tree(&t, v)?;
                     }
                 }
