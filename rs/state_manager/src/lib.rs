@@ -1810,14 +1810,6 @@ impl StateManagerImpl {
         let prev_height = height - Height::from(1);
 
         if prev_height == Self::INITIAL_STATE_HEIGHT {
-            // This code is executed at most once per subnet, no need to
-            // optimize this.
-            let hash_tree = hash_lazy_tree(&LazyTree::from(
-                initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-            ));
-            state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                crypto_hash_of_tree(&hash_tree),
-            ));
             return;
         }
 
@@ -2276,35 +2268,39 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let populate_prev_state_hash_in_tip =
-            |tip_height: Height,
-             tip: &mut ReplicatedState,
-             certifications_metadata: &CertificationsMetadata| {
-                if tip_height > Self::INITIAL_STATE_HEIGHT {
-                    let tip_metadata =
-                        certifications_metadata.get(&tip_height).unwrap_or_else(|| {
-                            fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
-                        });
+        let hash_at = |tip_height: Height, certifications_metadata: &CertificationsMetadata| {
+            if tip_height > Self::INITIAL_STATE_HEIGHT {
+                let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
+                    fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
+                });
 
-                    // Since the state machine will use this tip to compute the *next* state,
-                    // we populate the prev_state_hash with the hash of the current tip.
-                    tip.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                        tip_metadata.certified_state_hash.clone(),
-                    ));
-                }
-            };
+                // Since the state machine will use this tip to compute the *next* state,
+                // we populate the prev_state_hash with the hash of the current tip.
+                Some(CryptoHashOfPartialState::from(
+                    tip_metadata.certified_state_hash.clone(),
+                ))
+            } else {
+                // This code is executed at most once per subnet, no need to
+                // optimize this.
+                let hash_tree = hash_lazy_tree(&LazyTree::from(
+                    initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
+                ));
+                Some(CryptoHashOfPartialState::from(crypto_hash_of_tree(
+                    &hash_tree,
+                )))
+            }
+        };
 
         let mut states = self.states.write();
         let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
 
-        let target_snapshot = match states.snapshots.back() {
-            Some(snapshot) if snapshot.height > tip_height => snapshot.clone(),
+        let (target_snapshot, target_hash) = match states.snapshots.back() {
+            Some(snapshot) if snapshot.height > tip_height => (
+                snapshot.clone(),
+                hash_at(snapshot.height, &states.certifications_metadata),
+            ),
             _ => {
-                populate_prev_state_hash_in_tip(
-                    tip_height,
-                    &mut tip,
-                    &states.certifications_metadata,
-                );
+                tip.metadata.prev_state_hash = hash_at(tip_height, &states.certifications_metadata);
                 return (tip_height, tip);
             }
         };
@@ -2327,7 +2323,6 @@ impl StateManager for StateManagerImpl {
         // take_tip() and commit_and_certify() — the state machine thread.
         std::mem::drop(states);
 
-        let states = self.states.read();
         let mut new_tip = load_checkpoint_as_tip(
             #[cfg(debug_assertions)]
             &self.load_checkpoint_as_tip_guard,
@@ -2338,12 +2333,7 @@ impl StateManager for StateManagerImpl {
             self.own_subnet_type,
         );
 
-        let new_tip_height = target_snapshot.height;
-        populate_prev_state_hash_in_tip(
-            new_tip_height,
-            &mut new_tip,
-            &states.certifications_metadata,
-        );
+        new_tip.metadata.prev_state_hash = target_hash;
 
         // This might still not be the latest version: there might have been
         // another successful state sync while we were updating the tip.
