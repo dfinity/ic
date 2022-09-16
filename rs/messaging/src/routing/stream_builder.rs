@@ -557,10 +557,11 @@ impl StreamBuilderImpl {
                     .out_cycles
                     .with_label_values(&[&subnet])
                     .set(cycles_out.get() as f64);
+                let mant = (cycles_out.get() as f64)/(10_f64.powf((cycles_out.get() as f64).log10()-16.0).floor());
                 self.metrics
                     .out_cycle_index_checksum
                     .with_label_values(&[&subnet])
-                    .set((begin.get() as f64 + cycles_out.get() as f64) as f64);
+                    .set((mant as u64 % 10000000000000000 + (begin.get() % 1000) * 10000000000000000) as f64);
             });
 
         {

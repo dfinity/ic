@@ -471,8 +471,7 @@ impl StreamHandlerImpl {
         for msg in collected_messages {
             match msg {
                 RequestOrResponse::Request(req)
-                    if (req.sender == cmc_id
-                        && req.method_name == "deposit_cycles") =>
+                    if (req.sender == cmc_id && req.method_name == "deposit_cycles") =>
                 {
                     let old_val = self
                         .metrics
@@ -675,10 +674,11 @@ impl StreamHandlerImpl {
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
+            let mant = (stream.sum_cycles_out().get() as f64)/(10_f64.powf((stream.sum_cycles_out().get() as f64).log10()-16.0).floor());
             self.metrics
                 .inc_cycle_index_checksum
                 .with_label_values(&[&remote_subnet_id.to_string()])
-                .set((stream.signals_end().get() as f64 + new_cycles_sum.get() as f64) as f64);
+                .set((mant as u64 % 10000000000000000 + (stream.signals_end().get() % 1000) * 10000000000000000) as f64);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
