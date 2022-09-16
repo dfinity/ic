@@ -20,6 +20,7 @@ build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
 build --bes_backend=bes.buildfarm.dfinity.systems
 build --bes_timeout=30s # Defauilt is no timeout.
 build --bes_upload_mode=fully_async
+build:ci --bes_timeout=180s # Defauilt is no timeout.
 build:ci --bes_upload_mode=wait_for_upload_complete
 
 build --remote_local_fallback
