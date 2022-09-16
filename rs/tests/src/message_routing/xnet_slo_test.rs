@@ -30,7 +30,7 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
 use ic_registry_subnet_type::SubnetType;
-use slog::info;
+use slog::{info, Logger};
 use std::fmt::Display;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -167,6 +167,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
     info!(ctx.logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
+        ctx.logger.clone(),
         &endpoints_runtime,
         config.subnets,
         config.canisters_per_subnet,
@@ -342,7 +343,17 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
     info!(ctx.logger, "Stop/delete all canisters...");
     block_on(async {
         for canister in canisters.iter().flatten() {
+            info!(
+                ctx.logger,
+                "Stopping canister {} ...",
+                canister.canister_id()
+            );
             canister.stop().await.expect("Stopping canister failed.");
+            info!(
+                ctx.logger,
+                "Deleting canister {} ...",
+                canister.canister_id()
+            );
             canister.delete().await.expect("Deleting canister failed.");
         }
     });
@@ -425,6 +436,7 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
 }
 
 pub fn install_canisters(
+    logger: Logger,
     endpoints_runtime: &[Runtime],
     subnets: usize,
     canisters_per_subnet: usize,
@@ -445,6 +457,13 @@ pub fn install_canisters(
                             canister_idx, subnet_idx
                         )
                     });
+                info!(
+                    logger,
+                    "Installed canister (#{:?}) {} on subnet #{:?}",
+                    canister_idx,
+                    canister.canister_id(),
+                    subnet_idx
+                );
                 canisters[subnet_idx].push(canister);
             }
         }
