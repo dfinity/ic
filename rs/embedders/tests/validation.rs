@@ -566,7 +566,7 @@ fn can_reject_module_with_invalid_custom_sections() {
             }
         ),
         Err(WasmValidationError::InvalidCustomSection(
-            "Invalid custom section: Custom section named custom3 has no public/private scope defined.".to_string()
+            "Invalid custom section: Custom section 'icp:dummy custom3' has no public/private scope defined.".to_string()
         ))
     );
 }
@@ -582,13 +582,13 @@ fn can_extract_custom_section_name() {
     // Valid private section.
     let name = "icp:private    private_name";
     let (name, visibility) = extract_custom_section_name(name).unwrap().unwrap();
-    assert_eq!(name, "private_name");
+    assert_eq!(name, "   private_name");
     assert_eq!(visibility, CustomSectionType::Private);
 
     // No public/private visibility defined.
     let name = "icp:x invalid_custom";
     assert_eq!(extract_custom_section_name(name),  Err(WasmValidationError::InvalidCustomSection(
-            "Invalid custom section: Custom section named invalid_custom has no public/private scope defined.".to_string()
+            "Invalid custom section: Custom section 'icp:x invalid_custom' has no public/private scope defined.".to_string()
         )));
 
     // Ignore custom section. The name does not start with `icp:`.
