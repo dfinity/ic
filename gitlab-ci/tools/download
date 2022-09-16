@@ -9,7 +9,7 @@ print_usage() {
 		Options:
 			-h  - print this help message
 			-c <git revision> - git revision to use, default to autodetect from \$CI_COMMIT_SHA or from the current working tree
-			-u <url> - base url to download from. Default is ${BASE_URL}
+			-u <url> - base url to download from. Default is to autodetect.
 			files... - list of files to download.
 USAGE
 }
@@ -24,7 +24,6 @@ download_file() {
     exit 1
 }
 
-BASE_URL="http://download.proxy.dfinity.systems:8080"
 GIT_COMMIT="${CI_COMMIT_SHA:-$(git rev-parse HEAD)}"
 
 while getopts 'hc:u:' flag; do
@@ -47,6 +46,14 @@ if [ -z "${GIT_COMMIT:-}" ]; then
     echo "Can't detect git revision" >&2
     print_usage
     exit 1
+fi
+
+if [ -z "${BASE_URL:-}" ]; then
+    BASE_URL="https://download.dfinity.systems"
+    PROXY_URL="http://download.proxy.dfinity.systems:8080"
+    if curl --connect-timeout 5 --head "${PROXY_URL}" >&2; then
+        BASE_URL="${PROXY_URL}"
+    fi
 fi
 
 for F in $@; do
