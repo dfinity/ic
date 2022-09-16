@@ -99,11 +99,6 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         self.queue.front()
     }
 
-    /// Number of messages in the queue.
-    fn num_messages(&self) -> usize {
-        self.queue.len()
-    }
-
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.num_slots_reserved
@@ -254,12 +249,17 @@ impl InputQueue {
 
     /// Returns the number of messages in the queue.
     pub(super) fn num_messages(&self) -> usize {
-        self.queue.num_messages()
+        self.queue.queue.len()
     }
 
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.queue.reserved_slots()
+    }
+
+    /// Returns `true` if the queue is empty (no messages and no reserved slots).
+    pub(super) fn is_empty(&self) -> bool {
+        self.queue.reserved_slots() == 0 && self.queue.queue.is_empty()
     }
 
     /// Returns the amount of cycles contained in the queue.
@@ -524,6 +524,11 @@ impl OutputQueue {
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.queue.reserved_slots()
+    }
+
+    /// Returns `true` if the queue is empty (no messages and no reserved slots).
+    pub(super) fn is_empty(&self) -> bool {
+        self.queue.reserved_slots() == 0 && self.num_messages == 0
     }
 
     /// Returns the amount of cycles contained in the queue.

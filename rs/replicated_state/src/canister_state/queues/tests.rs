@@ -1157,6 +1157,102 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 }
 
+/// Simulates sending an outgoing request and receiving an incoming response,
+/// calling `garbage_collect()` throughout. This is always a no-op, until after
+/// the response was consumed, when the queue pair is GC-ed and all fields are
+/// reset to their default values.
+#[test]
+fn test_garbage_collect() {
+    let this = canister_test_id(1);
+    let other = canister_test_id(2);
+
+    // A matching request and response pair.
+    let request = RequestBuilder::default()
+        .sender(this)
+        .receiver(other)
+        .build();
+    let response = ResponseBuilder::default()
+        .respondent(other)
+        .originator(this)
+        .build();
+
+    // Empty `CanisterQueues`.
+    let mut queues = CanisterQueues::default();
+    assert!(queues.canister_queues.is_empty());
+    // No-op.
+    queues.garbage_collect();
+    assert_eq!(CanisterQueues::default(), queues);
+
+    // Push output request.
+    queues
+        .push_output_request(request.into(), mock_time())
+        .unwrap();
+    // No-op.
+    queues.garbage_collect();
+    assert!(queues.has_output());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // "Route" output request.
+    queues.output_into_iter(this).next();
+    // No-op.
+    queues.garbage_collect();
+    // No messages, but the queue pair is not GC-ed (due to the reservation).
+    assert!(!queues.has_output());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // Push input response.
+    queues
+        .push_input(
+            QUEUE_INDEX_NONE,
+            response.into(),
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+    // Before popping any input, `queue.next_input_queue` has default value.
+    assert_eq!(NextInputQueue::default(), queues.next_input_queue);
+    // No-op.
+    queues.garbage_collect();
+    // Still one queue pair.
+    assert!(queues.has_input());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // "Process" response.
+    queues.pop_input();
+    // After having popped an input, `next_input_queue` has advanced.
+    assert_ne!(NextInputQueue::default(), queues.next_input_queue);
+    // No more inputs, but we still have the queue pair.
+    assert!(!queues.has_input());
+    assert_eq!(1, queues.canister_queues.len());
+
+    // Queue pair can finally be GC-ed.
+    queues.garbage_collect();
+    // No canister queues left.
+    assert!(queues.canister_queues.is_empty());
+    // And all fields have been reset to their default values.
+    assert_eq!(CanisterQueues::default(), queues);
+}
+
+/// Tests that even when `garbage_collect()` would otherwis be a no-op, fields
+/// are always reset to default.
+#[test]
+fn test_garbage_collect_restores_defaults() {
+    let this = canister_test_id(1);
+
+    // Empty `CanisterQueues`.
+    let mut queues = CanisterQueues::default();
+    assert_eq!(CanisterQueues::default(), queues);
+
+    // Push and pop an ingress message.
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+    assert!(queues.pop_input().is_some());
+    // `next_input_queue` has now advanced to `RemoteSubnet`.
+    assert_ne!(CanisterQueues::default(), queues);
+
+    // But `garbage_collect()` should restore the struct to its default value.
+    queues.garbage_collect();
+    assert_eq!(CanisterQueues::default(), queues);
+}
+
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
 // `CanisterQueues` defined by a its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.

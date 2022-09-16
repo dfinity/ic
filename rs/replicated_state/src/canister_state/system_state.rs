@@ -763,6 +763,11 @@ impl SystemState {
             *subnet_available_memory -= memory_usage;
         }
     }
+
+    /// Garbage collects empty input and output queue pairs.
+    pub fn garbage_collect_canister_queues(&mut self) {
+        self.queues.garbage_collect();
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister

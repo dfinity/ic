@@ -13,13 +13,14 @@ fn input_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = InputQueue::new(capacity);
     assert_eq!(queue.num_messages(), 0);
+    assert!(queue.is_empty());
     assert_eq!(queue.pop(), None);
 }
 
 #[test]
-fn input_queue_is_empty() {
+fn input_queue_with_message_is_not_empty() {
     let mut input_queue = InputQueue::new(1);
-    assert_eq!(input_queue.num_messages(), 0);
+
     input_queue
         .push(
             QueueIndex::from(0),
@@ -27,6 +28,16 @@ fn input_queue_is_empty() {
         )
         .expect("could push");
     assert_ne!(input_queue.num_messages(), 0);
+    assert!(!input_queue.is_empty());
+}
+
+#[test]
+fn input_queue_with_reservation_is_not_empty() {
+    let mut input_queue = InputQueue::new(1);
+    input_queue.reserve_slot().unwrap();
+
+    assert_eq!(input_queue.num_messages(), 0);
+    assert!(!input_queue.is_empty());
 }
 
 /// Test affirming success on successive pushes with incrementing indices.
@@ -214,10 +225,29 @@ fn input_queue_decode_with_non_empty_deadlines_fails() {
 
 #[test]
 fn output_queue_constructor_test() {
-    let capacity: usize = 14;
-    let mut queue = OutputQueue::new(capacity);
+    let mut queue = OutputQueue::new(14);
     assert_eq!(queue.num_messages(), 0);
     assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn output_queue_with_message_is_not_empty() {
+    let mut queue = OutputQueue::new(14);
+
+    queue
+        .push_request(RequestBuilder::default().build().into(), mock_time())
+        .expect("could push");
+    assert_eq!(queue.num_messages(), 1);
+    assert!(!queue.is_empty());
+}
+
+#[test]
+fn output_queue_with_reservation_is_not_empty() {
+    let mut queue = OutputQueue::new(14);
+    queue.reserve_slot().unwrap();
+
+    assert_eq!(queue.num_messages(), 0);
+    assert!(!queue.is_empty());
 }
 
 /// Test that overfilling an output queue with messages and reservations
@@ -254,7 +284,7 @@ fn output_queue_push_to_full_queue_fails() {
 
 #[test]
 #[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
-fn output_push_into_reserved_slot_fails() {
+fn output_push_without_reserved_slot_fails() {
     let mut queue = OutputQueue::new(10);
     queue.push_response(ResponseBuilder::default().build().into());
 }

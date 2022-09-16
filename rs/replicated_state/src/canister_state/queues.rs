@@ -808,6 +808,62 @@ impl CanisterQueues {
         (input_queue, output_queue)
     }
 
+    /// Garbage collects all input and output queue pairs that are both empty.
+    ///
+    /// Because there is no useful information in an empty queue, there is no
+    /// need to retain them. In order to avoid state divergence (e.g. because
+    /// some replicas have an empty queue pair and some have garbage collected
+    /// it) we simply need to ensure that queues are garbage collected
+    /// deterministically across all replicas (e.g. at checkpointing time or
+    /// every round; but not e.g. when deserializing, which may happen at
+    /// different times on restarting or state syncing replicas).
+    ///
+    /// Time complexity: `O(num_queues)`.
+    pub fn garbage_collect(&mut self) {
+        self.garbage_collect_impl();
+
+        // Reset all fields to default if we have no messages. This is so that an empty
+        // `CanisterQueues` serializes as an empty byte array (and there is no need to
+        // persist it explicitly).
+        if self.canister_queues.is_empty() && self.ingress_queue.is_empty() {
+            // The schedules and stats will already have default (zero) values, only
+            // `next_input_queue` must be reset explicitly.
+            self.next_input_queue = Default::default();
+
+            // Trust but verify. Ensure everything is actually set to default.
+            debug_assert_eq!(CanisterQueues::default(), *self);
+        }
+    }
+
+    /// Implementation of `garbage_collect()`, ensuring the latter always resets
+    /// all fields to their default values when all queues are empty, regardless
+    /// of whether we bail out early or not.
+    fn garbage_collect_impl(&mut self) {
+        if self.canister_queues.is_empty() {
+            return;
+        }
+
+        // Adjust stats for any queue pairs we are going to GC.
+        let mut have_empty_pair = false;
+        for (_canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
+            if input_queue.is_empty() && output_queue.is_empty() {
+                self.input_queues_stats.size_bytes -= input_queue.calculate_size_bytes();
+                have_empty_pair = true;
+            }
+        }
+        // Bail out early if there is nothing to GC.
+        if !have_empty_pair {
+            return;
+        }
+
+        // Actually drop empty queue pairs.
+        self.canister_queues
+            .retain(|_canister_id, (input_queue, output_queue)| {
+                !input_queue.is_empty() || !output_queue.is_empty()
+            });
+        debug_assert!(self.stats_ok());
+    }
+
     /// Helper function to concisely validate stats adjustments in debug builds,
     /// by writing `debug_assert!(self.stats_ok())`.
     fn stats_ok(&self) -> bool {
