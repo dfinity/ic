@@ -84,6 +84,8 @@ check-bins-darwin:
   after_script: /usr/bin/true
   variables:
     ARTIFACT_PREFIX: sdk-release/x86_64-darwin
+    # https://curl.se/mail/lib-2020-06/0010.html
+    CURL_SSL_BACKEND: secure-transport
   script:
     - |
       set -exuo pipefail
