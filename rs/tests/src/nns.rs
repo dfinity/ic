@@ -38,7 +38,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use prost::Message;
 use registry_canister::mutations::{
-    do_add_nodes_to_subnet::AddNodesToSubnetPayload, do_create_subnet::CreateSubnetPayload,
+    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
+    do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_create_subnet::CreateSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
 };
@@ -627,6 +629,35 @@ pub async fn remove_nodes_via_endpoint(url: Url, node_ids: &[NodeId]) -> Result<
         proposal_payload,
         String::from("Remove node for testing"),
         "".to_string(),
+    )
+    .await;
+
+    vote_and_execute_proposal(&governance_canister, proposal_id).await;
+    Ok(())
+}
+
+pub async fn change_subnet_membership(
+    url: Url,
+    subnet_id: SubnetId,
+    node_ids_add: &[NodeId],
+    node_ids_remove: &[NodeId],
+) -> Result<(), String> {
+    let nns_api = runtime_from_url(url);
+    let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
+    let proposal_payload = ChangeSubnetMembershipPayload {
+        subnet_id: subnet_id.get(),
+        node_ids_add: node_ids_add.to_vec(),
+        node_ids_remove: node_ids_remove.to_vec(),
+    };
+
+    let proposal_id = submit_external_update_proposal(
+        &governance_canister,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::ChangeSubnetMembership,
+        proposal_payload,
+        String::from("Change subnet membership for testing"),
+        "Motivation: testing".to_string(),
     )
     .await;
 
