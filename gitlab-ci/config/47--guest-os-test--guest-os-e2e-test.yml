@@ -3,7 +3,7 @@
   extends:
     # Use untrusted builders for e2e tests.
     # The trusted builders don't work with IPv6 right now.
-    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: guest-os-test
   retry: 2
@@ -173,6 +173,11 @@ system-tests-pre-master:
   variables:
     SUITE_NAME: "pre_master"
 
+boundary-nodes-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "boundary_nodes_pre_master"
+
 create-subnet-pre-master:
   extends:
     - .system-tests
@@ -180,10 +185,13 @@ create-subnet-pre-master:
   variables:
     SUITE_NAME: "create_subnet_pre_master"
 
-boundary-nodes-pre-master:
+ckbtc-pre-master:
   extends: .system-tests
   variables:
-    SUITE_NAME: "boundary_nodes_pre_master"
+    SUITE_NAME: "ckbtc_pre_master"
+  script:
+    - |
+    - *run-farm-based-test
 
 boundary-nodes-sev-snp-pre-master:
   extends: .system-tests
@@ -330,7 +338,6 @@ spec-compliance-pre-master:
 test-monpoly-docker:
   extends:
     - .e2e-test-base
-    - .ubuntu-nix-docker-pinned-dc
   stage: prod-tests
   allow_failure: true  # TODO: VER-1714
   script:

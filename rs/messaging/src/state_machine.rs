@@ -108,7 +108,7 @@ impl StateMachine for StateMachineImpl {
         &self,
         mut state: ReplicatedState,
         network_topology: NetworkTopology,
-        batch: Batch,
+        mut batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -126,16 +126,22 @@ impl StateMachine for StateMachineImpl {
 
         self.remove_canisters_not_in_routing_table(&mut state);
 
-        // Preprocess messages and add messages to the induction pool through the Demux.
-        let mut state_with_messages = self.demux.process_payload(state, batch.payload);
-        if !state_with_messages.consensus_queue.is_empty() {
+        if !state.consensus_queue.is_empty() {
             fatal!(
                 self.log,
                 "Consensus queue not empty at the beginning of round {:?}.",
                 batch.batch_number
             )
         }
-        state_with_messages.consensus_queue = batch.consensus_responses;
+
+        // Preprocess messages and add messages to the induction pool through the Demux.
+        let mut state_with_messages = self.demux.process_payload(state, batch.payload);
+
+        // Append additional responses to the consensus queue.
+        state_with_messages
+            .consensus_queue
+            .append(&mut batch.consensus_responses);
+
         self.observe_phase_duration(PHASE_INDUCTION, &phase_timer);
 
         let execution_round_type = if batch.requires_full_state_hash {

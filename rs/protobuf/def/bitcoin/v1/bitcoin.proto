@@ -78,6 +78,7 @@ message BitcoinAdapterResponseWrapper {
   oneof r {
     GetSuccessorsResponse get_successors_response = 1;
     SendTransactionResponse send_transaction_response = 2;
+    CanisterGetSuccessorsResponseComplete canister_get_successors_response = 3;
   }
 }
 
@@ -134,6 +135,24 @@ enum Network {
   NETWORK_TESTNET = 1;
   NETWORK_MAINNET = 2;
   NETWORK_REGTEST = 3;
+}
+
+// A request to retrieve new blocks from the specified Bitcoin network.
+// NOTE: This request is specific to the Bitcoin wasm canister. It supersedes the
+// `GetSuccessorsRequest` above, which will be deleted once the  Bitcoin replica canister is
+// phased out.
+message CanisterGetSuccessorsRequestInitial {
+  Network network = 1;
+  repeated bytes processed_block_hashes = 2;
+}
+
+// A response containing new successor blocks from the Bitcoin network.
+// NOTE: This response is specific to the Bitcoin wasm canister. It supersedes the
+// `GetSuccessorsResponse` above, which will be deleted once the  Bitcoin replica canister is
+// phased out.
+message CanisterGetSuccessorsResponseComplete {
+  repeated bytes blocks = 1;
+  repeated bytes next = 2;
 }
 
 // Represents the Bitcoin state that isn't stored in PageMaps.

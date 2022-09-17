@@ -1,6 +1,6 @@
 boundary-node-service-worker:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .boundary-node-service-worker
   needs: [] # don't wait on other jobs
   stage: test

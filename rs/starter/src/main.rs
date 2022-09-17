@@ -38,7 +38,7 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_ic00_types::EcdsaKeyId;
-use ic_logger::LoggerImpl;
+use ic_logger::{info, new_replica_logger_from_config};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
@@ -52,7 +52,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, Height};
 use serde::{Deserialize, Serialize};
-use slog::info;
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -66,10 +65,13 @@ const NODE_INDEX: NodeIndex = 100;
 const SUBNET_ID: u64 = 0;
 
 fn main() -> Result<()> {
-    let logger = LoggerImpl::new(&LoggerConfig::default(), "starter_slog".to_string());
-    let log = logger.root.new(slog::o!("Application" => "starter"));
-
     let config = CliArgs::parse().validate()?;
+    let logger_config = LoggerConfig {
+        level: config.log_level,
+        ..LoggerConfig::default()
+    };
+    let (log, _async_log_guard) = new_replica_logger_from_config(&logger_config);
+
     info!(log, "ic-starter. Configuration: {:?}", config);
     let config_path = config.state_dir.join("ic.json5");
 
@@ -258,7 +260,7 @@ struct CliArgs {
     #[clap(short = 'c', long = "create-funds-whitelist")]
     provisional_whitelist: Option<String>,
 
-    /// Run replica with the provided log level. Default is Warning
+    /// Run replica and ic-starter with the provided log level. Default is Warning
     #[clap(long = "log-level",
                 possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
                 ignore_case = true)]

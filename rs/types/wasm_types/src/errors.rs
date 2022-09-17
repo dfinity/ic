@@ -51,9 +51,17 @@ pub enum WasmValidationError {
     /// Module defines an invalid index for a local function.
     InvalidFunctionIndex { index: usize, import_count: usize },
     /// A function was too complex.
-    FunctionComplexityTooHigh,
+    FunctionComplexityTooHigh {
+        index: usize,
+        complexity: usize,
+        allowed: usize,
+    },
     /// A function was too large.
-    FunctionTooLarge,
+    FunctionTooLarge {
+        index: usize,
+        size: usize,
+        allowed: usize,
+    },
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -106,8 +114,16 @@ impl std::fmt::Display for WasmValidationError {
                 "Function has index {} but should start from {}.",
                 index, import_count
             ),
-            Self::FunctionComplexityTooHigh => write!(f, "Wasm module contains a function that is too complex"),
-            Self::FunctionTooLarge => write!(f, "Wasm module contains a function that is too large"),
+            Self::FunctionComplexityTooHigh{ index, complexity, allowed } => write!(
+                f,
+                "Wasm module contains a function at index {} with complexity {} which exceeds the maximum complexity allowed {}",
+                index, complexity, allowed
+            ),
+            Self::FunctionTooLarge{index, size, allowed} => write!(
+                f,
+                "Wasm module contains a function at index {} of size {} that exceeds the maximum allowed size of {}",
+                index, size, allowed,
+            ),
         }
     }
 }

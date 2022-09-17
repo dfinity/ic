@@ -299,9 +299,11 @@ impl NiDkgCspVault for RemoteCspVault {
             epoch,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgUpdateFsEpochError::InternalError(InternalError {
-                internal_error: rpc_error.to_string(),
-            }))
+            Err(CspDkgUpdateFsEpochError::TransientInternalError(
+                InternalError {
+                    internal_error: rpc_error.to_string(),
+                },
+            ))
         })
     }
 
@@ -349,9 +351,11 @@ impl NiDkgCspVault for RemoteCspVault {
             receiver_index,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgLoadPrivateKeyError::InternalError(InternalError {
-                internal_error: rpc_error.to_string(),
-            }))
+            Err(CspDkgLoadPrivateKeyError::TransientInternalError(
+                InternalError {
+                    internal_error: rpc_error.to_string(),
+                },
+            ))
         })
     }
 
@@ -364,7 +368,7 @@ impl NiDkgCspVault for RemoteCspVault {
             active_key_ids,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgRetainThresholdKeysError::InternalError(
+            Err(CspDkgRetainThresholdKeysError::TransientInternalError(
                 InternalError {
                     internal_error: rpc_error.to_string(),
                 },

@@ -325,7 +325,10 @@ pub trait StateManager: StateReader {
     /// This function always panics because there is no point in continuing the
     /// normal operation.  We rely on orchestrator restarting the replica, which
     /// in turn will initiate the normal recovery procedure.
-    fn report_diverged_state(&self, height: Height);
+    /// Backs up the diverged checkpoint for troubleshooting.
+    /// Requires: height is a height of a checkpoint. Otherwise nothing is saved
+    /// for troubleshooting.
+    fn report_diverged_checkpoint(&self, height: Height);
 }
 // end::state-manager-interface[]
 

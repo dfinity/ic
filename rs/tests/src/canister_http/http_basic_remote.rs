@@ -23,7 +23,7 @@ use crate::util::block_on;
 use anyhow::bail;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformType};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformFunc, TransformType};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -50,10 +50,10 @@ pub fn test(env: TestEnv) {
                             headers: vec![],
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
-                            transform: Some(TransformType::Function(candid::Func {
+                            transform: Some(TransformType::Function(TransformFunc(candid::Func {
                                 principal: proxy_canister.canister_id().get().0,
                                 method: "transform".to_string(),
-                            })),
+                            }))),
                             max_response_bytes: None,
                         },
                         cycles: 500_000_000_000,

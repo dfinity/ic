@@ -31,6 +31,7 @@ pub struct NotifyTopUp {
 pub struct NotifyCreateCanister {
     pub block_index: BlockHeight,
     pub controller: PrincipalId,
+    pub subnet_type: Option<String>,
 }
 
 /// Error for notify endpoints
@@ -229,13 +230,19 @@ pub enum ChangeSubnetTypeAssignmentArgs {
     Remove(SubnetListWithType),
 }
 
-/// Errors that can happen when attempting to change the assignment of a subnet
-/// to a subnet type.
+/// Errors that can happen when attempting to change the assignment of a list of
+///  subnets to a subnet type.
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub enum ChangeSubnetTypeAssignmentError {
+    /// The provided type does not exist.
     TypeDoesNotExist(String),
+    /// Some of the provided subnets are already assigned to another type.
     SubnetsAreAssigned(Vec<SubnetListWithType>),
+    /// Some of the provided subnets are already in the authorized or default
+    /// subnets list maintained by CMC and cannot be assigned a type.
     SubnetsAreAuthorized(Vec<SubnetId>),
+    /// Some of the provided subnets that were submitted to be removed from a
+    /// type are not currently assigned to the type.
     SubnetsAreNotAssigned(SubnetListWithType),
 }
 
@@ -243,12 +250,16 @@ impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TypeDoesNotExist(subnet_type) => {
-                write!(f, "Cannot add duplicate subnet type {}.", subnet_type)
+                write!(
+                    f,
+                    "Cannot add subnets to the subnet type {} as this subnet type does not exist.",
+                    subnet_type
+                )
             }
             Self::SubnetsAreAssigned(subnets_with_type) => {
                 write!(
                     f,
-                    "The provided subnets are already assigned to a type {:?}.",
+                    "Some of the provided subnets are already assigned to a type {:?}.",
                     subnets_with_type
                 )
             }

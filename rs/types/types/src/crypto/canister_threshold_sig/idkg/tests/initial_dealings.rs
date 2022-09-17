@@ -274,6 +274,26 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
     );
 }
 
+#[test]
+fn should_not_deserialize_if_invariants_violated() {
+    let dealers = set_of_nodes(&[1, 2, 3]);
+    let random_params = create_params_for_dealers(&dealers, IDkgTranscriptOperation::Random);
+    let initial_dealings_with_violated_invariants_created_without_new_constructor =
+        InitialIDkgDealings {
+            params: random_params,
+            dealings: vec![],
+        };
+    let serialization: Vec<u8> = serde_cbor::to_vec(
+        &initial_dealings_with_violated_invariants_created_without_new_constructor,
+    )
+    .expect("serialization failed");
+
+    let deserialization_result = serde_cbor::from_slice::<InitialIDkgDealings>(&serialization);
+
+    assert!(matches!(deserialization_result, Err(serde_error)
+        if serde_error.to_string().contains("invariants violated: InvalidTranscriptOperation")));
+}
+
 fn mock_signed_dealings(
     transcript_id: IDkgTranscriptId,
     dealers: &BTreeSet<NodeId>,

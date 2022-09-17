@@ -78,7 +78,7 @@ use crate::{
     },
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics},
     peer_manager::*,
-    utils::FlowMapper,
+    utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::{
@@ -89,7 +89,7 @@ use ic_interfaces::{
         registry::RegistryClient,
     },
 };
-use ic_interfaces_transport::{FlowTag, Transport, TransportError, TransportPayload};
+use ic_interfaces_transport::{Transport, TransportChannelId, TransportError, TransportPayload};
 use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
@@ -191,7 +191,7 @@ pub(crate) struct DownloadManagerImpl {
     /// The underlying *Transport* layer.
     transport: Arc<dyn Transport>,
     /// The flow mapper.
-    flow_mapper: Arc<FlowMapper>,
+    transport_channel_mapper: Arc<TransportChannelIdMapper>,
     /// The list of artifacts that is under construction.
     artifacts_under_construction: RwLock<ArtifactDownloadListImpl>,
     /// The logger.
@@ -304,8 +304,8 @@ impl DownloadManager for DownloadManagerImpl {
             gossip_chunk
         );
         let message = GossipMessage::Chunk(gossip_chunk);
-        let flow_tag = self.flow_mapper.map(&message);
-        self.transport_send(message, peer_id, flow_tag)
+        let transport_channel = self.transport_channel_mapper.map(&message);
+        self.transport_send(message, peer_id, transport_channel)
             .map(|_| self.metrics.chunks_sent.inc())
             .unwrap_or_else(|e| {
                 // Transport and gossip implement fixed-sized queues for flow control.
@@ -513,12 +513,20 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Add the artifact hash to the receive check set.
         let charged_peer = artifact_tracker.peer_id;
-        self.receive_check_caches
-            .write()
-            .unwrap()
-            .get_mut(&charged_peer)
-            .unwrap()
-            .put(advert.integrity_hash.clone(), ());
+
+        let mut receive_check_caches = self.receive_check_caches.write().unwrap();
+        if receive_check_caches.contains_key(&charged_peer) {
+            receive_check_caches
+                .get_mut(&charged_peer)
+                .unwrap()
+                .put(advert.integrity_hash.clone(), ());
+        } else {
+            warn!(
+                every_n_seconds => 5,
+                self.log,
+                "Peer {:?} has no receive check cache", charged_peer
+            );
+        }
 
         // The artifact is complete and the integrity hash is okay.
         // Clean up the adverts for all peers:
@@ -675,9 +683,9 @@ impl DownloadManager for DownloadManagerImpl {
     fn send_retransmission_request(&self, peer_id: NodeId) {
         let filter = self.artifact_manager.get_filter();
         let message = GossipMessage::RetransmissionRequest(GossipRetransmissionRequest { filter });
-        let flow_tag = self.flow_mapper.map(&message);
+        let transport_channel = self.transport_channel_mapper.map(&message);
         let start_time = Instant::now();
-        self.transport_send(message, peer_id, flow_tag)
+        self.transport_send(message, peer_id, transport_channel)
             .map(|_| self.metrics.retransmission_requests_sent.inc())
             .unwrap_or_else(|e| {
                 trace!(
@@ -772,7 +780,7 @@ impl DownloadManagerImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        flow_mapper: Arc<FlowMapper>,
+        transport_channel_mapper: Arc<TransportChannelIdMapper>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
@@ -799,7 +807,7 @@ impl DownloadManagerImpl {
             prioritizer,
             peer_manager,
             transport: transport.clone(),
-            flow_mapper,
+            transport_channel_mapper,
             artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
             log,
             metrics: DownloadManagementMetrics::new(metrics_registry),
@@ -941,7 +949,7 @@ impl DownloadManagerImpl {
         &self,
         message: GossipMessage,
         peer_id: NodeId,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
     ) -> Result<(), TransportError> {
         let _timer = self
             .metrics
@@ -950,7 +958,7 @@ impl DownloadManagerImpl {
             .start_timer();
         let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
         self.transport
-            .send(&peer_id, flow_tag, message)
+            .send(&peer_id, channel_id, message)
             .map_err(|e| {
                 trace!(
                     self.log,
@@ -965,9 +973,9 @@ impl DownloadManagerImpl {
     /// The method sends the given advert to the given list of peers.
     fn send_advert_to_peer_list(&self, gossip_advert: GossipAdvert, peer_ids: Vec<NodeId>) {
         let message = GossipMessage::Advert(gossip_advert.clone());
-        let flow_tag = self.flow_mapper.map(&message);
+        let transport_channel = self.transport_channel_mapper.map(&message);
         for peer_id in peer_ids {
-            self.transport_send(message.clone(), peer_id, flow_tag)
+            self.transport_send(message.clone(), peer_id, transport_channel)
                 .map(|_| self.metrics.adverts_sent.inc())
                 .unwrap_or_else(|_e| {
                     // Ignore advert send failures
@@ -987,7 +995,7 @@ impl DownloadManagerImpl {
     fn send_chunk_requests(&self, requests: Vec<GossipChunkRequest>, peer_id: NodeId) {
         for request in requests {
             let message = GossipMessage::ChunkRequest(request);
-            let flow_tag = self.flow_mapper.map(&message);
+            let transport_channel = self.transport_channel_mapper.map(&message);
             // Debugging
             trace!(
                 self.log,
@@ -996,7 +1004,7 @@ impl DownloadManagerImpl {
                 peer_id,
                 message
             );
-            self.transport_send(message, peer_id, flow_tag)
+            self.transport_send(message, peer_id, transport_channel)
                 .map(|_| self.metrics.chunks_requested.inc())
                 .unwrap_or_else(|_e| {
                     // Ingore chunk send failures. Points to a misbehaving peer
@@ -1539,8 +1547,8 @@ pub mod tests {
         // Set up the prioritizer.
         let metrics_registry = MetricsRegistry::new();
 
-        let flow_tags = vec![FlowTag::from(0)];
-        let flow_mapper = Arc::new(FlowMapper::new(flow_tags));
+        let transport_channels = vec![TransportChannelId::from(0)];
+        let transport_channel_mapper = Arc::new(TransportChannelIdMapper::new(transport_channels));
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
@@ -1551,7 +1559,7 @@ pub mod tests {
             registry_client,
             artifact_manager,
             tp,
-            flow_mapper,
+            transport_channel_mapper,
             log,
             &metrics_registry,
         )

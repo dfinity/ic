@@ -13,7 +13,7 @@ include:
 # https://gitlab.com/gitlab-org/gitlab/-/issues/30396
 noop-job:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-parent-pipeline
   stage: cargo-build
   needs: []  # don't wait on other jobs

@@ -552,11 +552,17 @@ fn can_commit_same_state_twice() {
     state_manager_test(|_metrics, state_manager| {
         let (tip_height, state) = state_manager.take_tip();
         assert_eq!(tip_height, height(0));
+        let state_copy = state.clone();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
 
-        let (tip_height, state) = state_manager.take_tip();
+        let (tip_height, _state) = state_manager.take_tip();
         assert_eq!(tip_height, height(1));
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        // _state and state_copy will differ in metadata.prev_state_height,
+        // so to commit the same state twice we need to commit the copy.
+        state_manager.commit_and_certify(state_copy, height(1), CertificationScope::Metadata);
+
+        let (tip_height, _state) = state_manager.take_tip();
+        assert_eq!(tip_height, height(1));
     });
 }
 
@@ -1694,7 +1700,11 @@ fn can_do_simple_state_sync_transfer() {
 
             assert_eq!(height(1), dst_state_manager.latest_state_height());
             assert_eq!(state, recovered_state);
-            assert_eq!(*state.as_ref(), dst_state_manager.take_tip().1);
+
+            let mut tip = dst_state_manager.take_tip().1;
+            // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
+            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            assert_eq!(*state.as_ref(), tip);
             assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
 
             assert_eq!(
@@ -1869,6 +1879,112 @@ fn can_state_sync_into_existing_checkpoint() {
 }
 
 #[test]
+fn can_commit_after_prev_state_is_gone() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        let (_height, mut tip) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut tip, canister_test_id(100));
+        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
+
+        let hash = wait_for_checkpoint(&src_state_manager, height(3));
+        let id = StateSyncArtifactId {
+            height: height(3),
+            hash,
+        };
+
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            let (_height, mut tip) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut tip, canister_test_id(100));
+            dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+            let (_height, tip) = dst_state_manager.take_tip();
+
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let dst_msg = pipe_state_sync(msg, chunkable);
+            dst_state_manager
+                .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                .expect("Failed to process state sync artifact");
+
+            dst_state_manager.remove_states_below(height(2));
+
+            assert_eq!(height(3), dst_state_manager.latest_state_height());
+            assert_eq!(
+                dst_state_manager.get_state_at(height(1)),
+                Err(StateManagerError::StateRemoved(height(1)))
+            );
+
+            // Check that we can still commit the old tip.
+            dst_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+
+            // Check that after committing an old state, the state manager can still get the right tip and commit it.
+            let (tip_height, tip) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(3));
+            dst_state_manager.commit_and_certify(tip, height(4), CertificationScope::Metadata);
+
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        let (_height, mut tip) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut tip, canister_test_id(100));
+        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
+
+        let hash = wait_for_checkpoint(&src_state_manager, height(3));
+        let id = StateSyncArtifactId {
+            height: height(3),
+            hash,
+        };
+
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            let (_height, mut tip) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut tip, canister_test_id(100));
+            dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let dst_msg = pipe_state_sync(msg, chunkable);
+            dst_state_manager
+                .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                .expect("Failed to process state sync artifact");
+
+            assert_eq!(height(3), dst_state_manager.latest_state_height());
+            let (tip_height, tip) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(3));
+            // Check that we can still commit the new tip at the synced checkpoint height without prev state hash mismatch.
+            dst_state_manager.commit_and_certify(tip, height(4), CertificationScope::Metadata);
+
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn can_state_sync_based_on_old_checkpoint() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
@@ -1907,10 +2023,12 @@ fn can_state_sync_based_on_old_checkpoint() {
             let expected_state = src_state_manager.get_latest_state();
 
             assert_eq!(dst_state_manager.get_latest_state(), expected_state);
-            assert_eq!(
-                dst_state_manager.take_tip().1,
-                *expected_state.take().as_ref()
-            );
+
+            let mut tip = dst_state_manager.take_tip().1;
+            let state = expected_state.take();
+            // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
+            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            assert_eq!(tip, *state.as_ref());
 
             assert_eq!(
                 0,
@@ -2091,10 +2209,12 @@ fn can_recover_from_corruption_on_state_sync() {
             let expected_state = src_state_manager.get_latest_state();
 
             assert_eq!(dst_state_manager.get_latest_state(), expected_state);
-            assert_eq!(
-                dst_state_manager.take_tip().1,
-                *expected_state.take().as_ref()
-            );
+
+            let mut tip = dst_state_manager.take_tip().1;
+            let state = expected_state.take();
+            // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
+            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            assert_eq!(tip, *state.as_ref());
 
             assert_eq!(
                 0,
@@ -2690,8 +2810,10 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
     })
 }
 
+// For a divergence we expect the first of the diverged state to get stored for troubleshooting
+// and the state to reset to the pre-divergence checkpoint.
 #[test]
-fn deletes_diverged_states() {
+fn report_diverged_state() {
     state_manager_crash_test(
         |state_manager| {
             let (_, state) = state_manager.take_tip();
@@ -2703,15 +2825,26 @@ fn deletes_diverged_states() {
             wait_for_checkpoint(&state_manager, height(2));
 
             let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Metadata);
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
-            state_manager.report_diverged_state(height(3))
+            // This could only happen if calculating the manifest and certification of height 2
+            // completed after reaching height 3
+            state_manager.report_diverged_checkpoint(height(2))
         },
         |metrics, state_manager| {
             assert_eq!(
                 height(1),
                 state_manager.get_latest_state().height(),
-                "Expected diverged checkpoint@2 to go away"
+                "Expected diverged checkpoint@2 and checkpoint@3 to go away"
+            );
+            // We have diverged at state 2. This implies that height 3 diverges as a result but only
+            // height 2 is valuable for debugging.
+            assert_eq!(
+                vec![height(2)],
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
             );
             let last_diverged = fetch_int_gauge(
                 metrics,

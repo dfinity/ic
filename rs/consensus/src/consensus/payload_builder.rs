@@ -254,7 +254,7 @@ pub(crate) mod test {
         ///
         /// This is useful for proptests.
         pub(crate) fn count_critical_errors(&self) -> u64 {
-            self.metrics.cricital_error_payload_too_large.get()
+            self.metrics.critical_error_payload_too_large.get()
                 + self.metrics.critical_error_subnet_record_data_issue.get()
                 + self.metrics.critical_error_validation_not_passed.get()
         }

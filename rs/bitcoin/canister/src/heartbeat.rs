@@ -132,6 +132,9 @@ fn process_adapter_responses(state: &mut State, log: &ReplicaLogger) -> u32 {
             BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
                 // TODO(EXC-911): Handle these responses too.
             }
+            BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(_) => {
+                // A response to a request sent by the bitcoin wasm canister. Ignore.
+            }
         }
     }
 

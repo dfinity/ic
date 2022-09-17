@@ -213,6 +213,12 @@ pub fn setup_crypto_registry(
         DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     };
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
+
+    // The registry must be initialized before setting up the crypto component
+    if let Err(e) = registry.fetch_and_start_polling() {
+        panic!("fetch_and_start_polling failed: {}", e);
+    }
+
     // TODO(RPL-49): pass in registry_client
     let crypto = setup_crypto_provider(
         &config.crypto,
@@ -221,10 +227,6 @@ pub fn setup_crypto_registry(
         logger,
         metrics_registry,
     );
-
-    if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
-    }
 
     (registry, crypto)
 }

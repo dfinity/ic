@@ -702,7 +702,7 @@ impl BatchProcessor for BatchProcessorImpl {
                 SMALL_APP_SUBNET_MAX_SIZE
             });
 
-        let state_after_round = self.state_machine.execute_round(
+        let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
             batch,
@@ -714,6 +714,10 @@ impl BatchProcessor for BatchProcessorImpl {
                 subnet_size,
             },
         );
+        // Garbage collect empty canister queue pairs before checkpointing.
+        if certification_scope == CertificationScope::Full {
+            state_after_round.garbage_collect_canister_queues();
+        }
         self.observe_canisters_memory_usage(&state_after_round);
 
         let phase_timer = Timer::start();

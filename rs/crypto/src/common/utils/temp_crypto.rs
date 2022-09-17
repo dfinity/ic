@@ -9,11 +9,9 @@ use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_seed::Seed;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
@@ -54,7 +52,6 @@ use ic_types::crypto::{
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
-use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -447,42 +444,6 @@ impl TempCryptoComponent {
         (temp_crypto, dkg_dealing_encryption_pubkey)
     }
 
-    // TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-    pub fn new_with_signing_idkg_dealing_encryption_and_multisigning_keys_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, IDkgMEGaAndMultisignPublicKeys) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate {
-                generate_node_signing_keys: true,
-                generate_committee_signing_keys: true,
-                generate_idkg_dealing_encryption_keys: true,
-                ..NodeKeysToGenerate::none()
-            })
-            .build();
-        let node_public_keys = temp_crypto.node_public_keys();
-
-        let node_signing_pk = node_public_keys
-            .node_signing_pk
-            .expect("missing node_signing_pk");
-        let committee_signing_pk = node_public_keys
-            .committee_signing_pk
-            .expect("missing committee_signing_pk");
-        let idkg_dealing_encryption_pk = node_public_keys
-            .idkg_dealing_encryption_pk
-            .expect("missing idkg_dealing_encryption_pk");
-        (
-            temp_crypto,
-            IDkgMEGaAndMultisignPublicKeys {
-                node_signing_pubkey: node_signing_pk,
-                mega_pubkey: idkg_dealing_encryption_pk,
-                multisign_pubkey: committee_signing_pk,
-            },
-        )
-    }
-
     pub fn new_with_tls_key_generation(
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -549,7 +510,7 @@ impl TempCryptoComponent {
             .collect()
     }
 
-    pub fn temp_dir_path(&self) -> &std::path::Path {
+    pub fn temp_dir_path(&self) -> &Path {
         self.temp_dir.path()
     }
 
@@ -564,14 +525,6 @@ impl TempCryptoComponent {
             .as_ref()
             .map(|env| env.vault_client_runtime.handle())
     }
-}
-
-/// Bundles the public keys needed for canister threshold signature protocol
-// TODO (CRP-1275): Remove this once MEGa key is in NodePublicKeys
-pub struct IDkgMEGaAndMultisignPublicKeys {
-    pub node_signing_pubkey: PublicKeyProto,
-    pub mega_pubkey: PublicKeyProto,
-    pub multisign_pubkey: PublicKeyProto,
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
@@ -651,30 +604,6 @@ impl NodeKeysToGenerate {
         NodeKeysToGenerate {
             generate_tls_keys_and_certificate: true,
             ..Self::none()
-        }
-    }
-}
-
-impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
-    pub fn new_from_seed(
-        seed: Seed,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> Self {
-        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let csprng = seed.into_rng();
-        let crypto_component = CryptoComponentFatClient::new_with_rng_and_fake_node_id(
-            csprng,
-            &config,
-            no_op_logger(),
-            registry_client,
-            node_id,
-        );
-
-        TempCryptoComponentGeneric {
-            crypto_component,
-            remote_vault_environment: None,
-            temp_dir,
         }
     }
 }

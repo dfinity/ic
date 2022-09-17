@@ -54,11 +54,11 @@ pub trait Transport: Send + Sync {
     fn stop_connection(&self, peer_id: &NodeId);
 
     /// Send the message to the specified peer. The message will be enqueued
-    /// into the corresponding 'FlowTag' send queue.
+    /// into the corresponding 'TransportChannelId' send queue.
     fn send(
         &self,
         peer_id: &NodeId,
-        flow_tag: FlowTag,
+        channel_id: TransportChannelId,
         message: TransportPayload,
     ) -> Result<(), TransportError>;
 
@@ -74,9 +74,9 @@ pub trait Transport: Send + Sync {
 pub type TransportEventHandler = BoxCloneService<TransportEvent, (), Infallible>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FlowTagType;
-/// A tag attached to a flow.
-pub type FlowTag = Id<FlowTagType, u32>;
+pub struct TransportChannel;
+/// Identifier associated with a peer connection.
+pub type TransportChannelId = Id<TransportChannel, u32>;
 
 /// The payload for the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

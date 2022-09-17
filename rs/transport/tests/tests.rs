@@ -6,7 +6,8 @@ mod tests {
     use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
     use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
     use ic_interfaces_transport::{
-        FlowTag, Transport, TransportError, TransportEvent, TransportEventHandler, TransportPayload,
+        Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
+        TransportPayload,
     };
     use ic_logger::ReplicaLogger;
     use ic_metrics::MetricsRegistry;
@@ -30,7 +31,7 @@ mod tests {
     const NODE_ID_1: NodeId = NODE_1;
     const NODE_ID_2: NodeId = NODE_2;
     const REG_V1: RegistryVersion = RegistryVersion::new(1);
-    const FLOW_TAG: u32 = 1234;
+    const TRANSPORT_CHANNEL_ID: u32 = 1234;
 
     fn setup_test_peer<F>(
         log: ReplicaLogger,
@@ -47,7 +48,7 @@ mod tests {
         let crypto = crypto_factory(registry_and_data, node_id);
         let config = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            legacy_flow_tag: FLOW_TAG,
+            legacy_flow_tag: TRANSPORT_CHANNEL_ID,
             listening_port: port,
             send_queue_size: 10,
         };
@@ -148,10 +149,10 @@ mod tests {
                 hol_event_handler,
             );
 
-            let flow_tag = FlowTag::from(FLOW_TAG);
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
             // Send message from A -> B
-            let res = client.send(&NODE_ID_2, flow_tag, blocking_msg);
+            let res = client.send(&NODE_ID_2, channel_id, blocking_msg);
             assert_eq!(res, Ok(()));
             assert_eq!(done_2.blocking_recv(), Some(true));
 
@@ -161,14 +162,14 @@ mod tests {
             loop {
                 let _temp = normal_msg.clone();
                 if let Err(TransportError::SendQueueFull(ref _temp)) =
-                    client.send(&NODE_ID_2, flow_tag, normal_msg.clone())
+                    client.send(&NODE_ID_2, channel_id, normal_msg.clone())
                 {
                     break;
                 }
                 messages_sent += 1;
                 std::thread::sleep(Duration::from_millis(10));
             }
-            let res2 = client.send(&NODE_ID_2, flow_tag, normal_msg.clone());
+            let res2 = client.send(&NODE_ID_2, channel_id, normal_msg.clone());
             assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
 
             // Unblock event handler and confirm in-flight messages are received.
@@ -208,17 +209,55 @@ mod tests {
 
             let msg_1 = TransportPayload(vec![0xa; 1000000]);
             let msg_2 = TransportPayload(vec![0xb; 1000000]);
-            let flow_tag = FlowTag::from(FLOW_TAG);
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
             // A sends message to B
-            let res = peer_a.send(&NODE_ID_2, flow_tag, msg_1.clone());
+            let res = peer_a.send(&NODE_ID_2, channel_id, msg_1.clone());
             assert_eq!(res, Ok(()));
             assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
 
             // B sends message to A
-            let res2 = peer_b.send(&NODE_ID_1, flow_tag, msg_2.clone());
+            let res2 = peer_b.send(&NODE_ID_1, channel_id, msg_2.clone());
             assert_eq!(res2, Ok(()));
             assert_eq!(peer_a_receiver.blocking_recv(), Some(msg_2));
+        });
+    }
+
+    /*
+    Establish connection with 2 peers, A and B.  Confirm that connection stays alive even when
+    no messages are being sent. (In current implementation, this is ensured by heartbeats)
+    */
+    #[test]
+    fn test_idle_connection_active() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            let (peer_a_sender, _peer_a_receiver) = channel(1);
+            let peer_a_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+            let (peer_b_sender, mut peer_b_receiver) = channel(1);
+            let peer_b_event_handler =
+                setup_message_ack_event_handler(rt.handle().clone(), peer_b_sender);
+
+            let (peer_a, _peer_b) = start_connection_between_two_peers(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                1,
+                peer_a_event_handler,
+                peer_b_event_handler,
+            );
+            std::thread::sleep(Duration::from_secs(20));
+
+            let msg_1 = TransportPayload(vec![0xa; 1000000]);
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+
+            // A sends message to B to verify that the connection is still alive
+            let res = peer_a.send(&NODE_ID_2, channel_id, msg_1.clone());
+            assert_eq!(res, Ok(()));
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
         });
     }
 
@@ -465,7 +504,7 @@ mod tests {
         let peer_a_config = TransportConfig {
             node_ip: "127.0.0.1".to_string(),
             listening_port: peer1_port,
-            legacy_flow_tag: FLOW_TAG,
+            legacy_flow_tag: TRANSPORT_CHANNEL_ID,
             send_queue_size,
         };
 
@@ -484,7 +523,7 @@ mod tests {
         let peer_b_config = TransportConfig {
             node_ip: "127.0.0.1".to_string(),
             listening_port: peer2_port,
-            legacy_flow_tag: FLOW_TAG,
+            legacy_flow_tag: TRANSPORT_CHANNEL_ID,
             send_queue_size,
         };
 

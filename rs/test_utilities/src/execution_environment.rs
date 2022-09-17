@@ -300,8 +300,8 @@ impl ExecutionTest {
         self.time += duration;
     }
 
-    pub fn ingress_status(&self, message_id: MessageId) -> IngressStatus {
-        self.state().get_ingress_status(&message_id)
+    pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+        self.state().get_ingress_status(message_id)
     }
 
     pub fn get_call_context(
@@ -394,6 +394,11 @@ impl ExecutionTest {
     /// Consider using higher-level helpers like `canister_from_wat()`.
     pub fn install_code(&mut self, args: InstallCodeArgs) -> Result<WasmResult, UserError> {
         self.subnet_message(Method::InstallCode, args.encode())
+    }
+
+    /// Sends an `install_code` message to the IC management canister with DTS.
+    pub fn dts_install_code(&mut self, args: InstallCodeArgs) -> MessageId {
+        self.subnet_message_raw(Method::InstallCode, args.encode())
     }
 
     /// Sends an `uninstall_code` message to the IC management canister.
@@ -545,6 +550,24 @@ impl ExecutionTest {
         Ok(())
     }
 
+    /// Installs the given canister with the given Wasm binary with DTS.
+    pub fn dts_upgrade_canister(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> MessageId {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        self.dts_install_code(args)
+    }
+
     pub fn upgrade_canister_with_allocation(
         &mut self,
         canister_id: CanisterId,
@@ -665,7 +688,7 @@ impl ExecutionTest {
         if !self.manual_execution {
             self.execute_all();
         }
-        (ingress_id.clone(), self.ingress_status(ingress_id))
+        (ingress_id.clone(), self.ingress_status(&ingress_id))
     }
 
     /// Executes the heartbeat method of the given canister.
@@ -787,7 +810,7 @@ impl ExecutionTest {
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let ingress_id = self.subnet_message_raw(method_name, method_payload);
-        check_ingress_status(self.ingress_status(ingress_id))
+        check_ingress_status(self.ingress_status(&ingress_id))
     }
 
     // Similar to `subnet_message()` but does not check the ingress status of
@@ -984,7 +1007,7 @@ impl ExecutionTest {
                     .set(round_limits.subnet_available_memory.get());
                 self.update_execution_stats(
                     canister_id,
-                    self.instruction_limits.message(),
+                    self.install_code_instruction_limits.message(),
                     instructions_executed,
                 );
             }
@@ -1204,6 +1227,8 @@ pub struct ExecutionTestBuilder {
     deterministic_time_slicing: bool,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
+    bitcoin_canisters: Vec<PrincipalId>,
+    cost_to_compile_wasm_instruction: u64,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1239,6 +1264,10 @@ impl Default for ExecutionTestBuilder {
             deterministic_time_slicing: false,
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
+            bitcoin_canisters: Vec::default(),
+            cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
+                .cost_to_compile_wasm_instruction
+                .get(),
         }
     }
 }
@@ -1392,6 +1421,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_bitcoin_canister(mut self, bitcoin_canister: PrincipalId) -> Self {
+        self.bitcoin_canisters.push(bitcoin_canister);
+        self
+    }
+
+    pub fn with_cost_to_compile_wasm_instruction(mut self, cost: u64) -> Self {
+        self.cost_to_compile_wasm_instruction = cost;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
@@ -1492,6 +1531,8 @@ impl ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
+            bitcoin_canisters: self.bitcoin_canisters,
+            cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(

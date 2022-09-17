@@ -20,6 +20,7 @@ mockall = "0.11.1"
 opentelemetry = "0.17.0"
 opentelemetry-prometheus = "0.10.0"
 prometheus = "0.13.1"
+rand = "0.8.4"
 reqwest = { version = "0.11.11", features = ["json"] }
 serde = { version = "1.0.139", features = ["serde_derive"] }
 serde_cbor = "0.11.2"

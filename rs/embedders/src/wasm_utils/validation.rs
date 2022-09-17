@@ -910,36 +910,81 @@ fn validate_function_section(
 // Possible options:
 //      * icp:public <name>
 //      * icp:private <name>
+// Where <name> is an arbitrary string (empty names are allowed).
 // If the name starts with the prefix `icp:` but does not define
 // the visibility `private` or `public` then this custom name is invalid.
 #[doc(hidden)] // pub for usage in tests
 pub fn extract_custom_section_name(
-    name: &str,
+    section_name: &str,
 ) -> Result<Option<(&str, CustomSectionType)>, WasmValidationError> {
-    let split = name.split_whitespace().collect::<Vec<&str>>();
-
-    // We are extracting custom name
-    // only if visibility and name is provided.
-    if split.len() != 2 {
+    if !section_name.starts_with("icp:") {
+        // Ignore custom section name which does not start with `icp:`.
         return Ok(None);
     }
 
-    let visibility = split[0];
-    let name = split[1];
-    match visibility {
-        "icp:public" => Ok(Some((name, CustomSectionType::Public))),
-        "icp:private" => Ok(Some((name, CustomSectionType::Private))),
-        _ => {
-            match visibility.starts_with("icp:") {
-                true => Err(WasmValidationError::InvalidCustomSection(format!(
-                    "Invalid custom section: Custom section named {} has no public/private scope defined.",
-                    name
-                ))),
-                // Ignore custom section name which does not start with `icp:`.
-                false => Ok(None),
-            }
-        }
+    if let Some(name) = section_name.strip_prefix("icp:public ") {
+        return Ok(Some((name, CustomSectionType::Public)));
     }
+
+    if let Some(name) = section_name.strip_prefix("icp:private ") {
+        return Ok(Some((name, CustomSectionType::Private)));
+    }
+
+    if section_name == "icp:public" || section_name == "icp:private" {
+        return Err(WasmValidationError::InvalidCustomSection(
+            "'icp:' section names must have a space after the public/private scope".to_string(),
+        ));
+    }
+
+    Err(WasmValidationError::InvalidCustomSection(format!(
+        "Invalid custom section: Custom section '{}' has no public/private scope defined.",
+        section_name
+    )))
+}
+
+#[test]
+fn test_extract_section_name() {
+    assert_eq!(
+        extract_custom_section_name("icp:public "),
+        Ok(Some(("", CustomSectionType::Public))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:private "),
+        Ok(Some(("", CustomSectionType::Private))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:public name"),
+        Ok(Some(("name", CustomSectionType::Public))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:private name"),
+        Ok(Some(("name", CustomSectionType::Private))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:public   name"),
+        Ok(Some(("  name", CustomSectionType::Public))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:private   name"),
+        Ok(Some(("  name", CustomSectionType::Private))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:public static void main"),
+        Ok(Some(("static void main", CustomSectionType::Public))),
+    );
+    assert_eq!(
+        extract_custom_section_name("icp:private static void main"),
+        Ok(Some(("static void main", CustomSectionType::Private))),
+    );
+
+    extract_custom_section_name("icp:protected name").unwrap_err();
+    extract_custom_section_name("icp:public").unwrap_err();
+    extract_custom_section_name("icp:private").unwrap_err();
+
+    assert_eq!(extract_custom_section_name("eth:private name"), Ok(None));
+    assert_eq!(extract_custom_section_name(" icp:private name"), Ok(None));
+    assert_eq!(extract_custom_section_name(" icp:private name"), Ok(None));
+    assert_eq!(extract_custom_section_name("eth:private"), Ok(None));
 }
 
 // Performs the following checks to validate the custom sections:
@@ -1010,10 +1055,10 @@ pub fn validate_custom_section(
 fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidationError> {
     let mut max_function_size = NumInstructions::new(0);
     if let Some(code_section) = module.code_section() {
-        for func_body in code_section.bodies().iter() {
+        for (index, func_body) in code_section.bodies().iter().enumerate() {
             let instructions = func_body.code().elements();
-            let function_size = instructions.len();
-            let complexity_count = instructions
+            let size = instructions.len();
+            let complexity = instructions
                 .iter()
                 .filter(|instruction| {
                     matches!(
@@ -1030,17 +1075,22 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
                 })
                 .count();
 
-            if complexity_count >= WASM_FUNCTION_COMPLEXITY_LIMIT {
-                return Err(WasmValidationError::FunctionComplexityTooHigh);
+            if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
+                return Err(WasmValidationError::FunctionComplexityTooHigh {
+                    index,
+                    complexity,
+                    allowed: WASM_FUNCTION_COMPLEXITY_LIMIT,
+                });
             }
 
-            if function_size >= WASM_FUNCTION_SIZE_LIMIT {
-                return Err(WasmValidationError::FunctionTooLarge);
+            if size > WASM_FUNCTION_SIZE_LIMIT {
+                return Err(WasmValidationError::FunctionTooLarge {
+                    index,
+                    size,
+                    allowed: WASM_FUNCTION_SIZE_LIMIT,
+                });
             } else {
-                max_function_size = cmp::max(
-                    max_function_size,
-                    NumInstructions::new(function_size as u64),
-                );
+                max_function_size = cmp::max(max_function_size, NumInstructions::new(size as u64));
             }
         }
     }

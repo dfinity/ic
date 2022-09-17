@@ -45,7 +45,7 @@ gflags.DEFINE_integer("batchsize", 20, "Number of concurrent canisters installs 
 def install_single(payload):
     wl_path, target = payload
     try:
-        subprocess.check_output([wl_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"])
+        subprocess.check_output([wl_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"])
     except Exception:
         logging.error(logging.traceback.format_exc())
 

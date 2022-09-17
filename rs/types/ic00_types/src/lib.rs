@@ -17,7 +17,8 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
 pub use http::{
-    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformType,
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformFunc,
+    TransformType,
 };
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
@@ -975,8 +976,16 @@ pub use ic_btc_types::{
     GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
 };
+pub use ic_btc_types_internal::{
+    CanisterGetSuccessorsRequest as BitcoinGetSuccessorsArgs,
+    CanisterGetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
+    CanisterGetSuccessorsResponse as BitcoinGetSuccessorsResponse,
+    CanisterGetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+};
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
 impl Payload<'_> for BitcoinSendTransactionArgs {}
 impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
+impl Payload<'_> for BitcoinGetSuccessorsArgs {}
+impl Payload<'_> for BitcoinGetSuccessorsResponse {}

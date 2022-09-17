@@ -1,13 +1,17 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_btc_types::NetworkSnakeCase;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+    CanisterGetSuccessorsRequestInitial, CanisterGetSuccessorsResponseComplete,
     GetSuccessorsRequest, GetSuccessorsResponse,
 };
+use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
     replicated_state::PeekableOutputIterator, replicated_state::ReplicatedStateMessageRouting,
     BitcoinStateError, CanisterState, InputQueueType, ReplicatedState, SchedulerState, StateError,
     SystemState,
@@ -22,7 +26,7 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
+    messages::{CallbackId, Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
     CountBytes, Cycles, QueueIndex,
 };
 use proptest::prelude::*;
@@ -777,6 +781,63 @@ fn state_equality_with_bitcoin() {
 
     // The bitcoin state is different and so the states cannot be equal.
     assert_ne!(original_state, state);
+}
+
+#[test]
+fn insert_bitcoin_response_non_matching() {
+    let mut state =
+        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+
+    assert_eq!(
+        state.push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
+                CanisterGetSuccessorsResponseComplete {
+                    blocks: vec![],
+                    next: vec![],
+                },
+            ),
+            callback_id: 0,
+        }),
+        Err(StateError::BitcoinStateError(
+            BitcoinStateError::NonMatchingResponse { callback_id: 0 }
+        ))
+    );
+}
+
+#[test]
+fn insert_bitcoin_response() {
+    let mut state =
+        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+            request: RequestBuilder::default().build(),
+            payload: CanisterGetSuccessorsRequestInitial {
+                network: NetworkSnakeCase::Regtest,
+                processed_block_hashes: vec![],
+            },
+        });
+
+    let response = CanisterGetSuccessorsResponseComplete {
+        blocks: vec![],
+        next: vec![],
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
+                response.clone(),
+            ),
+            callback_id: 0,
+        })
+        .unwrap();
+
+    assert_eq!(
+        state.consensus_queue[0].response_payload,
+        Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
+    );
 }
 
 proptest! {

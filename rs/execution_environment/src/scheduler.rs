@@ -1535,6 +1535,7 @@ fn execute_canisters_on_thread(
         // - it has not tasks and input messages to execute
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
+        // - or the canister finishes a long execution
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -1557,7 +1558,7 @@ fn execute_canisters_on_thread(
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;
-            // TODO(RUN-301): break the loop after finishing long execution
+            let canister_had_paused_execution = canister.has_paused_execution();
             let ExecuteCanisterResult {
                 canister: new_canister,
                 heap_delta,
@@ -1603,6 +1604,10 @@ fn execute_canisters_on_thread(
                 );
             }
             if total_heap_delta >= config.max_heap_delta_per_iteration {
+                break;
+            }
+            if canister_had_paused_execution && !canister.has_paused_execution() {
+                // Break the loop, as the canister just finished its long execution
                 break;
             }
         }

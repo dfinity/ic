@@ -106,14 +106,6 @@ filegroup(
     srcs = [name for name in BINARIES],
 )
 
-sh_binary(
-    # A unique name for this target.
-    name = "collect_binaries",
-    srcs = ["gitlab-ci/tools/copy-bins.sh"],
-    data = [":binaries"],
-    env = {"BINARIES": "$(rootpaths :binaries)"},
-)
-
 optimized_canister(
     name = "ledger_archive_canister",
     wasm = "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
@@ -143,3 +135,15 @@ CANISTERS = {
         srcs = [":" + name + ".wasm"],
     ),
 ] for name in CANISTERS]
+
+filegroup(
+    name = "sdk",
+    srcs = [
+        "//rs/bitcoin/adapter:ic-btc-adapter",
+        "//rs/canister_http/adapter:ic-canister-http-adapter",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/replica",
+        "//rs/starter:ic-starter",
+    ],
+)

@@ -24,7 +24,15 @@ type By = variant {
   MemoAndController : ClaimOrRefreshNeuronFromAccount;
   Memo : nat64;
 };
+type CfNeuron = record { nns_neuron_id : nat64; amount_icp_e8s : nat64 };
+type CfParticipant = record {
+  hotkey_principal : text;
+  cf_neurons : vec CfNeuron;
+};
 type Change = variant { ToRemove : NodeProvider; ToAdd : NodeProvider };
+type ChangeAutoStakeMaturity = record {
+  requested_setting_for_auto_stake_maturity : bool;
+};
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshNeuronFromAccount = record {
   controller : opt principal;
@@ -42,6 +50,7 @@ type Command = variant {
   Merge : Merge;
   DisburseToNeuron : DisburseToNeuron;
   MakeProposal : Proposal;
+  StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
@@ -56,6 +65,7 @@ type Command_1 = variant {
   Merge : record {};
   DisburseToNeuron : SpawnResponse;
   MakeProposal : MakeProposalResponse;
+  StakeMaturity : StakeMaturityResponse;
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
 };
@@ -65,10 +75,12 @@ type Command_2 = variant {
   Configure : Configure;
   Merge : Merge;
   DisburseToNeuron : DisburseToNeuron;
+  SyncCommand : record {};
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
+type Committed = record { sns_governance_canister_id : opt principal };
 type Configure = record { operation : opt Operation };
 type Disburse = record {
   to_account : opt AccountIdentifier;
@@ -182,6 +194,7 @@ type NetworkEconomics = record {
 };
 type Neuron = record {
   id : opt NeuronId;
+  staked_maturity_e8s_equivalent : opt nat64;
   controller : opt principal;
   recent_ballots : vec BallotInfo;
   kyc_verified : bool;
@@ -189,6 +202,7 @@ type Neuron = record {
   maturity_e8s_equivalent : nat64;
   cached_neuron_stake_e8s : nat64;
   created_timestamp_seconds : nat64;
+  auto_stake_maturity : opt bool;
   aging_since_timestamp_seconds : nat64;
   hot_keys : vec principal;
   account : vec nat8;
@@ -242,6 +256,7 @@ type OpenSnsTokenSwap = record {
 type Operation = variant {
   RemoveHotKey : RemoveHotKey;
   AddHotKey : AddHotKey;
+  ChangeAutoStakeMaturity : ChangeAutoStakeMaturity;
   StopDissolving : record {};
   StartDissolving : record {};
   IncreaseDissolveDelay : IncreaseDissolveDelay;
@@ -267,12 +282,14 @@ type Proposal = record {
 type ProposalData = record {
   id : opt NeuronId;
   failure_reason : opt GovernanceError;
+  cf_participants : vec CfParticipant;
   ballots : vec record { nat64; Ballot };
   proposal_timestamp_seconds : nat64;
   reward_event_round : nat64;
   failed_timestamp_seconds : nat64;
   reject_cost_e8s : nat64;
   latest_tally : opt Tally;
+  sns_token_swap_lifecycle : opt int32;
   decided_timestamp_seconds : nat64;
   proposal : opt Proposal;
   proposer : opt NeuronId;
@@ -306,6 +323,7 @@ type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
 type Result_3 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
 type Result_4 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type Result_5 = variant { Ok : NodeProvider; Err : GovernanceError };
+type Result_6 = variant { Committed : Committed; Aborted : record {} };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
@@ -336,6 +354,10 @@ type SetSnsTokenSwapOpenTimeWindow = record {
   request : opt SetOpenTimeWindowRequest;
   swap_canister_id : opt principal;
 };
+type SettleCommunityFundParticipation = record {
+  result : opt Result_6;
+  open_sns_token_swap_proposal_id : opt nat64;
+};
 type Spawn = record {
   percentage_to_spawn : opt nat32;
   new_controller : opt principal;
@@ -343,6 +365,11 @@ type Spawn = record {
 };
 type SpawnResponse = record { created_neuron_id : opt NeuronId };
 type Split = record { amount_e8s : nat64 };
+type StakeMaturity = record { percentage_to_stake : opt nat32 };
+type StakeMaturityResponse = record {
+  maturity_e8s : nat64;
+  staked_maturity_e8s : nat64;
+};
 type Tally = record {
   no : nat64;
   yes : nat64;
@@ -383,6 +410,9 @@ service : (Governance) -> {
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
+      Result,
+    );
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

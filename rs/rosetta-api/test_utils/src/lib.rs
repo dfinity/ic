@@ -18,7 +18,7 @@ use ic_types::{messages::Blob, time, PrincipalId};
 
 use ledger_canister::{AccountIdentifier, BlockHeight, Operation, Tokens};
 
-pub use ed25519_dalek::Keypair as EdKeypair;
+pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use log::debug;
 use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ use std::path::Path;
 
 pub fn to_public_key(keypair: &EdKeypair) -> PublicKey {
     PublicKey {
-        hex_bytes: to_hex(&keypair.public.to_bytes()),
+        hex_bytes: to_hex(&keypair.public_key),
         curve_type: CurveType::Edwards25519,
     }
 }
@@ -49,12 +49,9 @@ pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, Princip
     let public_key = to_public_key(&keypair);
 
     let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
 
-    assert_eq!(
-        from_public_key(&public_key).unwrap(),
-        keypair.public.to_bytes()
-    );
+    assert_eq!(from_public_key(&public_key).unwrap(), keypair.public_key);
 
     let pid = PrincipalId::new_self_authenticating(&public_key_der);
     let user_id: AccountIdentifier = pid.into();
@@ -235,8 +232,6 @@ pub async fn sign_txn(
     keypairs: &[Arc<EdKeypair>],
     payloads: ConstructionPayloadsResponse,
 ) -> Result<ConstructionCombineResponse, RosettaError> {
-    use ed25519_dalek::Signer;
-
     let mut keypairs_map = HashMap::new();
     for kp in keypairs {
         let pid = principal_id_from_public_key(&to_public_key(kp)).unwrap();
@@ -257,7 +252,7 @@ pub async fn sign_txn(
                 .map(Arc::clone)
                 .unwrap_or_else(|| Arc::clone(&keypairs[0]));
             let bytes = from_hex(&p.hex_bytes).unwrap();
-            let signature_bytes = keypair.sign(&bytes).to_bytes();
+            let signature_bytes = keypair.sign(&bytes);
             let hex_bytes = to_hex(&signature_bytes);
             Signature {
                 signing_payload: p,
@@ -519,7 +514,7 @@ pub async fn send_icpts_with_window(
     RosettaError,
 > {
     let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
 
     let from: AccountIdentifier = PrincipalId::new_self_authenticating(&public_key_der).into();
 

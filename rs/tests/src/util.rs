@@ -15,7 +15,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -625,6 +625,17 @@ pub fn get_random_node_endpoint_of_init_subnet_type<'a>(
     handle
         .as_permutation(rng)
         .find(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(subnet_type))
+        .unwrap()
+}
+
+pub fn get_random_node_endpoint_of_subnet<'a>(
+    handle: &'a IcHandle,
+    subnet_id: SubnetId,
+    rng: &mut ChaCha8Rng,
+) -> &'a IcEndpoint {
+    handle
+        .as_permutation(rng)
+        .find(|ep| ep.subnet.as_ref().map(|s| s.id) == Some(subnet_id))
         .unwrap()
 }
 

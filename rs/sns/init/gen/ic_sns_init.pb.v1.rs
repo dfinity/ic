@@ -29,26 +29,29 @@ pub struct SnsInitPayload {
     /// Cost of making a proposal that doesnt pass.
     #[prost(uint64, optional, tag = "4")]
     pub proposal_reject_cost_e8s: ::core::option::Option<u64>,
-    /// The minimum amount a neuron needs to have staked.
+    /// The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
     #[prost(uint64, optional, tag = "5")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s). Must not be empty.
-    #[prost(string, repeated, tag = "12")]
+    #[prost(string, repeated, tag = "7")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The logo for the SNS project represented as a base64 encoded string.
-    #[prost(string, optional, tag = "13")]
+    #[prost(string, optional, tag = "8")]
     pub logo: ::core::option::Option<::prost::alloc::string::String>,
     /// Url to the dapp controlled by the SNS project.
-    #[prost(string, optional, tag = "14")]
+    #[prost(string, optional, tag = "9")]
     pub url: ::core::option::Option<::prost::alloc::string::String>,
     /// Name of the SNS project. This may differ from the name of the associated token.
-    #[prost(string, optional, tag = "15")]
+    #[prost(string, optional, tag = "10")]
     pub name: ::core::option::Option<::prost::alloc::string::String>,
     /// Description of the SNS project.
-    #[prost(string, optional, tag = "16")]
+    #[prost(string, optional, tag = "11")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+    /// The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
+    #[prost(uint64, optional, tag = "12")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
@@ -211,4 +214,13 @@ pub struct NeuronDistribution {
     /// Neuron's account in the SNS Ledger will have this value.
     #[prost(uint64, tag = "2")]
     pub stake_e8s: u64,
+    /// The `memo` used along with the controller's `PrincipalId` to generate the subaccount
+    /// of the neuron. This allows for a single `PrincipalId` to have multiple neurons as
+    /// the identifier will be unique as long as the memo is unique.
+    #[prost(uint64, tag = "3")]
+    pub memo: u64,
+    /// The amount of time denominated in seconds that the neuron will have its dissolve delay
+    /// set to. This value cannot be changed until after the decentralization sale is complete.
+    #[prost(uint64, tag = "4")]
+    pub dissolve_delay_seconds: u64,
 }

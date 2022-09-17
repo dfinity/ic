@@ -3,7 +3,7 @@ use crate::{
     flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
@@ -118,6 +118,9 @@ pub struct Config {
     /// Compiling a single WASM instruction should cost as much as executing
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
+
+    /// Principals of Bitcoin canisters, which can access privileged APIs.
+    pub bitcoin_canisters: Vec<PrincipalId>,
 }
 
 impl Default for Config {
@@ -148,6 +151,7 @@ impl Default for Config {
             deterministic_time_slicing: FlagStatus::Disabled,
             module_sharing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: embedders::DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
+            bitcoin_canisters: Vec::default(),
         }
     }
 }

@@ -1,11 +1,16 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
+    "//rs/utils",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -23,9 +28,32 @@ rust_binary(
 )
 
 rust_canister(
-    name = "pmap_canister",
+    name = "pmap_canister_raw",
     srcs = ["canister/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+optimized_canister(
+    name = "pmap_canister",
+    wasm = ":pmap_canister_raw",
+)
+
+rust_test(
+    name = "pmap_test",
+    srcs = ["test/main.rs"],
+    data = [
+        ":pmap_canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "CARGO_MANIFEST_DIR": "rs/rust_canisters/pmap",
+        "PMAP_CANISTER_WASM_PATH": "$(rootpath :pmap_canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

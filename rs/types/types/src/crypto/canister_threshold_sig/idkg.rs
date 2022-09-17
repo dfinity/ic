@@ -9,7 +9,7 @@ use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -531,7 +531,7 @@ impl_display_using_debug!(IDkgTranscriptParams);
 
 /// Initial params and dealings for a set of receivers assigned to a different subnet.
 /// Only dealings intended for resharing an unmasked transcript can be included in InitialIDkgDealings.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Hash)]
 pub struct InitialIDkgDealings {
     params: IDkgTranscriptParams,
     dealings: Vec<SignedIDkgDealing>,
@@ -607,6 +607,21 @@ impl InitialIDkgDealings {
     }
     pub fn dealings(&self) -> Vec<SignedIDkgDealing> {
         self.dealings.clone()
+    }
+}
+
+impl<'de> Deserialize<'de> for InitialIDkgDealings {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct InitialIDkgDealingsUnchecked {
+            params: IDkgTranscriptParams,
+            dealings: Vec<SignedIDkgDealing>,
+        }
+        let unchecked = InitialIDkgDealingsUnchecked::deserialize(deserializer)?;
+
+        InitialIDkgDealings::new(unchecked.params, unchecked.dealings).map_err(|validation_error| {
+            D::Error::custom(format!("invariants violated: {validation_error}"))
+        })
     }
 }
 

@@ -8,15 +8,20 @@ build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
 
-build:ci --remote_cache=buildfarm.zh1-idx1.dfinity.network # TODO: set as default when the infrastructure will be reliably accessible from development machines
+build --remote_cache=buildfarm.zh1-idx1.dfinity.network
 build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
+build --remote_timeout=30s # Defauilt is 60s.
 
 build --execution_log_json_file=bazel-build-log.json
 
 build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
-build:ci --bes_backend=bes.buildfarm.dfinity.systems # TODO: set as default when the infrastructure will be reliably accessible from development machines
+build --bes_backend=bes.buildfarm.dfinity.systems
+build --bes_timeout=30s # Defauilt is no timeout.
+build --bes_upload_mode=fully_async
+build:ci --bes_timeout=180s # Defauilt is no timeout.
+build:ci --bes_upload_mode=wait_for_upload_complete
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh

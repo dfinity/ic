@@ -4,6 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/types/public",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto",

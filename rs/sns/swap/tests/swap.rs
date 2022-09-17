@@ -27,7 +27,10 @@ use ic_sns_swap::{
         Lifecycle::{Committed, Open},
         *,
     },
-    swap::{principal_to_subaccount, SnsGovernanceClient, TransferResult, SECONDS_PER_DAY},
+    swap::{
+        principal_to_subaccount, NnsGovernanceClient, SnsGovernanceClient, TransferResult,
+        SECONDS_PER_DAY,
+    },
 };
 use ledger_canister::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
@@ -55,6 +58,8 @@ pub const ICP_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1630);
 pub const SNS_ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(4347);
 pub const SNS_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1380);
 pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
+
+const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 746114;
 
 /// Returns a valid Init.
 fn init() -> Init {
@@ -212,6 +217,11 @@ fn test_open() {
         subaccount: None,
     };
     let params = params();
+    let open_request = OpenRequest {
+        params: Some(params.clone()),
+        cf_participants: vec![],
+        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+    };
     // Cannot open as the swap has not received its initial funding yet (zero).
     {
         let r = swap
@@ -222,10 +232,7 @@ fn test_open() {
                     Ok(Tokens::ZERO),
                 )]),
                 START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                },
+                open_request.clone(),
             )
             .now_or_never()
             .unwrap();
@@ -238,10 +245,7 @@ fn test_open() {
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(account.clone(), Err(13))]),
                 START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                },
+                open_request.clone(),
             )
             .now_or_never()
             .unwrap();
@@ -257,10 +261,7 @@ fn test_open() {
                     Ok(Tokens::from_e8s(params.sns_token_e8s - 1)),
                 )]),
                 START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                },
+                open_request.clone(),
             )
             .now_or_never()
             .unwrap();
@@ -276,10 +277,7 @@ fn test_open() {
                     Ok(Tokens::from_e8s(params.sns_token_e8s)),
                 )]),
                 START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                },
+                open_request,
             )
             .now_or_never()
             .unwrap();
@@ -329,6 +327,7 @@ fn test_min_icp() {
                 OpenRequest {
                     params: Some(params),
                     cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()
@@ -464,6 +463,7 @@ fn test_min_max_icp_per_buyer() {
                 OpenRequest {
                     params: Some(params),
                     cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()
@@ -573,6 +573,7 @@ fn test_max_icp() {
                 OpenRequest {
                     params: Some(params),
                     cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()
@@ -691,6 +692,7 @@ fn test_scenario_happy() {
                             }],
                         },
                     ],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()
@@ -817,17 +819,6 @@ fn test_scenario_happy() {
                         Err(77),
                     ),
                     LedgerExpect::TransferFunds(
-                        900 * E8 - 1,
-                        1,
-                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
-                        Account {
-                            owner: SNS_GOVERNANCE_CANISTER_ID.get(),
-                            subaccount: None,
-                        },
-                        0,
-                        Ok(1067),
-                    ),
-                    LedgerExpect::TransferFunds(
                         400 * E8 - 1,
                         1,
                         Some(principal_to_subaccount(&*TEST_USER3_PRINCIPAL)),
@@ -837,6 +828,17 @@ fn test_scenario_happy() {
                         },
                         0,
                         Ok(1066),
+                    ),
+                    LedgerExpect::TransferFunds(
+                        900 * E8 - 1,
+                        1,
+                        Some(principal_to_subaccount(&*TEST_USER1_PRINCIPAL)),
+                        Account {
+                            owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            subaccount: None,
+                        },
+                        0,
+                        Ok(1067),
                     ),
                 ]),
             )
@@ -904,20 +906,20 @@ fn test_scenario_happy() {
                         Ok(1066),
                     ),
                     LedgerExpect::TransferFunds(
-                        90000 * E8 - 1,
-                        1,
-                        None,
-                        dst(*TEST_USER1_PRINCIPAL),
-                        0,
-                        Ok(1067),
-                    ),
-                    LedgerExpect::TransferFunds(
                         40000 * E8 - 1,
                         1,
                         None,
                         dst(*TEST_USER3_PRINCIPAL),
                         0,
                         Ok(1068),
+                    ),
+                    LedgerExpect::TransferFunds(
+                        90000 * E8 - 1,
+                        1,
+                        None,
+                        dst(*TEST_USER1_PRINCIPAL),
+                        0,
+                        Ok(1067),
                     ),
                     LedgerExpect::TransferFunds(5000 * E8 - 1, 1, None, cf(0x91), 0, Ok(1069)),
                     LedgerExpect::TransferFunds(3000 * E8 - 1, 1, None, cf(0x92), 0, Ok(1070)),
@@ -990,6 +992,29 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
         self.calls.push(SnsGovernanceClientCall::SetMode(request));
         Ok(SetModeResponse {})
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, PartialEq)]
+enum NnsGovernanceClientCall {
+    SettleCommunityFundParticipation(SettleCommunityFundParticipation),
+}
+#[derive(Default, Debug)]
+struct SpyNnsGovernanceClient {
+    calls: Vec<NnsGovernanceClientCall>,
+}
+#[async_trait]
+impl NnsGovernanceClient for SpyNnsGovernanceClient {
+    async fn settle_community_fund_participation(
+        &mut self,
+        request: SettleCommunityFundParticipation,
+    ) -> Result<Result<(), GovernanceError>, CanisterCallError> {
+        self.calls
+            .push(NnsGovernanceClientCall::SettleCommunityFundParticipation(
+                request,
+            ));
+        Ok(Ok(()))
     }
 }
 
@@ -1087,13 +1112,14 @@ async fn test_finalize_swap_ok() {
         },
         cf_participants: vec![],
         neuron_recipes: vec![],
-        cf_minting: None,
+        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
     };
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
 
     let mut sns_root_client = ExplodingSnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
+    let mut nns_governance_client = SpyNnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
@@ -1103,32 +1129,43 @@ async fn test_finalize_swap_ok() {
             &mut sns_governance_client,
             &icp_ledger,
             &sns_ledger,
+            &mut nns_governance_client,
         )
         .await;
 
     // Step 3: Inspect the results.
-    assert_eq!(
-        result,
-        FinalizeSwapResponse {
-            sweep_icp: Some(SweepResult {
-                success: 3,
-                failure: 0,
-                skipped: 0,
-            }),
-            sweep_sns: Some(SweepResult {
-                success: 3,
-                failure: 0,
-                skipped: 0,
-            }),
-            create_neuron: Some(SweepResult {
-                success: 3,
-                failure: 0,
-                skipped: 0,
-            }),
-            sns_governance_normal_mode_enabled: Some(SetModeCallResult { possibility: None }),
-            set_dapp_controllers_result: None,
-        },
-    );
+    {
+        use settle_community_fund_participation_result::{Possibility, Response};
+        assert_eq!(
+            result,
+            FinalizeSwapResponse {
+                sweep_icp: Some(SweepResult {
+                    success: 3,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sweep_sns: Some(SweepResult {
+                    success: 3,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                create_neuron: Some(SweepResult {
+                    success: 3,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sns_governance_normal_mode_enabled: Some(SetModeCallResult { possibility: None }),
+                set_dapp_controllers_result: None,
+                settle_community_fund_participation_result: Some(
+                    SettleCommunityFundParticipationResult {
+                        possibility: Some(Possibility::Ok(Response {
+                            governance_error: None
+                        })),
+                    }
+                ),
+            },
+        );
+    }
 
     // Assert that do_finalize_swap created neurons.
     assert_eq!(
@@ -1262,6 +1299,22 @@ async fn test_finalize_swap_ok() {
     let mut actual_sns_ledger_calls = sns_ledger_calls;
     actual_sns_ledger_calls.sort();
     assert_eq!(actual_sns_ledger_calls, expected_sns_ledger_calls);
+
+    // Assert that NNS governance was notified of positive outcome (i.e. ended in Lifecycle::Committed).
+    {
+        use settle_community_fund_participation::{Committed, Result};
+        assert_eq!(
+            nns_governance_client.calls,
+            vec![NnsGovernanceClientCall::SettleCommunityFundParticipation(
+                SettleCommunityFundParticipation {
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                    result: Some(Result::Committed(Committed {
+                        sns_governance_canister_id: Some(SNS_GOVERNANCE_CANISTER_ID.into()),
+                    })),
+                }
+            )]
+        );
+    }
 }
 
 #[tokio::test]
@@ -1302,7 +1355,7 @@ async fn test_finalize_swap_abort() {
                 i2principal_id_string(8502) => BuyerState::new(77 * E8),
         },
         neuron_recipes: vec![],
-        cf_minting: None,
+        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
     };
 
     assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
@@ -1310,6 +1363,7 @@ async fn test_finalize_swap_abort() {
 
     let mut sns_root_client = SpySnsRootClient::default();
     let mut sns_governance_client = SpySnsGovernanceClient::default();
+    let mut nns_governance_client = SpyNnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_swap.
     let result = swap
@@ -1319,31 +1373,42 @@ async fn test_finalize_swap_abort() {
             &mut sns_governance_client,
             &icp_ledger,
             &sns_ledger,
+            &mut nns_governance_client,
         )
         .await;
 
     // Step 3: Inspect the results.
-    assert_eq!(
-        result,
-        FinalizeSwapResponse {
-            sweep_icp: Some(SweepResult {
-                success: 1,
-                failure: 0,
-                skipped: 0,
-            }),
-            sweep_sns: None,
-            create_neuron: None,
-            sns_governance_normal_mode_enabled: None,
-            // This is the main assertion:
-            set_dapp_controllers_result: Some(SetDappControllersCallResult {
-                possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
-                    SetDappControllersResponse {
-                        failed_updates: vec![]
+    {
+        use settle_community_fund_participation_result::{Possibility, Response};
+        assert_eq!(
+            result,
+            FinalizeSwapResponse {
+                sweep_icp: Some(SweepResult {
+                    success: 1,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sweep_sns: None,
+                create_neuron: None,
+                sns_governance_normal_mode_enabled: None,
+                // This is the main assertion:
+                set_dapp_controllers_result: Some(SetDappControllersCallResult {
+                    possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                        SetDappControllersResponse {
+                            failed_updates: vec![]
+                        }
+                    )),
+                }),
+                settle_community_fund_participation_result: Some(
+                    SettleCommunityFundParticipationResult {
+                        possibility: Some(Possibility::Ok(Response {
+                            governance_error: None
+                        })),
                     }
-                )),
-            }),
-        },
-    );
+                ),
+            },
+        );
+    }
 
     // Step 3.1: Assert that no neurons were created, and SNS governance was not set to normal mode.
     assert_eq!(
@@ -1386,6 +1451,20 @@ async fn test_finalize_swap_abort() {
             controller_principal_ids
         }],
     );
+
+    // Assert that NNS governance was notified of negative outcome (i.e. ended in Lifecycle::Aborted).
+    {
+        use settle_community_fund_participation::{Aborted, Result};
+        assert_eq!(
+            nns_governance_client.calls,
+            vec![NnsGovernanceClientCall::SettleCommunityFundParticipation(
+                SettleCommunityFundParticipation {
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                    result: Some(Result::Aborted(Aborted {})),
+                }
+            )]
+        );
+    }
 }
 
 /// Test the error refund method.
@@ -1418,6 +1497,7 @@ fn test_error_refund() {
                 OpenRequest {
                     params: Some(params),
                     cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()
@@ -1631,6 +1711,7 @@ fn test_get_buyer_state() {
                 OpenRequest {
                     params: Some(params),
                     cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                 },
             )
             .now_or_never()

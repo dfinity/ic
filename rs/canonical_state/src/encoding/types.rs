@@ -127,7 +127,8 @@ pub struct RejectContext {
 #[derive(Debug, Serialize)]
 pub struct SystemMetadata {
     /// The counter used to allocate canister ids.
-    pub id_counter: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
 }
@@ -425,10 +426,24 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
     }
 }
 
-impl From<&ic_replicated_state::metadata_state::SystemMetadata> for SystemMetadata {
-    fn from(metadata: &ic_replicated_state::metadata_state::SystemMetadata) -> Self {
+impl
+    From<(
+        &ic_replicated_state::metadata_state::SystemMetadata,
+        CertificationVersion,
+    )> for SystemMetadata
+{
+    fn from(
+        (metadata, certification_version): (
+            &ic_replicated_state::metadata_state::SystemMetadata,
+            CertificationVersion,
+        ),
+    ) -> Self {
         Self {
-            id_counter: metadata.generated_id_counter,
+            id_counter: if certification_version <= CertificationVersion::V9 {
+                Some(metadata.generated_id_counter)
+            } else {
+                None
+            },
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()

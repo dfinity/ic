@@ -156,6 +156,14 @@ impl SchedulerTest {
         &self.registry_settings
     }
 
+    pub fn subnet_size(&self) -> usize {
+        self.registry_settings.subnet_size
+    }
+
+    pub fn use_cost_scaling(&self) -> bool {
+        self.scheduler().cycles_account_manager.use_cost_scaling()
+    }
+
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
@@ -638,7 +646,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             config,
         );
-        cycles_account_manager.use_cost_scaling(self.use_cost_scaling_flag);
+        cycles_account_manager.set_using_cost_scaling(self.use_cost_scaling_flag);
         let cycles_account_manager = Arc::new(cycles_account_manager);
         let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
             FlagStatus::Enabled

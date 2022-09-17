@@ -99,7 +99,7 @@ use ic_interfaces::{
     artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
 };
 
-use ic_interfaces_transport::{FlowTag, Transport};
+use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
@@ -131,23 +131,23 @@ pub(crate) mod utils {
     //! The utils module provides a mapping from a gossip message to the
     //! corresponding flow tag.
     use crate::gossip_protocol::GossipMessage;
-    use ic_interfaces_transport::FlowTag;
+    use ic_interfaces_transport::TransportChannelId;
 
-    /// The FlowMapper struct holds a vector of flow tags.
-    pub(crate) struct FlowMapper {
-        flow_tags: Vec<FlowTag>,
+    /// An ordered collection of transport channels.
+    pub(crate) struct TransportChannelIdMapper {
+        transport_channels: Vec<TransportChannelId>,
     }
 
-    impl FlowMapper {
-        /// The function creates a new FlowMapper instance.
-        pub(crate) fn new(flow_tags: Vec<FlowTag>) -> Self {
-            assert_eq!(flow_tags.len(), 1);
-            Self { flow_tags }
+    impl TransportChannelIdMapper {
+        /// The function creates a new TransportChannelIdMapper instance.
+        pub(crate) fn new(transport_channels: Vec<TransportChannelId>) -> Self {
+            assert_eq!(transport_channels.len(), 1);
+            Self { transport_channels }
         }
 
         /// The function returns the flow tag of the flow the message maps to.
-        pub(crate) fn map(&self, _msg: &GossipMessage) -> FlowTag {
-            self.flow_tags[0]
+        pub(crate) fn map(&self, _msg: &GossipMessage) -> TransportChannelId {
+            self.transport_channels[0]
         }
     }
 }
@@ -168,7 +168,7 @@ pub fn start_p2p(
     malicious_flags: MaliciousFlags,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
-    let p2p_flow_tags = vec![FlowTag::from(transport_config.legacy_flow_tag)];
+    let p2p_transport_channels = vec![TransportChannelId::from(transport_config.legacy_flow_tag)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
         subnet_id,
@@ -176,7 +176,7 @@ pub fn start_p2p(
         registry_client.clone(),
         artifact_manager.clone(),
         transport.clone(),
-        p2p_flow_tags,
+        p2p_transport_channels,
         log.clone(),
         &metrics_registry,
         malicious_flags,

@@ -1,6 +1,6 @@
 after-script-test:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-after-script-test
   needs: []  # don't wait on other jobs
   stage: test

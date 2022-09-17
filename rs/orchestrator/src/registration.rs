@@ -10,10 +10,7 @@ use ic_config::{
     Config,
 };
 use ic_crypto::CryptoComponentForNonReplicaProcess;
-use ic_interfaces::{
-    crypto::PublicKeyRegistrationStatus,
-    registry::{RegistryClient, ZERO_REGISTRY_VERSION},
-};
+use ic_interfaces::{crypto::PublicKeyRegistrationStatus, registry::RegistryClient};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -253,57 +250,26 @@ impl NodeRegistration {
         }
     }
 
+    // Returns one random NNS url from the node config.
     async fn get_random_nns_url(&self) -> Option<Url> {
-        match self.collect_shuffled_nns_urls().await {
-            Ok(mut urls) => urls.pop(),
-            Err(e) => {
-                warn!(self.log, "Failed to collect NNS URLs: {}", e);
-                None
-            }
-        }
-    }
+        let mut urls = self.node_config.registration.nns_url.as_ref().map(|v| {
+            v.split(',')
+                .flat_map(|s| match Url::parse(s) {
+                    Err(_) => {
+                        info!(
+                            self.log,
+                            "Could not parse registration NNS url {} from config.", s
+                        );
+                        None
+                    }
+                    Ok(url) => Some(url),
+                })
+                .collect::<Vec<Url>>()
+        })?;
 
-    async fn collect_shuffled_nns_urls(&self) -> Result<Vec<Url>, String> {
-        let version = self.registry_client.get_latest_version();
-        if version == ZERO_REGISTRY_VERSION {
-            return Err("Registry cache is still at version 0".to_string());
-        }
-        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
-        let nns_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(version)
-            .map_err(|e| format!("Error when fetching NNS subnet ID: {:?}", e))?
-            .ok_or("NNS subnet ID not defined")?;
-        let node_ids = self
-            .registry_client
-            .get_node_ids_on_subnet(nns_subnet_id, version)
-            .map_err(|e| format!("Could not load node IDs from NNS: {:?}", e))?
-            .ok_or("No nodes on the NNS subnet")?;
-        let nns_urls: Result<Vec<Url>, String> = node_ids
-            .iter()
-            .map(|nid| {
-                let r = self
-                    .registry_client
-                    .get_transport_info(*nid, version)
-                    .map_err(|e| format!("Fetching NNS node record registry failed: {:?}", e))?
-                    .ok_or("No NNS node record found in registry.")?;
-                let http = r.http.ok_or("No http record")?;
-                let ip = http.ip_addr;
-                let port = http.port;
-                let url = Url::parse(&format!(
-                    "http://{}/",
-                    get_endpoint(&self.log, ip, port as u16)
-                        .map_err(|e| format!("Could not parse endpoint information: {:?}", e))?
-                ))
-                .map_err(|e| format!("Can't fail: {:?}", e))?;
-                Ok(url)
-            })
-            .collect::<Result<_, _>>();
-        nns_urls.map(|mut urls| {
-            let mut rng = thread_rng();
-            urls.shuffle(&mut rng);
-            urls
-        })
+        let mut rng = thread_rng();
+        urls.shuffle(&mut rng);
+        urls.pop()
     }
 
     fn is_node_registered(&self) -> bool {

@@ -1,30 +1,10 @@
-use ed25519_dalek::{Keypair, Signer, KEYPAIR_LENGTH};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
+use rand::{CryptoRng, Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{error::Error, sync::Arc};
-
-/// A version of Keypair with a clone instance.
-/// Originally this was done with a reference, but I'm avoiding them in async
-/// testing because it makes the tests much harder to write.
-/// This is a little inefficient, but it's only used for testing
-#[derive(Clone, Copy)]
-pub struct ClonableKeyPair {
-    bytes: [u8; KEYPAIR_LENGTH],
-}
-
-impl ClonableKeyPair {
-    fn new(kp: &Keypair) -> Self {
-        ClonableKeyPair {
-            bytes: kp.to_bytes(),
-        }
-    }
-
-    fn get(&self) -> Keypair {
-        Keypair::from_bytes(&self.bytes).unwrap()
-    }
-}
 
 pub type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
 pub type SignMessageId = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
@@ -35,20 +15,39 @@ pub struct Secp256k1KeyPair {
     pk: ecdsa_secp256k1::types::PublicKeyBytes,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Ed25519KeyPair {
+    pub secret_key: [u8; 32],
+    pub public_key: [u8; 32],
+}
+
+impl Ed25519KeyPair {
+    pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let rng = ChaCha20Rng::from_seed(rng.gen());
+        let signing_key = ed25519_consensus::SigningKey::new(rng);
+        Self {
+            secret_key: signing_key.to_bytes(),
+            public_key: signing_key.verification_key().to_bytes(),
+        }
+    }
+
+    pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
+        let signing_key = ed25519_consensus::SigningKey::from(self.secret_key);
+        signing_key.sign(msg).to_bytes()
+    }
+}
+
 #[derive(Clone)]
 pub enum SigKeys {
+    Ed25519(Ed25519KeyPair),
     EcdsaSecp256k1(Secp256k1KeyPair),
 }
 
 /// Represents the identity of the sender.
 #[derive(Clone)]
 pub enum Sender {
-    /// The sender is defined as public/private keypair.
-    KeyPair(ClonableKeyPair),
-
     /// The sender is defined as a public/private keypair of a signature scheme,
     /// not bound to a specific scheme.
-    /// TODO: add handling of Ed25519-keys, and remove `KeyPair`-variant above
     SigKeys(SigKeys),
 
     /// The sender is authenticated via an external HSM devices and the
@@ -74,8 +73,12 @@ pub enum Sender {
 }
 
 impl Sender {
-    pub fn from_keypair(kp: &Keypair) -> Self {
-        Sender::KeyPair(ClonableKeyPair::new(kp))
+    pub fn from_keypair(kp: &Ed25519KeyPair) -> Self {
+        Self::from_ed25519_key_pair(*kp)
+    }
+
+    pub fn from_ed25519_key_pair(keys: Ed25519KeyPair) -> Self {
+        Sender::SigKeys(SigKeys::Ed25519(keys))
     }
 
     pub fn from_secp256k1_keys(sk_bytes: &[u8], pk_bytes: &[u8]) -> Self {
@@ -94,10 +97,10 @@ impl Sender {
 
     pub fn get_principal_id(&self) -> PrincipalId {
         match self {
-            Self::KeyPair(keypair) => PrincipalId::new_self_authenticating(
-                &ed25519_public_key_to_der(keypair.get().public.to_bytes().to_vec()),
-            ),
             Self::SigKeys(sig_keys) => match sig_keys {
+                SigKeys::Ed25519(key_pair) => PrincipalId::new_self_authenticating(
+                    &ed25519_public_key_to_der(key_pair.public_key.to_vec()),
+                ),
                 SigKeys::EcdsaSecp256k1(key_pair) => PrincipalId::new_self_authenticating(
                     &ecdsa_secp256k1::api::public_key_to_der(&key_pair.pk).unwrap(),
                 ),
@@ -127,8 +130,8 @@ impl Sender {
         msg.extend_from_slice(DOMAIN_IC_REQUEST);
         msg.extend_from_slice(raw_msg);
         match self {
-            Self::KeyPair(keypair) => Ok(Some(keypair.get().sign(&msg).to_bytes().to_vec())),
             Self::SigKeys(sig_keys) => match sig_keys {
+                SigKeys::Ed25519(key_pair) => Ok(Some(key_pair.sign(&msg).to_vec())),
                 SigKeys::EcdsaSecp256k1(key_pair) => {
                     // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
                     // in ECDSA), so we do it here with SHA256, which is the only
@@ -151,10 +154,10 @@ impl Sender {
 
     pub fn sender_pubkey_der(&self) -> Option<Vec<u8>> {
         match self {
-            Self::KeyPair(keypair) => Some(ed25519_public_key_to_der(
-                keypair.get().public.to_bytes().to_vec(),
-            )),
             Self::SigKeys(sig_keys) => match sig_keys {
+                SigKeys::Ed25519(key_pair) => {
+                    Some(ed25519_public_key_to_der(key_pair.public_key.to_vec()))
+                }
                 SigKeys::EcdsaSecp256k1(key_pair) => {
                     Some(ecdsa_secp256k1::api::public_key_to_der(&key_pair.pk).unwrap())
                 }

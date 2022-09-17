@@ -59,7 +59,6 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
         for wl in self.workload_description:
             print(wl)
-            timeout = max(2 * wl.duration, 300)
             rps = int(config["load_total"] * wl.rps_ratio)
             if wl.rps < 0:
                 wl = wl._replace(rps=rps)
@@ -80,7 +79,6 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 wl,
                 f_stdout,
                 f_stderr,
-                timeout,
             )
             commands, _ = load.get_commands()
             n = 0

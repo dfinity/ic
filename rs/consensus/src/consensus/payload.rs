@@ -9,7 +9,8 @@ use ic_interfaces::{
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_types::{
     batch::{
-        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload, ValidationContext,
+        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload,
+        ValidationContext, XNetPayload,
     },
     consensus::Payload,
     CountBytes, Height, NumBytes, Time,
@@ -94,7 +95,7 @@ impl BatchPayloadSectionBuilder {
                         CRITICAL_ERROR_PAYLOAD_TOO_LARGE
                     );
 
-                    metrics.cricital_error_payload_too_large.inc();
+                    metrics.critical_error_payload_too_large.inc();
                     payload.ingress = IngressPayload::default();
                     return NumBytes::new(0);
                 }
@@ -107,8 +108,20 @@ impl BatchPayloadSectionBuilder {
                 let xnet = builder.get_xnet_payload(validation_context, &past_payloads, max_size);
                 let size = NumBytes::new(xnet.count_bytes() as u64);
 
-                payload.xnet = xnet;
-                size
+                if size > max_size {
+                    error!(
+                        logger,
+                        "XNetPayload is larger than byte_limit. This is a bug, @{}",
+                        CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+                    );
+
+                    metrics.critical_error_payload_too_large.inc();
+                    payload.xnet = XNetPayload::default();
+                    NumBytes::new(0)
+                } else {
+                    payload.xnet = xnet;
+                    size
+                }
             }
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
@@ -129,7 +142,7 @@ impl BatchPayloadSectionBuilder {
                         CRITICAL_ERROR_PAYLOAD_TOO_LARGE
                     );
 
-                    metrics.cricital_error_payload_too_large.inc();
+                    metrics.critical_error_payload_too_large.inc();
                     payload.self_validating = SelfValidatingPayload::default();
                     NumBytes::new(0)
                 } else {
@@ -163,7 +176,7 @@ impl BatchPayloadSectionBuilder {
                                 CRITICAL_ERROR_PAYLOAD_TOO_LARGE
                             );
 
-                            metrics.cricital_error_payload_too_large.inc();
+                            metrics.critical_error_payload_too_large.inc();
                             payload.canister_http = CanisterHttpPayload::default();
                             return NumBytes::new(0);
                         }

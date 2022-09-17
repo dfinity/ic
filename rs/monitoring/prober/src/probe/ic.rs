@@ -28,8 +28,8 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_types::{CanisterId, PrincipalId};
 use lazy_static::lazy_static;
 use prometheus::{Gauge, IntGauge};
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use slog::{info, Logger};
 use std::borrow::Cow;
 use std::str::FromStr;
@@ -43,9 +43,9 @@ lazy_static! {
     static ref CLIENT: HttpClient = HttpClient::new();
 
     /// Static keypair of the `ic-prober` sender.
-    static ref KEYPAIR: ed25519_dalek::Keypair = {
+    static ref KEYPAIR: ic_canister_client::Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(1_u64);
-        ed25519_dalek::Keypair::generate(&mut rng)
+        ic_canister_client::Ed25519KeyPair::generate(&mut rng)
     };
 
     /// Incrementing nonce used to identify sent requests.

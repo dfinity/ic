@@ -2,7 +2,7 @@ use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     xnet::CertifiedStreamSlice,
-    NumBytes, SubnetId,
+    CountBytes, NumBytes, SubnetId,
 };
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -34,14 +34,13 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
         // Pick a stream that fits the size requirements
         let mut picked_stream = None;
         for (index, stream_slice) in streams.iter().enumerate() {
-            let stream_size: usize = stream_slice
-                .iter()
-                .map(|(_, stream_slice)| {
-                    stream_slice.payload.len() + stream_slice.merkle_proof.len()
-                })
-                .sum();
+            let stream = XNetPayload {
+                stream_slices: stream_slice.clone(),
+            };
+            let stream_size = stream.count_bytes();
             if NumBytes::from(stream_size as u64) < byte_limit {
                 picked_stream = Some(index);
+                continue;
             }
         }
 

@@ -25,6 +25,8 @@ pub enum CertificationVersion {
     V8 = 8,
     /// Producing non-empty `StreamHeader::reject_signals`.
     V9 = 9,
+    /// Dropped `SystemMetadata::id_counter`.
+    V10 = 10,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -63,7 +65,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V9;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V10;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

@@ -50,7 +50,7 @@ use registry_canister::mutations::do_create_subnet::{
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use secp256k1::{Message, PublicKey, Secp256k1, Signature};
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
@@ -219,6 +219,14 @@ pub(crate) async fn get_public_key(
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<PublicKey, AgentError> {
+    get_public_key_with_logger(key_id, uni_can, &ctx.logger).await
+}
+
+pub(crate) async fn get_public_key_with_logger(
+    key_id: EcdsaKeyId,
+    uni_can: &UniversalCanister<'_>,
+    logger: &Logger,
+) -> Result<PublicKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: vec![],
@@ -243,7 +251,7 @@ pub(crate) async fn get_public_key(
             Err(err) => {
                 count += 1;
                 if count < 20 {
-                    debug!(ctx.logger, "ecdsa_public_key returns {}, try again...", err);
+                    debug!(logger, "ecdsa_public_key returns {}, try again...", err);
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 } else {
                     return Err(err);
@@ -251,7 +259,7 @@ pub(crate) async fn get_public_key(
             }
         }
     };
-    info!(ctx.logger, "ecdsa_public_key returns {:?}", public_key);
+    info!(logger, "ecdsa_public_key returns {:?}", public_key);
     Ok(PublicKey::from_slice(&public_key).expect("Response is not a valid public key"))
 }
 
@@ -301,6 +309,16 @@ pub(crate) async fn get_signature(
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<Signature, AgentError> {
+    get_signature_with_logger(message_hash, cycles, key_id, uni_can, &ctx.logger).await
+}
+
+pub(crate) async fn get_signature_with_logger(
+    message_hash: &[u8; 32],
+    cycles: Cycles,
+    key_id: EcdsaKeyId,
+    uni_can: &UniversalCanister<'_>,
+    logger: &Logger,
+) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
         message_hash: *message_hash,
         derivation_path: Vec::new(),
@@ -328,7 +346,7 @@ pub(crate) async fn get_signature(
             Err(err) => {
                 count += 1;
                 if count < 20 {
-                    debug!(ctx.logger, "sign_with_ecdsa returns {}, try again...", err);
+                    debug!(logger, "sign_with_ecdsa returns {}, try again...", err);
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 } else {
                     return Err(err);
@@ -336,7 +354,7 @@ pub(crate) async fn get_signature(
             }
         }
     };
-    info!(ctx.logger, "sign_with_ecdsa returns {:?}", signature);
+    info!(logger, "sign_with_ecdsa returns {:?}", signature);
 
     Ok(Signature::from_compact(&signature).expect("Response is not a valid signature"))
 }

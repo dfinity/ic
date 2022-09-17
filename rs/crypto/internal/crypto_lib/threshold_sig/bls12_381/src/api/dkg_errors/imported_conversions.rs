@@ -464,8 +464,8 @@ mod retain_active_keys_error_conversions {
                 CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(e) => {
                     DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(e)
                 }
-                CspDkgUpdateFsEpochError::InternalError(e) => {
-                    DkgKeyRemovalError::InternalError(InternalError {
+                CspDkgUpdateFsEpochError::TransientInternalError(e) => {
+                    DkgKeyRemovalError::TransientInternalError(InternalError {
                         internal_error: e.internal_error,
                     })
                 }
@@ -476,8 +476,8 @@ mod retain_active_keys_error_conversions {
     impl From<CspDkgRetainThresholdKeysError> for DkgKeyRemovalError {
         fn from(dkg_retain_threshold_keys_error: CspDkgRetainThresholdKeysError) -> Self {
             match dkg_retain_threshold_keys_error {
-                CspDkgRetainThresholdKeysError::InternalError(e) => {
-                    DkgKeyRemovalError::InternalError(InternalError {
+                CspDkgRetainThresholdKeysError::TransientInternalError(e) => {
+                    DkgKeyRemovalError::TransientInternalError(InternalError {
                         internal_error: e.internal_error,
                     })
                 }

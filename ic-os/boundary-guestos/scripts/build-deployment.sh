@@ -9,6 +9,10 @@
 set -o errexit
 set -o pipefail
 
+err() {
+    echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
+}
+
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
@@ -30,6 +34,8 @@ Arguments:
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
+       --geolite2-country-db=           specify path to GeoLite2 Country Database
+       --geolite2-city-db=              specify path to GeoLite2 City Database
        --git-revision=                  git revision for which to prepare the media
   -x,  --debug                          enable verbose console output
 '
@@ -69,6 +75,12 @@ Arguments:
         --prober-identity=*)
             PROBER_IDENTITY="${argument#*=}"
             ;;
+        --geolite2-country-db=*)
+            GEOLITE2_COUNTRY_DB="${argument#*=}"
+            ;;
+        --geolite2-city-db=*)
+            GEOLITE2_CITY_DB="${argument#*=}"
+            ;;
         *)
             echo 'Error: Argument is not supported.'
             exit 1
@@ -82,7 +94,12 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
 
-if [[ -z "${GIT_REVISION:-}" ]]; then
+if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
+    err "please provide both country and city geolite2 dbs"
+    exit 1
+fi
+
+if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
     exit 1
 fi
@@ -397,7 +414,7 @@ function copy_ssh_keys() {
     done
 }
 
-function setup_certs() {
+function copy_certs() {
     if [[ -f "${CERT_DIR}/fullchain.pem" ]] && [[ -f "${CERT_DIR}/privkey.pem" ]] && [[ -f "${CERT_DIR}/chain.pem" ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
         for n in $NODES; do
@@ -416,6 +433,23 @@ function setup_certs() {
     else
         echo "Not copying certificates"
     fi
+}
+
+function copy_geolite2_dbs() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs"
+        cp "${GEOLITE2_COUNTRY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
+        cp "${GEOLITE2_CITY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
+    done
 }
 
 function build_tarball() {
@@ -446,9 +480,9 @@ function build_removable_media() {
 
             #echo "${DEPLOYMENT}.$subnet_idx.$node_idx"
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            truncate --size 4M "${OUTPUT}/${NODE_PREFIX}.img"
+            truncate --size 100M "${OUTPUT}/${NODE_PREFIX}.img"
             mkfs.vfat "${OUTPUT}/${NODE_PREFIX}.img"
-            mcopy -i "${OUTPUT}/${NODE_PREFIX}.img" -o -s "${TARBALL_DIR}/${NODE_PREFIX}/ic-bootstrap.tar" ::
+            mcopy -i "${OUTPUT}/${NODE_PREFIX}.img" -o -s ${TARBALL_DIR}/${NODE_PREFIX}/ic-bootstrap.tar ::
         fi
     done
 }
@@ -469,7 +503,9 @@ function main() {
     generate_prober_config
     generate_denylist_config
     copy_ssh_keys
-    setup_certs
+    copy_certs
+    copy_deny_list
+    copy_geolite2_dbs
     build_tarball
     build_removable_media
     # remove_temporary_directories

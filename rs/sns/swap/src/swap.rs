@@ -1,11 +1,14 @@
 use crate::pb::v1::{
-    set_dapp_controllers_call_result, set_mode_call_result, sns_neuron_recipe::Investor,
-    BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
-    DirectInvestment, FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse,
-    GetBuyersTotalResponse, Init, Lifecycle, OpenRequest, OpenResponse, Params,
-    RefreshBuyerTokensResponse, SetDappControllersCallResult, SetModeCallResult, SnsNeuronRecipe,
-    Swap, SweepResult, TransferableAmount,
+    set_dapp_controllers_call_result, set_mode_call_result,
+    settle_community_fund_participation_result, sns_neuron_recipe::Investor, BuyerState,
+    CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState, DirectInvestment,
+    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse,
+    Init, Lifecycle, OpenRequest, OpenResponse, Params, RefreshBuyerTokensResponse,
+    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
+    SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
+// TODO(NNS1-1589): Get these from authoritative source.
+use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -24,7 +27,11 @@ use ic_sns_governance::{
 };
 use std::str::FromStr;
 
-use crate::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+// TODO(NNS1-1589): Get these from the canonical location.
+use crate::pb::v1::{
+    settle_community_fund_participation, SetDappControllersRequest, SetDappControllersResponse,
+    SettleCommunityFundParticipation,
+};
 
 // TODO: remove when not used.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640995200;
@@ -92,6 +99,14 @@ pub trait SnsRootClient {
     ) -> Result<SetDappControllersResponse, CanisterCallError>;
 }
 
+#[async_trait]
+pub trait NnsGovernanceClient {
+    async fn settle_community_fund_participation(
+        &mut self,
+        request: SettleCommunityFundParticipation,
+    ) -> Result<Result<(), GovernanceError>, CanisterCallError>;
+}
+
 // High level documentation in the corresponding Protobuf message.
 impl Swap {
     /// Create state from an `Init` object.
@@ -108,7 +123,7 @@ impl Swap {
             cf_participants: vec![],
             buyers: Default::default(), // Btree map
             neuron_recipes: vec![],
-            cf_minting: None,
+            open_sns_token_swap_proposal_id: None,
         }
     }
 
@@ -190,14 +205,8 @@ impl Swap {
             return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
         }
 
-        let params = req
-            .params
-            .as_ref()
-            .ok_or("The parameters of the swap are missing.")?;
-        if !params.is_valid_at(now_seconds) {
-            return Err("The parameters of the swap are invalid.".to_string());
-        }
-        params.validate()?;
+        req.validate(now_seconds)?;
+        let params = req.params.as_ref().expect("The params field has no value.");
 
         let sns_token_amount = Self::get_sns_tokens(this_canister, sns_ledger).await?;
 
@@ -216,6 +225,7 @@ impl Swap {
         assert!(self.params.is_none());
         self.params = req.params;
         self.cf_participants = req.cf_participants;
+        self.open_sns_token_swap_proposal_id = req.open_sns_token_swap_proposal_id;
         self.set_lifecycle(Lifecycle::Open);
         Ok(OpenResponse {})
     }
@@ -515,6 +525,7 @@ impl Swap {
         sns_governance_client: &mut impl SnsGovernanceClient,
         icp_ledger: &dyn Ledger,
         sns_ledger: &dyn Ledger,
+        nns_governance_client: &mut impl NnsGovernanceClient,
     ) -> FinalizeSwapResponse {
         let lifecycle = self.lifecycle();
         assert!(
@@ -522,11 +533,33 @@ impl Swap {
             "Swap can only be finalized in the COMMITTED or ABORTED states - was {:?}",
             lifecycle
         );
+        let swap_is_committed = lifecycle == Lifecycle::Committed;
 
         let sweep_icp = self
             .sweep_icp(now_fn, DEFAULT_TRANSFER_FEE, icp_ledger)
             .await;
-        if lifecycle != Lifecycle::Committed {
+
+        let settle_community_fund_participation_result = Some({
+            use settle_community_fund_participation::{Aborted, Committed, Result};
+
+            let result = if swap_is_committed {
+                Result::Committed(Committed {
+                    sns_governance_canister_id: Some(self.init().sns_governance().into()),
+                })
+            } else {
+                Result::Aborted(Aborted {})
+            };
+
+            nns_governance_client
+                .settle_community_fund_participation(SettleCommunityFundParticipation {
+                    open_sns_token_swap_proposal_id: self.open_sns_token_swap_proposal_id,
+                    result: Some(result),
+                })
+                .await
+                .into()
+        });
+
+        if !swap_is_committed {
             // Restore controllers of dapp canisters to their original owners (i.e. self.init.fallback_controller_principal_ids).
             let set_dapp_controllers_result = sns_root_client.set_dapp_controllers(
                 SetDappControllersRequest {
@@ -548,6 +581,7 @@ impl Swap {
                 create_neuron: None,
                 sns_governance_normal_mode_enabled: None,
                 set_dapp_controllers_result: Some(set_dapp_controllers_result.into()),
+                settle_community_fund_participation_result,
             };
         }
 
@@ -564,16 +598,13 @@ impl Swap {
             )
             .await;
 
-        // TODO(NNS1-1664): this also needs to pass the community fund
-        // participation back to the NNS so the NNS can mint ICP and
-        // send to the SNS Governance canister.
-
         FinalizeSwapResponse {
             sweep_icp: Some(sweep_icp),
             sweep_sns: Some(sweep_sns),
             create_neuron: Some(create_neuron),
             sns_governance_normal_mode_enabled,
             set_dapp_controllers_result: None,
+            settle_community_fund_participation_result,
         }
     }
 
@@ -1287,6 +1318,36 @@ impl TransferableAmount {
     }
 }
 
+impl OpenRequest {
+    pub fn validate(&self, current_timestamp_seconds: u64) -> Result<(), String> {
+        let mut defects = vec![];
+
+        // Inspect params.
+        let params = self.params.as_ref();
+        if params.is_none() {
+            defects.push("The parameters of the swap are missing.".to_string());
+        } else if let Some(params) = params {
+            if !params.is_valid_at(current_timestamp_seconds) {
+                defects.push("The parameters of the swap are invalid.".to_string());
+            } else if let Err(err) = params.validate() {
+                defects.push(err);
+            }
+        }
+
+        // Inspect open_sns_token_swap_proposal_id.
+        if self.open_sns_token_swap_proposal_id.is_none() {
+            defects.push("The open_sns_token_swap_proposal_id field has no value.".to_string());
+        }
+
+        // Return result.
+        if defects.is_empty() {
+            Ok(())
+        } else {
+            Err(defects.join("\n"))
+        }
+    }
+}
+
 impl DirectInvestment {
     pub fn validate(&self) -> Result<(), String> {
         if !is_valid_principal(&self.buyer_principal) {
@@ -1377,4 +1438,107 @@ pub fn principal_to_subaccount(principal_id: &PrincipalId) -> Subaccount {
     subaccount[0] = principal_id.len().try_into().unwrap();
     subaccount[1..1 + principal_id.len()].copy_from_slice(principal_id);
     subaccount
+}
+
+impl Lifecycle {
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            Self::Committed | Self::Aborted => true,
+
+            Self::Pending | Self::Open => false,
+            Self::Unspecified => {
+                println!(
+                    "{}ERROR: A wild Lifecycle::Unspecified appeared.",
+                    LOG_PREFIX
+                );
+                false
+            }
+        }
+    }
+}
+
+impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
+    for SettleCommunityFundParticipationResult
+{
+    fn from(original: Result<Result<(), GovernanceError>, CanisterCallError>) -> Self {
+        use settle_community_fund_participation_result::{Possibility, Response};
+
+        match original {
+            Ok(inner) => Self {
+                possibility: Some(Possibility::Ok(Response {
+                    governance_error: match inner {
+                        Ok(()) => None,
+                        Err(governance_error) => Some(governance_error),
+                    },
+                })),
+            },
+
+            Err(err) => Self {
+                possibility: Some(Possibility::Err(err)),
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_nervous_system_common::{
+        assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+    };
+    use lazy_static::lazy_static;
+
+    const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
+
+    const PARAMS: Params = Params {
+        max_icp_e8s: 1_000 * E8,
+        max_participant_icp_e8s: 1_000 * E8,
+        min_icp_e8s: 10 * E8,
+        min_participant_icp_e8s: 5 * E8,
+        sns_token_e8s: 5_000 * E8,
+        min_participants: 10,
+        swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 14 * SECONDS_PER_DAY,
+    };
+
+    lazy_static! {
+        static ref OPEN_REQUEST: OpenRequest = OpenRequest {
+            params: Some(PARAMS),
+            cf_participants: vec![CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 42,
+                    amount_icp_e8s: 99,
+                }],
+            },],
+            open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+        };
+    }
+
+    #[test]
+    fn open_request_validate_ok() {
+        assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn open_request_validate_invalid_params() {
+        let request = OpenRequest {
+            params: Some(Params {
+                swap_due_timestamp_seconds: 42,
+                ..PARAMS.clone()
+            }),
+            ..OPEN_REQUEST.clone()
+        };
+
+        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn open_request_validate_no_proposal_id() {
+        let request = OpenRequest {
+            open_sns_token_swap_proposal_id: None,
+            ..OPEN_REQUEST.clone()
+        };
+
+        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS));
+    }
 }

@@ -106,6 +106,58 @@ RUN \
     dpkg -i /tmp/${snp_kernel_libc_host} && \
     dpkg -i /tmp/${snp_kernel_libc_guest} && \
     cd /tmp/sev-guest && make
+
+# Build ngx_http_geoip2_module
+FROM ubuntu:20.04 AS ngx_http_geoip2_module
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN \
+    apt-get update && \
+    apt-get install -y \
+        software-properties-common \
+        gpg
+
+RUN \
+    add-apt-repository -y ppa:maxmind/ppa
+
+RUN \
+    apt-get install -y \
+        libmaxminddb-dev \
+        libmaxminddb0 \
+        mmdb-bin
+
+RUN \
+    apt-get install -y \
+        curl \
+        gcc \
+        libpcre3 \
+        libpcre3-dev \
+        make \
+        zlib1g \
+        zlib1g-dev
+
+ARG NGX_HTTP_GEOIP2_MODULE_TAG=3.4
+RUN \
+    curl -sLv \
+        https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_HTTP_GEOIP2_MODULE_TAG}.tar.gz \
+    | tar -xzf -
+
+ARG NGINX_VERSION=1.21.3
+RUN \
+    curl -sLv \
+        http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+    | tar -xzf -
+
+WORKDIR /nginx-${NGINX_VERSION}
+
+RUN \
+    ./configure \
+        --with-compat \
+        --add-dynamic-module=/ngx_http_geoip2_module-${NGX_HTTP_GEOIP2_MODULE_TAG}/ && \
+    make modules && \
+    mv objs/ngx_http_geoip2_module.so /tmp/
+
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
@@ -126,51 +178,65 @@ RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
 RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list &&\
     echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
 
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    attr \
-    ca-certificates \
-    checkpolicy \
-    chrony \
-    cryptsetup \
-    curl \
-    dante-server \
-    faketime \
-    fdisk \
-    haveged \
-    initramfs-tools \
-    inotify-tools \
-    iproute2 \
-    iputils-ping \
-    isc-dhcp-client \
-    less \
-    libffi-dev \
-    liblmdb0 \
-    libssl-dev \
-    linux-image-virtual-hwe-20.04 \
-    logrotate \
-    lshw \
-    lvm2 \
-    net-tools \
-    nftables \
-    nginx-module-njs=1.21.3+0.7.0-1~focal \
-    nginx=1.21.3-1~focal \
-    opensc \
-    openssh-client openssh-server \
-    parted \
-    pciutils \
-    pcsc-tools pcscd \
-    policycoreutils \
-    python \
-    python3-dev \
-    rsync \
-    ssl-cert \
-    stunnel \
-    sudo \
-    systemd systemd-sysv systemd-journal-remote \
-    udev \
-    usbutils \
-    vim \
-    zstd
+# GeoIP repository
+RUN \
+    apt-get update && \
+    apt-get install -y \
+        software-properties-common \
+        gpg
+
+RUN \
+    add-apt-repository -y ppa:maxmind/ppa
+
+RUN \
+    apt-get update && \
+    apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install \
+        attr \
+        ca-certificates \
+        checkpolicy \
+        chrony \
+        cryptsetup \
+        curl \
+        dante-server \
+        faketime \
+        fdisk \
+        haveged \
+        initramfs-tools \
+        inotify-tools \
+        iproute2 \
+        iputils-ping \
+        isc-dhcp-client \
+        less \
+        libffi-dev \
+        liblmdb0 \
+        libmaxminddb0 \
+        libssl-dev \
+        linux-image-virtual-hwe-20.04 \
+        logrotate \
+        lshw \
+        lvm2 \
+        net-tools \
+        nftables \
+        nginx-module-njs=1.21.3+0.7.0-1~focal \
+        nginx=1.21.3-1~focal \
+        opensc \
+        openssh-client openssh-server \
+        parted \
+        pciutils \
+        pcsc-tools pcscd \
+        policycoreutils \
+        python \
+        python3-dev \
+        rsync \
+        ssl-cert \
+        stunnel \
+        sudo \
+        systemd systemd-sysv systemd-journal-remote \
+        udev \
+        usbutils \
+        vim \
+        zstd
 
 # For the common image, just use common to use the default kernel of Ubuntu
 # For the SEV-SNP image, use "snp"  -- this can
@@ -246,12 +312,24 @@ RUN \
         /usr/local/bin/nginx_exporter && \
     rm /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
 
+### Nginx Modules
+
+ARG NGINX_MODULES_PATH=/usr/lib/nginx/modules/
+
+WORKDIR /tmp
+
 # Install libnginx-mod-http-ndk 
-COPY --from=download /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb /tmp/
-RUN dpkg -i /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb &&\
-    rm /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb
+COPY --from=download /tmp/libnginx-mod-http-ndk_0.3.1_amd64.deb .
+RUN \
+    dpkg -i libnginx-mod-http-ndk_0.3.1_amd64.deb && \
+    rm libnginx-mod-http-ndk_0.3.1_amd64.deb
 
 # Install libnginx-mod-http-cbor-input
-COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
-RUN dpkg -i /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb &&\
-    rm /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
+COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb .
+RUN \
+    dpkg -i libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
+    rm libnginx-mod-http-cbor-input_0.0.9_amd64.deb
+
+# Install ngx_http_geoip2
+COPY --from=ngx_http_geoip2_module \
+    /tmp/ngx_http_geoip2_module.so ${NGINX_MODULES_PATH}

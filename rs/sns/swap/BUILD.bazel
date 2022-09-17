@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
-    "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -52,6 +51,7 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/config",
+    "//rs/nervous_system/common/test_keys",
     "//rs/nns/common",
     "//rs/rosetta-api/ledger_canister",
     "//rs/sns/swap/protobuf_generator:lib",
