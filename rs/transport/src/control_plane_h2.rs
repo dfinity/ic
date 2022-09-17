@@ -5,13 +5,15 @@
 //! peers. The component also manages re-establishment of severed connections.
 
 use crate::{
-    types::{Connecting, ServerPortState, TransportImplH2},
+    types::{
+        Connecting, ConnectionState, PeerStateH2, QueueSize, ServerPortState, TransportImplH2,
+    },
     utils::{get_peer_label, start_listener},
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_transport::{TransportChannelId, TransportError, TransportEventHandler};
 use std::net::SocketAddr;
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{net::TcpListener, sync::RwLock, task::JoinHandle};
 
 /// Implementation for the transport control plane
 impl TransportImplH2 {
@@ -31,27 +33,33 @@ impl TransportImplH2 {
     ) -> Result<(), TransportError> {
         self.allowed_clients.blocking_write().insert(*peer_id);
         *self.registry_version.blocking_write() = registry_version;
-        let peer_map = self.peer_map.blocking_write();
+        let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
             return Err(TransportError::AlreadyExists);
         }
 
-        let _peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
+        let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
         // TODO: P2P-514
         let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
 
         let connecting_task = self.spawn_connect_task(channel_id, *peer_id, peer_addr);
-        let _connecting_state = Connecting {
+        let connecting_state = Connecting {
             peer_addr,
             connecting_task,
         };
 
-        self.create_peer_state();
+        let peer_state = PeerStateH2::new(
+            self.log.clone(),
+            channel_id,
+            peer_label,
+            ConnectionState::Listening,
+            ConnectionState::Connecting(connecting_state),
+            QueueSize::from(self.config.send_queue_size),
+            self.send_queue_metrics.clone(),
+            self.control_plane_metrics.clone(),
+        );
+        peer_map.insert(*peer_id, RwLock::new(peer_state));
         Ok(())
-    }
-
-    fn create_peer_state(&self) {
-        // TODO NET-1196: Implement
     }
 
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
