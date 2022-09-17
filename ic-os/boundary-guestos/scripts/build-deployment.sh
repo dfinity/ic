@@ -3,8 +3,14 @@
 # Build subnet based on subnet.json and transform it into removable media.
 
 # Build Requirements:
+# - Bash 4+
+#
 # - Operating System: Ubuntu 20.04
-# - Packages: coreutils, jq, mtools, tar, util-linux, wget, rclone
+# - >sudo apt install coreutils jq mtools tar util-linux wget rclone
+#
+# - Operating System: MacOS 12.5
+# - >brew install coreutil bash jq rclone dosfstools wget mtools gnu-tar
+# - /usr/local/sbin/ must be in your path (for dosfstools)
 
 set -o errexit
 set -o pipefail
@@ -12,6 +18,11 @@ set -o pipefail
 err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
 }
+
+if [[ "${BASH_VERSINFO:-0}" -lt 4 ]]; then
+    err "Bash 4+ is required"
+    exit 1
+fi
 
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 GIT_REVISION=$(git rev-parse --verify HEAD)

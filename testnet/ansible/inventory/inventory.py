@@ -93,8 +93,14 @@ class IcDeploymentInventory:
 
     def _load_hosts(self):
         # inventory hosts file can be comma separated
-        hosts_ini_filename = os.environ.get("HOSTS_INI_FILENAME", "hosts.ini")
-        inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/{hosts_ini_filename}")
+        hosts_filename = os.environ.get("HOSTS_INI_FILENAME")
+        if hosts_filename:
+            inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/{hosts_filename}")
+        else:
+            inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/hosts.ini")
+            if not os.path.exists(inventory_filename):
+                inventory_filename = str(BASE_DIR / f"env/{self.deployment_name}/hosts.yml")
+
         inventory_dir = os.path.dirname(inventory_filename)
         # Include only the nodes for which certain variables are set, e.g. `nns=parent`
         filter_include = os.environ.get("NODES_FILTER_INCLUDE", "")
@@ -645,7 +651,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nodes_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6_address"]
+                nodes[str(node)] = str(node_vars["ipv6_address"])
 
             yaml.dump(nodes, f)
             return f.getvalue()
@@ -657,7 +663,7 @@ class IcDeploymentInventory:
             nodes = {}
             for node in self._all_nns_hosts:
                 node_vars = self.hostvars(node)
-                nodes[node] = node_vars["ipv6_address"]
+                nodes[str(node)] = str(node_vars["ipv6_address"])
 
             yaml.dump(nodes, f)
             return f.getvalue()
