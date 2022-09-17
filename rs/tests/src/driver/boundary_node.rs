@@ -134,7 +134,7 @@ impl BoundaryNode {
 
     pub fn for_ic(self, env: &TestEnv, name: &str) -> Self {
         let replica_ipv6_rule = env
-            .topology_snapshot()
+            .topology_snapshot_by_name(name)
             .subnets()
             .flat_map(|subnet| subnet.nodes())
             .filter_map(|node| {
