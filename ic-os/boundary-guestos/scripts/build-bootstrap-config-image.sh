@@ -283,6 +283,7 @@ ipv4_address=$IPV4_ADDRESS
 ipv4_gateway=$IPV4_GATEWAY
 name_servers=$NAME_SERVERS
 hostname=$HOSTNAME
+ipv6_replica_ips=${IPV6_REPLICA_IPS}
 EOF
     if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
         echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
@@ -320,7 +321,6 @@ EOF
 domain=${DOMAIN}
 denylist_url=${DENYLIST_URL}
 elasticsearch_url=${ELASTICSEARCH_URL}
-ipv6_replica_ips=${IPV6_REPLICA_IPS}
 ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}

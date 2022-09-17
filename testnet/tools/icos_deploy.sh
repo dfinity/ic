@@ -201,8 +201,7 @@ mkdir -p "$BN_MEDIA_PATH"
 "$INVENTORY" --media-json >"$BN_MEDIA_PATH/${deployment}.json"
 "$REPO_ROOT"/ic-os/boundary-guestos/scripts/build-deployment.sh \
     --input="$BN_MEDIA_PATH/${deployment}.json" \
-    --output="$BN_MEDIA_PATH" \
-    --git-revision=$GIT_REVISION
+    --output="$BN_MEDIA_PATH"
 EOM
     )
 

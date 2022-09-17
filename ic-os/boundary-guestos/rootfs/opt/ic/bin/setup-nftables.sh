@@ -35,18 +35,27 @@ function read_variables() {
         err "missing bn_vars configuration: ${BOOT_CONFIG}/bn_vars.conf"
         exit 1
     fi
+    if [ ! -f "${BOOT_CONFIG}/network.conf" ]; then
+        err "missing network configuration: ${BOOT_CONFIG}/network.conf"
+        exit 1
+    fi
 
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "$key" in
-            "ipv6_replica_ips") ipv6_replica_ips+="${value}" ;;
             "ipv4_http_ips") ipv4_http_ips+=("${value}") ;;
             "ipv6_http_ips") ipv6_http_ips+=("${value}") ;;
             "ipv6_debug_ips") ipv6_debug_ips+=("${value}") ;;
             "ipv6_monitoring_ips") ipv6_monitoring_ips+=("${value}") ;;
         esac
     done <"${BOOT_CONFIG}/bn_vars.conf"
+
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_replica_ips") ipv6_replica_ips+="${value}" ;;
+        esac
+    done <"${BOOT_CONFIG}/network.conf"
 }
 
 # Add extra rules to nftables to limit access.

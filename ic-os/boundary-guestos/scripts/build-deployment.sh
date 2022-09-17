@@ -14,7 +14,7 @@ err() {
 }
 
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
-REPO_ROOT=$(git rev-parse --show-toplevel)
+GIT_REVISION=$(git rev-parse --verify HEAD)
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -65,10 +65,6 @@ Arguments:
             REPLICA_IPV6_OVERRIDE="${argument#*=}"
             shift
             ;;
-        --git-revision=*)
-            GIT_REVISION="${argument#*=}"
-            shift
-            ;;
         --denylist=*)
             DENY_LIST="${argument#*=}"
             ;;
@@ -93,16 +89,6 @@ INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
-
-if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
-    err "please provide both country and city geolite2 dbs"
-    exit 1
-fi
-
-if [[ -z "$GIT_REVISION" ]]; then
-    echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
-    exit 1
-fi
 
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
@@ -174,36 +160,6 @@ function prepare_build_directories() {
     if [ ! -d "${OUTPUT}" ]; then
         mkdir -p "${OUTPUT}"
     fi
-}
-
-BN_BINARIES=(
-    "boundary-node-control-plane"
-    "boundary-node-prober"
-    "denylist-updater"
-    "ic-balance-exporter"
-)
-
-function download_binaries() {
-    for filename in "${BN_BINARIES[@]}"; do
-        "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-            --git-rev "${GIT_REVISION}" \
-            --remote-path=release \
-            --include "${filename}.gz" \
-            --out="${IC_PREP_DIR}/bin/"
-    done
-
-    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
-
-    mkdir -p "${OUTPUT}/bin"
-    rsync -a --delete "${IC_PREP_DIR}/bin/" "${OUTPUT}/bin/"
-}
-
-function place_binaries() {
-    for filename in "${BN_BINARIES[@]}"; do
-        cp -a \
-            "${IC_PREP_DIR}/bin/${filename}" \
-            "${REPO_ROOT}/ic-os/boundary-guestos/rootfs/opt/ic/bin/${filename}"
-    done
 }
 
 function create_tarball_structure() {
@@ -376,7 +332,7 @@ function generate_prober_config() {
     done
 }
 
-function generate_denylist_config() {
+function copy_deny_list() {
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" == "boundary" ]]; then
@@ -436,6 +392,11 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
+    if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
+        err "please provide both country and city geolite2 dbs"
+        return
+    fi
+
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" != "boundary" ]]; then
@@ -494,21 +455,18 @@ function remove_temporary_directories() {
 function main() {
     # Establish run order
     prepare_build_directories
-    download_binaries
-    place_binaries
     create_tarball_structure
     generate_boundary_node_config
     generate_logging_config
     generate_network_config
     generate_prober_config
-    generate_denylist_config
     copy_ssh_keys
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
     build_tarball
     build_removable_media
-    # remove_temporary_directories
+    remove_temporary_directories
 }
 
 main
