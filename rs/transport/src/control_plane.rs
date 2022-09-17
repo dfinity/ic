@@ -11,7 +11,7 @@ use crate::{
         Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
         TransportImpl,
     },
-    utils::get_peer_label,
+    utils::{get_peer_label, start_listener},
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
@@ -507,20 +507,6 @@ async fn connect_to_server(
     let stream = socket.connect(peer_addr).await?;
     stream.set_nodelay(true)?;
     Ok(stream)
-}
-
-// Sets up the server side socket with the node IP:port
-// Panics in case of unrecoverable error.
-fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
-    let socket = if local_addr.is_ipv6() {
-        TcpSocket::new_v6()?
-    } else {
-        TcpSocket::new_v4()?
-    };
-    socket.set_reuseaddr(true)?;
-    socket.set_reuseport(true)?;
-    socket.bind(local_addr)?;
-    socket.listen(128)
 }
 
 /// Returns our role wrt the peer connection

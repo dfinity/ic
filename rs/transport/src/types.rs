@@ -111,12 +111,12 @@ pub(crate) struct TransportImplH2 {
     /// The node ID of this replica
     pub _node_id: NodeId,
     /// The IP address of this node
-    pub _node_ip: IpAddr,
+    pub node_ip: IpAddr,
     /// Configuration
-    pub _config: TransportConfig,
+    pub config: TransportConfig,
 
     /// Port used to accept connections for this transport-client
-    pub _accept_port: Mutex<Option<ServerPortState>>,
+    pub accept_port: Mutex<Option<ServerPortState>>,
     /// Mapping of peers to their corresponding state
     pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerState>>>,
     /// Event handler to report back to the transport client
@@ -126,7 +126,7 @@ pub(crate) struct TransportImplH2 {
     /// Clients that are allowed to connect to this node
     pub allowed_clients: Arc<RwLock<BTreeSet<NodeId>>>,
     /// The registry version that is used
-    pub _registry_version: Arc<RwLock<RegistryVersion>>,
+    pub registry_version: Arc<RwLock<RegistryVersion>>,
     /// Reference to the crypto component
     pub _crypto: Arc<dyn TlsHandshake + Send + Sync>,
 

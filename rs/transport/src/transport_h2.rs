@@ -101,18 +101,18 @@ impl TransportImplH2 {
             .unwrap_or_else(|_| panic!("Invalid node IP: {}", &config.node_ip));
         let arc = Arc::new(Self {
             _node_id: node_id,
-            _node_ip: node_ip,
-            _config: config,
+            node_ip,
+            config,
             allowed_clients: Arc::new(RwLock::new(BTreeSet::<NodeId>::new())),
             _crypto: crypto,
-            _registry_version: Arc::new(RwLock::new(registry_version)),
+            registry_version: Arc::new(RwLock::new(registry_version)),
             rt_handle,
             _data_plane_metrics: DataPlaneMetrics::new(metrics_registry.clone()),
             _control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             _send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
             peer_map: tokio::sync::RwLock::new(HashMap::new()),
-            _accept_port: Mutex::new(None),
+            accept_port: Mutex::new(None),
             event_handler: Mutex::new(None),
             weak_self: std::sync::RwLock::new(Weak::new()),
         });
@@ -146,8 +146,7 @@ pub fn create_transport(
 /// [`Transport`](../../ic_interfaces/transport/trait.Transport.html).
 impl Transport for TransportImplH2 {
     fn set_event_handler(&self, event_handler: TransportEventHandler) {
-        let _rt_enter_guard = self.rt_handle.enter();
-        *self.event_handler.blocking_lock() = Some(event_handler);
+        self.init_client(event_handler)
     }
 
     /// Mark the peer as valid neighbor, and set up the transport layer to
