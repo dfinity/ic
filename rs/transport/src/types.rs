@@ -118,7 +118,7 @@ pub(crate) struct TransportImplH2 {
     /// Port used to accept connections for this transport-client
     pub accept_port: Mutex<Option<ServerPortState>>,
     /// Mapping of peers to their corresponding state
-    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerState>>>,
+    pub peer_map: RwLock<HashMap<NodeId, RwLock<PeerStateH2>>>,
     /// Event handler to report back to the transport client
     pub event_handler: Mutex<Option<TransportEventHandler>>,
 
@@ -133,9 +133,9 @@ pub(crate) struct TransportImplH2 {
     /// Data plane metrics
     pub _data_plane_metrics: DataPlaneMetrics,
     /// Control plane metrics
-    pub _control_plane_metrics: ControlPlaneMetrics,
+    pub control_plane_metrics: ControlPlaneMetrics,
     /// Send queue metrics
-    pub _send_queue_metrics: SendQueueMetrics,
+    pub send_queue_metrics: SendQueueMetrics,
 
     /// The tokio runtime
     pub rt_handle: Handle,
@@ -246,6 +246,94 @@ impl Drop for PeerState {
                 "Transport:PeerState drop: Could not remove peer metric {:?}", self.peer_label
             )
         }
+    }
+}
+
+pub(crate) struct PeerStateH2 {
+    _log: ReplicaLogger,
+    /// Transport channel label, used for metrics
+    pub _channel_id_label: String,
+    /// Peer label, used for metrics
+    pub _peer_label: String,
+    /// Connection state where peer is server
+    _connection_state_write_path: ConnectionState,
+    /// Connection state where peer is client
+    _connection_state_read_path: ConnectionState,
+    /// The send queue of this flow
+    pub send_queue: Box<dyn SendQueue + Send + Sync>,
+    /// Metrics
+    _control_plane_metrics: ControlPlaneMetrics,
+}
+
+impl PeerStateH2 {
+    pub(crate) fn new(
+        log: ReplicaLogger,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        connection_state_write_path: ConnectionState,
+        connection_state_read_path: ConnectionState,
+        queue_size: QueueSize,
+        send_queue_metrics: SendQueueMetrics,
+        control_plane_metrics: ControlPlaneMetrics,
+    ) -> Self {
+        let send_queue = Box::new(SendQueueImpl::new(
+            peer_label.clone(),
+            channel_id,
+            queue_size,
+            send_queue_metrics,
+        ));
+        let ret = Self {
+            _log: log,
+            _channel_id_label: channel_id.to_string(),
+            _peer_label: peer_label,
+            _connection_state_write_path: connection_state_write_path,
+            _connection_state_read_path: connection_state_read_path,
+            send_queue,
+            _control_plane_metrics: control_plane_metrics,
+        };
+        ret.report_connection_state(ConnectionRole::Client);
+        ret.report_connection_state(ConnectionRole::Server);
+        ret
+    }
+
+    // Connection role represents role of calling node, not the peer
+    pub(crate) fn _update_peer_state(
+        &mut self,
+        connection_state: ConnectionState,
+        connection_role: ConnectionRole,
+    ) {
+        match connection_role {
+            ConnectionRole::Client => self._connection_state_write_path.update(connection_state),
+            ConnectionRole::Server => self._connection_state_read_path.update(connection_state),
+        }
+        self.report_connection_state(connection_role);
+    }
+
+    /// Reports the state of a flow to metrics
+    fn report_connection_state(&self, _connection_role: ConnectionRole) {
+        //TODO - metrics
+    }
+
+    pub(crate) fn _get_connected(&self, connection_role: ConnectionRole) -> Option<&Connected> {
+        match connection_role {
+            ConnectionRole::Client => {
+                if let ConnectionState::Connected(connected) = &self._connection_state_write_path {
+                    return Some(connected);
+                }
+            }
+            ConnectionRole::Server => {
+                if let ConnectionState::Connected(connected) = &self._connection_state_read_path {
+                    return Some(connected);
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Drop for PeerStateH2 {
+    fn drop(&mut self) {
+        // TODO: Metrics
     }
 }
 
