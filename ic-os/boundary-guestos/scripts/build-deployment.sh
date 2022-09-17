@@ -102,11 +102,6 @@ DENY_LIST="${DENY_LIST:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
 
-if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
-    err "please provide both country and city geolite2 dbs"
-    exit 1
-fi
-
 if [[ "${DEPLOYMENT_TYPE}" != "prod" && "${DEPLOYMENT_TYPE}" != "dev" ]]; then
     err "only prod or dev deployment types supported"
     exit 1
@@ -426,6 +421,11 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
+    if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
+        err "please provide both country and city geolite2 dbs"
+        return
+    fi
+
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" != "boundary" ]]; then
