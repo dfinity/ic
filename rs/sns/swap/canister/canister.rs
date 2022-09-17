@@ -18,7 +18,10 @@ use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
-use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
+use ic_sns_swap::pb::v1::{
+    GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
+    SettleCommunityFundParticipation,
+};
 
 use ic_sns_swap::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
@@ -26,7 +29,7 @@ use ic_sns_swap::pb::v1::{
     GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
     OpenRequest, OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
 };
-use ic_sns_swap::swap::{SnsGovernanceClient, SnsRootClient, LOG_PREFIX};
+use ic_sns_swap::swap::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient, LOG_PREFIX};
 use prost::Message;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
@@ -213,14 +216,41 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
     }
 }
 
-/// See Swap.finalize.
-#[export_name = "canister_update finalize_swap"]
-fn finalize_swap() {
-    over_async(candid_one, finalize_swap_)
+struct RealNnsGovernanceClient {
+    canister_id: CanisterId,
+}
+
+impl RealNnsGovernanceClient {
+    fn new(canister_id: CanisterId) -> Self {
+        Self { canister_id }
+    }
+}
+
+#[async_trait]
+impl NnsGovernanceClient for RealNnsGovernanceClient {
+    async fn settle_community_fund_participation(
+        &mut self,
+        request: SettleCommunityFundParticipation,
+    ) -> Result<Result<(), GovernanceError>, CanisterCallError> {
+        dfn_core::api::call(
+            self.canister_id,
+            "settle_community_fund_participation",
+            dfn_candid::candid_one,
+            request,
+        )
+        .await
+        .map_err(CanisterCallError::from)
+    }
 }
 
 fn now_fn(_: bool) -> u64 {
     now_seconds()
+}
+
+/// See Swap.finalize.
+#[export_name = "canister_update finalize_swap"]
+fn finalize_swap() {
+    over_async(candid_one, finalize_swap_)
 }
 
 /// See Swap.finalize.
@@ -231,6 +261,7 @@ async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
     let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
     let sns_ledger = create_real_icrc1_ledger(swap().init().sns_ledger());
+    let mut nns_governance_client = RealNnsGovernanceClient::new(swap().init().nns_governance());
     swap_mut()
         .finalize(
             now_fn,
@@ -238,6 +269,7 @@ async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
             &mut sns_governance_client,
             &icp_ledger,
             &sns_ledger,
+            &mut nns_governance_client,
         )
         .await
 }

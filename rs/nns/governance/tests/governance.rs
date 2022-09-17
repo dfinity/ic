@@ -10706,7 +10706,8 @@ fn test_open_sns_token_swap_proposal() {
             method_name: "open",
             request: Encode!(&sns_swap_pb::OpenRequest {
                 params: Some(params.clone()),
-                cf_participants,
+                cf_participants: cf_participants.clone(),
+                open_sns_token_swap_proposal_id: Some(1),
             })
             .unwrap(),
         },
@@ -10764,6 +10765,11 @@ fn test_open_sns_token_swap_proposal() {
         proposal.executed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
         "{:#?}",
         proposal
+    );
+    assert_eq!(proposal.cf_participants, cf_participants);
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);

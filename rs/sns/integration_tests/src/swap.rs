@@ -495,7 +495,7 @@ fn begin_swap(
 }
 
 #[test]
-fn swap_lifecycle_happy() {
+fn swap_lifecycle_happy_one_neuron() {
     swap_n_accounts(1);
 }
 
@@ -532,6 +532,30 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     let instructions_consumed_base = state_machine.instructions_consumed();
     let mut instructions_consumed_swapping = None;
     let mut time_finalization_started = None;
+
+    let assert_cf_neuron_maturities =
+        |state_machine: &mut StateMachine, withdrawl_amounts_e8s: &[u64]| {
+            assert_eq!(community_fund_neurons.len(), withdrawl_amounts_e8s.len());
+
+            for (original_neuron, withdrawl_amount_e8s) in community_fund_neurons
+                .iter()
+                .zip(withdrawl_amounts_e8s.iter())
+            {
+                let new_neuron = nns_governance_get_full_neuron(
+                    state_machine,
+                    original_neuron.controller.unwrap(),
+                    original_neuron.id.as_ref().unwrap().id,
+                )
+                .unwrap();
+                assert_eq!(
+                    new_neuron.maturity_e8s_equivalent,
+                    original_neuron.maturity_e8s_equivalent - withdrawl_amount_e8s,
+                );
+            }
+        };
+
+    // We'll do this again after finalizing the swap.
+    assert_cf_neuron_maturities(&mut state_machine, &[10 * E8, 20 * E8]);
 
     // Step 2: Run code under test.
 
@@ -595,33 +619,43 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
     // Step 3: Inspect results.
 
     // Step 3.1: Inspect finalize_swap_response.
-    assert_eq!(
-        finalize_swap_response,
-        swap_pb::FinalizeSwapResponse {
-            sweep_icp: Some(swap_pb::SweepResult {
-                // While, the other fields in the response count 3 successes,
-                // this only counts 1, because 2 of the participants are from
-                // the (maturity of) Community Fund (NNS neurons).
-                success: num_accounts as u32,
-                failure: 0,
-                skipped: 0,
-            }),
-            sweep_sns: Some(swap_pb::SweepResult {
-                success: num_accounts as u32 + 2,
-                failure: 0,
-                skipped: 0,
-            }),
-            create_neuron: Some(swap_pb::SweepResult {
-                success: num_accounts as u32 + 2,
-                failure: 0,
-                skipped: 0,
-            }),
-            sns_governance_normal_mode_enabled: Some(swap_pb::SetModeCallResult {
-                possibility: None
-            }),
-            set_dapp_controllers_result: None,
-        }
-    );
+    {
+        use swap_pb::settle_community_fund_participation_result::{Possibility, Response};
+        assert_eq!(
+            finalize_swap_response,
+            swap_pb::FinalizeSwapResponse {
+                sweep_icp: Some(swap_pb::SweepResult {
+                    // While, the other fields in the response count 3 successes,
+                    // this only counts 1, because 2 of the participants are from
+                    // the (maturity of) Community Fund (NNS neurons).
+                    success: num_accounts as u32,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sweep_sns: Some(swap_pb::SweepResult {
+                    success: num_accounts as u32 + 2,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                create_neuron: Some(swap_pb::SweepResult {
+                    success: num_accounts as u32 + 2,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sns_governance_normal_mode_enabled: Some(swap_pb::SetModeCallResult {
+                    possibility: None
+                }),
+                set_dapp_controllers_result: None,
+                settle_community_fund_participation_result: Some(
+                    swap_pb::SettleCommunityFundParticipationResult {
+                        possibility: Some(Possibility::Ok(Response {
+                            governance_error: None,
+                        })),
+                    }
+                )
+            }
+        );
+    }
 
     // Step 3.2.1: Inspect ICP balances.
 
@@ -635,10 +669,10 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
                     .to_address(),
             },
         );
-        // TODO(NNS1-1664): ICP from the community fund should also appear in
-        // the account of SNS governance, but that hasn't been implemented yet.
-        let total_transferred =
-            Tokens::from_tokens(planned_contribution_per_account * num_accounts).unwrap();
+        let total_transferred = Tokens::from_tokens(
+            planned_contribution_per_account * num_accounts + planned_cf_contribution,
+        )
+        .unwrap();
         let total_paid_in_transfer_fee =
             Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * num_accounts);
         let expected_balance = (total_transferred - total_paid_in_transfer_fee).unwrap();
@@ -774,6 +808,19 @@ fn swap_n_accounts(num_accounts: u64) -> SwapPerformanceResults {
             observed_sns_neuron
         );
     }
+
+    // STEP 3.4: NNS governance is responsible for "settling" CF
+    // contributions. In this case, that means that a total of 30 ICP was minted
+    // and sent to the the default account of the SNS governance canister, 10
+    // ICP coming from NNS neuron 1 and 20 ICP from neuron 2 (more accurately,
+    // from their maturity).
+    //
+    // We already noticed the 30 ICP being added to the SNS governance
+    // canister's (default) account in step 3.2.1. Therefore, all that remains
+    // for us to verify is that the maturity of the two CF neurons have been
+    // decreased by the right amounts.
+    assert_cf_neuron_maturities(&mut state_machine, &[10 * E8, 20 * E8]);
+
     SwapPerformanceResults {
         instructions_consumed_base,
         instructions_consumed_swapping: instructions_consumed_swapping.unwrap(),
@@ -790,12 +837,46 @@ fn swap_lifecycle_sad() {
 
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
-    let (scenario, _community_fund_neurons) = begin_swap(
+    let (scenario, community_fund_neurons) = begin_swap(
         &mut state_machine,
         &[],
         planned_contribution_per_account,
         planned_cf_contribution,
     );
+
+    let assert_cf_neuron_maturities =
+        |state_machine: &mut StateMachine, withdrawl_amounts_e8s: &[u64]| {
+            assert_eq!(community_fund_neurons.len(), withdrawl_amounts_e8s.len());
+
+            for (original_neuron, withdrawl_amount_e8s) in community_fund_neurons
+                .iter()
+                .zip(withdrawl_amounts_e8s.iter())
+            {
+                let new_neuron = nns_governance_get_full_neuron(
+                    state_machine,
+                    original_neuron.controller.unwrap(),
+                    original_neuron.id.as_ref().unwrap().id,
+                )
+                .unwrap();
+                let expected_e8s = original_neuron.maturity_e8s_equivalent - withdrawl_amount_e8s;
+                assert!(new_neuron.maturity_e8s_equivalent >= expected_e8s);
+                // This can occur if neurons are given their voting rewards.
+                let extra =
+                    (new_neuron.maturity_e8s_equivalent as f64) / (expected_e8s as f64) - 1.0;
+                assert!(
+                    extra < 0.015,
+                    "observed = {} expected = {} extra = {}",
+                    new_neuron.maturity_e8s_equivalent,
+                    expected_e8s,
+                    extra,
+                );
+            }
+        };
+
+    // We'll do something like this again after finalizing the swap, except
+    // we'll pass all zero withdrawl amounts instead, because finalization ins
+    // supposed to include restoring maturities after a failed swap.
+    assert_cf_neuron_maturities(&mut state_machine, &[10 * E8, 20 * E8]);
 
     // Step 2: Run code under test.
 
@@ -871,26 +952,36 @@ fn swap_lifecycle_sad() {
     // Step 3: Inspect results.
 
     // Step 3.1: Inspect finalize_swap_response.
-    assert_eq!(
-        finalize_swap_response,
-        swap_pb::FinalizeSwapResponse {
-            sweep_icp: Some(swap_pb::SweepResult {
-                success: 1,
-                failure: 0,
-                skipped: 0,
-            }),
-            sweep_sns: None,
-            create_neuron: None,
-            sns_governance_normal_mode_enabled: None,
-            set_dapp_controllers_result: Some(SetDappControllersCallResult {
-                possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
-                    SetDappControllersResponse {
-                        failed_updates: vec![],
+    {
+        use swap_pb::settle_community_fund_participation_result::{Possibility, Response};
+        assert_eq!(
+            finalize_swap_response,
+            swap_pb::FinalizeSwapResponse {
+                sweep_icp: Some(swap_pb::SweepResult {
+                    success: 1,
+                    failure: 0,
+                    skipped: 0,
+                }),
+                sweep_sns: None,
+                create_neuron: None,
+                sns_governance_normal_mode_enabled: None,
+                set_dapp_controllers_result: Some(SetDappControllersCallResult {
+                    possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                        SetDappControllersResponse {
+                            failed_updates: vec![],
+                        }
+                    )),
+                }),
+                settle_community_fund_participation_result: Some(
+                    swap_pb::SettleCommunityFundParticipationResult {
+                        possibility: Some(Possibility::Ok(Response {
+                            governance_error: None,
+                        })),
                     }
-                )),
-            }),
-        }
-    );
+                )
+            }
+        );
+    }
 
     // Step 3.2.1: Inspect ICP balance(s).
     // TEST_USER2 (the participant) should get their ICP back (less two transfer fees).
@@ -938,7 +1029,7 @@ fn swap_lifecycle_sad() {
         assert_eq!(observed_neurons, vec![]);
     }
 
-    // Finally, dapp should once again return to the (exclusive) control of TEST_USER1.
+    // Dapp should once again return to the (exclusive) control of TEST_USER1.
     {
         let dapp_canister_status = canister_status(
             &mut state_machine,
@@ -950,6 +1041,9 @@ fn swap_lifecycle_sad() {
             vec![*TEST_USER1_PRINCIPAL],
         );
     }
+
+    // Maturity of CF neurons should be restored.
+    assert_cf_neuron_maturities(&mut state_machine, &[0, 0]);
 }
 
 fn participate_in_swap(
@@ -1009,6 +1103,32 @@ fn nns_governance_make_proposal(
         Some(manage_neuron_response::Command::MakeProposal(response)) => response,
         _ => panic!("Response was not of type MakeProposal: {:#?}", result),
     }
+}
+
+fn nns_governance_get_full_neuron(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: u64,
+) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            NNS_GOVERNANCE_CANISTER_ID,
+            "get_full_neuron",
+            Encode!(&neuron_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_full_neuron was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
 }
 
 fn sns_root_register_dapp_canister(

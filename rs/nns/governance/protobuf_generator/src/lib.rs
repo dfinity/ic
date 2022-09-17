@@ -34,23 +34,37 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
     config.type_attribute(
+        "ic_nns_governance.pb.v1.SettleCommunityFundParticipation",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.SettleCommunityFundParticipation.Committed",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.SettleCommunityFundParticipation.Aborted",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.SettleCommunityFundParticipation.result",
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+    );
+
+    config.type_attribute(
         "ic_nns_governance.pb.v1.OpenSnsTokenSwap",
-        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.SetSnsTokenSwapOpenTimeWindow",
-        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.Empty",
-        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+        "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.NodeProvider",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]",
-        ]
-        .join(" "),
+        "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]",
     );
     config.type_attribute(
         "ic_nns_governance.pb.v1.UpdateNodeProvider",

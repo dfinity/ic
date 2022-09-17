@@ -1519,9 +1519,23 @@ pub struct ProposalData {
     /// Wait-for-quiet state that needs to be saved in stable memory.
     #[prost(message, optional, tag = "16")]
     pub wait_for_quiet_state: ::core::option::Option<WaitForQuietState>,
+    // SNS Token Swap-related fields
+    // -----------------------------
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
+    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
+    /// conclude_community_fund_participation Candid method is called to either
+    /// mint ICP, or restore CF neuron maturity.
+    #[prost(message, repeated, tag = "18")]
+    pub cf_participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
+    /// This gets set to one of the terminal values (i.e. Committed or Aborted)
+    /// when the swap canister calls our conclude_community_fund_participation
+    /// Candid method. Initially, it is set to Open, because swap is supposed to
+    /// enter that state when we call its open Candid method, which is the main
+    /// operation in the execution of an OpenSnsTokenSwap proposal.
+    #[prost(enumeration = "::ic_sns_swap::pb::v1::Lifecycle", optional, tag = "19")]
+    pub sns_token_swap_lifecycle: ::core::option::Option<i32>,
 }
 /// Stores data relevant to the "wait for quiet" implementation.
 #[derive(
@@ -2085,6 +2099,75 @@ pub struct MostRecentMonthlyNodeProviderRewards {
     pub timestamp: u64,
     #[prost(message, repeated, tag = "2")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
+}
+/// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+/// manually propagated to (sns) swap.proto.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SettleCommunityFundParticipation {
+    /// The caller's principal ID must match the value in the
+    /// target_swap_canister_id field in the proposal (more precisely, in the
+    /// OpenSnsTokenSwap).
+    #[prost(uint64, optional, tag = "1")]
+    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
+    /// Each of the possibilities here corresponds to one of two ways that a swap
+    /// can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+    #[prost(oneof = "settle_community_fund_participation::Result", tags = "2, 3")]
+    pub result: ::core::option::Option<settle_community_fund_participation::Result>,
+}
+/// Nested message and enum types in `SettleCommunityFundParticipation`.
+pub mod settle_community_fund_participation {
+    /// When this happens, ICP needs to be minted, and sent to the SNS governance
+    /// canister's main account on the ICP Ledger. As with Aborted, the amount of
+    /// ICP that needs to be minted can be deduced from the ProposalData's
+    /// cf_participants field.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Committed {
+        /// This is where the minted ICP will be sent. In principal, this could be
+        /// fetched using the swap canister's get_state method.
+        #[prost(message, optional, tag = "1")]
+        pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    }
+    /// When this happens, maturity needs to be restored to CF neurons. The amounts
+    /// to be refunded can be found in the ProposalData's cf_participants field.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Aborted {}
+    /// Each of the possibilities here corresponds to one of two ways that a swap
+    /// can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "2")]
+        Committed(Committed),
+        #[prost(message, tag = "3")]
+        Aborted(Aborted),
+    }
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

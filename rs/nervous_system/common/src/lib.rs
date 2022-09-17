@@ -13,6 +13,40 @@ use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 pub mod ledger;
 pub mod stable_mem_utils;
 
+// 10^8
+pub const E8: u64 = 100_000_000;
+
+pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+
+// Useful as a piece of realistic test data.
+pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
+
+#[macro_export]
+macro_rules! assert_is_ok {
+    ($result: expr) => {
+        let r = $result;
+        assert!(
+            r.is_ok(),
+            "result ({}) = {:#?}, not Ok",
+            stringify!($result),
+            r
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! assert_is_err {
+    ($result: expr) => {
+        let r = $result;
+        assert!(
+            r.is_err(),
+            "result ({}) = {:#?}, not Err",
+            stringify!($result),
+            r
+        );
+    };
+}
+
 pub fn i2d(i: u64) -> Decimal {
     // Convert to i64.
     let i = i

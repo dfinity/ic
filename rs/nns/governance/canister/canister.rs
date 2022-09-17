@@ -9,63 +9,51 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
-use ic_nns_governance::{
-    governance::{TimeWarp, CMC},
-    pb::v1::{manage_neuron::NeuronIdOrSubaccount, NetworkEconomics, RewardNodeProviders},
-};
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
 use std::boxed::Box;
 use std::time::SystemTime;
-
-use prost::Message;
 
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, call_with_callbacks, caller, now},
+    api::{arg_data, call_with_callbacks, caller, now, reject_message},
     over, over_async, println,
 };
 use dfn_protobuf::protobuf;
+use prost::Message;
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::MethodAuthzChange;
+use ic_nervous_system_common::{
+    ledger::LedgerCanister,
+    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+    MethodAuthzChange,
+};
 use ic_nns_common::{
-    access_control::{check_caller_is_ledger, check_caller_is_root},
+    access_control::{check_caller_is_gtc, check_caller_is_ledger, check_caller_is_root},
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{NeuronId, ProposalId},
 };
-
-use ic_nervous_system_common::stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
-};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    ListNodeProvidersResponse, MostRecentMonthlyNodeProviderRewards, NodeProvider, RewardEvent,
-    UpdateNodeProvider,
-};
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp, CMC},
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, Command, RegisterVote,
+            ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceError, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Neuron,
-        NeuronInfo, NnsFunction, Proposal, ProposalInfo, Vote,
+        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
+        RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
     },
 };
-
-use dfn_core::api::reject_message;
-use ic_nervous_system_common::ledger::LedgerCanister;
-use ic_nns_common::access_control::check_caller_is_gtc;
-use ic_nns_governance::governance::HeapGrowthPotential;
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -766,6 +754,21 @@ fn update_node_provider() {
 #[candid_method(update, rename = "update_node_provider")]
 fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     governance_mut().update_node_provider(&caller(), req)
+}
+
+#[export_name = "canister_update settle_community_fund_participation"]
+fn settle_community_fund_participation() {
+    println!("{}settle_community_fund_participation", LOG_PREFIX);
+    over_async(candid_one, settle_community_fund_participation_)
+}
+
+#[candid_method(update, rename = "settle_community_fund_participation")]
+async fn settle_community_fund_participation_(
+    request: SettleCommunityFundParticipation,
+) -> Result<(), GovernanceError> {
+    governance_mut()
+        .settle_community_fund_participation(caller(), &request)
+        .await
 }
 
 /// Return the NodeProvider record where NodeProvider.id == caller(), if such a
