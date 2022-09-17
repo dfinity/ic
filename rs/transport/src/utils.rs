@@ -5,7 +5,9 @@ use crate::types::{QueueSize, SendQueue, SendQueueReader};
 use async_trait::async_trait;
 use ic_base_types::NodeId;
 use ic_interfaces_transport::{TransportChannelId, TransportPayload};
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
 use tokio::time::{timeout_at, Instant};
@@ -278,4 +280,18 @@ pub(crate) fn get_peer_label(node_ip: &str, node_id: &NodeId) -> String {
     // 35: Includes the first 6 groups of 5 chars each + the 5 separators
     let prefix = node_id.to_string().chars().take(35).collect::<String>();
     return format!("{}_{}", node_ip, prefix);
+}
+
+// Sets up the server side socket with the node IP:port
+// Panics in case of unrecoverable error.
+pub(crate) fn start_listener(local_addr: SocketAddr) -> std::io::Result<TcpListener> {
+    let socket = if local_addr.is_ipv6() {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(true)?;
+    socket.bind(local_addr)?;
+    socket.listen(128)
 }
