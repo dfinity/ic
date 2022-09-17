@@ -1194,8 +1194,23 @@ message ProposalData {
   // Wait-for-quiet state that needs to be saved in stable memory.
   WaitForQuietState wait_for_quiet_state = 16;
 
+  // SNS Token Swap-related fields
+  // -----------------------------
+
   // This is populated when an OpenSnsTokenSwap proposal is first made.
   optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
+
+  // This is populated when OpenSnsTokenSwap is executed. It is used when our
+  // conclude_community_fund_participation Candid method is called to either
+  // mint ICP, or restore CF neuron maturity.
+  repeated ic_sns_swap.pb.v1.CfParticipant cf_participants = 18;
+
+  // This gets set to one of the terminal values (i.e. Committed or Aborted)
+  // when the swap canister calls our conclude_community_fund_participation
+  // Candid method. Initially, it is set to Open, because swap is supposed to
+  // enter that state when we call its open Candid method, which is the main
+  // operation in the execution of an OpenSnsTokenSwap proposal.
+  optional ic_sns_swap.pb.v1.Lifecycle sns_token_swap_lifecycle = 19;
 }
 
 // Stores data relevant to the "wait for quiet" implementation.
@@ -1618,4 +1633,35 @@ message ClaimOrRefreshNeuronFromAccountResponse {
 message MostRecentMonthlyNodeProviderRewards {
   uint64 timestamp = 1;
   repeated RewardNodeProvider rewards = 2;
+}
+
+// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+// manually propagated to (sns) swap.proto.
+message SettleCommunityFundParticipation {
+  // The caller's principal ID must match the value in the
+  // target_swap_canister_id field in the proposal (more precisely, in the
+  // OpenSnsTokenSwap).
+  optional uint64 open_sns_token_swap_proposal_id = 1;
+
+  // Each of the possibilities here corresponds to one of two ways that a swap
+  // can terminate. See also sns_swap_pb::Lifecycle::is_terminal.
+  oneof result {
+    Committed committed = 2;
+    Aborted aborted = 3;
+  }
+
+  // When this happens, ICP needs to be minted, and sent to the SNS governance
+  // canister's main account on the ICP Ledger. As with Aborted, the amount of
+  // ICP that needs to be minted can be deduced from the ProposalData's
+  // cf_participants field.
+  message Committed {
+    // This is where the minted ICP will be sent. In principal, this could be
+    // fetched using the swap canister's get_state method.
+    ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+  }
+
+  // When this happens, maturity needs to be restored to CF neurons. The amounts
+  // to be refunded can be found in the ProposalData's cf_participants field.
+  message Aborted {
+  }
 }
