@@ -880,11 +880,13 @@ impl ExecutionTest {
             .set(round_limits.subnet_available_memory.get());
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
-            self.update_execution_stats(
-                canister_id,
-                self.install_code_instruction_limits.message(),
-                instructions_used,
-            );
+            if let Some(instructions_used) = instructions_used {
+                self.update_execution_stats(
+                    canister_id,
+                    self.install_code_instruction_limits.message(),
+                    instructions_used,
+                );
+            }
         }
         true
     }
@@ -938,11 +940,13 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
-                self.update_execution_stats(
-                    canister_id,
-                    self.instruction_limits.message(),
-                    result.instructions_used,
-                );
+                if let Some(instructions_used) = result.instructions_used {
+                    self.update_execution_stats(
+                        canister_id,
+                        self.instruction_limits.message(),
+                        instructions_used,
+                    );
+                }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
                     self.ingress_history_writer
@@ -997,11 +1001,13 @@ impl ExecutionTest {
                 state = new_state;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
-                self.update_execution_stats(
-                    canister_id,
-                    self.install_code_instruction_limits.message(),
-                    instructions_used,
-                );
+                if let Some(instructions_used) = instructions_used {
+                    self.update_execution_stats(
+                        canister_id,
+                        self.install_code_instruction_limits.message(),
+                        instructions_used,
+                    );
+                }
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
@@ -1021,11 +1027,13 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory
                     .set(round_limits.subnet_available_memory.get());
-                self.update_execution_stats(
-                    canister_id,
-                    self.instruction_limits.message(),
-                    result.instructions_used,
-                );
+                if let Some(instructions_used) = result.instructions_used {
+                    self.update_execution_stats(
+                        canister_id,
+                        self.instruction_limits.message(),
+                        instructions_used,
+                    );
+                }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
                     self.ingress_history_writer

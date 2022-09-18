@@ -56,13 +56,16 @@ use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
-use ic_types::methods::{FuncRef, WasmClosure};
 use ic_types::{
     ingress::WasmResult,
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
     CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation, Time,
+};
+use ic_types::{
+    methods::{FuncRef, WasmClosure},
+    NumSlices,
 };
 use std::{
     collections::BTreeMap,
@@ -432,7 +435,11 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
-        measurement_scope.add(instructions_executed, NumMessages::from(1));
+        measurement_scope.add(
+            instructions_executed,
+            NumSlices::from(1),
+            NumMessages::from(1),
+        );
         self.query_allocations_used
             .write()
             .unwrap()
@@ -575,7 +582,11 @@ impl<'a> QueryContext<'a> {
             .on_canister_result(call_context_id, Some(callback_id), result);
 
         let instructions_executed = instruction_limit - instructions_left;
-        measurement_scope.add(instructions_executed, NumMessages::from(1));
+        measurement_scope.add(
+            instructions_executed,
+            NumSlices::from(1),
+            NumMessages::from(1),
+        );
         self.query_allocations_used
             .write()
             .unwrap()

@@ -374,7 +374,7 @@ impl ExecutionEnvironment {
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
-    ) -> (ReplicatedState, NumInstructions) {
+    ) -> (ReplicatedState, Option<NumInstructions>) {
         let timer = Timer::start(); // Start logging execution time.
 
         let mut msg = match msg {
@@ -384,7 +384,7 @@ impl ExecutionEnvironment {
                     .subnet_call_context_manager
                     .retrieve_request(response.originator_reply_callback, &self.log);
                 return match request {
-                    None => (state, NumInstructions::from(0)),
+                    None => (state, Some(NumInstructions::from(0))),
                     Some(request) => {
                         state.push_subnet_output_response(
                             Response {
@@ -396,7 +396,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        (state, NumInstructions::from(0))
+                        (state, Some(NumInstructions::from(0)))
                     }
                 };
             }
@@ -445,7 +445,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, NumInstructions::from(0));
+                        return (state, Some(NumInstructions::from(0)));
                     }
 
                     match SignWithECDSAArgs::decode(payload) {
@@ -932,7 +932,7 @@ impl ExecutionEnvironment {
                 state
             }
         };
-        (state, NumInstructions::from(0))
+        (state, Some(NumInstructions::from(0)))
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -1733,7 +1733,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> (ReplicatedState, NumInstructions) {
+    ) -> (ReplicatedState, Option<NumInstructions>) {
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
             msg: &RequestOrIngress,
@@ -1760,7 +1760,7 @@ impl ExecutionEnvironment {
                 let refund = msg.take_cycles();
                 let state =
                     self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
-                return (state, NumInstructions::from(0));
+                return (state, Some(NumInstructions::from(0)));
             }
         };
 
@@ -1822,7 +1822,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         dts_result: DtsInstallCodeResult,
         timer: Timer,
-    ) -> (ReplicatedState, NumInstructions) {
+    ) -> (ReplicatedState, Option<NumInstructions>) {
         let execution_duration = timer.elapsed();
         match dts_result {
             DtsInstallCodeResult::Finished {
@@ -1867,7 +1867,7 @@ impl ExecutionEnvironment {
                 let refund = message.take_cycles();
                 let state =
                     self.finish_subnet_message_execution(state, message, result, refund, timer);
-                (state, instructions_used)
+                (state, Some(instructions_used))
             }
             DtsInstallCodeResult::Paused {
                 mut canister,
@@ -1879,7 +1879,7 @@ impl ExecutionEnvironment {
                     .task_queue
                     .push_front(ExecutionTask::PausedInstallCode(id));
                 state.put_canister_state(canister);
-                (state, NumInstructions::from(0))
+                (state, None)
             }
         }
     }
@@ -1900,7 +1900,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> (ReplicatedState, NumInstructions) {
+    ) -> (ReplicatedState, Option<NumInstructions>) {
         let task = state
             .canister_state_mut(canister_id)
             .unwrap()
@@ -2014,7 +2014,7 @@ impl ExecutionEnvironment {
         result: ExecuteMessageResult,
     ) -> (
         CanisterState,
-        NumInstructions,
+        Option<NumInstructions>,
         NumBytes,
         Option<(MessageId, IngressStatus)>,
     ) {
@@ -2038,7 +2038,12 @@ impl ExecutionEnvironment {
                     }
                     ExecutionResponse::Empty => None,
                 };
-                (canister, instructions_used, heap_delta, ingress_status)
+                (
+                    canister,
+                    Some(instructions_used),
+                    heap_delta,
+                    ingress_status,
+                )
             }
             ExecuteMessageResult::Paused {
                 mut canister,
@@ -2049,7 +2054,7 @@ impl ExecutionEnvironment {
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::PausedExecution(id));
-                (canister, NumInstructions::from(0), NumBytes::from(0), None)
+                (canister, None, NumBytes::from(0), None)
             }
         }
     }
@@ -2137,7 +2142,7 @@ fn get_canister_mut(
 /// The result of `execute_canister()`.
 pub struct ExecuteCanisterResult {
     pub canister: CanisterState,
-    pub instructions_used: NumInstructions,
+    pub instructions_used: Option<NumInstructions>,
     pub heap_delta: NumBytes,
     pub ingress_status: Option<(MessageId, IngressStatus)>,
     // The description of the executed task or message.
@@ -2191,7 +2196,7 @@ pub fn execute_canister(
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
                 canister,
-                instructions_used: NumInstructions::from(0),
+                instructions_used: None,
                 heap_delta: NumBytes::from(0),
                 ingress_status: None,
                 description: None,
@@ -2214,7 +2219,7 @@ pub fn execute_canister(
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
                     canister,
-                    instructions_used,
+                    instructions_used: Some(instructions_used),
                     heap_delta,
                     ingress_status: None,
                     description: Some("heartbeat".to_string()),
