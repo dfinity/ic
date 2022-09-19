@@ -4459,9 +4459,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.5.1"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f50910f1df55124b5374847fd2b4e3515c426f6d1ce1a23503208e80832fbc2"
+checksum = "d453dcbe269b19ebd9b3a377819c9f32b3c5c99c3dd42bfd6789600aa77b510c"
 dependencies = [
  "candid",
  "ic-cdk 0.5.5",
@@ -5844,6 +5844,26 @@ dependencies = [
  "async-trait",
  "ic-cdk 0.5.5",
  "ic-icrc1-client",
+]
+
+[[package]]
+name = "ic-icrc1-index"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-base-types",
+ "ic-cdk 0.5.5",
+ "ic-cdk-macros",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "num-traits",
+ "proptest 0.9.6",
+ "serde",
 ]
 
 [[package]]

@@ -1,0 +1,33 @@
+[package]
+name = "ic-icrc1-index"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Index canister for the ICRC1 Ledger"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.53"
+candid = "0.7.10"
+ic-base-types = { path = "../../../types/base_types" }
+ic-cdk = "0.5.5"
+ic-cdk-macros = "0.5.5"
+ic-icrc1 = { path = "../" }
+ic-icrc1-ledger = { path = "../ledger" }
+num-traits = "0.2.14"
+serde = "1.0.139"
+
+[dev-dependencies]
+candid = "0.7.10"
+ic-base-types = { path = "../../../types/base_types" }
+ic-icrc1 = { path = "../" }
+ic-icrc1-ledger = { path = "../ledger" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-ledger-core = { path = "../../ledger_core" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+num-traits = "0.2.14"
+proptest = "0.9.4"
+
+[[bin]]
+name = "ic-icrc1-index"
+path = "src/main.rs"
