@@ -52,6 +52,7 @@ rust_test(
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     flaky = True,
+    tags = ["exclusive"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
