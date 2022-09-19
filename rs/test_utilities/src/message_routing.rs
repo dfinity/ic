@@ -99,7 +99,7 @@ mock! {
             validation_context: &ValidationContext,
             past_payloads: &[&'a XNetPayload],
             byte_limit : NumBytes,
-        ) -> XNetPayload;
+        ) -> (XNetPayload, NumBytes);
 
         fn validate_xnet_payload<'a>(
             &self,

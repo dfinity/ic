@@ -41,7 +41,7 @@ use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::{connection_endpoint::ConnectionEndpoint, RegistryClientError},
     xnet::{CertifiedStreamSlice, StreamIndex},
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
 use ic_xnet_uri::XNetAuthority;
@@ -669,7 +669,7 @@ impl XNetPayloadBuilderImpl {
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
-    ) -> Result<XNetPayload, Error> {
+    ) -> Result<(XNetPayload, NumBytes), Error> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
         let state = self
             .state_manager
@@ -685,7 +685,7 @@ impl XNetPayloadBuilderImpl {
         let stream_positions =
             self.expected_stream_indices(validation_context, &state, past_payloads)?;
         if stream_positions.is_empty() {
-            return Ok(XNetPayload::default());
+            return Ok((XNetPayload::default(), 0.into()));
         }
 
         // Random rotation so all slices have equal chances if `byte_limit` is reached.
@@ -740,7 +740,10 @@ impl XNetPayloadBuilderImpl {
         }
 
         // Collect all successfully queried slices into an `XNetPayload`.
-        Ok(XNetPayload { stream_slices })
+        Ok((
+            XNetPayload { stream_slices },
+            byte_limit.get().saturating_sub(bytes_left as u64).into(),
+        ))
     }
 
     /// Calculates an upper bound for how many messages can be included into a
@@ -893,13 +896,13 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
-    ) -> XNetPayload {
+    ) -> (XNetPayload, NumBytes) {
         let timer = Timer::start();
         let payload =
             match self.get_xnet_payload_impl(validation_context, past_payloads, byte_limit) {
-                Ok(payload) => {
+                Ok((payload, byte_size)) => {
                     self.metrics.observe_build_duration(STATUS_SUCCESS, timer);
-                    payload
+                    (payload, byte_size)
                 }
 
                 Err(e) => {
@@ -907,7 +910,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     self.metrics
                         .observe_build_duration(e.to_label_value(), timer);
 
-                    XNetPayload::default()
+                    (XNetPayload::default(), 0.into())
                 }
             };
 
@@ -915,7 +918,6 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         // just behind.
         self.refill_task_handle.trigger_refill();
 
-        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
         payload
     }
 
