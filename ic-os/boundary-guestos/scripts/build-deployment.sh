@@ -403,7 +403,7 @@ function copy_certs() {
 
 function copy_geolite2_dbs() {
     if [[ -z "${GEOLITE2_COUNTRY_DB}" || -z "${GEOLITE2_CITY_DB}" ]]; then
-        err "please provide both country and city geolite2 dbs"
+        err "geolite2 dbs have not been provided, therefore geolocation capabilities will be disabled"
         return
     fi
 
