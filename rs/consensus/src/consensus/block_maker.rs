@@ -339,7 +339,7 @@ impl BlockMaker {
                         // Use empty DKG dealings if a replica upgrade is pending.
                         let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
                         self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.count_bytes(),
+                            batch_payload.xnet.size_bytes(),
                             batch_payload.ingress.count_bytes(),
                         );
                         (batch_payload, new_dealings, None).into()
@@ -362,7 +362,7 @@ impl BlockMaker {
                         .ok()
                         .flatten();
                         self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.count_bytes(),
+                            batch_payload.xnet.size_bytes(),
                             batch_payload.ingress.count_bytes(),
                         );
                         (batch_payload, dealings, ecdsa_data).into()

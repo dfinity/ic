@@ -56,12 +56,15 @@ pub trait XNetPayloadBuilder: Send + Sync {
     /// valid given a `ValidationContext` (certified height plus registry
     /// version) and `past_payloads` (the `XNetPayloads` from all blocks
     /// above the certified height, in descending block height order).
+    ///
+    /// Returns the payload and its estimated byte size (using the same logic
+    /// as `validate_xnet_payload()`).
     fn get_xnet_payload(
         &self,
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
-    ) -> XNetPayload;
+    ) -> (XNetPayload, NumBytes);
 
     /// Checks whether the provided `XNetPayload` is valid given a
     /// `ValidationContext` (certified height and registry version) and
@@ -69,7 +72,7 @@ pub trait XNetPayloadBuilder: Send + Sync {
     /// height, in descending block height order).
     ///
     /// If valid, returns the payload's `CountBytes`-like byte size (estimated,
-    /// deterministic, using the exact same logic that`get_xnet_payload()` uses
+    /// deterministic, using the exact same logic that `get_xnet_payload()` uses
     /// for enforcing `byte_limit`); else returns a permanent or transient
     /// `ValidationError`.
     fn validate_xnet_payload(
