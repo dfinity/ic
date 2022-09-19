@@ -1,6 +1,6 @@
 use ic_ledger_core::{
     balances::{Balances, BalancesStore},
-    block::BlockHeight,
+    block::BlockIndex,
 };
 use ledger_canister::{AccountIdentifier, Tokens};
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use crate::errors::Error;
 
 pub type BalanceBook = Balances<AccountIdentifier, ClientBalancesStore>;
 
-const EMPTY_HISTORY: [(BlockHeight, Tokens); 0] = [];
+const EMPTY_HISTORY: [(BlockIndex, Tokens); 0] = [];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BalanceHistory {
@@ -21,14 +21,14 @@ pub struct BalanceHistory {
     // different meaning -- it corresponds to the oldest information
     // about this account, but the block at that height does not
     // necessary involve a transaction on this account
-    inner: Vec<(BlockHeight, Tokens)>,
+    inner: Vec<(BlockIndex, Tokens)>,
     pub num_pruned_transactions: usize,
 }
 
 impl BalanceHistory {
     // Add new entry or overwrite a present one.
     // Panics if new height < last_entry().height
-    pub fn insert(&mut self, height: BlockHeight, amount: Tokens) {
+    pub fn insert(&mut self, height: BlockIndex, amount: Tokens) {
         #[allow(clippy::comparison_chain)]
         if let Some((h, a)) = self.inner.last_mut() {
             if *h > height {
@@ -44,7 +44,7 @@ impl BalanceHistory {
         self.inner.push((height, amount));
     }
 
-    pub fn get_at(&self, height: BlockHeight) -> Result<Tokens, Error> {
+    pub fn get_at(&self, height: BlockIndex) -> Result<Tokens, Error> {
         // after prunning we always have at least one entry
         if self.num_pruned_transactions > 0 && self.inner.first().unwrap().0 > height {
             // TODO Add a new error type (ApiError::BlockPruned or something like that)
@@ -94,7 +94,7 @@ impl BalanceHistory {
         self.inner.last().map(|(_h, a)| a)
     }
 
-    pub fn prune_at(&mut self, height: BlockHeight) {
+    pub fn prune_at(&mut self, height: BlockIndex) {
         let idx = match self.inner.binary_search_by_key(&height, |&(h, _)| h) {
             Ok(i) => i,
             Err(i) => {
@@ -119,7 +119,7 @@ impl BalanceHistory {
         self.inner = trimmed;
     }
 
-    pub fn get_history(&self, max_block: Option<BlockHeight>) -> &[(BlockHeight, Tokens)] {
+    pub fn get_history(&self, max_block: Option<BlockIndex>) -> &[(BlockIndex, Tokens)] {
         let end = if let Some(height) = max_block {
             match self.inner.binary_search_by_key(&height, |&(h, _)| h) {
                 Ok(i) => i + 1,
@@ -143,25 +143,25 @@ impl BalanceHistory {
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct ClientBalancesStore {
     pub acc_to_hist: HashMap<AccountIdentifier, BalanceHistory>,
-    pub transaction_context: Option<BlockHeight>,
+    pub transaction_context: Option<BlockIndex>,
 }
 
 impl ClientBalancesStore {
-    pub fn insert(&mut self, acc: AccountIdentifier, height: BlockHeight, amount: Tokens) {
+    pub fn insert(&mut self, acc: AccountIdentifier, height: BlockIndex, amount: Tokens) {
         self.acc_to_hist
             .entry(acc)
             .or_default()
             .insert(height, amount);
     }
 
-    pub fn get_at(&self, acc: AccountIdentifier, height: BlockHeight) -> Result<Tokens, Error> {
+    pub fn get_at(&self, acc: AccountIdentifier, height: BlockIndex) -> Result<Tokens, Error> {
         self.acc_to_hist
             .get(&acc)
             .map(|hist| hist.get_at(height))
             .unwrap_or_else(|| Ok(Tokens::ZERO))
     }
 
-    pub fn prune_at(&mut self, height: BlockHeight) {
+    pub fn prune_at(&mut self, height: BlockIndex) {
         for hist in self.acc_to_hist.values_mut() {
             hist.prune_at(height);
         }
@@ -170,8 +170,8 @@ impl ClientBalancesStore {
     pub fn get_history(
         &self,
         acc: &AccountIdentifier,
-        max_block: Option<BlockHeight>,
-    ) -> &[(BlockHeight, Tokens)] {
+        max_block: Option<BlockIndex>,
+    ) -> &[(BlockIndex, Tokens)] {
         self.acc_to_hist
             .get(acc)
             .map(|hist| hist.get_history(max_block))

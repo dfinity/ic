@@ -1,7 +1,7 @@
 use ic_ledger_core::block::BlockType;
 use ic_types::PrincipalId;
 use ledger_canister::{
-    AccountIdentifier, Block, BlockHeight, Memo, Operation, Tokens, Transaction,
+    AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
     DEFAULT_TRANSFER_FEE,
 };
 
@@ -82,7 +82,7 @@ impl Scribe {
         Memo(self.next_index() as u64)
     }
 
-    fn next_index(&self) -> BlockHeight {
+    fn next_index(&self) -> BlockIndex {
         self.blockchain.len() as u64
     }
 

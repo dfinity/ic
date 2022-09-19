@@ -11,7 +11,7 @@ use ic_rosetta_api::models::{
 };
 use ic_rosetta_api::request_types::{RequestType, Status};
 use ledger_canister::{
-    self, AccountIdentifier, Block, BlockHeight, Operation, SendArgs, Tokens, TransferFee,
+    self, AccountIdentifier, Block, BlockIndex, Operation, SendArgs, Tokens, TransferFee,
     DEFAULT_TRANSFER_FEE,
 };
 use tokio::sync::RwLock;

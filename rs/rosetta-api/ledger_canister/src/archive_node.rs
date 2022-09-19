@@ -7,7 +7,7 @@ use ic_ledger_canister_core::range_utils;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use ledger_canister::{
-    Block, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
+    Block, BlockIndex, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
     GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use serde::{Deserialize, Serialize};
@@ -118,9 +118,9 @@ fn init(
     );
 }
 
-/// Get Block by BlockHeight. If the BlockHeight is outside the range stored in
+/// Get Block by BlockIndex. If the BlockIndex is outside the range stored in
 /// this Node the result is None
-fn get_block(block_height: BlockHeight) -> BlockRes {
+fn get_block(block_height: BlockIndex) -> BlockRes {
     let archive_state = ARCHIVE_STATE.read().unwrap();
     let adjusted_height = block_height - archive_state.block_height_offset;
     let block: Option<EncodedBlock> = archive_state.blocks.get(adjusted_height as usize).cloned();
@@ -153,7 +153,7 @@ fn append_blocks_() {
     dfn_core::over(dfn_candid::candid_one, append_blocks);
 }
 
-/// Get multiple blocks by *offset into the container* (not BlockHeight) and
+/// Get multiple blocks by *offset into the container* (not BlockIndex) and
 /// length. Note that this simply iterates the blocks available in the this
 /// particular archive node without taking into account the ledger or the
 /// remainder of the archive. For example, if the node contains blocks with
@@ -169,7 +169,7 @@ fn iter_blocks_() {
     });
 }
 
-/// Get multiple Blocks by BlockHeight and length. If the query is outside the
+/// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
@@ -218,7 +218,7 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
     })
 }
 
-/// Get multiple Blocks by BlockHeight and length. If the query is outside the
+/// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks"]
 fn get_blocks_candid_() {

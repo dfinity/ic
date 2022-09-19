@@ -1,0 +1,61 @@
+type TxId = nat64;
+
+type Account = record { owner : principal; subaccount : opt blob };
+
+type Transaction = record {
+     kind : text;
+     mint : opt record {
+         amount : nat;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     burn : opt record {
+         amount : nat;
+         from : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     transfer : opt record {
+         amount : nat;
+         from : Account;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     timestamp : nat64;
+};
+
+type GetAccountTransactionsArgs = record {
+    account : Account;
+    // The txid of the last transaction seen by the client.
+    // If None then the results will start from the most recent
+    // txid.
+    start : opt TxId;
+    // Maximum number of transactions to fetch.
+    max_results : nat,
+};
+
+type TransactionWithId = record {
+  id : TxId;
+  transaction : Transaction,
+};
+
+type GetTransactions = record {
+  transactions : vec TransactionWithId;
+  // The txid of the oldest transaction the account has
+  oldest_tx_id : opt TxId;
+};
+
+type GetTransactionsErr = record {
+  message : text;
+};
+
+type GetTransactionsResult = variant {
+  Ok : GetTransactions;
+  Err : GetTransactionsErr;
+};
+
+service : {
+  get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
+};

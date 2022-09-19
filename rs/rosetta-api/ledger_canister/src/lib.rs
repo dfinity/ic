@@ -11,7 +11,7 @@ use ic_ledger_core::{
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
     timestamp::TimeStamp,
 };
-pub use ic_ledger_core::{block::BlockHeight, tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
+pub use ic_ledger_core::{block::BlockIndex, tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire};
@@ -303,7 +303,7 @@ pub struct Ledger {
     // accounts with lowest balances are removed
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
-    // This is a set of blockheights that have been notified
+    // This is a set of BlockIndexs that have been notified
     #[serde(default)]
     pub blocks_notified: IntMap<()>,
     /// How long transactions are remembered to detect duplicates.
@@ -311,7 +311,7 @@ pub struct Ledger {
     /// For each transaction, record the block in which the
     /// transaction was created. This only contains transactions from
     /// the last `transaction_window` period.
-    transactions_by_hash: BTreeMap<HashOf<Transaction>, BlockHeight>,
+    transactions_by_hash: BTreeMap<HashOf<Transaction>, BlockIndex>,
     /// The transactions in the transaction window, sorted by block
     /// index / block timestamp. (Block timestamps are monotonically
     /// non-decreasing, so this is the same.)
@@ -385,13 +385,11 @@ impl LedgerData for Ledger {
         &mut self.blockchain
     }
 
-    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
         &self.transactions_by_hash
     }
 
-    fn transactions_by_hash_mut(
-        &mut self,
-    ) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+    fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
         &mut self.transactions_by_hash
     }
 
@@ -403,7 +401,7 @@ impl LedgerData for Ledger {
         &mut self.transactions_by_height
     }
 
-    fn on_purged_transaction(&mut self, height: BlockHeight) {
+    fn on_purged_transaction(&mut self, height: BlockIndex) {
         self.blocks_notified.remove(height);
     }
 }
@@ -445,7 +443,7 @@ impl Ledger {
         memo: Memo,
         operation: Operation,
         created_at_time: Option<TimeStamp>,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
+    ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
         let now = dfn_core::api::now().into();
         self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
@@ -456,7 +454,7 @@ impl Ledger {
         operation: Operation,
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
+    ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
         core_ledger::apply_transaction(
             self,
             Transaction {
@@ -495,7 +493,7 @@ impl Ledger {
 
     /// This adds a pre created block to the ledger. This should only be used
     /// during canister migration or upgrade
-    pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, String> {
+    pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
         apply_operation(&mut self.balances, &block.transaction.operation)
             .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
         self.blockchain.add_block(block)
@@ -539,7 +537,7 @@ impl Ledger {
 
     pub fn change_notification_state(
         &mut self,
-        height: BlockHeight,
+        height: BlockIndex,
         block_timestamp: TimeStamp,
         new_state: bool,
         now: TimeStamp,
@@ -616,7 +614,7 @@ pub fn add_payment(
     memo: Memo,
     payment: Operation,
     created_at_time: Option<TimeStamp>,
-) -> (BlockHeight, HashOf<EncodedBlock>) {
+) -> (BlockIndex, HashOf<EncodedBlock>) {
     LEDGER
         .write()
         .unwrap()
@@ -625,7 +623,7 @@ pub fn add_payment(
 }
 
 pub fn change_notification_state(
-    height: BlockHeight,
+    height: BlockIndex,
     block_timestamp: TimeStamp,
     new_state: bool,
 ) -> Result<(), String> {
@@ -1396,7 +1394,7 @@ mod tests {
         assert_eq!(res6, None);
     }
 
-    fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockHeight {
+    fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockIndex {
         let memo = Memo::default();
         ledger
             .add_payment_with_timestamp(memo, op.clone(), None, ts)
@@ -1581,7 +1579,7 @@ pub enum TransferError {
     InsufficientFunds { balance: Tokens },
     TxTooOld { allowed_window_nanos: u64 },
     TxCreatedInFuture,
-    TxDuplicate { duplicate_of: BlockHeight },
+    TxDuplicate { duplicate_of: BlockIndex },
 }
 
 impl fmt::Display for TransferError {
@@ -1627,7 +1625,7 @@ pub struct TransactionNotification {
     pub from_subaccount: Option<Subaccount>,
     pub to: CanisterId,
     pub to_subaccount: Option<Subaccount>,
-    pub block_height: BlockHeight,
+    pub block_height: BlockIndex,
     pub amount: Tokens,
     pub memo: Memo,
 }
@@ -1635,7 +1633,7 @@ pub struct TransactionNotification {
 /// Argument taken by the notification endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyCanisterArgs {
-    pub block_height: BlockHeight,
+    pub block_height: BlockIndex,
     pub max_fee: Tokens,
     pub from_subaccount: Option<Subaccount>,
     pub to_canister: CanisterId,
@@ -1648,7 +1646,7 @@ impl NotifyCanisterArgs {
     /// is the index of the block returned by `send`.
     pub fn new_from_send(
         send_args: &SendArgs,
-        block_height: BlockHeight,
+        block_height: BlockIndex,
         to_canister: CanisterId,
         to_subaccount: Option<Subaccount>,
     ) -> Result<Self, String> {
@@ -1814,12 +1812,12 @@ pub struct Archives {
 /// Argument returned by the tip_of_chain endpoint
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,
-    pub tip_index: BlockHeight,
+    pub tip_index: BlockIndex,
 }
 
 #[derive(Serialize, Deserialize, CandidType)]
 pub struct GetBlocksArgs {
-    pub start: BlockHeight,
+    pub start: BlockIndex,
     pub length: usize,
 }
 
@@ -1833,8 +1831,8 @@ pub type GetBlocksResult = Result<BlockRange, GetBlocksError>;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, CandidType)]
 pub enum GetBlocksError {
     BadFirstBlockIndex {
-        requested_index: BlockHeight,
-        first_valid_index: BlockHeight,
+        requested_index: BlockIndex,
+        first_valid_index: BlockIndex,
     },
     Other {
         error_code: u64,
@@ -1858,29 +1856,29 @@ impl IterBlocksArgs {
 pub struct IterBlocksRes(pub Vec<EncodedBlock>);
 
 // These is going away soon
-pub struct BlockArg(pub BlockHeight);
+pub struct BlockArg(pub BlockIndex);
 pub struct BlockRes(pub Option<Result<EncodedBlock, CanisterId>>);
 
 // A helper function for ledger/get_blocks and archive_node/get_blocks endpoints
 pub fn get_blocks(
     blocks: &[EncodedBlock],
-    range_from_offset: BlockHeight,
-    range_from: BlockHeight,
+    range_from_offset: BlockIndex,
+    range_from: BlockIndex,
     length: usize,
 ) -> GetBlocksRes {
     // Inclusive end of the range of *requested* blocks
     let requested_range_to = range_from as usize + length - 1;
     // Inclusive end of the range of *available* blocks
     let range_to = range_from_offset as usize + blocks.len() - 1;
-    // Example: If the Node stores 10 blocks beginning at BlockHeight 100, i.e.
-    // [100 .. 109] then requesting blocks at BlockHeight < 100 or BlockHeight
+    // Example: If the Node stores 10 blocks beginning at BlockIndex 100, i.e.
+    // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
         return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
             range_from, requested_range_to, range_from_offset, range_to)));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
-    // is 100 and the Block with BlockHeight 100 is at index 0
+    // is 100 and the Block with BlockIndex 100 is at index 0
     let offset = (range_from - range_from_offset) as usize;
     GetBlocksRes(Ok(blocks[offset..offset + length].to_vec()))
 }
@@ -1899,7 +1897,7 @@ pub enum CyclesResponse {
     CanisterCreated(CanisterId),
     // Silly requirement by the candid derivation
     ToppedUp(()),
-    Refunded(String, Option<BlockHeight>),
+    Refunded(String, Option<BlockIndex>),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1950,7 +1948,7 @@ impl CandidType for QueryArchiveFn {
 
 #[derive(Debug, CandidType, Deserialize)]
 pub struct ArchivedBlocksRange {
-    pub start: BlockHeight,
+    pub start: BlockIndex,
     pub length: u64,
     pub callback: QueryArchiveFn,
 }
@@ -1960,6 +1958,6 @@ pub struct QueryBlocksResponse {
     pub chain_length: u64,
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub blocks: Vec<CandidBlock>,
-    pub first_block_index: BlockHeight,
+    pub first_block_index: BlockIndex,
     pub archived_blocks: Vec<ArchivedBlocksRange>,
 }

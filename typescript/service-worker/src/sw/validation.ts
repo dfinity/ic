@@ -1,10 +1,11 @@
 import {
-  Cbor as cbor,
+  Cbor,
   Certificate,
   HashTree,
   HttpAgent,
   lookup_path,
   reconstruct,
+  compare,
 } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { lebDecode } from '@dfinity/candid';
@@ -32,26 +33,28 @@ export async function validateBody(
   agent: HttpAgent,
   shouldFetchRootKey = false
 ): Promise<boolean> {
-  const cert = new Certificate(
-    { certificate: new Uint8Array(certificate) },
-    agent
-  );
-
   // If we're running locally, update the key manually.
   if (shouldFetchRootKey) {
     await agent.fetchRootKey();
   }
 
-  // Make sure the certificate is valid.
-  if (!(await cert.verify())) {
+  let cert: Certificate | undefined;
+  try {
+    cert = await Certificate.create({
+      certificate,
+      canisterId,
+      rootKey: agent.rootKey,
+    });
+  } catch (error) {
     return false;
   }
+
   // check certificate time
   if (!validateCertificateTime(cert)) {
     return false;
   }
 
-  const hashTree: HashTree = cbor.decode(new Uint8Array(tree));
+  const hashTree = Cbor.decode<HashTree>(tree);
   const reconstructed = await reconstruct(hashTree);
   const witness = cert.lookup([
     'canister',
@@ -114,17 +117,5 @@ function validateCertificateTime(cert: Certificate): boolean {
 }
 
 function equal(buf1: ArrayBuffer, buf2: ArrayBuffer): boolean {
-  if (buf1.byteLength !== buf2.byteLength) {
-    return false;
-  }
-
-  const a1 = new Uint8Array(buf1);
-  const a2 = new Uint8Array(buf2);
-  for (let i = 0; i < a1.length; i++) {
-    if (a1[i] != a2[i]) {
-      return false;
-    }
-  }
-
-  return true;
+  return compare(buf1, buf2) === 0;
 }

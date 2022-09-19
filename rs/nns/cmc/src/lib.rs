@@ -2,7 +2,7 @@ use candid::CandidType;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use serde::{Deserialize, Serialize};
 
@@ -16,20 +16,20 @@ pub struct CyclesCanisterInitPayload {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
     pub minting_account_id: Option<AccountIdentifier>,
-    pub last_purged_notification: Option<BlockHeight>,
+    pub last_purged_notification: Option<BlockIndex>,
 }
 
 /// Argument taken by top up notification endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyTopUp {
-    pub block_index: BlockHeight,
+    pub block_index: BlockIndex,
     pub canister_id: CanisterId,
 }
 
 /// Argument taken by create canister notification endpoint
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct NotifyCreateCanister {
-    pub block_index: BlockHeight,
+    pub block_index: BlockIndex,
     pub controller: PrincipalId,
     pub subnet_type: Option<String>,
 }
@@ -39,10 +39,10 @@ pub struct NotifyCreateCanister {
 pub enum NotifyError {
     Refunded {
         reason: String,
-        block_index: Option<BlockHeight>,
+        block_index: Option<BlockIndex>,
     },
     InvalidTransaction(String),
-    TransactionTooOld(BlockHeight),
+    TransactionTooOld(BlockIndex),
     Processing,
     Other {
         error_code: u64,
@@ -140,11 +140,11 @@ pub fn top_up_canister_txn(
 
 /// The result of create_canister transaction notification. In case of
 /// an error, contains the index of the refund block.
-pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockHeight>)>;
+pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockIndex>)>;
 
 /// The result of top_up_canister transaction notification. In case of
 /// an error, contains the index of the refund block.
-pub type TopUpCanisterResult = Result<(), (String, Option<BlockHeight>)>;
+pub type TopUpCanisterResult = Result<(), (String, Option<BlockIndex>)>;
 
 pub struct TokensToCycles {
     /// Number of 1/10,000ths of XDR that 1 ICP is worth.

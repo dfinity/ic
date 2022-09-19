@@ -8,7 +8,7 @@ use crate::{
     transaction_id::TransactionIdentifier,
 };
 use ic_types::PrincipalId;
-use ledger_canister::{AccountIdentifier, BlockHeight, Operation as LedgerOperation, Tokens};
+use ledger_canister::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -137,7 +137,7 @@ impl From<RequestResultMetadata> for Object {
 pub struct RequestResultMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub block_index: Option<BlockHeight>,
+    pub block_index: Option<BlockIndex>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub neuron_id: Option<u64>,

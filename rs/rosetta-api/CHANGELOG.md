@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.7.0] - 2022-09-20
+### Fixed
+- The Rosetta node can now correctly handle absence proofs
+  (see https://internetcomputer.org/docs/current/references/ic-interface-spec/#example).
+  All Rosetta node operators are advised to update to this release.
+
 ## [1.6.1] - 2022-08-26
 ### Added
 - `blockchain` command line flag that overrides the blockchain name in the network identifier.

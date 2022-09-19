@@ -28,7 +28,7 @@ use ic_nns_test_utils::{
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
     LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ fn test_stop_start_nns_canister() {
             let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
             // Perform a transfer, should succeed.
-            let _: BlockHeight = nns_canisters
+            let _: BlockIndex = nns_canisters
                 .ledger
                 .update_from_sender(
                     "send_pb",
@@ -195,7 +195,7 @@ fn test_stop_start_nns_canister() {
             );
 
             // Perform a transfer, should fail.
-            let result: Result<BlockHeight, String> = nns_canisters
+            let result: Result<BlockIndex, String> = nns_canisters
                 .ledger
                 .update_from_sender(
                     "send_pb",
@@ -260,7 +260,7 @@ fn test_stop_start_nns_canister() {
             );
 
             // Perform another transfer, should succeed.
-            let _: BlockHeight = nns_canisters
+            let _: BlockIndex = nns_canisters
                 .ledger
                 .update_from_sender(
                     "send_pb",

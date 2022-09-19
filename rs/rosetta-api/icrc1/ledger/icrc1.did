@@ -70,7 +70,7 @@ service : (InitArgs) -> {
     icrc1_total_supply : () -> (Tokens) query;
     icrc1_fee : () -> (Tokens) query;
     icrc1_minting_account : () -> (opt Account) query;
-
+    
     icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
     icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;

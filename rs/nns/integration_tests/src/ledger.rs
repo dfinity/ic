@@ -35,7 +35,7 @@ use ic_nns_test_utils::{
 };
 use ledger_canister::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
-    ArchiveOptions, Block, BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
+    ArchiveOptions, Block, BlockIndex, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
     Tokens, Transaction, DEFAULT_TRANSFER_FEE,
 };
 use tokio::time::{timeout_at, Instant};
@@ -63,7 +63,7 @@ async fn perform_transfers(
         let nns_canisters = nns_canisters.clone();
         let user = user.clone();
         join_handles.push(tokio::runtime::Handle::current().spawn(async move {
-            let result: Result<BlockHeight, String> = timeout_at(
+            let result: Result<BlockIndex, String> = timeout_at(
                 Instant::now() + Duration::from_secs(10u64),
                 nns_canisters.ledger.update_from_sender(
                     "send_pb",
@@ -431,7 +431,7 @@ fn test_stake_and_disburse_neuron_with_account() {
                 ledger::compute_neuron_staking_subaccount(user.get_principal_id(), nonce);
 
             let stake = Tokens::from_tokens(100).unwrap();
-            let _block_height: BlockHeight = nns_canisters
+            let _block_height: BlockIndex = nns_canisters
                 .ledger
                 .update_from_sender(
                     "send_pb",

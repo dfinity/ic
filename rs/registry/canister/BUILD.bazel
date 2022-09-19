@@ -158,6 +158,7 @@ rust_test(
     },
     flaky = True,
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    tags = ["exclusive"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
 )
 

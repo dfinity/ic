@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 
 /// Stores a chain of transactions with their metadata
@@ -51,7 +51,7 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         }
     }
 
-    pub fn add_block<B>(&mut self, block: B) -> Result<BlockHeight, String>
+    pub fn add_block<B>(&mut self, block: B) -> Result<BlockIndex, String>
     where
         B: BlockType,
     {
@@ -71,7 +71,7 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
 
-    pub fn get(&self, height: BlockHeight) -> Option<&EncodedBlock> {
+    pub fn get(&self, height: BlockIndex) -> Option<&EncodedBlock> {
         if height < self.num_archived_blocks() {
             None
         } else {
@@ -110,8 +110,8 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
         &self.blocks[offset(&local_blocks, self.num_archived_blocks)]
     }
 
-    pub fn chain_length(&self) -> BlockHeight {
-        self.num_archived_blocks() + self.num_unarchived_blocks() as BlockHeight
+    pub fn chain_length(&self) -> BlockIndex {
+        self.num_archived_blocks() + self.num_unarchived_blocks() as BlockIndex
     }
 
     pub fn remove_archived_blocks(&mut self, len: usize) {

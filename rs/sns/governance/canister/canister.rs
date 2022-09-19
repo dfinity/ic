@@ -378,7 +378,6 @@ fn list_neurons_(list_neurons: ListNeurons) -> ListNeuronsResponse {
 /// Returns the full proposal corresponding to the `proposal_id`.
 #[export_name = "canister_query get_proposal"]
 fn get_proposal() {
-    println!("{}get_proposal", log_prefix());
     over(candid_one, get_proposal_)
 }
 
@@ -452,7 +451,6 @@ fn get_latest_reward_event() {
 /// governance controls.
 #[export_name = "canister_update get_root_canister_status"]
 fn get_root_canister_status() {
-    println!("{}get_root_canister_status", log_prefix());
     over_async(candid_one, get_root_canister_status_)
 }
 

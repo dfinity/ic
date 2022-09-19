@@ -3,9 +3,7 @@ use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
-use ledger_canister::{
-    BlockArg, BlockHeight, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes,
-};
+use ledger_canister::{BlockArg, BlockIndex, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes};
 use log::{debug, trace, warn};
 use on_wire::{FromWire, IntoWire};
 use std::collections::VecDeque;
@@ -21,8 +19,8 @@ pub struct CanisterAccess {
     #[allow(clippy::type_complexity)]
     ongoing_block_queries: tokio::sync::Mutex<
         VecDeque<(
-            BlockHeight,
-            BlockHeight,
+            BlockIndex,
+            BlockIndex,
             JoinHandle<Result<Vec<EncodedBlock>, String>>,
         )>,
     >,
@@ -79,7 +77,7 @@ impl CanisterAccess {
 
     pub async fn query_raw_block(
         &self,
-        height: BlockHeight,
+        height: BlockIndex,
     ) -> Result<Option<EncodedBlock>, String> {
         let BlockRes(b) = self
             .query("block_pb", BlockArg(height))
@@ -105,8 +103,8 @@ impl CanisterAccess {
     async fn call_query_blocks(
         &self,
         can_id: CanisterId,
-        start: BlockHeight,
-        end: BlockHeight,
+        start: BlockIndex,
+        end: BlockIndex,
     ) -> Result<Vec<EncodedBlock>, String> {
         let blocks: GetBlocksRes = self
             .query_canister(
@@ -135,8 +133,8 @@ impl CanisterAccess {
 
     pub async fn multi_query_blocks(
         self: Arc<Self>,
-        start: BlockHeight,
-        end: BlockHeight,
+        start: BlockIndex,
+        end: BlockIndex,
     ) -> Result<Vec<EncodedBlock>, String> {
         let mut ongoing = self.ongoing_block_queries.lock().await;
         // clean up stale queries
@@ -180,8 +178,8 @@ impl CanisterAccess {
 
     pub async fn query_blocks(
         self: &Arc<Self>,
-        start: BlockHeight,
-        end: BlockHeight,
+        start: BlockIndex,
+        end: BlockIndex,
     ) -> Result<Vec<EncodedBlock>, String> {
         // asking for a low number of blocks means we are close to the tip
         // so we can try fetching from ledger first
@@ -195,7 +193,7 @@ impl CanisterAccess {
 
         fn locate_archive(
             archive_list: &Option<ArchiveIndexResponse>,
-            start: BlockHeight,
+            start: BlockIndex,
         ) -> Option<ArchiveIndexEntry> {
             archive_list.as_ref().and_then(|al| {
                 al.entries

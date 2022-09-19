@@ -6,7 +6,7 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
 use ic_icrc1_client::{ICRC1Client, Runtime};
-use ic_ledger_core::{block::BlockHeight, Tokens};
+use ic_ledger_core::{block::BlockIndex, Tokens};
 use ic_nervous_system_common::ledger::Ledger as IcpLedger;
 use ic_nervous_system_common::ledger::LedgerCanister as IcpLedgerCanister;
 use ic_nervous_system_common::NervousSystemError;
@@ -54,7 +54,7 @@ pub trait Ledger: Send + Sync {
         from_subaccount: Option<Subaccount>,
         to: Account,
         memo: u64,
-    ) -> Result<BlockHeight, NervousSystemError>;
+    ) -> Result<BlockIndex, NervousSystemError>;
 
     /// Gets the total supply of tokens from the sum of all accounts except for the
     /// minting canister's.
@@ -88,7 +88,7 @@ impl Ledger for LedgerCanister {
         from_subaccount: Option<Subaccount>,
         to: Account,
         memo: u64,
-    ) -> Result<BlockHeight, NervousSystemError> {
+    ) -> Result<BlockIndex, NervousSystemError> {
         let args = TransferArg {
             from_subaccount,
             to,
@@ -152,7 +152,7 @@ impl Ledger for IcpLedgerCanister {
         from_subaccount: Option<Subaccount>,
         to: Account,
         memo: u64,
-    ) -> Result<BlockHeight, NervousSystemError> {
+    ) -> Result<BlockIndex, NervousSystemError> {
         <IcpLedgerCanister as IcpLedger>::transfer_funds(
             self,
             amount_e8s,

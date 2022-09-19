@@ -105,8 +105,8 @@ impl BatchPayloadSectionBuilder {
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                let xnet = builder.get_xnet_payload(validation_context, &past_payloads, max_size);
-                let size = NumBytes::new(xnet.count_bytes() as u64);
+                let (xnet, size) =
+                    builder.get_xnet_payload(validation_context, &past_payloads, max_size);
 
                 if size > max_size {
                     error!(

@@ -34,18 +34,18 @@ message SendRequest {
   Tokens max_fee = 3              [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount from_subaccount = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   AccountIdentifier to = 5       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  BlockHeight created_at = 6;
+  BlockIndex created_at = 6;
   TimeStamp created_at_time = 7;
 }
 
 message SendResponse {
-  BlockHeight resulting_height = 1;
+  BlockIndex resulting_height = 1;
 }
 
 // Notify a canister that it has received a payment
 message NotifyRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  BlockHeight block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  BlockIndex block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Tokens max_fee = 2                               [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount from_subaccount = 3                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   ic_base_types.pb.v1.PrincipalId to_canister = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
@@ -60,7 +60,7 @@ message TransactionNotificationRequest {
   Subaccount from_subaccount = 2;
   ic_base_types.pb.v1.PrincipalId to = 3;
   Subaccount to_subaccount = 4;
-  BlockHeight block_height = 5;
+  BlockIndex block_height = 5;
   Tokens amount = 6;
   Memo memo = 7;
 }
@@ -92,7 +92,7 @@ message TipOfChainRequest {
 
 message TipOfChainResponse {
   Certification certification = 1;
-  BlockHeight chain_length = 2;
+  BlockIndex chain_length = 2;
 }
 
 // How many Tokens are there not in the minting account
@@ -133,7 +133,7 @@ message GetBlocksRequest {
 }
 
 message Refund {
-  BlockHeight refund = 2;
+  BlockIndex refund = 2;
   string error = 3;
 }
 
@@ -213,7 +213,7 @@ message Payment {
 
 }
 
-message BlockHeight {
+message BlockIndex {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   uint64 height = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
@@ -242,7 +242,7 @@ message Transaction {
     Send send = 3;
   }
   Memo memo = 4;
-  BlockHeight created_at = 5; // obsolete
+  BlockIndex created_at = 5; // obsolete
   TimeStamp created_at_time = 6;
 }
 

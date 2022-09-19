@@ -21,7 +21,7 @@ use ic_ledger_core::block::BlockType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, Block, BlockHeight, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
+    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
@@ -111,8 +111,8 @@ struct State {
 
     total_cycles_minted: Cycles,
 
-    blocks_notified: Option<BTreeMap<BlockHeight, NotificationStatus>>,
-    last_purged_notification: Option<BlockHeight>,
+    blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
+    last_purged_notification: Option<BlockIndex>,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
@@ -1047,10 +1047,7 @@ async fn notify_create_canister(
     }
 }
 
-async fn query_block(
-    block_index: BlockHeight,
-    ledger_id: CanisterId,
-) -> Result<Block, NotifyError> {
+async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<Block, NotifyError> {
     fn failed_to_fetch_block(error_message: String) -> NotifyError {
         NotifyError::Other {
             error_code: NotifyErrorCode::FailedToFetchBlock as u64,
@@ -1105,13 +1102,13 @@ fn memo_to_intent_str(memo: Memo) -> String {
 }
 
 async fn fetch_transaction(
-    block_height: BlockHeight,
+    block_index: BlockIndex,
     expected_to: AccountIdentifier,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
     let ledger_id = with_state(|state| state.ledger_canister_id);
 
-    let block = query_block(block_height, ledger_id).await?;
+    let block = query_block(block_index, ledger_id).await?;
 
     let (from, to, amount) = match block.transaction().operation {
         Operation::Transfer {
@@ -1385,7 +1382,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         to: minting_account_id,
         created_at_time: None,
     };
-    let res: Result<BlockHeight, (Option<i32>, String)> =
+    let res: Result<BlockIndex, (Option<i32>, String)> =
         call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
 
     match res {
@@ -1406,7 +1403,7 @@ async fn refund(
     to: AccountIdentifier,
     amount: Tokens,
     extra_fee: Tokens,
-) -> Result<Option<BlockHeight>, NotifyError> {
+) -> Result<Option<BlockIndex>, NotifyError> {
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
     let mut refund_block_index = None;
 
@@ -1428,7 +1425,7 @@ async fn refund(
             to,
             created_at_time: None,
         };
-        let send_res: Result<BlockHeight, (Option<i32>, String)> =
+        let send_res: Result<BlockIndex, (Option<i32>, String)> =
             call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
         let block = send_res.map_err(|(code, err)| {
             let code = code.unwrap_or_default();
@@ -1478,6 +1475,12 @@ async fn create_canister(
     cycles: Cycles,
     subnet_type: Option<String>,
 ) -> Result<CanisterId, String> {
+    // Retrieve randomness from the system to use later to get a random
+    // permutation of subnets. Performing the asynchronous call before
+    // we retrieve the list of subnets to avoid having the list of
+    // subnets change in the meantime.
+    let mut rng = get_rng().await?;
+
     // If subnet_type is `Some`, then use it to determine the eligible list
     // of subnets. Otherwise, fall back to the list of subnets for the
     // provided controller id.
@@ -1502,7 +1505,6 @@ async fn create_canister(
 
     // Perform a random permutation of the eligible list of subnets to ensure
     // that we load balance canister creations among them.
-    let mut rng = get_rng().await?;
     subnets.shuffle(&mut rng);
 
     let mut last_err = None;
@@ -1748,7 +1750,7 @@ mod tests {
 
     #[test]
     fn test_purge_notifications() {
-        fn block_index_to_cycles(block_index: BlockHeight) -> Cycles {
+        fn block_index_to_cycles(block_index: BlockIndex) -> Cycles {
             Cycles::new(block_index as u128)
         }
         let mut state = State {

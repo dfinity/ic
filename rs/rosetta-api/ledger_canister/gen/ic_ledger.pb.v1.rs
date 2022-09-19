@@ -35,20 +35,20 @@ pub struct SendRequest {
     #[prost(message, optional, tag = "5")]
     pub to: ::core::option::Option<AccountIdentifier>,
     #[prost(message, optional, tag = "6")]
-    pub created_at: ::core::option::Option<BlockHeight>,
+    pub created_at: ::core::option::Option<BlockIndex>,
     #[prost(message, optional, tag = "7")]
     pub created_at_time: ::core::option::Option<TimeStamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendResponse {
     #[prost(message, optional, tag = "1")]
-    pub resulting_height: ::core::option::Option<BlockHeight>,
+    pub resulting_height: ::core::option::Option<BlockIndex>,
 }
 /// Notify a canister that it has received a payment
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NotifyRequest {
     #[prost(message, optional, tag = "1")]
-    pub block_height: ::core::option::Option<BlockHeight>,
+    pub block_height: ::core::option::Option<BlockIndex>,
     #[prost(message, optional, tag = "2")]
     pub max_fee: ::core::option::Option<Tokens>,
     #[prost(message, optional, tag = "3")]
@@ -71,7 +71,7 @@ pub struct TransactionNotificationRequest {
     #[prost(message, optional, tag = "4")]
     pub to_subaccount: ::core::option::Option<Subaccount>,
     #[prost(message, optional, tag = "5")]
-    pub block_height: ::core::option::Option<BlockHeight>,
+    pub block_height: ::core::option::Option<BlockIndex>,
     #[prost(message, optional, tag = "6")]
     pub amount: ::core::option::Option<Tokens>,
     #[prost(message, optional, tag = "7")]
@@ -118,7 +118,7 @@ pub struct TipOfChainResponse {
     #[prost(message, optional, tag = "1")]
     pub certification: ::core::option::Option<Certification>,
     #[prost(message, optional, tag = "2")]
-    pub chain_length: ::core::option::Option<BlockHeight>,
+    pub chain_length: ::core::option::Option<BlockIndex>,
 }
 /// How many Tokens are there not in the minting account
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -173,7 +173,7 @@ pub struct GetBlocksRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Refund {
     #[prost(message, optional, tag = "2")]
-    pub refund: ::core::option::Option<BlockHeight>,
+    pub refund: ::core::option::Option<BlockIndex>,
     #[prost(string, tag = "3")]
     pub error: ::prost::alloc::string::String,
 }
@@ -265,7 +265,7 @@ pub struct Payment {
     pub receiver_gets: ::core::option::Option<Tokens>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockHeight {
+pub struct BlockIndex {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
@@ -297,7 +297,7 @@ pub struct Transaction {
     pub memo: ::core::option::Option<Memo>,
     /// obsolete
     #[prost(message, optional, tag = "5")]
-    pub created_at: ::core::option::Option<BlockHeight>,
+    pub created_at: ::core::option::Option<BlockIndex>,
     #[prost(message, optional, tag = "6")]
     pub created_at_time: ::core::option::Option<TimeStamp>,
     #[prost(oneof = "transaction::Transfer", tags = "1, 2, 3")]
