@@ -159,7 +159,7 @@ impl From<&Batch> for BatchStats {
             batch_height: batch.batch_number.get(),
             ingress_messages_delivered: batch.payload.ingress.message_count(),
             ingress_message_bytes_delivered: batch.payload.ingress.count_bytes(),
-            xnet_bytes_delivered: batch.payload.xnet.count_bytes(),
+            xnet_bytes_delivered: batch.payload.xnet.size_bytes(),
             ingress_ids: batch.payload.ingress.message_ids(),
             canister_http_success_delivered: batch.payload.canister_http.responses.len(),
             canister_http_timeouts_delivered: batch.payload.canister_http.timeouts.len(),
