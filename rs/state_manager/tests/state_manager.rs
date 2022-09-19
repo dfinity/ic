@@ -409,27 +409,32 @@ fn missing_stable_memory_file_is_handled() {
     });
 }
 
-fn state_manager_crash_test<Fixture, Test>(fixture: Fixture, test: Test)
-where
-    Fixture: FnOnce(StateManagerImpl) + std::panic::UnwindSafe,
+fn state_manager_crash_test<Test>(
+    fixtures: Vec<
+        Box<dyn FnOnce(StateManagerImpl) + std::panic::UnwindSafe + std::panic::RefUnwindSafe>,
+    >,
+    test: Test,
+) where
     Test: FnOnce(&MetricsRegistry, StateManagerImpl),
 {
     let tmp = Builder::new().prefix("test").tempdir().unwrap();
     let config = Config::new(tmp.path().into());
     with_test_replica_logger(|log| {
-        std::panic::catch_unwind(|| {
-            fixture(StateManagerImpl::new(
-                Arc::new(FakeVerifier::new()),
-                subnet_test_id(42),
-                SubnetType::Application,
-                log.clone(),
-                &MetricsRegistry::new(),
-                &config,
-                None,
-                ic_types::malicious_flags::MaliciousFlags::default(),
-            ));
-        })
-        .expect_err("Crash test fixture did not crash");
+        for (i, fixture) in fixtures.into_iter().enumerate() {
+            std::panic::catch_unwind(|| {
+                fixture(StateManagerImpl::new(
+                    Arc::new(FakeVerifier::new()),
+                    subnet_test_id(42),
+                    SubnetType::Application,
+                    log.clone(),
+                    &MetricsRegistry::new(),
+                    &config,
+                    None,
+                    ic_types::malicious_flags::MaliciousFlags::default(),
+                ));
+            })
+            .expect_err(&format!("Crash test fixture {} did not crash", i));
+        }
 
         let metrics = MetricsRegistry::new();
 
@@ -2815,7 +2820,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
 #[test]
 fn report_diverged_state() {
     state_manager_crash_test(
-        |state_manager| {
+        vec![Box::new(|state_manager: StateManagerImpl| {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(1));
@@ -2830,7 +2835,7 @@ fn report_diverged_state() {
             // This could only happen if calculating the manifest and certification of height 2
             // completed after reaching height 3
             state_manager.report_diverged_checkpoint(height(2))
-        },
+        })],
         |metrics, state_manager| {
             assert_eq!(
                 height(1),
@@ -2851,8 +2856,38 @@ fn report_diverged_state() {
                 "state_manager_last_diverged_state_timestamp_seconds",
             )
             .unwrap();
-
             assert!(last_diverged > 0);
+        },
+    );
+}
+
+#[test]
+fn remove_too_many_diverged_states() {
+    fn diverge_at(state_manager: StateManagerImpl, divergence: u64) {
+        for i in 1..divergence {
+            let (_, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(i));
+        }
+
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
+        state_manager.report_diverged_checkpoint(height(divergence))
+    }
+    state_manager_crash_test(
+        vec![
+            Box::new(|state_manager: StateManagerImpl| diverge_at(state_manager, 1)),
+            Box::new(|state_manager: StateManagerImpl| diverge_at(state_manager, 2)),
+            Box::new(|state_manager: StateManagerImpl| diverge_at(state_manager, 3)),
+        ],
+        |_metrics, state_manager| {
+            assert_eq!(
+                vec![height(2), height(3)],
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
+            );
         },
     );
 }
