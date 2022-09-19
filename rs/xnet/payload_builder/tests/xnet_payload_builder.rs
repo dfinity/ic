@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use ic_base_types::NumBytes;
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore, messaging::XNetPayloadBuilder,
@@ -98,7 +99,7 @@ impl XNetPayloadBuilderFixture {
 
     /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
     /// decodes all slices in the payload.
-    fn get_xnet_payload(&self, byte_limit: usize) -> BTreeMap<SubnetId, StreamSlice> {
+    fn get_xnet_payload(&self, byte_limit: usize) -> (BTreeMap<SubnetId, StreamSlice>, NumBytes) {
         let time = mock_time();
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -106,8 +107,13 @@ impl XNetPayloadBuilderFixture {
             time,
         };
 
-        self.xnet_payload_builder
-            .get_xnet_payload(&validation_context, &[], (byte_limit as u64).into())
+        let (payload, byte_size) = self.xnet_payload_builder.get_xnet_payload(
+            &validation_context,
+            &[],
+            (byte_limit as u64).into(),
+        );
+
+        let payload = payload
             .stream_slices
             .into_iter()
             .map(|(k, v)| {
@@ -118,7 +124,9 @@ impl XNetPayloadBuilderFixture {
                         .unwrap(),
                 )
             })
-            .collect()
+            .collect();
+
+        (payload, byte_size)
     }
 
     /// Pools the provided slice coming from a given subnet and returns its byte
@@ -288,7 +296,7 @@ proptest! {
 
             // Build the payload.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX);
+                .get_xnet_payload(std::usize::MAX).0;
 
             // Payload should contain 1 slice...
             assert_eq!(
@@ -356,7 +364,7 @@ proptest! {
 
             // Build a payload with a byte limit just under the total size of the 2 slices.
             let payload = xnet_payload_builder
-                .get_xnet_payload(slice_bytes_sum - 1);
+                .get_xnet_payload(slice_bytes_sum - 1).0;
 
             // Payload should contain 2 slices.
             assert_eq!(
@@ -405,7 +413,7 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, msg_count, &log);
 
             // Build a payload with a byte limit too small even for an empty slice.
-            let payload = xnet_payload_builder.get_xnet_payload(1);
+            let (payload, byte_size) = xnet_payload_builder.get_xnet_payload(1);
 
             // Payload should contain no slices.
             assert!(
@@ -413,6 +421,7 @@ proptest! {
                 "Expecting empty payload, got payload of length {}",
                 payload.len()
             );
+            assert_eq!(0, byte_size.get());
 
             assert_eq!(
                 metric_vec(&[(&[(LABEL_STATUS, STATUS_SUCCESS)], 1)]),
@@ -453,11 +462,12 @@ proptest! {
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, 0, &log);
 
             // Build a payload.
-            let payload = xnet_payload_builder
+            let (payload, byte_size) = xnet_payload_builder
                 .get_xnet_payload(std::usize::MAX);
 
             // Payload should be empty (we already have all signals in the slice).
             assert!(payload.is_empty(), "Expecting empty in payload, got a slice");
+            assert_eq!(0, byte_size.get());
 
             // Bump `stream.signals_end` and pool an empty slice again.
             let mut updated_stream = stream.clone();
@@ -466,7 +476,7 @@ proptest! {
 
             // Build a payload again.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX);
+                .get_xnet_payload(std::usize::MAX).0;
 
             // Payload should now contain 1 empty slice from REMOTE_SUBNET.
             assert_eq!(
@@ -532,7 +542,7 @@ proptest! {
             );
 
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX);
+                .get_xnet_payload(std::usize::MAX).0;
 
             assert_eq!(1, payload.len());
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {
@@ -576,6 +586,56 @@ proptest! {
                     REMOTE_SUBNET
                 );
             }
+        });
+    }
+
+    /// Tests that `validate_xnet_payload()` successfully validates any payload
+    /// produced by `get_xnet_payload()` and produces the same size estimate.
+    #[test]
+    fn validate_xnet_payload(
+        (stream1, from1, msg_count1) in arb_stream_slice(0, 10, 0, 10),
+        (stream2, from2, msg_count2) in arb_stream_slice(0, 10, 0, 10),
+        size_limit_percentage in 0..110u64,
+    ) {
+        with_test_replica_logger(|log| {
+            let mut state_manager =
+                StateManagerFixture::with_subnet_type(SubnetType::Application, log.clone());
+
+            // Create a matching outgoing stream within `state_manager` for each slice.
+            state_manager = state_manager.with_stream(SUBNET_1, out_stream(&stream1, from1));
+            state_manager = state_manager.with_stream(SUBNET_2, out_stream(&stream2, from2));
+
+            // Create payload builder with the 2 slices pooled.
+            let fixture = XNetPayloadBuilderFixture::new(state_manager);
+            let mut slice_bytes_sum = 0;
+            slice_bytes_sum += fixture.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
+            slice_bytes_sum += fixture.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
+
+            let time = mock_time();
+            let validation_context = ValidationContext {
+                registry_version: REGISTRY_VERSION,
+                certified_height: fixture.certified_height,
+                time,
+            };
+
+            // Build a payload with a byte limit dictated by `size_limit_percentage`.
+            let byte_size_limit = (slice_bytes_sum as u64 * size_limit_percentage / 100).into();
+            let (payload, byte_size) = fixture.xnet_payload_builder.get_xnet_payload(
+                &validation_context,
+                &[],
+                byte_size_limit,
+            );
+            assert!(byte_size <= byte_size_limit);
+
+            // Payload should validate and the size estimate should match.
+            assert_eq!(
+                byte_size,
+                fixture.xnet_payload_builder.validate_xnet_payload(
+                    &payload,
+                    &validation_context,
+                    &[],
+                ).unwrap()
+            );
         });
     }
 }
