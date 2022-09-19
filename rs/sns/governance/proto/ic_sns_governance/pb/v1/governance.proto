@@ -1046,6 +1046,8 @@ message Governance {
     // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
     // allowing us to fail in case we otherwise have gotten stuck.
     uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    uint64 proposal_id = 4;
   }
   // Current version that this SNS is running.
   Version deployed_version = 22;

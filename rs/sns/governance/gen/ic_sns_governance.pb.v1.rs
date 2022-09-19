@@ -1209,6 +1209,9 @@ pub mod governance {
         /// allowing us to fail in case we otherwise have gotten stuck.
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
+        /// The proposal that initiated this upgrade
+        #[prost(uint64, tag = "4")]
+        pub proposal_id: u64,
     }
     #[derive(
         strum_macros::EnumIter,
