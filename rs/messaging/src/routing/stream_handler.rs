@@ -674,14 +674,14 @@ impl StreamHandlerImpl {
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
-            let exponent = (new_cycles_sum.get() as f64).log2().floor();
-            let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent - 53_f64)).floor();
-            let chksm = mant % 2_f64.powf(43_f64)
-                + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
-            self.metrics
-                .inc_cycle_index_checksum
-                .with_label_values(&[&remote_subnet_id.to_string()])
-                .set(chksm);
+            // let exponent = (new_cycles_sum.get() as f64).log2().floor();
+            // let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent - 53_f64)).floor();
+            // let chksm = mant % 2_f64.powf(43_f64)
+            //     + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
+            // self.metrics
+            //     .inc_cycle_index_checksum
+            //     .with_label_values(&[&remote_subnet_id.to_string()])
+            //     .set(chksm);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
@@ -815,10 +815,15 @@ impl StreamHandlerImpl {
             .with_label_values(&[&remote_subnet_id.to_string()])
             //.set(stream_index.get().try_into().unwrap()); // this option is -1 compared to stream_begin
             .set(stream.signals_end().get() as i64); // option to mirror what is being sent // might be useful, current state of incoming
+        let new_cycles_sum = stream.sum_cycles_inc();
+        let exponent = (new_cycles_sum.get() as f64).log2().floor();
+        let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent - 53_f64)).floor();
+        let chksm = mant % 2_f64.powf(43_f64)
+            + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
         self.metrics
             .inc_cycle_index_checksum
             .with_label_values(&[&remote_subnet_id.to_string()])
-            .set((stream.signals_end().get() as f64 + stream.sum_cycles_inc().get() as f64) as f64);
+            .set(chksm);
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
