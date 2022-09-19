@@ -47,7 +47,6 @@ Arguments:
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
        --geolite2-city-db=              specify path to GeoLite2 City Database
-       --git-revision=                  git revision for which to prepare the media
   -x,  --debug                          enable verbose console output
 '
             exit 1
