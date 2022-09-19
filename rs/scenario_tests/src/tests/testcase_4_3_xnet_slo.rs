@@ -185,12 +185,12 @@ pub async fn test_impl(
                 .push(canister.canister_id_vec8())
         });
     }
-    let canisters_to_start = canisters
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| *i == 1)
-        .map(|(_, c)| c)
-        .collect::<Vec<_>>();
+    // let _canisters_to_start = canisters
+    //     .iter()
+    //     .enumerate()
+    //     .filter(|(i, _)| *i == 1)
+    //     .map(|(_, c)| c)
+    //     .collect::<Vec<_>>();
     //exchange canisters with canisters_to_start below
     let _: Vec<String> = parallel_async(
         &canisters,

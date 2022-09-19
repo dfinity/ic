@@ -674,18 +674,14 @@ impl StreamHandlerImpl {
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
-            let mant = (stream.sum_cycles_out().get() as f64)
-                / (10_f64
-                    .powf((stream.sum_cycles_out().get() as f64).log10() - 16.0)
-                    .floor());
+            let exponent = (new_cycles_sum.get() as f64).log2().floor();
+            let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent)).floor();
+            let chksm = mant % 2_f64.powf(43_f64)
+                    + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
             self.metrics
                 .inc_cycle_index_checksum
                 .with_label_values(&[&remote_subnet_id.to_string()])
-                .set(
-                    (mant as u64 % 10000000000000000
-                        + (stream.signals_end().get() % 1000) * 10000000000000000)
-                        as f64,
-                );
+                .set(chksm);
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
