@@ -1,29 +1,30 @@
 import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
 import { IDL } from '@dfinity/candid';
 
 export type HeaderField = [string, string];
 export interface HttpRequest {
   url: string;
   method: string;
-  body: Array<number>;
+  body: Uint8Array;
   headers: Array<HeaderField>;
 }
 export interface HttpResponse {
-  body: Array<number>;
+  body: Uint8Array;
   headers: Array<HeaderField>;
+  upgrade: [] | [boolean];
   streaming_strategy: [] | [StreamingStrategy];
   status_code: number;
-  upgrade: [] | [boolean];
 }
 export interface StreamingCallbackHttpResponse {
   token: [] | [Token];
-  body: Array<number>;
+  body: Uint8Array;
 }
 export type StreamingStrategy = {
   Callback: { token: Token; callback: [Principal, string] };
 };
-export type Token = { type: () => IDL.Type };
+export type Token = { type: <T>() => IDL.Type<T> };
 export interface _SERVICE {
-  http_request: (arg_0: HttpRequest) => Promise<HttpResponse>;
-  http_request_update: (arg_0: HttpRequest) => Promise<HttpResponse>;
+  http_request: ActorMethod<[HttpRequest], HttpResponse>;
+  http_request_update: ActorMethod<[HttpRequest], HttpResponse>;
 }

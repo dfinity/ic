@@ -5,14 +5,14 @@ Service worker which transforms browser asset request to the IC to canister call
 ## Build
 
 | Usage                  | Folder    | Command             | Note                                              |
-|------------------------|-----------|---------------------|---------------------------------------------------|
+| ---------------------- | --------- | ------------------- | ------------------------------------------------- |
 | dev build for testnets | dist-dev  | `npm run build-dev` | - sets `FORCE_FETCH_ROOT_KEY=1`<br>- not minified |
 | prod build for mainnet | dist-prod | `npm run build`     | - uses IC root key<br>- minified                  |
 
 ### Prerequisites
 
-* Node.js 17
-* npm 8.5
+- Node.js 17
+- npm 8.5
 
 ### Build With `FORCE_FETCH_ROOT_KEY`
 
@@ -34,18 +34,71 @@ Note that for the service worker to correctly relay the canister call to a canis
 The service worker can be tested against any mainnet canister.
 
 For example:
-* Internet Identity: http://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
-* DSCVR: http://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
+
+- Internet Identity: http://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
+- DSCVR: http://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
 
 ### Developing locally on Safari
 
 Safari does not allow service workers to be served on non-secure connections, even on localhost. So to test the service worker locally first follow the setup instructions on [web.dev](https://web.dev/how-to-use-local-https/) (except for the final step to generate SSL certs), then generate SSL certificates by running `npm run create-ssl-certs`. This will create self-signed certificates that will be stored in a temporary folder called `certs`. Now you can run `npm run start-ssl`. Now you can test using HTTPS.
 
 For example:
-* Internet Identity: https://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
-* DSCVR: https://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
+
+- Internet Identity: https://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
+- DSCVR: https://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
+
+## Generating HTTP Gateway bindings
+
+### JavaScript binding
+
+Generate the binding:
+
+```shell
+didc bind ./src/http-interface/canister_http_interface.did --target js > ./src/http-interface/canister_http_interface.js
+```
+
+Then move the `StreamingCallbackHttpResponse` variable outside of the `idlFactory` function, rename to `streamingCallbackHttpResponseType` and then export it.
+
+```typescript
+export const streamingCallbackHttpResponseType = // ...
+```
+
+and then add the `import { IDL } from '@dfinity/candid';` import, move the `Token` variable outside of the `idlFactory` function, and set its value to be `IDL.Unknown`.
+
+```typescript
+import { IDL } from '@dfinity/candid';
+
+const Token = IDL.Unknown;
+```
+
+### TypeScript binding
+
+Generate the binding:
+
+```shell
+didc bind ./src/http-interface/canister_http_interface.did --target ts > ./src/http-interface/canister_http_interface_types.d.ts
+```
+
+Add the following import:
+
+```typescript
+import { IDL } from '@dfinity/candid';
+```
+
+and then replace:
+
+```typescript
+export type Token = { type: any };
+```
+
+with:
+
+```typescript
+export type Token = { type: <T>() => IDL.Type<T> };
+```
 
 ## Release
+
 1. Create MR that updates `version` in `package.json`
 2. Test the built artifact using testnet boundary node VMs
    1. TODO https://dfinity.atlassian.net/browse/L2-442

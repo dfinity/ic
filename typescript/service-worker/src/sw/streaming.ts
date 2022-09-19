@@ -5,7 +5,12 @@ import {
 } from '../http-interface/canister_http_interface_types';
 import { streamingCallbackHttpResponseType } from '../http-interface/canister_http_interface';
 import { IDL } from '@dfinity/candid';
-import { HttpAgent, QueryResponseStatus } from '@dfinity/agent';
+import {
+  HttpAgent,
+  QueryResponse,
+  QueryResponseStatus,
+  concat,
+} from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 
 const MAX_CALLBACKS = 1000;
@@ -14,8 +19,8 @@ export async function streamContent(
   agent: HttpAgent,
   canisterId: Principal,
   streamingStrategy: StreamingStrategy
-): Promise<Array<number>> {
-  let buffer = [];
+): Promise<ArrayBuffer> {
+  let buffer = new ArrayBuffer(0);
   let tokenOpt = [streamingStrategy.Callback.token];
   const [, callBackFunc] = streamingStrategy.Callback.callback;
 
@@ -37,7 +42,7 @@ export async function streamContent(
           callbackResponse.reply.arg
         )[0];
         if (isStreamingCallbackResponse(callbackData)) {
-          buffer = buffer.concat(callbackData.body);
+          buffer = concat(buffer, callbackData.body);
           tokenOpt = callbackData.token;
         } else {
           throw new Error('Unexpected callback response: ' + callbackData);
@@ -58,7 +63,7 @@ function queryNextChunk(
   agent: HttpAgent,
   canisterId: Principal,
   callBackFunc: string
-) {
+): Promise<QueryResponse> {
   const tokenType = token.type();
   // unbox primitive values
   const tokenValue =

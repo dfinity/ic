@@ -2,14 +2,14 @@
  * Implement the HttpRequest to Canisters Proposal.
  *
  */
-import { Actor, ActorSubclass, HttpAgent } from '@dfinity/agent';
+import { Actor, ActorSubclass, HttpAgent, concat } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { validateBody } from './validation';
 import * as base64Arraybuffer from 'base64-arraybuffer';
 import * as pako from 'pako';
 import {
+  HttpRequest,
   _SERVICE,
-  HttpResponse,
 } from '../http-interface/canister_http_interface_types';
 import { idlFactory } from '../http-interface/canister_http_interface';
 import { streamContent } from './streaming';
@@ -25,15 +25,15 @@ const hostnameCanisterIdMap: Record<string, [string, string]> = {
 const shouldFetchRootKey: boolean = ['1', 'true'].includes(
   process.env.FORCE_FETCH_ROOT_KEY
 );
-const swLocation = new URL(self.location.toString());
-const [, swDomains] = (() => {
-  const maybeSplit = splitHostnameForCanisterId(swLocation.hostname);
-  if (maybeSplit) {
-    return maybeSplit;
-  } else {
-    return [null, swLocation.hostname];
-  }
-})() as [Principal | null, string];
+
+function getServiceWorkerDomain(): string {
+  const swLocation = new URL(self.location.toString());
+
+  return (
+    splitHostnameForCanisterId(swLocation.hostname)?.[1] ?? swLocation.hostname
+  );
+}
+const swDomains = getServiceWorkerDomain();
 
 /**
  * Split a hostname up-to the first valid canister ID from the right.
@@ -50,7 +50,7 @@ function splitHostnameForCanisterId(
   }
 
   const subdomains = hostname.split('.').reverse();
-  const topdomains = [];
+  const topdomains: string[] = [];
   for (const domain of subdomains) {
     try {
       const principal = Principal.fromText(domain);
@@ -280,17 +280,15 @@ export async function handleRequest(request: Request): Promise<Response> {
         requestHeaders.push(['Accept-Encoding', 'gzip, deflate, identity']);
       }
 
-      const httpRequest = {
+      const httpRequest: HttpRequest = {
         method: request.method,
         url: url.pathname + url.search,
         headers: requestHeaders,
-        body: [...new Uint8Array(await request.arrayBuffer())],
+        body: new Uint8Array(await request.arrayBuffer()),
       };
 
       let upgradeCall = false;
-      let httpResponse: HttpResponse = (await actor.http_request(
-        httpRequest
-      )) as HttpResponse;
+      let httpResponse = await actor.http_request(httpRequest);
 
       // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
       // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
@@ -306,9 +304,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       if (httpResponse.upgrade.length === 1 && httpResponse.upgrade[0]) {
         // repeat the request as an update call
-        httpResponse = (await actor.http_request_update(
-          httpRequest
-        )) as HttpResponse;
+        httpResponse = await actor.http_request_update(httpRequest);
         upgradeCall = true;
       }
 
@@ -345,9 +341,11 @@ export async function handleRequest(request: Request): Promise<Response> {
       }
 
       // if we do streaming, body contains the first chunk
-      let buffer = httpResponse.body;
+      let buffer = new ArrayBuffer(0);
+      buffer = concat(buffer, httpResponse.body);
       if (httpResponse.streaming_strategy.length !== 0) {
-        buffer = buffer.concat(
+        buffer = concat(
+          buffer,
           await streamContent(
             agent,
             maybeCanisterId,
