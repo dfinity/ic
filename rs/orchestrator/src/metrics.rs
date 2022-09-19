@@ -1,4 +1,4 @@
-use prometheus::{IntCounter, IntGauge};
+use prometheus::{IntCounter, IntGauge, IntGaugeVec};
 
 pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
@@ -11,6 +11,7 @@ pub struct OrchestratorMetrics {
     pub ssh_access_registry_version: IntGauge,
     pub firewall_registry_version: IntGauge,
     pub reboot_duration: IntGauge,
+    pub orchestrator_info: IntGaugeVec,
 }
 
 impl OrchestratorMetrics {
@@ -39,6 +40,11 @@ impl OrchestratorMetrics {
             reboot_duration: metrics_registry.int_gauge(
                 "reboot_duration_seconds",
                 "The time it took for the node to reboot",
+            ),
+            orchestrator_info: metrics_registry.int_gauge_vec(
+                "ic_orchestrator_info",
+                "version info for the internet computer orchestrator running.",
+                &["ic_active_version"],
             ),
         }
     }
