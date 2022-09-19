@@ -57,7 +57,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
@@ -74,6 +74,9 @@ const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
 
 /// Critical error tracking unexpectedly corrupted chunks.
 const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
+
+/// How long to keep diverged state.
+const ARCHIVED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
@@ -614,7 +617,7 @@ type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 
 /// The number of diverged states to keep before we start deleting the old ones.
-const MAX_DIVERGED_STATES_TO_KEEP: usize = 2;
+const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 2;
 
 /// The number of extra checkpoints to keep for state sync.
 const EXTRA_CHECKPOINTS_TO_KEEP: usize = 1;
@@ -720,13 +723,46 @@ fn load_checkpoint_as_tip(
     tip
 }
 
+/// Return duration since path creation (or modification, if no creation)
+/// Return zero duration and log a warning on failure.
+fn path_age(log: &ReplicaLogger, path: &Path) -> Duration {
+    let now = SystemTime::now();
+    match path
+        .metadata()
+        .and_then(|m| m.created().or_else(|_| m.modified()))
+    {
+        Ok(ctime) => {
+            if let Ok(duration) = now.duration_since(ctime) {
+                duration
+            } else {
+                // Only happens when created in the future. Return 0 is OK
+                Duration::from_secs(0)
+            }
+        }
+        Err(err) => {
+            warn!(
+                log,
+                "Could not determine age for the path {}; error: {:?}",
+                path.display(),
+                err
+            );
+            Duration::from_secs(0)
+        }
+    }
+}
+
 /// Deletes obsolete diverged states and state backups, keeping at most
-/// MAX_DIVERGED_STATES_TO_KEEP.
+/// MAX_ARCHIVED_CHECKPOINTS_TO_KEEP checkpoints and backups no older than
+/// ARCHIVED_CHECKPOINT_MAX_AGE
 fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
     if let Ok(diverged_heights) = layout.diverged_checkpoint_heights() {
-        if diverged_heights.len() > MAX_DIVERGED_STATES_TO_KEEP {
-            let to_remove = diverged_heights.len() - MAX_DIVERGED_STATES_TO_KEEP;
-            for h in diverged_heights.iter().take(to_remove) {
+        let to_remove = diverged_heights
+            .len()
+            .saturating_sub(MAX_ARCHIVED_CHECKPOINTS_TO_KEEP);
+        for (i, h) in diverged_heights.iter().enumerate() {
+            if i < to_remove
+                || path_age(log, &layout.diverged_checkpoint_path(*h)) > ARCHIVED_CHECKPOINT_MAX_AGE
+            {
                 match layout.remove_diverged_checkpoint(*h) {
                     Ok(()) => info!(log, "Successfully removed diverged state {}", *h),
                     Err(err) => info!(log, "{}", err),
@@ -735,9 +771,13 @@ fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
         }
     }
     if let Ok(backup_heights) = layout.backup_heights() {
-        if backup_heights.len() > MAX_DIVERGED_STATES_TO_KEEP {
-            let to_remove = backup_heights.len() - MAX_DIVERGED_STATES_TO_KEEP;
-            for h in backup_heights.iter().take(to_remove) {
+        let to_remove = backup_heights
+            .len()
+            .saturating_sub(MAX_ARCHIVED_CHECKPOINTS_TO_KEEP);
+        for (i, h) in backup_heights.iter().enumerate() {
+            if i < to_remove
+                || path_age(log, &layout.backup_checkpoint_path(*h)) > ARCHIVED_CHECKPOINT_MAX_AGE
+            {
                 match layout.remove_backup(*h) {
                     Ok(()) => info!(log, "Successfully removed backup {}", *h),
                     Err(err) => info!(log, "Failed to remove backup {}", err),
@@ -755,8 +795,6 @@ fn report_last_diverged_checkpoint(
     match state_layout.diverged_checkpoint_heights() {
         Err(e) => warn!(log, "failed to enumerate diverged checkpoints: {}", e),
         Ok(heights) => {
-            use std::time::SystemTime;
-
             let mut last_time = SystemTime::UNIX_EPOCH;
             for h in heights {
                 let p = state_layout.diverged_checkpoint_path(h);
