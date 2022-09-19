@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    block::{BlockHeight, BlockType, EncodedBlock},
+    block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
 };
 use ledger_canister::{
@@ -59,7 +59,7 @@ async fn simple_send(
     from: &Sender,
     amount_e8s: u64,
     fee_e8s: u64,
-) -> Result<BlockHeight, String> {
+) -> Result<BlockIndex, String> {
     ledger
         .update_from_sender(
             "send_pb",
@@ -107,7 +107,7 @@ async fn transfer_candid(
     ledger: &Canister<'_>,
     from: &Sender,
     args: TransferArgs,
-) -> Result<BlockHeight, TransferError> {
+) -> Result<BlockIndex, TransferError> {
     ledger
         .update_from_sender("transfer", candid_one, args, from)
         .await
@@ -635,7 +635,7 @@ fn notify_timeout_test() {
             )
             .await?;
 
-        let block_height: BlockHeight = ledger_canister
+        let block_height: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
                 protobuf,
@@ -742,7 +742,7 @@ fn notify_test() {
             )
             .await?;
 
-        let block_height: BlockHeight = ledger_canister
+        let block_height: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
                 protobuf,
@@ -759,7 +759,7 @@ fn notify_test() {
             .await?;
 
         for i in 1..10 {
-            let _: BlockHeight = ledger_canister
+            let _: BlockIndex = ledger_canister
                 .update_from_sender(
                     "send_pb",
                     protobuf,
@@ -817,7 +817,7 @@ fn notify_test() {
         assert_eq!(2, count);
 
         // Notification of non whitelisted target should fail
-        let block_height: BlockHeight = ledger_canister
+        let block_height: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
                 protobuf,
@@ -917,7 +917,7 @@ fn notify_disabled_test() {
             )
             .await?;
 
-        let block_height: BlockHeight = ledger_canister
+        let block_height: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
                 protobuf,
@@ -934,7 +934,7 @@ fn notify_disabled_test() {
             .await?;
 
         for i in 1..10 {
-            let _: BlockHeight = ledger_canister
+            let _: BlockIndex = ledger_canister
                 .update_from_sender(
                     "send_pb",
                     protobuf,
@@ -1014,7 +1014,7 @@ fn sub_account_test() {
             .await?;
 
         // Send a payment to yourself on a different sub_account
-        let _: BlockHeight = ledger_canister
+        let _: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
                 protobuf,
@@ -1098,7 +1098,7 @@ fn check_anonymous_cannot_send() {
             .await?;
 
         // Send a payment from an anonymous user, should fail
-        let _: BlockHeight = ledger_canister
+        let _: BlockIndex = ledger_canister
             .update_(
                 "send_pb",
                 protobuf,
@@ -1563,7 +1563,7 @@ fn get_multiple_blocks_test() {
         };
 
         // Blocks [0 .. 8] (inclusive) are stored in node [0]. Remaining five
-        // blocks in node [1] are those with BlockHeights 9, 10, 11, 12 and 13
+        // blocks in node [1] are those with BlockIndexs 9, 10, 11, 12 and 13
 
         // Query Blocks 10 and 11
         {
@@ -1644,7 +1644,7 @@ fn get_multiple_blocks_test() {
 
         {
             println!("[test] querying blocks from the ledger");
-            // Fetch 2 blocks beginning at BlockHeight 14 from the ledger
+            // Fetch 2 blocks beginning at BlockIndex 14 from the ledger
             let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 14..16).await?;
             let blocks_from_ledger = blocks_from_ledger.unwrap();
             assert!(

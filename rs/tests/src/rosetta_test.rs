@@ -20,7 +20,7 @@ use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
 use ledger_canister::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
-    ArchiveOptions, BlockHeight, Certification, LedgerCanisterInitPayload, Operation, Subaccount,
+    ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, Operation, Subaccount,
     TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
@@ -734,7 +734,7 @@ async fn get_balance(ledger: &Canister<'_>, acc: AccountIdentifier) -> Tokens {
     reply.unwrap()
 }
 
-async fn get_tip(ledger: &Canister<'_>) -> (Certification, BlockHeight) {
+async fn get_tip(ledger: &Canister<'_>) -> (Certification, BlockIndex) {
     let reply: Result<TipOfChainRes, String> = ledger
         .query_("tip_of_chain_pb", protobuf, TipOfChainRequest {})
         .await;

@@ -40,7 +40,7 @@ use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
     LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
@@ -426,7 +426,7 @@ impl Eq for Operation {}
 enum OperationResult {
     LedgerTransfer {
         id: u64,
-        result: Result<BlockHeight, String>,
+        result: Result<BlockIndex, String>,
     },
     VerifyOne {
         id: u64,
@@ -1023,7 +1023,7 @@ impl LocalNnsFuzzDriver {
         amount: Tokens,
         ledger: &Canister<'_>,
     ) -> OperationResult {
-        let result: Result<BlockHeight, String> = timeout_at(
+        let result: Result<BlockIndex, String> = timeout_at(
             Instant::now() + MAX_OP_DURATION,
             ledger.update_from_sender(
                 "send_pb",
@@ -1052,7 +1052,7 @@ impl LocalNnsFuzzDriver {
         ledger: &Canister<'_>,
     ) -> OperationResult {
         assert_eq!(source.owner, destination.owner);
-        let result: Result<BlockHeight, String> = timeout_at(
+        let result: Result<BlockIndex, String> = timeout_at(
             Instant::now() + MAX_OP_DURATION,
             ledger.update_from_sender(
                 "send_pb",

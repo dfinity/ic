@@ -4,7 +4,7 @@ use ic_icrc1::{
     endpoints::{GetTransactionsRequest, Transaction, TransactionRange},
     Block,
 };
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use serde::{Deserialize, Serialize};
 use stable_structures::memory_manager::{ManagedMemory, MemoryId};
 use stable_structures::{
@@ -193,7 +193,7 @@ fn remaining_capacity() -> usize {
 
 #[query]
 #[candid_method(query)]
-fn get_transaction(index: BlockHeight) -> Option<Transaction> {
+fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
     let relative_idx = (idx_offset < index).then(|| (index - idx_offset) as usize)?;
 

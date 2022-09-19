@@ -23,7 +23,7 @@ use ic_ledger_core::block::{BlockType, HashOf};
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    Block, BlockHeight, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
+    Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
 };
 use on_wire::{FromWire, IntoWire};
 use serde_json::map::Map;
@@ -271,7 +271,7 @@ pub fn from_model_account_identifier(
 const LAST_HEIGHT: &str = "last_height";
 
 // Last hash is an option because there may be no blocks on the system
-pub fn from_metadata(mut ob: models::Object) -> Result<BlockHeight, ApiError> {
+pub fn from_metadata(mut ob: models::Object) -> Result<BlockIndex, ApiError> {
     let v = ob
         .remove(LAST_HEIGHT)
         .ok_or_else(|| ApiError::internal_error("No value `LAST_HEIGHT` in object"))?;

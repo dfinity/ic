@@ -4,7 +4,7 @@ use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Principal;
 use ic_icrc1::endpoints::{TransferArg, TransferError, Value};
 pub use ic_icrc1::Account;
-use ic_ledger_core::block::BlockHeight;
+use ic_ledger_core::block::BlockIndex;
 use num_traits::ToPrimitive;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
@@ -103,7 +103,7 @@ impl<R: Runtime> ICRC1Client<R> {
     pub async fn transfer(
         &self,
         args: TransferArg,
-    ) -> Result<Result<BlockHeight, TransferError>, (i32, String)> {
+    ) -> Result<Result<BlockIndex, TransferError>, (i32, String)> {
         let result: Result<Nat, TransferError> = self
             .runtime
             .call(self.ledger_canister_id, "icrc1_transfer", (args,))

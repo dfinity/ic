@@ -7,7 +7,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::balance_book::BalanceBook;
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ledger_canister::{AccountIdentifier, Block, Tokens};
 
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -22,7 +22,7 @@ impl HashedBlock {
     pub fn hash_block(
         block: EncodedBlock,
         parent_hash: Option<HashOf<EncodedBlock>>,
-        index: BlockHeight,
+        index: BlockIndex,
     ) -> HashedBlock {
         HashedBlock {
             hash: Block::block_hash(&block),
@@ -35,8 +35,8 @@ impl HashedBlock {
 
 #[derive(Debug, PartialEq)]
 pub enum BlockStoreError {
-    NotFound(BlockHeight),
-    NotAvailable(BlockHeight),
+    NotFound(BlockIndex),
+    NotAvailable(BlockIndex),
     Other(String),
 }
 
@@ -52,7 +52,7 @@ pub struct SQLiteStore {
     connection: Mutex<rusqlite::Connection>,
     base_idx: u64,
     first_block: Option<HashedBlock>,
-    last_verified_idx: Option<BlockHeight>,
+    last_verified_idx: Option<BlockIndex>,
 }
 
 impl SQLiteStore {
@@ -311,7 +311,7 @@ impl SQLiteStore {
         Ok(())
     }
 
-    pub fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, BlockStoreError> {
+    pub fn get_at(&self, index: BlockIndex) -> Result<HashedBlock, BlockStoreError> {
         if 0 < index && index < self.base_idx {
             return Err(BlockStoreError::NotAvailable(index));
         }
@@ -340,7 +340,7 @@ impl SQLiteStore {
 
     pub fn get_range(
         &self,
-        range: std::ops::Range<BlockHeight>,
+        range: std::ops::Range<BlockIndex>,
     ) -> Result<Vec<HashedBlock>, BlockStoreError> {
         if 0 < range.start && range.start < self.base_idx {
             return Err(BlockStoreError::NotAvailable(range.start));
@@ -441,11 +441,11 @@ impl SQLiteStore {
         }
     }
 
-    pub fn last_verified(&self) -> Option<BlockHeight> {
+    pub fn last_verified(&self) -> Option<BlockIndex> {
         self.last_verified_idx
     }
 
-    pub fn mark_last_verified(&mut self, block_height: BlockHeight) -> Result<(), BlockStoreError> {
+    pub fn mark_last_verified(&mut self, block_height: BlockIndex) -> Result<(), BlockStoreError> {
         if let Some(hh) = self.last_verified_idx {
             if block_height < hh {
                 panic!(

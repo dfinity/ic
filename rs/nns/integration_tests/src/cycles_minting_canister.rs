@@ -21,7 +21,7 @@ use ic_nns_test_utils::{
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
     NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
@@ -202,7 +202,7 @@ async fn send_cycles(
         created_at_time: None,
     };
 
-    let block_height: BlockHeight = ledger
+    let block_height: BlockIndex = ledger
         .update_from_sender(
             "send_dfx",
             candid_one,

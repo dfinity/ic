@@ -6,7 +6,7 @@ use ic_icrc1::{
     endpoints::{TransferArg, TransferError},
     Account,
 };
-use ic_ledger_core::block::BlockHeight;
+use ic_ledger_core::block::BlockIndex;
 use num_traits::ToPrimitive;
 
 pub async fn balance_of<'a>(canister: &Canister<'a>, account: Account) -> Result<u64, String> {
@@ -20,7 +20,7 @@ pub async fn transfer<'a>(
     canister: &Canister<'a>,
     sender: &Sender,
     args: TransferArg,
-) -> Result<BlockHeight, String> {
+) -> Result<BlockIndex, String> {
     let res: Result<Nat, TransferError> = canister
         .update_from_sender("icrc1_transfer", candid_one, args, sender)
         .await?;

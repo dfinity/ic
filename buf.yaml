@@ -27,3 +27,4 @@ breaking:
   # needed for Candid compatibility.
   ignore:
     - ic_nns_governance/pb/v1/governance.proto
+    - ic_ledger/pb/v1/types.proto

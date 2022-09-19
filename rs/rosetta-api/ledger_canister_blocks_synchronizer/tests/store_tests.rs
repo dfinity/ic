@@ -6,7 +6,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
 use ic_ledger_core::Tokens;
-use ledger_canister::{AccountIdentifier, BlockHeight};
+use ledger_canister::{AccountIdentifier, BlockIndex};
 use std::{collections::BTreeMap, path::Path};
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
@@ -135,7 +135,7 @@ async fn store_prune_and_load_test() {
 
 pub(crate) fn to_balances(
     balances: BTreeMap<AccountIdentifier, Tokens>,
-    index: BlockHeight,
+    index: BlockIndex,
 ) -> BalanceBook {
     let mut balance_book = BalanceBook::default();
     for (acc, amount) in balances {

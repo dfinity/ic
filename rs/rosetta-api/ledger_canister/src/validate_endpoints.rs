@@ -101,7 +101,7 @@ impl ToProto for TipOfChainRes {
             certification: self
                 .certification
                 .map(|certification| protobuf::Certification { certification }),
-            chain_length: Some(protobuf::BlockHeight {
+            chain_length: Some(protobuf::BlockIndex {
                 height: self.tip_index,
             }),
         }
@@ -131,7 +131,7 @@ impl ToProto for CyclesResponse {
         let response = match self {
             CyclesResponse::Refunded(error, refund) => Response::Refund(protobuf::Refund {
                 error,
-                refund: refund.map(|height| protobuf::BlockHeight { height }),
+                refund: refund.map(|height| protobuf::BlockIndex { height }),
             }),
             CyclesResponse::ToppedUp(()) => Response::ToppedUp(protobuf::ToppedUp {}),
             CyclesResponse::CanisterCreated(cid) => Response::CreatedCanisterId(cid.get()),
@@ -427,7 +427,7 @@ impl ToProto for NotifyCanisterArgs {
             from_subaccount,
         } = self;
         protobuf::NotifyRequest {
-            block_height: Some(protobuf::BlockHeight {
+            block_height: Some(protobuf::BlockIndex {
                 height: block_height,
             }),
             max_fee: Some(tokens_into_proto(max_fee)),
@@ -493,7 +493,7 @@ impl ToProto for TransactionNotification {
             from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
             to: Some(to.get().into_proto()),
             to_subaccount: to_subaccount.map(|sa| sa.into_proto()),
-            block_height: Some(protobuf::BlockHeight {
+            block_height: Some(protobuf::BlockIndex {
                 height: block_height,
             }),
             amount: Some(tokens_into_proto(amount)),
