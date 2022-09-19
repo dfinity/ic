@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -41,7 +41,13 @@ rust_binary(
         "src/main.rs",
         "src/metrics.rs",
     ],
-    data = ["src/canister.wat"],
+    compile_data = ["src/canister.wat"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "boundary-node-prober_test",
+    compile_data = ["src/canister.wat"],
+    crate = ":boundary-node-prober",
 )
