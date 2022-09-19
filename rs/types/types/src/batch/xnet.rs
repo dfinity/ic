@@ -56,9 +56,14 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
     }
 }
 
-impl CountBytes for XNetPayload {
-    /// Returns the approximate amount of bytes in xnet payload.
-    fn count_bytes(&self) -> usize {
+impl XNetPayload {
+    /// Returns an approximation of the byte size of the `XNetPayload`, exclusively
+    /// for use in stats.
+    ///
+    /// Not implemented as an `impl CountBytes for XNetPayload` because this is NOT
+    /// THE SAME ESTIMATE that is used when building and validating a `XNetPayload`
+    /// and accidentally using this to validate payload sizes WILL cause breakages.
+    pub fn size_bytes(&self) -> usize {
         self.stream_slices
             .values()
             .map(|slice| {

@@ -25,9 +25,12 @@ async fn build_payload_no_subnets() {
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         assert_eq!(
-            XNetPayload {
-                stream_slices: Default::default()
-            },
+            (
+                XNetPayload {
+                    stream_slices: Default::default()
+                },
+                0.into()
+            ),
             xnet_payload_builder.get_xnet_payload(
                 &fixture.validation_context,
                 &fixture.past_payloads(),
