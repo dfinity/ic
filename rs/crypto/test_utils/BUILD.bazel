@@ -9,6 +9,7 @@ rust_library(
     ],
     version = "0.8.0",
     visibility = [
+        "//rs/canister_client:__subpackages__",
         "//rs/crypto:__subpackages__",
         "//rs/test_utilities:__pkg__",
     ],
