@@ -69,7 +69,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_rosetta_api",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.6.1",
+    version = "1.7.0",
     deps = DEPENDENCIES,
 )
 
