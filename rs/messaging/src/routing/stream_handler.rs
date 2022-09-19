@@ -675,9 +675,9 @@ impl StreamHandlerImpl {
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
             let exponent = (new_cycles_sum.get() as f64).log2().floor();
-            let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent)).floor();
+            let mant = (new_cycles_sum.get() as f64 / 2_f64.powf(exponent - 53_f64)).floor();
             let chksm = mant % 2_f64.powf(43_f64)
-                    + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
+                + stream.signals_end().get() as f64 % 2_f64.powf(10_f64) * 2_f64.powf(44_f64);
             self.metrics
                 .inc_cycle_index_checksum
                 .with_label_values(&[&remote_subnet_id.to_string()])
