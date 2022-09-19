@@ -168,6 +168,11 @@ impl Orchestrator {
         );
         let metrics = Arc::new(metrics);
 
+        metrics
+            .orchestrator_info
+            .with_label_values(&[&replica_version.to_string()])
+            .set(1);
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
