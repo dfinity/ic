@@ -6,8 +6,7 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::{
-    query, set_controllers, setup_nns_canisters, setup_nns_governance_with_correct_canister_id,
-    setup_nns_sns_wasms_with_correct_canister_id, update, update_with_sender,
+    query, set_controllers, setup_nns_canisters, update, update_with_sender,
 };
 use ic_nns_test_utils::{sns_wasm, state_test_helpers};
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
@@ -22,10 +21,10 @@ use std::time::Duration;
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
 use ic_icrc1::Account;
-use ic_sns_governance::pb::v1::get_proposal_response;
 use ic_sns_governance::pb::v1::governance::{Mode, Version};
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::proposal::Action;
+use ic_sns_governance::pb::v1::{get_proposal_response, ProposalDecisionStatus};
 use ic_sns_governance::pb::v1::{
     GetProposal, GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GovernanceError, ManageNeuron, ManageNeuronResponse, NeuronId, Proposal, ProposalData,
@@ -174,11 +173,11 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     )
     .unwrap();
 
-    sns_wait_for_proposal_execution(&machine, governance, proposal_id);
-
-    // After proposal executed but before upgrade has completed we expect the old version to be
-    // reported as running, but there is now a pending version.
     let old_version = wasm_map_to_version(&wasm_map);
+    sns_wait_for_pending_upgrade(&machine, governance);
+
+    // After the pending upgrade is set, but before upgrade has completed, we expect the old
+    // version to be reported as running. The proposal should still be in the "adopted" state.
     let version_response = Decode!(
         &query(
             &machine,
@@ -193,8 +192,31 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     assert_eq!(version_response.deployed_version, Some(old_version.clone()));
     assert!(version_response.pending_version.is_some());
 
-    let statuses = sns_wait_for_upgrade_finished(canister_type, &machine, root);
+    let proposal =
+        sns_get_proposal(&machine, governance, proposal_id).expect("Unable to get proposal");
 
+    assert_eq!(proposal.status(), ProposalDecisionStatus::Adopted);
+
+    // Wait for proposal execution
+    sns_wait_for_proposal_execution(&machine, governance, proposal_id);
+
+    // The pending upgrade should be cleared after proposal execution
+    let version_response = Decode!(
+        &query(
+            &machine,
+            governance,
+            "get_running_sns_version",
+            Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
+        )
+        .unwrap(),
+        GetRunningSnsVersionResponse
+    )
+    .unwrap();
+
+    assert!(version_response.pending_version.is_none());
+
+    // Get the WASM hash of the canister given by `canister_type`. This should be the upgraded hash.
+    let statuses = get_canister_statuses(canister_type, &machine, root);
     assert!(!statuses.is_empty());
 
     let new_hash_vec = new_wasm_hash.to_vec();
@@ -202,8 +224,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         .iter()
         .all(|s| s.module_hash().unwrap() == new_hash_vec));
 
-    // Now we test the upgrade success logic whereby governance confirms that the upgrade was successful
-    // by checking if running system matches what was proposed.
+    // Now we test the upgrade success logic whereby governance confirms that the upgrade was
+    // successful by checking if running system matches what was proposed.
 
     let mut next_version = old_version.clone();
     match canister_type {
@@ -216,10 +238,6 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     }
 
     assert_ne!(old_version, next_version);
-
-    // Advance time and tick, then we should get a new result.
-    machine.advance_time(Duration::from_secs(5 * 60 + 1));
-    machine.tick();
 
     // Now we should expect that the new version is marked as deployed.
     let version_response = Decode!(
@@ -255,8 +273,8 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         .with_test_neurons()
         .with_sns_dedicated_subnets(machine.get_subnet_ids())
         .build();
-    setup_nns_governance_with_correct_canister_id(&machine, nns_init_payload.governance.clone());
-    setup_nns_sns_wasms_with_correct_canister_id(&machine, nns_init_payload.sns_wasms);
+
+    setup_nns_canisters(&machine, nns_init_payload);
 
     let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
 
@@ -364,6 +382,11 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         wasm_for_type(&SnsCanisterType::Ledger),
         Encode!(&init_payloads.ledger).unwrap(),
     );
+    install_code(
+        swap,
+        wasm_for_type(&SnsCanisterType::Swap),
+        Encode!(&init_payloads.swap).unwrap(),
+    );
 
     machine.tick();
 
@@ -385,6 +408,12 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         PrincipalId::new_anonymous(),
         ledger,
         vec![root.get()],
+    );
+    set_controllers(
+        &machine,
+        PrincipalId::new_anonymous(),
+        swap,
+        vec![swap.get()],
     );
 
     // We need a ledger archive, so we need to do a transaction to trigger that.
@@ -646,34 +675,8 @@ fn sns_wait_for_upgrade_finished(
     let statuses = loop {
         attempt_count += 1;
         machine.tick();
-        // We have to wait for the canisters to restart....
-        let status_summary = match update(
-            machine,
-            root,
-            "get_sns_canisters_summary",
-            Encode!(&GetSnsCanistersSummaryRequest {
-                update_canister_list: None
-            })
-            .unwrap(),
-        ) {
-            Ok(summary) => summary,
-            Err(_) => continue,
-        };
 
-        let status_summary = Decode!(&status_summary, GetSnsCanistersSummaryResponse).unwrap();
-
-        let statuses = match canister_type {
-            SnsCanisterType::Unspecified => panic!("Cannot be unspecified"),
-            SnsCanisterType::Root => vec![status_summary.root.unwrap().status.unwrap()],
-            SnsCanisterType::Governance => vec![status_summary.governance.unwrap().status.unwrap()],
-            SnsCanisterType::Ledger => vec![status_summary.ledger.unwrap().status.unwrap()],
-            SnsCanisterType::Archive => status_summary
-                .archives
-                .into_iter()
-                .map(|summary| summary.status.unwrap())
-                .collect(),
-            SnsCanisterType::Swap => panic!("Swap can't be upgraded by SNS"),
-        };
+        let statuses = get_canister_statuses(canister_type, machine, root);
 
         // Stop waiting once it dapp has reached the Running state.
         if statuses
@@ -686,6 +689,39 @@ fn sns_wait_for_upgrade_finished(
         assert!(attempt_count < 250, "status: {:?}", statuses);
     };
     statuses
+}
+
+/// Get the canister status(es) for the given `canister_type`
+fn get_canister_statuses(
+    canister_type: SnsCanisterType,
+    machine: &StateMachine,
+    root: CanisterId,
+) -> Vec<CanisterStatusResultV2> {
+    let status_summary = update(
+        machine,
+        root,
+        "get_sns_canisters_summary",
+        Encode!(&GetSnsCanistersSummaryRequest {
+            update_canister_list: None
+        })
+        .unwrap(),
+    )
+    .expect("get_sns_canisters_summary failed");
+
+    let status_summary = Decode!(&status_summary, GetSnsCanistersSummaryResponse).unwrap();
+
+    match canister_type {
+        SnsCanisterType::Unspecified => panic!("Cannot be unspecified"),
+        SnsCanisterType::Root => vec![status_summary.root.unwrap().status.unwrap()],
+        SnsCanisterType::Governance => vec![status_summary.governance.unwrap().status.unwrap()],
+        SnsCanisterType::Ledger => vec![status_summary.ledger.unwrap().status.unwrap()],
+        SnsCanisterType::Archive => status_summary
+            .archives
+            .into_iter()
+            .map(|summary| summary.status.unwrap())
+            .collect(),
+        SnsCanisterType::Swap => panic!("Swap can't be upgraded by SNS"),
+    }
 }
 
 /// Wait for an SNS proposal to be executed
@@ -702,13 +738,53 @@ fn sns_wait_for_proposal_execution(
         machine.tick();
 
         let proposal = sns_get_proposal(machine, governance, proposal_id);
-        assert!(attempt_count < 50, "proposal: {:?}", proposal);
+        assert!(
+            attempt_count < 100,
+            "proposal {:?} not executed after {} attempts",
+            proposal_id,
+            attempt_count
+        );
 
         if let Ok(p) = proposal {
             proposal_executed = p.executed_timestamp_seconds != 0;
         }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
+
+/// Return once Governance has a set pending upgrade
+fn sns_wait_for_pending_upgrade(machine: &StateMachine, governance: CanisterId) {
+    // We create some blocks until the proposal has finished executing (machine.tick())
+    let mut attempt_count = 0;
+    let mut pending_upgrade_exists = false;
+    while !pending_upgrade_exists {
+        attempt_count += 1;
+        machine.tick();
+
+        let version_response = Decode!(
+            &query(
+                machine,
+                governance,
+                "get_running_sns_version",
+                Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
+            )
+            .unwrap(),
+            GetRunningSnsVersionResponse
+        )
+        .unwrap();
+
+        pending_upgrade_exists = version_response.pending_version.is_some();
+
+        assert!(
+            attempt_count < 50,
+            "Never found pending upgrade after {} attemps",
+            attempt_count
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 /// Translates a WasmMap to a Version
 fn wasm_map_to_version(wasm_map: &HashMap<SnsCanisterType, SnsWasm>) -> Version {
     let version_hash_from_map = |canister_type: SnsCanisterType| {

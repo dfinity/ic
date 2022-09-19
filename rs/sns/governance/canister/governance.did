@@ -309,6 +309,7 @@ type Tally = record {
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
+  proposal_id : nat64;
   target_version : opt Version;
 };
 type UpgradeSnsControlledCanister = record {

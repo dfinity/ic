@@ -1805,7 +1805,21 @@ impl Governance {
                     .await
             }
             Action::UpgradeSnsToNextVersion(_) => {
-                self.perform_upgrade_to_next_sns_version(proposal_id).await
+                println!("{}Executing UpgradeSnsToNextVersion action", log_prefix(),);
+                let upgrade_sns_result =
+                    self.perform_upgrade_to_next_sns_version(proposal_id).await;
+
+                // If the upgrade returned `Ok` that means the upgrade has successfully been
+                // kicked-off asynchronously. Governance's heartbeat logic will continuously
+                // check the status of the upgrade and mark the proposal as either executed or
+                // failed. So we call `return` in the `Ok` branch so that
+                // `set_proposal_execution_status` doesn't get called and set the proposal status
+                // prematurely. If the result is `Err`, we do want to set the proposal status,
+                // and passing the value through is sufficient.
+                match upgrade_sns_result {
+                    Ok(()) => return,
+                    Err(_) => upgrade_sns_result,
+                }
             }
             // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
             proposal::Action::ExecuteGenericNervousSystemFunction(call) => {
@@ -2130,31 +2144,30 @@ impl Governance {
             .wasm;
 
         let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
-        println!(
-            "{}target_is_root: {} (target_canister_ids = {:?})",
-            log_prefix(),
-            target_is_root,
-            canister_ids_to_upgrade
-        );
-
-        self.proto.pending_version = Some(UpgradeInProgress {
-            target_version: Some(next_version),
-            mark_failed_at_seconds: self.env.now() + 5 * 60,
-            checking_upgrade_lock: 0,
-        });
 
         if target_is_root {
-            // There is only one root canister, so there is no need to do more than one of these.
-            if let Some(target_canister_id) = canister_ids_to_upgrade.into_iter().next() {
-                return upgrade_canister_directly(&*self.env, target_canister_id, target_wasm)
-                    .await;
-            }
+            upgrade_canister_directly(&*self.env, root_canister_id, target_wasm).await?;
         } else {
             for target_canister_id in canister_ids_to_upgrade {
                 self.upgrade_non_root_canister(target_canister_id, target_wasm.clone())
                     .await?;
             }
         }
+
+        // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
+        // field so that Governance's heartbeat logic can check on the status of this upgrade.
+        self.proto.pending_version = Some(UpgradeInProgress {
+            target_version: Some(next_version),
+            mark_failed_at_seconds: self.env.now() + 5 * 60,
+            checking_upgrade_lock: 0,
+            proposal_id,
+        });
+
+        println!(
+            "{}Successfully kicked off upgrade for SNS canister {:?}",
+            log_prefix(),
+            canister_type_to_upgrade,
+        );
 
         Ok(())
     }
@@ -3720,6 +3733,7 @@ impl Governance {
         // Pre-checks finished, we now extract needed variables.
         let target_version = upgrade_in_progress.target_version.as_ref().unwrap().clone();
         let mark_failed_at = upgrade_in_progress.mark_failed_at_seconds;
+        let proposal_id = upgrade_in_progress.proposal_id;
 
         // Mark the check as active before async call.
         self.proto
@@ -3736,10 +3750,16 @@ impl Governance {
             .checking_upgrade_lock;
 
         if lock > 1000 {
-            println!(
-                "{} Too many attempts to check upgrade without success.  Marking upgrade failed.",
-                log_prefix()
-            );
+            let error =
+                "Too many attempts to check upgrade without success.  Marking upgrade failed.";
+
+            println!("{} {}", log_prefix(), error);
+
+            let result = Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                error,
+            ));
+            self.set_proposal_execution_status(proposal_id, result);
             self.proto.pending_version = None;
             return;
         }
@@ -3780,12 +3800,18 @@ impl Governance {
         if target_version != running_version {
             // We are past mark_failed_at_seconds.
             if self.env.now() > mark_failed_at {
-                println!(
-                    "{}Upgrade marked as failed at {} seconds from genesis.  Running system version \
-                        does not match expected state.",
-                    log_prefix(),
+                let error = format!(
+                    "Upgrade marked as failed at {} seconds from genesis. \
+                Running system version does not match expected state.",
                     self.env.now()
                 );
+
+                println!("{}{}", log_prefix(), &error,);
+                let result = Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    error,
+                ));
+                self.set_proposal_execution_status(proposal_id, result);
                 self.proto.pending_version = None;
             }
         } else {
@@ -3795,6 +3821,7 @@ impl Governance {
                 self.env.now(),
                 target_version
             );
+            self.set_proposal_execution_status(proposal_id, Ok(()));
             self.proto.deployed_version = Some(target_version);
             self.proto.pending_version = None;
         }
@@ -4595,7 +4622,11 @@ mod tests {
                 _ => panic!("get_proposal result: {:#?}", result),
             };
 
-            if proposal_data.status().is_final() {
+            let upgrade_sns_action_id = 7;
+
+            // If the proposal is an SNS upgrade action, it won't move to the "executed" state in
+            // this env (non-canister env), hence return.
+            if proposal_data.status().is_final() || proposal_data.action == upgrade_sns_action_id {
                 break proposal_data;
             }
 
@@ -5117,16 +5148,16 @@ mod tests {
         );
 
         // When we execute the proposal
-        let upgrade_result = execute_proposal(&mut governance, 1);
+        execute_proposal(&mut governance, 1);
         // Then we check things happened as expected
         assert_required_calls();
-        assert_eq!(upgrade_result.status(), Status::Executed);
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
             UpgradeInProgress {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 5 * 60,
-                checking_upgrade_lock: 0
+                checking_upgrade_lock: 0,
+                proposal_id,
             }
         );
         // We do not check the upgrade completion in this test because of limitations
@@ -5239,6 +5270,7 @@ mod tests {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
                     checking_upgrade_lock: 0,
+                    proposal_id: 0,
                 }),
                 ..basic_governance_proto()
             }
@@ -5253,7 +5285,8 @@ mod tests {
             UpgradeInProgress {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now - 1,
-                checking_upgrade_lock: 0
+                checking_upgrade_lock: 0,
+                proposal_id: 0,
             }
         );
         assert_eq!(
@@ -5303,6 +5336,7 @@ mod tests {
         };
 
         let now = env.now();
+        let proposal_id = 12;
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
@@ -5311,6 +5345,7 @@ mod tests {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
+                    proposal_id,
                 }),
                 ..basic_governance_proto()
             }
@@ -5325,7 +5360,8 @@ mod tests {
             UpgradeInProgress {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
-                checking_upgrade_lock: 0
+                checking_upgrade_lock: 0,
+                proposal_id,
             }
         );
         assert_eq!(
@@ -5375,6 +5411,7 @@ mod tests {
         };
 
         let now = env.now();
+        let proposal_id = 45;
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
@@ -5383,6 +5420,7 @@ mod tests {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
+                    proposal_id,
                 }),
                 ..basic_governance_proto()
             }
@@ -5397,7 +5435,8 @@ mod tests {
             UpgradeInProgress {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
-                checking_upgrade_lock: 0
+                checking_upgrade_lock: 0,
+                proposal_id,
             }
         );
         assert_eq!(
