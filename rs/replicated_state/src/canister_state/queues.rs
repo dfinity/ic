@@ -979,7 +979,9 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             // TODO: input_schedule is deprecated and should be removed next release
             input_schedule: [].into(),
             next_input_queue: match item.next_input_queue {
-                NextInputQueue::LocalSubnet => ProtoNextInputQueue::LocalSubnet,
+                // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
+                // serializes to zero bytes).
+                NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
                 NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
                 NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
             } as i32,

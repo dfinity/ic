@@ -7426,6 +7426,7 @@ dependencies = [
  "nix 0.23.0",
  "phantom_newtype",
  "proptest 0.9.6",
+ "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "scoped_threadpool",

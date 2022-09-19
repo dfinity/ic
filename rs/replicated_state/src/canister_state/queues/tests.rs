@@ -654,6 +654,21 @@ fn encode_roundtrip() {
     assert_eq!(queues, decoded);
 }
 
+/// Tests that serializing an empty `CanisterQueues` produces zero bytes.
+#[test]
+fn encode_empty() {
+    use prost::Message;
+
+    let queues = CanisterQueues::default();
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let mut serialized: Vec<u8> = Vec::new();
+    encoded.encode(&mut serialized).unwrap();
+
+    let expected: &[u8] = &[];
+    assert_eq!(expected, serialized.as_slice());
+}
+
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
         queues
