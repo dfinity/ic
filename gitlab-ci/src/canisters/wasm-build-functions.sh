@@ -14,6 +14,7 @@ wasm_canister_list=(
     identity-canister
     ic-ckbtc-minter
     ic-icrc1-archive
+    ic-icrc1-index
     ic-icrc1-ledger
     ic-nervous-system-common-test-canister
     inter_canister_error_handling
