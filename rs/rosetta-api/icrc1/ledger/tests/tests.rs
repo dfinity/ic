@@ -10,7 +10,7 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockHeight, BlockType, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -140,7 +140,7 @@ fn send_transfer(
     ledger: CanisterId,
     from: PrincipalId,
     arg: &TransferArg,
-) -> Result<BlockHeight, TransferError> {
+) -> Result<BlockIndex, TransferError> {
     Decode!(
         &env.execute_ingress_as(
             from,
@@ -163,7 +163,7 @@ fn transfer(
     from: Account,
     to: Account,
     amount: u64,
-) -> Result<BlockHeight, TransferError> {
+) -> Result<BlockIndex, TransferError> {
     send_transfer(
         env,
         ledger,

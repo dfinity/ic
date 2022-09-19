@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use core::ops::Deref;
 
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ledger_canister::{Block, TipOfChainRes};
 use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
@@ -210,7 +210,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
     pub async fn sync_blocks(
         &self,
         stopped: Arc<AtomicBool>,
-        up_to_block_included: Option<BlockHeight>,
+        up_to_block_included: Option<BlockIndex>,
     ) -> Result<(), Error> {
         let canister = self.blocks_access.as_ref().unwrap();
         let TipOfChainRes {
@@ -284,7 +284,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
     async fn sync_range_of_blocks(
         &self,
-        range: Range<BlockHeight>,
+        range: Range<BlockIndex>,
         first_block_parent_hash: Option<HashOf<EncodedBlock>>,
         stopped: Arc<AtomicBool>,
         certification: Option<Vec<u8>>,
@@ -394,7 +394,7 @@ mod test {
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::Tokens;
     use ic_types::PrincipalId;
-    use ledger_canister::{AccountIdentifier, Block, BlockHeight, Memo, TipOfChainRes};
+    use ledger_canister::{AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes};
 
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
@@ -415,7 +415,7 @@ mod test {
     impl BlocksAccess for RangeOfBlocks {
         async fn query_raw_block(
             &self,
-            height: BlockHeight,
+            height: BlockIndex,
         ) -> Result<Option<EncodedBlock>, String> {
             Ok(self.blocks.get(height as usize).cloned())
         }
@@ -433,7 +433,7 @@ mod test {
 
         async fn multi_query_blocks(
             self: Arc<Self>,
-            range: Range<BlockHeight>,
+            range: Range<BlockIndex>,
         ) -> Result<Vec<EncodedBlock>, String> {
             Ok(self.blocks[range.start as usize..range.end as usize].to_vec())
         }

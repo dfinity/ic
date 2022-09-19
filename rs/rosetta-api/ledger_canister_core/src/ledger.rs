@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
 
@@ -100,15 +100,14 @@ pub trait LedgerData {
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
 
-    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockHeight>;
-    fn transactions_by_hash_mut(&mut self)
-        -> &mut BTreeMap<HashOf<Self::Transaction>, BlockHeight>;
+    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
+    fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
 
     fn transactions_by_height(&self) -> &VecDeque<TransactionInfo<Self::Transaction>>;
     fn transactions_by_height_mut(&mut self) -> &mut VecDeque<TransactionInfo<Self::Transaction>>;
 
     /// The callback that the ledger framework calls when it purges a transaction.
-    fn on_purged_transaction(&mut self, height: BlockHeight);
+    fn on_purged_transaction(&mut self, height: BlockIndex);
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -118,7 +117,7 @@ pub enum TransferError {
     TxTooOld { allowed_window_nanos: u64 },
     TxCreatedInFuture { ledger_time: TimeStamp },
     TxThrottled,
-    TxDuplicate { duplicate_of: BlockHeight },
+    TxDuplicate { duplicate_of: BlockIndex },
 }
 
 /// Adds a new block with the specified transaction to the ledger.
@@ -126,7 +125,7 @@ pub fn apply_transaction<L: LedgerData>(
     ledger: &mut L,
     transaction: L::Transaction,
     now: TimeStamp,
-) -> Result<(BlockHeight, HashOf<EncodedBlock>), TransferError> {
+) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError> {
     let num_pruned = purge_old_transactions(ledger, now);
 
     let created_at_time = transaction.created_at_time().unwrap_or(now);

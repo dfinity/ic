@@ -2,15 +2,15 @@ use crate::balance_book::BalanceBook;
 use crate::errors::Error;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ledger_canister::{apply_operation, AccountIdentifier, Block, Tokens, Transaction};
 use log::{error, info};
 use std::collections::HashMap;
 
 pub struct Blocks {
     pub balance_book: BalanceBook,
-    hash_location: HashMap<HashOf<EncodedBlock>, BlockHeight>,
-    pub tx_hash_location: HashMap<HashOf<Transaction>, BlockHeight>,
+    hash_location: HashMap<HashOf<EncodedBlock>, BlockIndex>,
+    pub tx_hash_location: HashMap<HashOf<Transaction>, BlockIndex>,
     pub block_store: SQLiteStore,
     last_hash: Option<HashOf<EncodedBlock>>,
 }
@@ -96,11 +96,11 @@ impl Blocks {
         Ok(n)
     }
 
-    fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, Error> {
+    fn get_at(&self, index: BlockIndex) -> Result<HashedBlock, Error> {
         Ok(self.block_store.get_at(index)?)
     }
 
-    pub fn get_verified_at(&self, index: BlockHeight) -> Result<HashedBlock, Error> {
+    pub fn get_verified_at(&self, index: BlockIndex) -> Result<HashedBlock, Error> {
         let last_verified_idx = self
             .block_store
             .last_verified()
@@ -113,7 +113,7 @@ impl Blocks {
         }
     }
 
-    pub fn get_balance(&self, acc: &AccountIdentifier, h: BlockHeight) -> Result<Tokens, Error> {
+    pub fn get_balance(&self, acc: &AccountIdentifier, h: BlockIndex) -> Result<Tokens, Error> {
         if let Ok(Some(b)) = self.first_verified() {
             if h < b.index {
                 return Err(Error::InvalidBlockId(format!(

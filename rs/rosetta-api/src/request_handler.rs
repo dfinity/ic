@@ -16,7 +16,7 @@ use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
-use ledger_canister::{Block, BlockHeight};
+use ledger_canister::{Block, BlockIndex};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -577,7 +577,7 @@ fn create_parent_block_id(
     convert::block_id(&parent)
 }
 
-fn block_height_to_index(height: BlockHeight) -> Result<i128, ApiError> {
+fn block_height_to_index(height: BlockIndex) -> Result<i128, ApiError> {
     i128::try_from(height).map_err(|e| ApiError::InternalError(true, e.to_string().into()))
 }
 

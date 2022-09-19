@@ -46,7 +46,7 @@ use ic_rosetta_test_utils::make_user;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ledger_canister::protobuf::TipOfChainRequest;
 use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockHeight,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockIndex,
     BlockRes, CyclesResponse, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
@@ -986,7 +986,7 @@ impl TestAgent {
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
-    pub async fn get_block(&self, h: BlockHeight) -> Result<Option<Block>, String> {
+    pub async fn get_block(&self, h: BlockIndex) -> Result<Option<Block>, String> {
         match self
             .query_pb(&LEDGER_CANISTER_ID, "block_pb", BlockArg(h))
             .await?
@@ -1016,7 +1016,7 @@ impl TestAgent {
 
     pub async fn check_refund(
         &self,
-        refund_block: BlockHeight,
+        refund_block: BlockIndex,
         send_amount: Tokens,
         refund_fee: Tokens,
     ) {
@@ -1178,7 +1178,7 @@ impl UserHandle {
         amount: Tokens,
         sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
-    ) -> BlockHeight {
+    ) -> BlockIndex {
         let (send_args, _subaccount) =
             create_canister_txn(amount, sender_subaccount, &self.cmc_id, controller_id);
 
@@ -1192,7 +1192,7 @@ impl UserHandle {
         amount: Tokens,
         sender_subaccount: Option<Subaccount>,
         target_canister_id: &CanisterId,
-    ) -> BlockHeight {
+    ) -> BlockIndex {
         let (send_args, _subaccount) =
             top_up_canister_txn(amount, sender_subaccount, &self.cmc_id, target_canister_id);
 
@@ -1203,7 +1203,7 @@ impl UserHandle {
 
     pub async fn notify_canister_create_cmc(
         &self,
-        block: BlockHeight,
+        block: BlockIndex,
         _sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
         subnet_type: Option<String>,
@@ -1231,7 +1231,7 @@ impl UserHandle {
 
     pub async fn notify_canister_create_ledger(
         &self,
-        block: BlockHeight,
+        block: BlockIndex,
         sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
     ) -> CreateCanisterResult {
@@ -1259,7 +1259,7 @@ impl UserHandle {
 
     pub async fn notify_top_up_cmc(
         &self,
-        block_idx: BlockHeight,
+        block_idx: BlockIndex,
         _sender_subaccount: Option<Subaccount>,
         target_canister_id: &CanisterId,
     ) -> TopUpCanisterResult {
@@ -1285,7 +1285,7 @@ impl UserHandle {
 
     pub async fn notify_top_up_ledger(
         &self,
-        block: BlockHeight,
+        block: BlockIndex,
         sender_subaccount: Option<Subaccount>,
         target_canister_id: &CanisterId,
     ) -> TopUpCanisterResult {

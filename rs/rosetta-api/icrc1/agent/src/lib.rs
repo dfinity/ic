@@ -4,7 +4,7 @@ pub use ic_icrc1::{
     endpoints::{TransferArg, TransferError, Value},
     Account,
 };
-pub use ic_ledger_core::block::BlockHeight;
+pub use ic_ledger_core::block::BlockIndex;
 
 #[derive(Debug)]
 pub enum Icrc1AgentError {

@@ -11,7 +11,7 @@ use ic_icrc1_index::{
 };
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::BlockHeight;
+use ic_ledger_core::block::BlockIndex;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::cast::ToPrimitive;
 
@@ -93,7 +93,7 @@ fn send_transfer(
     ledger: CanisterId,
     from: PrincipalId,
     arg: &TransferArg,
-) -> Result<BlockHeight, TransferError> {
+) -> Result<BlockIndex, TransferError> {
     Decode!(
         &env.execute_ingress_as(
             from,
@@ -155,7 +155,7 @@ fn transfer(
     from: Account,
     to: Account,
     amount: u64,
-) -> BlockHeight {
+) -> BlockIndex {
     send_transfer(
         env,
         ledger,
@@ -172,11 +172,11 @@ fn transfer(
     .unwrap()
 }
 
-fn burn(env: &StateMachine, ledger: CanisterId, from: Account, amount: u64) -> BlockHeight {
+fn burn(env: &StateMachine, ledger: CanisterId, from: Account, amount: u64) -> BlockIndex {
     transfer(env, ledger, from, MINTER, amount)
 }
 
-fn mint(env: &StateMachine, ledger: CanisterId, to: Account, amount: u64) -> BlockHeight {
+fn mint(env: &StateMachine, ledger: CanisterId, to: Account, amount: u64) -> BlockIndex {
     transfer(env, ledger, MINTER, to, amount)
 }
 

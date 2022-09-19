@@ -500,7 +500,7 @@ async fn verify_account_search(
 
     let middle_idx = (scribe.blockchain.len() as u64 - 1 + oldest_idx) / 2;
     for acc in &scribe.accounts {
-        let h2: Vec<BlockHeight> = history
+        let h2: Vec<BlockIndex> = history
             .get(acc)
             .unwrap()
             .clone()
@@ -512,16 +512,16 @@ async fn verify_account_search(
         let search_res = query_search_transactions(req_handler, acc, None, None, None)
             .await
             .unwrap();
-        let h: Vec<BlockHeight> = search_res
+        let h: Vec<BlockIndex> = search_res
             .transactions
             .iter()
-            .map(|t| t.block_identifier.index as BlockHeight)
+            .map(|t| t.block_identifier.index as BlockIndex)
             .collect();
 
         assert_eq!(h, h2);
 
         let limit = 3;
-        let h1: Vec<BlockHeight> = history
+        let h1: Vec<BlockIndex> = history
             .get(acc)
             .unwrap()
             .clone()
@@ -539,10 +539,10 @@ async fn verify_account_search(
         )
         .await
         .unwrap();
-        let h: Vec<BlockHeight> = search_res
+        let h: Vec<BlockIndex> = search_res
             .transactions
             .iter()
-            .map(|t| t.block_identifier.index as BlockHeight)
+            .map(|t| t.block_identifier.index as BlockIndex)
             .collect();
 
         let next_offset = if h1.len() > limit {
@@ -567,10 +567,10 @@ async fn verify_account_search(
         )
         .await
         .unwrap();
-        let h: Vec<BlockHeight> = search_res
+        let h: Vec<BlockIndex> = search_res
             .transactions
             .iter()
-            .map(|t| t.block_identifier.index as BlockHeight)
+            .map(|t| t.block_identifier.index as BlockIndex)
             .collect();
 
         let next_offset = if h1.len() > limit + offset as usize {

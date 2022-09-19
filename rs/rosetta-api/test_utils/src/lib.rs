@@ -16,7 +16,7 @@ use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{messages::Blob, time, PrincipalId};
 
-use ledger_canister::{AccountIdentifier, BlockHeight, Operation, Tokens};
+use ledger_canister::{AccountIdentifier, BlockIndex, Operation, Tokens};
 
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use log::debug;
@@ -490,7 +490,7 @@ pub async fn send_icpts(
 ) -> Result<
     (
         TransactionIdentifier,
-        Option<BlockHeight>,
+        Option<BlockIndex>,
         Tokens, // charged fee
     ),
     RosettaError,
@@ -508,7 +508,7 @@ pub async fn send_icpts_with_window(
 ) -> Result<
     (
         TransactionIdentifier,
-        Option<BlockHeight>,
+        Option<BlockIndex>,
         Tokens, // charged fee
     ),
     RosettaError,

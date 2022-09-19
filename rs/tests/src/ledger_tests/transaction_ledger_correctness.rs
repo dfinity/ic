@@ -43,7 +43,7 @@ use ic_nns_constants::{
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockHeight, BlockRes, Memo,
+    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
     Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use quickcheck::{Arbitrary, Gen};
@@ -475,7 +475,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
             Message::Send((from_funds, to_funds), to, amount) => {
                 let to_account = AccountIdentifier::new(*to, None);
                 let debit = (*amount + DEFAULT_TRANSFER_FEE).unwrap();
-                let block: Option<(BlockHeight, AccountIdentifier, Memo)> = match owner {
+                let block: Option<(BlockIndex, AccountIdentifier, Memo)> = match owner {
                     Ok(princ) => {
                         let rt = if *princ == LIFELINE_CANISTER_ID.get() {
                             nns_rt
@@ -508,7 +508,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                             to: to_account.to_address(),
                             created_at_time: None,
                         };
-                        let result: Result<Result<BlockHeight, TransferError>, String> = ledger
+                        let result: Result<Result<BlockIndex, TransferError>, String> = ledger
                             .update_from_sender(
                                 "transfer",
                                 candid_one,
@@ -559,7 +559,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
 
 /// Given a block height, obtain the corresponding block from
 /// the ledger and compare its contents with expectations.
-async fn obtain_block(ledger: &Canister<'_>, block: BlockHeight) -> Transaction {
+async fn obtain_block(ledger: &Canister<'_>, block: BlockIndex) -> Transaction {
     let BlockRes(result) = ledger
         .query_("block_pb", protobuf, BlockArg(block))
         .await
