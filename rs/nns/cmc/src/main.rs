@@ -1478,6 +1478,12 @@ async fn create_canister(
     cycles: Cycles,
     subnet_type: Option<String>,
 ) -> Result<CanisterId, String> {
+    // Retrieve randomness from the system to use later to get a random
+    // permutation of subnets. Performing the asynchronous call before
+    // we retrieve the list of subnets to avoid having the list of
+    // subnets change in the meantime.
+    let mut rng = get_rng().await?;
+
     // If subnet_type is `Some`, then use it to determine the eligible list
     // of subnets. Otherwise, fall back to the list of subnets for the
     // provided controller id.
@@ -1502,7 +1508,6 @@ async fn create_canister(
 
     // Perform a random permutation of the eligible list of subnets to ensure
     // that we load balance canister creations among them.
-    let mut rng = get_rng().await?;
     subnets.shuffle(&mut rng);
 
     let mut last_err = None;
