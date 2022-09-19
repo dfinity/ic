@@ -85,7 +85,7 @@ const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
 const METRIC_INC_CYCLES: &str = "mr_inc_cycles";
 const METRIC_INC_CHECKSUM: &str = "mr_inc_cycle_index_checksum";
 
-const METRIC_CYCLES_MINTED: &str = "mr_inc_cycles_minted";
+const METRIC_CYCLES_MINTED: &str = "mr_cycles_minted";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
@@ -674,11 +674,18 @@ impl StreamHandlerImpl {
                 .inc_cycles
                 .with_label_values(&[&remote_subnet_id.to_string()])
                 .set(new_cycles_sum.get() as f64);
-            let mant = (stream.sum_cycles_out().get() as f64)/(10_f64.powf((stream.sum_cycles_out().get() as f64).log10()-16.0).floor());
+            let mant = (stream.sum_cycles_out().get() as f64)
+                / (10_f64
+                    .powf((stream.sum_cycles_out().get() as f64).log10() - 16.0)
+                    .floor());
             self.metrics
                 .inc_cycle_index_checksum
                 .with_label_values(&[&remote_subnet_id.to_string()])
-                .set((mant as u64 % 10000000000000000 + (stream.signals_end().get() % 1000) * 10000000000000000) as f64);
+                .set(
+                    (mant as u64 % 10000000000000000
+                        + (stream.signals_end().get() % 1000) * 10000000000000000)
+                        as f64,
+                );
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
