@@ -141,7 +141,12 @@ rust_test(
 
 rust_test(
     name = "registry_canister_integration_test",
+    size = "large",
     srcs = glob(["tests/**/*.rs"]),
+    args = [
+        "--test-threads",
+        "1",
+    ],
     crate_root = "tests/integration_tests.rs",
     data = [
         ":registry-canister",
@@ -158,7 +163,7 @@ rust_test(
     },
     flaky = True,
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
-    tags = ["exclusive"],
+    tags = ["cpu:4"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
 )
 
