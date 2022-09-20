@@ -2731,6 +2731,12 @@ impl Governance {
             )
             .await?;
 
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&id.id)
+            .expect("Expected the parent neuron to exist");
+
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
         neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
