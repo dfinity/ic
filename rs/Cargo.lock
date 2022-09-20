@@ -8628,6 +8628,7 @@ dependencies = [
  "serde_json",
  "slog",
  "socket2 0.3.19",
+ "threadpool",
  "tokio",
  "url",
 ]

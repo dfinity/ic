@@ -83,6 +83,8 @@ impl std::error::Error for DecodeStreamError {}
 /// Such certifications allow subnets to verify that a slice fetched from an
 /// arbitrary node of a remote subnet is indeed genuine and agreed upon by a
 /// majority of the replicas constituting that subnet.
+///
+/// Thread safe.
 pub trait CertifiedStreamStore: Send + Sync {
     /// Produces a certified slice of the stream for `remote_subnet` from the
     /// latest certified state, with a witness beginning at `witness_begin`;
