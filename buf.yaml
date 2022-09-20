@@ -21,10 +21,5 @@ breaking:
   use:
     - WIRE
 
-  # TODO: Delete. This is here to temporarily allow us to override an error
-  # resulting from reinstating a field (namely,
-  # set_sns_token_swap_open_time_window in message Proposal). IIUC, the field is
-  # needed for Candid compatibility.
   ignore:
-    - ic_nns_governance/pb/v1/governance.proto
     - ic_ledger/pb/v1/types.proto
