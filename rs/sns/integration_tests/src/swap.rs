@@ -44,7 +44,8 @@ use ledger_canister::{
     DEFAULT_TRANSFER_FEE,
 };
 use num_traits::ToPrimitive;
-use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime},
@@ -289,12 +290,12 @@ fn make_account(seed: u64) -> ic_base_types::PrincipalId {
         encoded
     }
 
-    let keypair: ed25519_dalek::Keypair = {
+    let keypair = {
         let mut rng = ChaChaRng::seed_from_u64(seed);
-        ed25519_dalek::Keypair::generate(&mut rng)
+        ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng)
     };
     let pubkey: UserPublicKey = UserPublicKey {
-        key: keypair.public.to_bytes().to_vec(),
+        key: keypair.public_key.to_vec(),
         algorithm_id: AlgorithmId::Ed25519,
     };
     let principal_id: PrincipalId =
