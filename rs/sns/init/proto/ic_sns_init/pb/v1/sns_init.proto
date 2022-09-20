@@ -56,6 +56,9 @@ message SnsInitPayload {
 
   // The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
   optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 12;
+
+  // The initial config file used to set up this SNS.
+  optional string sns_initialization_parameters = 13;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures

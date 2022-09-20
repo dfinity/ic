@@ -64,6 +64,10 @@ repos:
   hooks:
   - id: buf-checks
     args: ["--config=buf.yaml"]
+    exclude: |
+      (?x)(
+      rs/sns/governance/proto |
+      )
   - id: buf-lint
     args: ["--config=buf.yaml"]
   - id: shfmt
