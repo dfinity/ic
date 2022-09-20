@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import MagicMock
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
 from common import workload  # noqa
@@ -28,10 +29,12 @@ class Test_Workload(unittest.TestCase):
                 rps_ratio=0.2,
                 subnet=1,
             ),
+            outdir="iter_dir",
             f_stdout="no stdout",
             f_stderr="no stderr",
         )
-        (commands, wgs) = dummy_workload.get_commands()
+        dummy_workload._Workload__write_commands_to_file = MagicMock()
+        commands = dummy_workload.get_commands()
         assert len(commands) == 2
         commands[0] = commands[0][: commands[0].find("wg_summary_")]
         commands[1] = commands[1][: commands[1].find("wg_summary_")]
@@ -41,12 +44,10 @@ class Test_Workload(unittest.TestCase):
             commands[0]
             == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 -p 9090 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_a -r 5.0 --summary-file '
         )
-        assert wgs[0] == "wg_1"
         assert (
             commands[1]
             == './ic-workload-generator "http://[tm_1]:8080,http://[tm_2]:8080,http://[tm_3]:8080" -n 60 -p 9090 --no-status-check  --query-timeout-secs 30 --ingress-timeout-secs 360 --payload \'\' -m plus --call-method "call" --canister-id c_b -r 5.0 --summary-file '
         )
-        assert wgs[1] == "wg_2"
 
 
 if __name__ == "__main__":
