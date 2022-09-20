@@ -41,11 +41,10 @@ repos:
     # Warning: Remember to put the pipe operator at the end of all lines except the last.
     exclude: |
         (?x)^(
-            rs/nns/empty\.did |  # Is this just test data?
-            rs/nns/sns-wasm/canister/sns-wasm\.did |
-            # TODO: Delete this line. This is temporary, and can be deleted
-            # right away (ideally, in the next commit).
-            rs/nns/governance/canister/governance\.did
+            # Is this just test data?
+            | rs/nns/empty\.did
+            # TODO: When SNS is released, delete the next line.
+            | rs/nns/sns-wasm/canister/sns-wasm\.did
         )$
     language: system
     always_run: true
