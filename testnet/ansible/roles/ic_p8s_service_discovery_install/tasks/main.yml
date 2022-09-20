@@ -75,14 +75,9 @@
       # Add the openssl package to the Nix store, and get the binary path
       openssl_bin=$(nix-shell -p openssl --run "which openssl")
 
-      TMP=$(mktemp -d)
-      echo -e "#include <iostream>\n int main() {}" > "$TMP"/main.cc
-      nix-shell -p gcc -p stdenv.cc.cc.lib --run "g++ $TMP/main.cc -o $TMP/a.out"
-
       # Extract the directory name for the libssl.so.1.1 library, from the ldd output
       libssl_path=$(dirname "$(ldd "$openssl_bin" | grep "libssl.so.1.1" | awk '{print $3}')")
-      libcpp6_path=$(dirname "$(ldd "$TMP/a.out" | grep "libstdc++.so.6" | awk '{print $3}')")
-      rm -rf "$TMP"
+      libcpp6_path=$(echo $(nix-build -E 'let pkgs = import <nixpkgs> {}; in pkgs.stdenv.cc.cc.lib' --no-link)/lib)
 
       ld_lib_path=$(which ls | xargs -n1 ldd | grep "ld-linux-x86-64.so" | awk '{print $3}')
       # Path the ld and libssl.so.1.1 library paths in the ic-p8s-service-discovery binary
