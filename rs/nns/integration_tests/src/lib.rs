@@ -22,9 +22,6 @@ mod bad_input;
 mod cycles_minting_canister;
 
 #[cfg(test)]
-mod fuzz;
-
-#[cfg(test)]
 mod node_provider_remuneration;
 
 #[cfg(test)]

@@ -6576,7 +6576,6 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "rand 0.8.5",
- "randomkit",
  "registry-canister",
  "rustc-hash",
  "serde",
@@ -11585,15 +11584,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
  "rand_core 0.6.3",
-]
-
-[[package]]
-name = "randomkit"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
-dependencies = [
- "libc",
 ]
 
 [[package]]
