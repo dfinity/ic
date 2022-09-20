@@ -73,6 +73,9 @@ for layer in layers:
                     if was_dir:
                         if not should_be_dir:
                             shutil.rmtree(target)
+                        else:
+                            os.chmod(target, member.mode)
+                            os.chown(target, member.uid, member.gid)
                     else:
                         if should_be_dir:
                             os.unlink(target)
