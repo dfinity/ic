@@ -4081,6 +4081,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-replicated-state",
+ "ic-stable-structures",
  "ic-state-layout",
  "ic-types 0.8.0",
  "lazy_static",
@@ -4092,7 +4093,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
- "stable-structures",
  "tempfile",
 ]
 
@@ -5797,8 +5797,8 @@ dependencies = [
  "ic-cdk-macros",
  "ic-icrc1",
  "ic-ledger-core",
+ "ic-stable-structures",
  "serde",
- "stable-structures",
 ]
 
 [[package]]
@@ -7950,6 +7950,12 @@ dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
 ]
+
+[[package]]
+name = "ic-stable-structures"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6df7f185b9b65b001eb81e824316275392b972633443e0218bddc7ac384048b"
 
 [[package]]
 name = "ic-starter"
@@ -12890,14 +12896,6 @@ dependencies = [
  "libc",
  "libssh2-sys",
  "parking_lot 0.11.1",
-]
-
-[[package]]
-name = "stable-structures"
-version = "0.1.0"
-dependencies = [
- "maplit",
- "proptest 0.9.6",
 ]
 
 [[package]]

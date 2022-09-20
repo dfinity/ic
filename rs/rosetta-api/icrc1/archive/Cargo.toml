@@ -13,5 +13,5 @@ ic-cdk = { version = "0.5.1" }
 ic-cdk-macros = { version = "0.5.1" }
 ic-icrc1 = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-stable-structures = "0.1.0"
 serde = "1.0"
-stable-structures = { path = "../../../stable-structures" }

@@ -3,7 +3,7 @@ use crate::types::Storable;
 use crate::PageMapMemory;
 use bitcoin::{OutPoint, TxOut};
 use ic_btc_types::Height;
-use stable_structures::{btreemap, Memory};
+use ic_stable_structures::{btreemap, Memory};
 
 /// Methods defined for [`Utxos`] struct.
 /// These are declared as a trait since [`Utxos`] is declared in a different crate.
