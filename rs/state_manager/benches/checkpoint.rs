@@ -13,9 +13,9 @@ use ic_test_utilities::{
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
+use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{Cycles, Height};
 use std::rc::Rc;
-use tempfile::Builder;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
@@ -37,7 +37,7 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
             // Setup input data for measurement
             || {
                 with_test_replica_logger(|log| {
-                    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+                    let tmp = tmpdir("checkpoint_bench");
                     let root = tmp.path().to_path_buf();
                     let layout = StateLayout::try_new(log, root).unwrap();
                     let subnet_type = SubnetType::Application;
@@ -45,11 +45,11 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
                     const HEIGHT: Height = Height::new(42);
                     let canister_id = canister_test_id(8);
 
-                    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+                    let tmp = tmpdir("checkpoint_bench_state");
                     let mut state = ReplicatedState::new_rooted_at(
                         subnet_test_id(1),
                         subnet_type,
-                        tmpdir.path().into(),
+                        tmp.path().into(),
                     );
                     state.put_canister_state(new_canister_state(
                         canister_id,
