@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "iccsa",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_iccsa",
+    version = "0.1.0",
+    deps = ["//rs/crypto/internal/crypto_lib/basic_sig/iccsa"],
+)

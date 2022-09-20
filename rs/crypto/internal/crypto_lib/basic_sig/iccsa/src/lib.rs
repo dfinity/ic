@@ -2,6 +2,6 @@
 #![deny(clippy::unwrap_used)]
 
 //! Internet Computer Canister Signature Algorithm (ICCSA)
-pub mod api;
+mod api;
 pub mod types;
 pub use api::*;

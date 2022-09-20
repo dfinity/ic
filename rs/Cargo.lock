@@ -4731,6 +4731,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-iccsa"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-basic-sig-iccsa",
+]
+
+[[package]]
 name = "ic-crypto-internal-basic-sig-cose"
 version = "0.1.0"
 dependencies = [

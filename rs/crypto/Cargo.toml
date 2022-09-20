@@ -22,7 +22,6 @@ ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
-ic-crypto-sha = { path = "sha" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
@@ -70,13 +69,14 @@ ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/bas
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
-ic-registry-client = { path = "../registry/client" }
+ic-crypto-sha = { path = "sha" }
 ic-crypto-tecdsa = { path = "tecdsa" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
+ic-registry-client = { path = "../registry/client" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 maplit = "1.0.2"
