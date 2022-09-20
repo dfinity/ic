@@ -85,8 +85,8 @@ type Possibility_1 = variant {
 type Possibility_2 = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
 type RefreshBuyerTokensResponse = record {
+  icp_accepted_participation_e8s : nat64;
   icp_ledger_account_balance_e8s : nat64;
-  icp_accepted_partipation_e8s : nat64;
 };
 type Response = record { governance_error : opt GovernanceError };
 type SetDappControllersCallResult = record { possibility : opt Possibility_1 };

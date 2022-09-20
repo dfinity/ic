@@ -596,7 +596,7 @@ pub struct RefreshBuyerTokensRequest {
 )]
 pub struct RefreshBuyerTokensResponse {
     #[prost(uint64, tag = "1")]
-    pub icp_accepted_partipation_e8s: u64,
+    pub icp_accepted_participation_e8s: u64,
     #[prost(uint64, tag = "2")]
     pub icp_ledger_account_balance_e8s: u64,
 }
