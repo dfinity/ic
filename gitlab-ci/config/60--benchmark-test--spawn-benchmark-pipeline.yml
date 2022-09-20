@@ -39,7 +39,7 @@ maximum-capacity-canister-http:
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh "$TESTNET" --git-revision "$GIT_REVISION" --no-boundary-nodes  --ansible-args "-e @$PWD/test-accounts.json" &> $TESTNET_LOG
 
       # Obtains nns_node URL
-      NNS_URL=$(grep "$TESTNET-0-" "$TESTNET_LOG" | tail -1 | grep -o -P '(?<=http).*(?=8080)' | sed 's/$/8080/' | sed 's/^/http/')
+      NNS_URL=$(grep "NNS_URL" "$TESTNET_LOG" | tail -1 | grep -o -P '(?<=http).*(?=8080)' | sed 's/$/8080/' | sed 's/^/http/')
       echo "$NNS_URL" > nns_url.log
       echo "Obtained NNS subnet URL: $NNS_URL"
 

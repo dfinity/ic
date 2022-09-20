@@ -4,6 +4,7 @@ import re
 import threading
 import time
 import uuid
+from typing import List
 from typing import NamedTuple
 
 from common import misc
@@ -67,6 +68,7 @@ class Workload(threading.Thread):
         load_generators: [str],
         target_machines: [str],
         workload: WorkloadDescription,
+        outdir: str,
         f_stdout: str,
         f_stderr: str,
     ):
@@ -76,11 +78,13 @@ class Workload(threading.Thread):
         self.load_generators = load_generators
         self.target_machines = target_machines
         self.workload = workload
+        self.outdir = outdir
         self.f_stdout = f_stdout
         self.f_stderr = f_stderr
 
         self.query_timeout_secs = 30
         self.ingress_timeout_secs = 6 * 60
+        self.uuids = [uuid.uuid4()] * len(self.load_generators)
 
         if not isinstance(self.workload.canister_ids, list):
             raise Exception(
@@ -89,7 +93,7 @@ class Workload(threading.Thread):
         if len(self.workload.canister_ids) < 1:
             raise Exception("List of canister  IDs is empty")
 
-    def get_commands(self) -> [str]:
+    def get_commands(self) -> List[str]:
         """Build a list of command line arguments to use for workload generation."""
         num_load_generators = len(self.load_generators)
         if num_load_generators <= 0:
@@ -132,45 +136,68 @@ class Workload(threading.Thread):
         canister_ids = [
             self.workload.canister_ids[i % len(self.workload.canister_ids)] for i in range(num_load_generators)
         ]
-        self.uuids = [uuid.uuid4()] * num_load_generators
         commands = [
             "{} --canister-id {} -r {rps} --summary-file wg_summary_{wg_summary} ".format(
                 cmd, canister_id, rps=rps, wg_summary=self.uuids[i]
             )
             for i, (canister_id, rps) in enumerate(zip(canister_ids, rps_per_machine))
         ]
+        self.__write_commands_to_file(commands)
 
-        return (commands, self.load_generators)
+        return commands
+
+    def __write_commands_to_file(self, commands: List[str]):
+        assert len(commands) == len(self.uuids) == len(self.load_generators)
+        for idx, uid in enumerate(self.uuids):
+            try:
+                filename = os.path.join(self.outdir, f"workload-generator-cmd-{uid}")
+                # Try to open file in exclusive mode
+                with open(filename, "x") as cmd_file:
+                    cmd_file.write(commands[idx] + "\n")
+                break
+            except FileExistsError:
+                print(f"Failed to open - file already exists: {filename}")
 
     def run(self):
         """Start running the given workloads as a thread."""
         time.sleep(self.workload.start_delay)
-        commands, machines = self.get_commands()
-        ssh.run_all_ssh_in_parallel(machines, commands, self.f_stdout, self.f_stderr)
+        commands = self.get_commands()
+        ssh.run_all_ssh_in_parallel(self.load_generators, commands, self.f_stdout, self.f_stderr)
 
-    def fetch_results(self, destinations, out_dir):
+    def fetch_results(self):
         """Fetch results from workload generators."""
         sources = ["admin@[{}]:wg_summary_{}".format(m, self.uuids[i]) for i, m in enumerate(self.load_generators)]
+
+        assert len(self.uuids) == len(self.load_generators)
+        destinations = [
+            "{}/summary_workload_{}_{}_machine_{}".format(
+                self.outdir, self.uuids[idx], idx, load_generator.replace(":", "_")
+            )
+            for idx, load_generator in enumerate(self.load_generators)
+        ]
+
         rc = ssh.scp_in_parallel(sources, destinations)
         if not rc == [0 for _ in range(len(destinations))]:
             print(colored("⚠️  Some workload generators failed:", "red"))
-            for fname in os.listdir(out_dir):
+            for fname in os.listdir(self.outdir):
                 if re.match("workload-generator.*stderr.*", fname):
-                    with open(os.path.join(out_dir, fname)) as ferr:
+                    with open(os.path.join(self.outdir, fname)) as ferr:
                         lines = ferr.read().split("\n")
                         print("\n".join(lines[-10:]))
 
         # exit the experiment if more than half of workload generators fail to run
-        failures = [i for i, r in enumerate(rc) if r != 0]
-        if len(failures) * 2 > len(destinations):
-            print(
-                colored(
-                    "⚠️  More than half ({} out of {}) workload generators failed. Exiting...".format(
-                        len(failures), len(destinations)
-                    ),
-                    "red",
-                )
-            )
-            exit(1)
+        # failures = [r for r in enumerate(rc) if r != 0]
+        # print(rc)
+        # print(failures)
+        # if len(failures) * 2 > len(destinations):
+        #     print(
+        #         colored(
+        #             "⚠️  More than half ({} out of {}) workload generators failed. Exiting...".format(
+        #                 len(failures), len(destinations)
+        #             ),
+        #             "red",
+        #         )
+        #     )
+        #     exit(1)
 
-        return rc
+        return destinations

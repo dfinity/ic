@@ -376,10 +376,11 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             machines,
             targets,
             workload_description,
+            self.iter_outdir,
             f_stdout,
             f_stderr,
         )
-        commands, load_generators = load.get_commands()
+        commands = load.get_commands()
 
         n = 0
         while True:
@@ -388,7 +389,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
                 # Try to open file in exclusive mode
                 with open(filename, "x") as cmd_file:
-                    for cmd, generator in zip(commands, load_generators):
+                    for cmd, generator in zip(commands, machines):
                         cmd_file.write(generator + ":" + cmd + "\n")
                 break
             except FileExistsError:
@@ -399,9 +400,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         load.join()
 
         print("Fetching workload generator results")
+        destinations = load.fetch_results()
 
-        destinations = ["{}/summary_machine_{}".format(curr_outdir, m.replace(":", "_")) for m in machines]
-        load.fetch_results(destinations, self.iter_outdir)
         print("Evaluating results from {} machines".format(len(destinations)))
         return report.evaluate_summaries(destinations)
 

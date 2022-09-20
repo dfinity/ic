@@ -101,7 +101,7 @@ def run_all_ssh_in_parallel(
     machines: [str], commands: [str], f_stdout: str = None, f_stderr: str = None, timeout: int = None
 ) -> [int]:
     """Run the given command in parallel on all given machines and wait for completion."""
-    ps = [(str, str, subprocess.Popen)]
+    ps = []  # Array of type: [(str, str, subprocess.Popen)]
     for command, machine in zip(commands, machines):
         ps.append(
             (
@@ -119,7 +119,7 @@ def run_all_ssh_in_parallel(
     rcs = []
     for (machine, command, p) in ps:
         try:
-            rc = p.wait(timeout=timeout)
+            rc = p.wait(timeout)
             rcs.append(rc)
             status = colored("OK", "green") if rc == 0 else colored(f"rc={rc}", "red")
             print("{}: {} Done running {} on {}".format(colored(machine, "blue"), status, command, machine))
