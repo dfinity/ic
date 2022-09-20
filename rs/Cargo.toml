@@ -41,6 +41,7 @@ members = [
   "criterion_time",
   "crypto",
   "crypto/extended_bip32",
+  "crypto/iccsa",
   "crypto/internal/crypto_lib/basic_sig/der_utils",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
   "crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
