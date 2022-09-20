@@ -696,7 +696,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1.1",
             ),
             "rocksdb": crate.spec(
-                version = "^0.15.0",
+                version = "^0.19.0",
                 default_features = False,
             ),
             "rsa": crate.spec(

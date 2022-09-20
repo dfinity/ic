@@ -1,5 +1,5 @@
 {
-  "checksum": "c3dadd0c2d891db5786479f3a25392b064ab97f9fa019415dce55ccfdf0cc96e",
+  "checksum": "efdbb215241254c0771b6c592de0c41f52445ded9d03a59c6b9989e515517d1a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3694,6 +3694,124 @@
       },
       "license": "BSD-3-Clause"
     },
+    "bindgen 0.60.1": {
+      "name": "bindgen",
+      "version": "0.60.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/bindgen/0.60.1/download",
+          "sha256": "062dddbc1ba4aca46de6338e2bf87771414c335f7b2f2036e8f3e9befebf88e6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "bindgen",
+            "crate_root": "src/main.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "runtime"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.60.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 1.3.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.3.3",
+              "target": "clang_sys"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "lazycell 1.3.0",
+              "target": "lazycell"
+            },
+            {
+              "id": "peeking_take_while 0.1.2",
+              "target": "peeking_take_while"
+            },
+            {
+              "id": "proc-macro2 1.0.43",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.21",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.6.0",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.1.0",
+              "target": "shlex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.60.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "BSD-3-Clause"
+    },
     "binread 2.2.0": {
       "name": "binread",
       "version": "2.2.0",
@@ -5302,6 +5420,86 @@
         "version": "1.1.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "bzip2-sys 0.1.11+1.0.8": {
+      "name": "bzip2-sys",
+      "version": "0.1.11+1.0.8",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/bzip2-sys/0.1.11+1.0.8/download",
+          "sha256": "736a955f3fa7875102d57c82b8cac37ec45224a07fd32d58f9f7a186b6cd4cdc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bzip2_sys",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "bzip2_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "static"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bzip2-sys 0.1.11+1.0.8",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libc 0.2.132",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.11+1.0.8"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.73",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.25",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "bzip2"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "camino 1.1.1": {
       "name": "camino",
@@ -11605,7 +11803,7 @@
               "target": "ripemd"
             },
             {
-              "id": "rocksdb 0.15.0",
+              "id": "rocksdb 0.19.0",
               "target": "rocksdb"
             },
             {
@@ -21080,13 +21278,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "librocksdb-sys 6.20.3": {
+    "librocksdb-sys 0.8.0+7.4.4": {
       "name": "librocksdb-sys",
-      "version": "6.20.3",
+      "version": "0.8.0+7.4.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/librocksdb-sys/6.20.3/download",
-          "sha256": "c309a9d2470844aceb9a4a098cf5286154d20596868b75a6b36357d2bb9ca25d"
+          "url": "https://crates.io/api/v1/crates/librocksdb-sys/0.8.0+7.4.4/download",
+          "sha256": "611804e4666a25136fcc5f8cf425ab4d26c7f74ea245ffe92ea23b85b6420b5d"
         }
       },
       "targets": [
@@ -21127,18 +21325,26 @@
         "deps": {
           "common": [
             {
+              "id": "bzip2-sys 0.1.11+1.0.8",
+              "target": "bzip2_sys"
+            },
+            {
               "id": "libc 0.2.132",
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 6.20.3",
+              "id": "librocksdb-sys 0.8.0+7.4.4",
               "target": "build_script_build"
+            },
+            {
+              "id": "libz-sys 1.1.8",
+              "target": "libz_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "6.20.3"
+        "version": "0.8.0+7.4.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -21147,7 +21353,7 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.59.2",
+              "id": "bindgen 0.60.1",
               "target": "bindgen"
             },
             {
@@ -21647,7 +21853,8 @@
           "**"
         ],
         "crate_features": [
-          "libc"
+          "libc",
+          "static"
         ],
         "deps": {
           "common": [
@@ -33736,13 +33943,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "rocksdb 0.15.0": {
+    "rocksdb 0.19.0": {
       "name": "rocksdb",
-      "version": "0.15.0",
+      "version": "0.19.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rocksdb/0.15.0/download",
-          "sha256": "23d83c02c429044d58474eaf5ae31e062d0de894e21125b47437ec0edc1397e6"
+          "url": "https://crates.io/api/v1/crates/rocksdb/0.19.0/download",
+          "sha256": "7e9562ea1d70c0cc63a34a22d977753b50cca91cc6b6527750463bd5dd8697bc"
         }
       },
       "targets": [
@@ -33771,14 +33978,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 6.20.3",
+              "id": "librocksdb-sys 0.8.0+7.4.4",
               "target": "librocksdb_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.15.0"
+        "version": "0.19.0"
       },
       "license": "Apache-2.0"
     },
@@ -44809,8 +45016,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -44833,8 +45040,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48393,6 +48600,7 @@
     "alloc-stdlib 0.2.2",
     "assert_cmd 0.12.2",
     "bindgen 0.59.2",
+    "bindgen 0.60.1",
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
