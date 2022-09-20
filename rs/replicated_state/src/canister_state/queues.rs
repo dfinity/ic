@@ -29,11 +29,6 @@ use std::{
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
-/// "None" queue index used internally by Message Routing for reject responses
-/// generated e.g. when a request cannot be inducted due to a full input queue
-/// (and enqueuing the response into the output queue might also fail).
-pub const QUEUE_INDEX_NONE: QueueIndex = QueueIndex::new(std::u64::MAX);
-
 /// The default lifetime of a request in OutputQueue from which the deadline
 /// is computed as time + DEFAULT_OUTPUT_REQUEST_LIFETIME.
 pub const DEFAULT_OUTPUT_REQUEST_LIFETIME: Duration = Duration::from_secs(300);
@@ -332,7 +327,6 @@ impl CanisterQueues {
     ///  expecting one.
     pub(super) fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
@@ -358,7 +352,7 @@ impl CanisterQueues {
         let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
         let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
-        input_queue.push(index, msg)?;
+        input_queue.push(msg)?;
 
         // Add sender canister ID to the input schedule queue if it isn't already there.
         // Sender was not scheduled iff its input queue was empty before the push (i.e.
@@ -621,7 +615,7 @@ impl CanisterQueues {
             refund: request.payment,
             response_payload: Payload::Reject(reject_context),
         }));
-        self.push_input(QUEUE_INDEX_NONE, response, InputQueueType::LocalSubnet)
+        self.push_input(response, InputQueueType::LocalSubnet)
             .map_err(|(e, _msg)| e)
     }
 
@@ -689,7 +683,7 @@ impl CanisterQueues {
             .1
             .clone();
 
-        self.push_input(QUEUE_INDEX_NONE, msg, InputQueueType::LocalSubnet)
+        self.push_input(msg, InputQueueType::LocalSubnet)
             .map_err(|_| ())?;
 
         let msg = self
@@ -1375,7 +1369,6 @@ pub mod testing {
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)>;
@@ -1425,11 +1418,10 @@ pub mod testing {
 
         fn push_input(
             &mut self,
-            index: QueueIndex,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)> {
-            self.push_input(index, msg, input_queue_type)
+            self.push_input(msg, input_queue_type)
         }
 
         fn pop_input(&mut self) -> Option<CanisterInputMessage> {

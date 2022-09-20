@@ -13,7 +13,6 @@ mod canister_state {
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::messages::RequestOrResponse;
-    use ic_types::QueueIndex;
 
     const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
     const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
@@ -24,7 +23,6 @@ mod canister_state {
 
         assert_eq!(
             canister.system_state.queues_mut().push_input(
-                QueueIndex::new(0),
                 RequestBuilder::new().build().into(),
                 InputQueueType::RemoteSubnet,
             ),
@@ -50,7 +48,6 @@ mod canister_state {
 
         assert_eq!(
             canister.system_state.queues_mut().push_input(
-                QueueIndex::new(0),
                 ResponseBuilder::new()
                     .originator(canister_test_id(0))
                     .respondent(canister_test_id(1))
@@ -69,7 +66,6 @@ mod canister_state {
         let request: RequestOrResponse = RequestBuilder::new().build().into();
         assert_eq!(
             canister.push_input(
-                QueueIndex::new(0),
                 request.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -102,11 +98,10 @@ mod canister_state {
             .build()
             .into();
         assert_eq!(
-            canister.system_state.queues_mut().push_input(
-                QueueIndex::new(0),
-                response,
-                InputQueueType::RemoteSubnet,
-            ),
+            canister
+                .system_state
+                .queues_mut()
+                .push_input(response, InputQueueType::RemoteSubnet,),
             Ok(())
         );
     }
@@ -118,7 +113,6 @@ mod canister_state {
         let request: RequestOrResponse = RequestBuilder::new().build().into();
         assert_eq!(
             canister.push_input(
-                QueueIndex::new(0),
                 request.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -152,7 +146,6 @@ mod canister_state {
             .into();
         assert_eq!(
             canister.push_input(
-                QueueIndex::new(0),
                 response.clone(),
                 MAX_CANISTER_MEMORY_SIZE,
                 &mut SUBNET_AVAILABLE_MEMORY.clone(),
