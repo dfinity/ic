@@ -18,6 +18,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
 use maplit::btreemap;
+use std::sync::Barrier;
 use url::Url;
 
 const SRC_CANISTER: u64 = 2;
@@ -91,7 +92,8 @@ fn query_streams() {
             log,
         );
 
-        let resp = rt.block_on(async move { http_get("/api/v1/streams", &xnet_endpoint).await });
+        let resp = rt
+            .block_on(async move { http_get(&http_url("/api/v1/streams", &xnet_endpoint)).await });
 
         assert_eq!(format!("[\"{}\"]", DST_SUBNET), resp);
         assert_eq!(
@@ -126,7 +128,7 @@ fn query_stream() {
         );
 
         let resp = rt.block_on(async move {
-            http_get(
+            http_get(&http_url(
                 &format!(
                     "/api/v1/stream/{}?witness_begin={}&msg_begin={}",
                     DST_SUBNET,
@@ -134,7 +136,7 @@ fn query_stream() {
                     STREAM_BEGIN.increment()
                 ),
                 &xnet_endpoint,
-            )
+            ))
             .await
         });
 
@@ -161,6 +163,61 @@ fn query_stream() {
             metric_vec(&[(&[("resource", "stream")], 1)]),
             fixture.response_size_counts()
         );
+    });
+}
+
+/// Tests that `/api/v1/{SubnetId}` API endpoint executes requests in parallel.
+///
+/// Heavyweight test that starts an `XNetEndpoint` and queries it over HTTP.
+#[test]
+fn query_stream_parallel() {
+    with_test_replica_logger(|log| {
+        let endpoint_rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
+
+        *fixture
+            .state_manager
+            .encode_certified_stream_slice_barrier
+            .write()
+            .unwrap() = Barrier::new(XNetEndpoint::num_workers() + 1);
+
+        let xnet_endpoint = XNetEndpoint::new(
+            endpoint_rt.handle().clone(),
+            fixture.state_manager.clone(),
+            fixture.tls_handshake.clone(),
+            fixture.registry_client.clone(),
+            Default::default(),
+            &fixture.metrics,
+            log,
+        );
+
+        let http_url = http_url(
+            &format!(
+                "/api/v1/stream/{}?witness_begin={}&msg_begin={}",
+                DST_SUBNET,
+                STREAM_BEGIN,
+                STREAM_BEGIN.increment()
+            ),
+            &xnet_endpoint,
+        );
+        let mut handles = vec![];
+        for _ in 0..XNetEndpoint::num_workers() {
+            let http_url = http_url.clone();
+            handles.push(std::thread::spawn(move || {
+                let http_rt = tokio::runtime::Runtime::new().unwrap();
+                http_rt.block_on(async move { http_get(&http_url).await });
+            }));
+        }
+        // Expect no deadlock on the encode_barrier at pre_encode_certified_stream_slice
+        fixture
+            .state_manager
+            .encode_certified_stream_slice_barrier
+            .read()
+            .unwrap()
+            .wait();
+        for h in handles {
+            h.join().unwrap();
+        }
     });
 }
 
@@ -529,11 +586,16 @@ fn get_stream_for_testing() -> Stream {
     stream
 }
 
-/// Queries the given path on a running `XNetEndpoint`.
-async fn http_get(path: &str, xnet_endpoint: &XNetEndpoint) -> Bytes {
+/// Queries the given URL for the given path on a running `XNetEndpoint`.
+fn http_url(path: &str, xnet_endpoint: &XNetEndpoint) -> String {
     let url = format!("http://localhost:{}{}", xnet_endpoint.server_port(), path);
-    let url = reqwest::Url::parse(&url).unwrap_or_else(|_| panic!("Could not parse URL: {}", url));
+    reqwest::Url::parse(&url)
+        .unwrap_or_else(|_| panic!("Could not parse URL: {}", url))
+        .to_string()
+}
 
+/// Queries the given URL.
+async fn http_get(url: &str) -> Bytes {
     reqwest::get(url)
         .await
         .expect("couldn't execute a GET request")
