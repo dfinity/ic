@@ -816,6 +816,7 @@ fn insert_bitcoin_response() {
             request: RequestBuilder::default().build(),
             payload: CanisterGetSuccessorsRequestInitial {
                 network: NetworkSnakeCase::Regtest,
+                anchor: vec![],
                 processed_block_hashes: vec![],
             },
         });
