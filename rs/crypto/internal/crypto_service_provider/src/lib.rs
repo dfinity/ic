@@ -27,7 +27,6 @@ use crate::api::{
 };
 use crate::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
 use crate::public_key_store::read_node_public_keys;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspVault;
@@ -38,7 +37,6 @@ use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
 use std::convert::TryFrom;
@@ -124,13 +122,12 @@ impl PublicKeyData {
     }
 }
 
-/// Implements the CryptoServiceProvider for an RNG and a SecretKeyStore.
-pub struct Csp<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
+/// Implements `CryptoServiceProvider` that uses a `CspVault` for
+/// storing and managing secret keys.
+pub struct Csp {
     csp_vault: Arc<dyn CspVault>,
     public_key_data: PublicKeyData,
     logger: ReplicaLogger,
-    // TODO(CRP-1325): remove R, S, C generics.
-    _marker: std::marker::PhantomData<(R, S, C)>,
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
@@ -186,7 +183,7 @@ impl<T> CspRwLock<T> {
     }
 }
 
-impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
+impl Csp {
     /// Creates a production-grade crypto service provider.
     ///
     /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
@@ -269,19 +266,19 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
             public_key_data,
             csp_vault,
             logger,
-            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone>
-    Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore>
-{
+impl Csp {
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the random
     /// number generator, hence the keys, is not guaranteed.
-    pub fn new_with_rng(csprng: R, config: &CryptoConfig) -> Self {
+    pub fn new_with_rng<R: 'static + Rng + CryptoRng + Send + Sync + Clone>(
+        csprng: R,
+        config: &CryptoConfig,
+    ) -> Self {
         let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
         let public_key_data = PublicKeyData::new(node_public_keys);
         Csp {
@@ -291,12 +288,11 @@ impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone>
                 ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
             )),
             logger: no_op_logger(),
-            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync> Csp<R, VolatileSecretKeyStore, VolatileSecretKeyStore> {
+impl Csp {
     /// Resets public key data according to the given `NodePublicKeys`.
     ///
     /// Note: This is for testing only and MUST NOT be used in production.
@@ -305,9 +301,7 @@ impl<R: Rng + CryptoRng + Send + Sync> Csp<R, VolatileSecretKeyStore, VolatileSe
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NodePublicKeyData
-    for Csp<R, S, C>
-{
+impl NodePublicKeyData for Csp {
     fn node_public_keys(&self) -> NodePublicKeys {
         self.public_key_data.node_public_keys.clone()
     }
@@ -329,21 +323,21 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Nod
     }
 }
 
-impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyStore>
-    Csp<R, S, VolatileSecretKeyStore>
-{
+impl Csp {
     /// Creates a crypto service provider for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store and the canister secret key store is not guaranteed.
-    pub fn of(csprng: R, secret_key_store: S) -> Self {
+    pub fn of<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyStore>(
+        csprng: R,
+        secret_key_store: S,
+    ) -> Self {
         let node_public_keys = Default::default();
         let public_key_data = PublicKeyData::new(node_public_keys);
         Csp {
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
             logger: no_op_logger(),
-            _marker: std::marker::PhantomData,
         }
     }
 }

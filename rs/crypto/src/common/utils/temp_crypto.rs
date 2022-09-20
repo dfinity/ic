@@ -8,7 +8,6 @@ use crate::{derive_node_id, CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -51,7 +50,6 @@ use ic_types::crypto::{
 };
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
-use rand::rngs::OsRng;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -64,8 +62,7 @@ mod tests;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
-pub type TempCryptoComponent =
-    TempCryptoComponentGeneric<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>;
+pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp>;
 
 /// This struct combines the following two items:
 /// * a crypto component whose state lives in a temporary directory

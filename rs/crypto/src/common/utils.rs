@@ -1,7 +1,6 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
@@ -12,7 +11,6 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, X509PublicKeyCert};
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::NodeId;
-use rand::rngs::OsRng;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -325,7 +323,7 @@ fn generate_tls_keys(csp: &mut dyn CryptoServiceProvider, node: NodeId) -> TlsPu
 pub(crate) fn csp_for_config(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
+) -> Csp {
     Csp::new(
         config,
         tokio_runtime_handle,
@@ -335,10 +333,7 @@ pub(crate) fn csp_for_config(
 }
 
 #[cfg(test)]
-pub(crate) fn local_csp_in_temp_dir() -> (
-    Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>,
-    TempDir,
-) {
+pub(crate) fn local_csp_in_temp_dir() -> (Csp, TempDir) {
     let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
     let csp = csp_for_config(&config, None);
     (csp, temp_dir)

@@ -1,14 +1,12 @@
 #![allow(clippy::unwrap_used)]
 use super::fixtures::cache::STATE_WITH_TRANSCRIPT;
 use crate::api::NiDkgCspClient;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::threshold::ni_dkg::tests::fixtures::StateWithTranscript;
 use crate::threshold::ThresholdSignatureCspClient;
 use crate::types as csp_types;
 use crate::Csp;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::crypto::AlgorithmId;
-use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeSet;
 
 /// Verifies that precisely the expected keys are retained.
@@ -43,9 +41,7 @@ fn test_retention() {
     let internal_public_coefficients = state.transcript.public_coefficients();
 
     // We will apply our tests to just one CSP:
-    fn get_one_csp(
-        state: &mut StateWithTranscript,
-    ) -> &mut Csp<ChaCha20Rng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
+    fn get_one_csp(state: &mut StateWithTranscript) -> &mut Csp {
         &mut state
             .network
             .nodes_by_node_id

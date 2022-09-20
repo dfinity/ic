@@ -3,7 +3,6 @@
 
 use crate::api::ThresholdSignatureCspClient;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
 use ic_crypto_internal_seed::Seed;
@@ -11,7 +10,7 @@ use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use strum::IntoEnumIterator;
 
@@ -37,13 +36,9 @@ pub mod util {
     ///   provider, which contains the secret key, and the key identifier.
     /// * `seed` is a source of randomness.
     /// * `message` is a test message.
-    pub fn test_threshold_signatures<
-        R: Rng + CryptoRng + Send + Sync,
-        S: SecretKeyStore,
-        C: SecretKeyStore,
-    >(
+    pub fn test_threshold_signatures(
         public_coefficients: &CspPublicCoefficients,
-        signers: &[(&Csp<R, S, C>, KeyId)],
+        signers: &[(&Csp, KeyId)],
         seed: Seed,
         message: &[u8],
     ) {
