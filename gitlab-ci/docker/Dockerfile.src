@@ -38,7 +38,7 @@ ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
 RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cdk-optimizer-linux-amd64.gz | gunzip > /opt/bin/ic-cdk-optimizer && \
     chmod 0755 /opt/bin/ic-cdk-optimizer
 
-ARG rocksdb_sha=e656fa3d196c5b4c8a77255db1e6cd36a7ded348
+ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
 RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1
 WORKDIR /tmp/rocksdb
 
