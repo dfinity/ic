@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "optimized_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -44,4 +44,34 @@ rust_binary(
     name = "lifeline_bin",
     srcs = ["src/main.rs"],
     deps = [":lifeline"],
+)
+
+rust_test(
+    name = "lifeline_unit_test",
+    compile_data = [":lifeline.wasm"],
+    crate = ":lifeline",
+    deps = [
+        "@wabt_rs//:wabt",
+    ],
+)
+
+rust_test(
+    name = "lifeline_test",
+    srcs = ["tests/test.rs"],
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+    ],
+    env = {
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    },
+    deps = [
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/root",
+        "//rs/nns/common",
+        "//rs/nns/test_utils",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/types/ic00_types",
+    ],
 )
