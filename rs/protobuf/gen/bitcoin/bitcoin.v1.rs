@@ -89,7 +89,7 @@ pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
-    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2")]
+    #[prost(oneof = "bitcoin_adapter_request_wrapper::R", tags = "1, 2, 3")]
     pub r: ::core::option::Option<bitcoin_adapter_request_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
@@ -100,6 +100,8 @@ pub mod bitcoin_adapter_request_wrapper {
         GetSuccessorsRequest(super::GetSuccessorsRequest),
         #[prost(message, tag = "2")]
         SendTransactionRequest(super::SendTransactionRequest),
+        #[prost(message, tag = "3")]
+        CanisterGetSuccessorsRequest(super::CanisterGetSuccessorsRequestInitial),
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
@@ -193,6 +195,8 @@ pub struct CanisterGetSuccessorsRequestInitial {
     pub network: i32,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub processed_block_hashes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub anchor: ::prost::alloc::vec::Vec<u8>,
 }
 /// A response containing new successor blocks from the Bitcoin network.
 /// NOTE: This response is specific to the Bitcoin wasm canister. It supersedes the

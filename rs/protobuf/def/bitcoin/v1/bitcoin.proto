@@ -70,6 +70,7 @@ message BitcoinAdapterRequestWrapper {
   oneof r {
     GetSuccessorsRequest get_successors_request = 1;
     SendTransactionRequest send_transaction_request = 2;
+    CanisterGetSuccessorsRequestInitial canister_get_successors_request = 3;
   }
 }
 
@@ -144,6 +145,7 @@ enum Network {
 message CanisterGetSuccessorsRequestInitial {
   Network network = 1;
   repeated bytes processed_block_hashes = 2;
+  bytes anchor = 3;
 }
 
 // A response containing new successor blocks from the Bitcoin network.

@@ -1,7 +1,7 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_types::Network;
+use ic_btc_types::{Network, NetworkSnakeCase};
 use ic_btc_types_internal::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, CanisterGetSuccessorsResponseComplete,
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
 use ic_interfaces::{
     registry::RegistryClient,
@@ -223,7 +223,7 @@ impl BitcoinPayloadBuilder {
             .map(|x| x.callback_id)
             .collect();
 
-        for (callback_id, _context) in state
+        for (callback_id, context) in state
             .metadata
             .subnet_call_context_manager
             .bitcoin_get_successors_contexts
@@ -235,25 +235,68 @@ impl BitcoinPayloadBuilder {
                 continue;
             }
 
-            // Add a stub response.
-            // TODO(EXC-1236): Fetch response from bitcoin adapter.
-            let response = BitcoinAdapterResponse {
-                response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                    CanisterGetSuccessorsResponseComplete {
-                        blocks: vec![],
-                        next: vec![],
-                    },
-                ),
-                callback_id: callback_id.get(),
+            let adapter_client = match context.payload.network {
+                NetworkSnakeCase::Mainnet => &self.bitcoin_mainnet_adapter_client,
+                NetworkSnakeCase::Testnet | NetworkSnakeCase::Regtest => {
+                    &self.bitcoin_testnet_adapter_client
+                }
             };
 
-            let response_size = response.count_bytes() as u64;
-            if response_size + current_payload_size > byte_limit.get() {
-                // Stop if we're about to exceed the byte limit.
-                break;
+            // Send request to the adapter.
+            let request =
+                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(context.payload.clone());
+            let timer = Timer::start();
+            let result = adapter_client.send_request(
+                request.clone(),
+                Options {
+                    timeout: Duration::from_millis(50),
+                },
+            );
+
+            match result {
+                Ok(response_wrapper) => {
+                    self.metrics.observe_adapter_request_duration(
+                        ADAPTER_REQUEST_STATUS_SUCCESS,
+                        request.to_request_type_label(),
+                        timer,
+                    );
+
+                    if let BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) =
+                        &response_wrapper
+                    {
+                        self.metrics
+                            .observe_blocks_per_get_successors_response(r.blocks.len());
+                    }
+
+                    let response = BitcoinAdapterResponse {
+                        response: response_wrapper,
+                        callback_id: callback_id.get(),
+                    };
+
+                    let response_size = response.count_bytes() as u64;
+                    self.metrics.observe_adapter_response_size(response_size);
+                    if response_size + current_payload_size > byte_limit.get() {
+                        // Stop if we're about to exceed the byte limit.
+                        break;
+                    }
+                    current_payload_size += response_size;
+                    responses.push(response);
+                }
+                Err(err) => {
+                    self.metrics.observe_adapter_request_duration(
+                        ADAPTER_REQUEST_STATUS_FAILURE,
+                        request.to_request_type_label(),
+                        timer,
+                    );
+                    log!(
+                        self.log,
+                        slog::Level::Error,
+                        "Sending the request with callback id {} to the adapter failed with {:?}",
+                        callback_id,
+                        err
+                    );
+                }
             }
-            current_payload_size += response_size;
-            responses.push(response);
         }
 
         SelfValidatingPayload::new(responses)
