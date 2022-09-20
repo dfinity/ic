@@ -8100,6 +8100,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-metrics",
+ "ic-test-utilities-tmpdir",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
@@ -8345,6 +8346,13 @@ dependencies = [
  "ic-types 0.8.0",
  "mockall 0.7.2",
  "serde_cbor",
+]
+
+[[package]]
+name = "ic-test-utilities-tmpdir"
+version = "0.8.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

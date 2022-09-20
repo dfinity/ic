@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "tmpdir",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_test_utilities_tmpdir",
+    version = "0.8.0",
+    deps = ["@crate_index//:tempfile"],
+)

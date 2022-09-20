@@ -51,6 +51,7 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
 proptest = "0.9.4"

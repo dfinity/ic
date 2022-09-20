@@ -232,6 +232,7 @@ members = [
   "test_utilities/logger",
   "test_utilities/metrics",
   "test_utilities/registry",
+  "test_utilities/tmpdir",
   "tests",
   "tests/test_canisters/http_counter",
   "transport",
