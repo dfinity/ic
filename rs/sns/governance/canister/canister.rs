@@ -38,7 +38,8 @@ use ic_sns_governance::{
     pb::v1::{
         governance, GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse,
         GetProposal, GetProposalResponse, GetRunningSnsVersionRequest,
-        GetRunningSnsVersionResponse, Governance as GovernanceProto,
+        GetRunningSnsVersionResponse, GetSnsInitializationParametersRequest,
+        GetSnsInitializationParametersResponse, Governance as GovernanceProto,
         ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
         ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
         RewardEvent, SetMode, SetModeResponse,
@@ -310,6 +311,21 @@ fn get_metadata() {
 #[candid_method(query, rename = "get_metadata")]
 fn get_metadata_(request: GetMetadataRequest) -> GetMetadataResponse {
     governance().get_metadata(&request)
+}
+
+/// Returns the initialization parameters used to spawn an SNS
+#[export_name = "canister_query get_sns_initialization_parameters"]
+fn get_sns_initialization_parameters() {
+    println!("{}get_sns_initialization_parameters", log_prefix());
+    over(candid_one, get_sns_initialization_parameters_)
+}
+
+/// Internal method for calling get_sns_initialization_parameters.
+#[candid_method(query, rename = "get_sns_initialization_parameters")]
+fn get_sns_initialization_parameters_(
+    request: GetSnsInitializationParametersRequest,
+) -> GetSnsInitializationParametersResponse {
+    governance().get_sns_initialization_parameters(&request)
 }
 
 /// Performs a command on a neuron if the caller is authorised to do so.

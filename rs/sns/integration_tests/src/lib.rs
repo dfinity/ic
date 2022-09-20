@@ -33,3 +33,6 @@ mod swap;
 
 #[cfg(test)]
 mod upgrade_canister;
+
+#[cfg(test)]
+mod governance;

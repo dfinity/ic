@@ -931,6 +931,7 @@ mod tests {
             sns_metadata: None,
             deployed_version,
             pending_version: None,
+            sns_initialization_parameters: "".to_string(),
         }
     }
 

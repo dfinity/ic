@@ -26,9 +26,10 @@ use crate::pb::v1::{
     },
     neuron::{DissolveState, Followees},
     proposal, Ballot, DefaultFollowees, Empty, GetMetadataRequest, GetMetadataResponse, GetNeuron,
-    GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
-    GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
-    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
+    GetNeuronResponse, GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
     ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister,
@@ -3898,6 +3899,16 @@ impl Governance {
             url: sns_metadata.url.clone(),
             name: sns_metadata.name.clone(),
             description: sns_metadata.description.clone(),
+        }
+    }
+
+    /// Gets the config file used to set up the SNS.
+    pub fn get_sns_initialization_parameters(
+        &self,
+        _request: &GetSnsInitializationParametersRequest,
+    ) -> GetSnsInitializationParametersResponse {
+        GetSnsInitializationParametersResponse {
+            sns_initialization_parameters: self.proto.sns_initialization_parameters.clone(),
         }
     }
 }

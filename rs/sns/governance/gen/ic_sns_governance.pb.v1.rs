@@ -1000,11 +1000,14 @@ pub struct Governance {
     pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(message, optional, tag = "21")]
     pub sns_metadata: ::core::option::Option<governance::SnsMetadata>,
+    /// The initialization parameters used to spawn an SNS
+    #[prost(string, tag = "22")]
+    pub sns_initialization_parameters: ::prost::alloc::string::String,
     /// Current version that this SNS is running.
-    #[prost(message, optional, tag = "22")]
+    #[prost(message, optional, tag = "23")]
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// Version SNS is in process of upgrading to.
-    #[prost(message, optional, tag = "23")]
+    #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
 }
 /// Nested message and enum types in `Governance`.
@@ -1264,6 +1267,19 @@ pub struct GetMetadataResponse {
     pub name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "4")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Request message for 'get_sns_initialization_parameters'
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSnsInitializationParametersRequest {}
+/// Response message for 'get_sns_initialization_parameters'
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSnsInitializationParametersResponse {
+    #[prost(string, tag = "1")]
+    pub sns_initialization_parameters: ::prost::alloc::string::String,
 }
 /// Request for the SNS's currently running version.
 #[derive(

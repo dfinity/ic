@@ -7756,6 +7756,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-nns-test-utils",
+ "ic-sns-cli",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
@@ -7776,6 +7777,7 @@ dependencies = [
  "rand_core 0.6.3",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde_yaml",
  "tokio",
  "wabt",
 ]

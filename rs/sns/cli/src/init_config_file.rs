@@ -46,44 +46,44 @@ enum SubCommand {
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
 pub struct SnsCliInitConfig {
     /// Fee of a transaction.
-    transaction_fee_e8s: Option<u64>,
+    pub transaction_fee_e8s: Option<u64>,
 
     /// The name of the token issued by an SNS Ledger.
-    token_name: Option<String>,
+    pub token_name: Option<String>,
 
     /// The symbol of the token issued by an SNS Ledger.
-    token_symbol: Option<String>,
+    pub token_symbol: Option<String>,
 
     /// Cost of making a proposal that is rejected.
-    proposal_reject_cost_e8s: Option<u64>,
+    pub proposal_reject_cost_e8s: Option<u64>,
 
     /// The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
-    neuron_minimum_stake_e8s: Option<u64>,
+    pub neuron_minimum_stake_e8s: Option<u64>,
 
     /// The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
-    neuron_minimum_dissolve_delay_to_vote_seconds: Option<u64>,
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: Option<u64>,
 
     /// The logo for the SNS project represented as a path to the logo file in the local filesystem.
-    logo: Option<PathBuf>,
+    pub logo: Option<PathBuf>,
 
     /// The URL to the dapp that is controlled by the SNS project.
-    url: Option<String>,
+    pub url: Option<String>,
 
     /// The name of the SNS project. This may differ from the name of the associated token.
-    name: Option<String>,
+    pub name: Option<String>,
 
     /// A description of the SNS project.
-    description: Option<String>,
+    pub description: Option<String>,
 
     /// If the swap fails, control of the dapp canister(s) will be set to these
     /// principal IDs. In most use-cases, this would be the same as the original
     /// set of controller(s).
-    fallback_controller_principal_ids: Vec<String>,
+    pub fallback_controller_principal_ids: Vec<String>,
 
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
-    initial_token_distribution: Option<InitialTokenDistribution>,
+    pub initial_token_distribution: Option<InitialTokenDistribution>,
 }
 
 impl Default for SnsCliInitConfig {
@@ -190,10 +190,13 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
     fn try_from(sns_cli_init_config: SnsCliInitConfig) -> Result<Self, Self::Error> {
         let optional_logo = match sns_cli_init_config.logo {
             None => None,
-            Some(logo_path) => Some(load_logo(&logo_path)?),
+            Some(ref logo_path) => Some(load_logo(logo_path)?),
         };
 
         Ok(SnsInitPayload {
+            sns_initialization_parameters: Some(get_config_file_contents(
+                sns_cli_init_config.clone(),
+            )),
             transaction_fee_e8s: sns_cli_init_config.transaction_fee_e8s,
             token_name: sns_cli_init_config.token_name,
             token_symbol: sns_cli_init_config.token_symbol,
@@ -231,7 +234,7 @@ fn new(init_config_file_path: PathBuf) {
         .expect("Unable to write init config file");
 }
 
-fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
+pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String {
     let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
     let yaml_payload = serde_yaml::to_string(&sns_cli_init_config)
         .expect("Error when converting sns_cli_init_config to yaml");
@@ -570,10 +573,20 @@ description: Launching an SNS
 name: ServiceNervousSystemTest
 url: https://internetcomputer.org/
         "#,
-            logo_path.into_os_string().into_string().unwrap()
+            logo_path.clone().into_os_string().into_string().unwrap()
         );
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         assert!(resulting_payload.validate().is_ok());
+
+        let sns_init_payload = SnsInitPayload::try_from(resulting_payload.clone())
+            .expect("Expected to be able to convert");
+        assert_eq!(
+            serde_yaml::from_str::<SnsCliInitConfig>(
+                &sns_init_payload.sns_initialization_parameters.unwrap()
+            )
+            .unwrap(),
+            resulting_payload
+        );
 
         // We add a string repeating the field "name", this should fail
         let mut file_contents = file_contents;
@@ -594,6 +607,10 @@ url: https://internetcomputer.org/
             ),
         };
 
+        assert_eq!(
+            get_config_file_contents(sns_cli_init_config.clone()),
+            sns_init_payload.sns_initialization_parameters.unwrap()
+        );
         assert_eq!(
             sns_cli_init_config.transaction_fee_e8s,
             sns_init_payload.transaction_fee_e8s
