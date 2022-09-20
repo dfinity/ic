@@ -47,6 +47,10 @@ test:alltests --test_tag_filters=""
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
 
+# For sandboxed actions, mount an empty, writable directory at this absolute path
+# (if supported by the sandboxing implementation, ignored otherwise).
+test --sandbox_tmpfs_path=/tmp
+
 test --test_timeout=-1,-1,1200,-1 # timeout in seconds for short, moderate(default), long and eternal tests. Defauilt is 60,300,900,3600. -1 is to use default.
 
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
