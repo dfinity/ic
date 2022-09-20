@@ -235,7 +235,7 @@ after_script:
 .ubuntu-docker:
   extends: .build-env-base
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:e1aa96782b66f23b674b75d8a7016d2d0f749347197f87a716a75fcfb351f5a9"
   tags:
     - dfinity
     - docker
@@ -244,7 +244,7 @@ after_script:
 .ubuntu-docker-k8s:
   extends: .build-env-base
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:e1aa96782b66f23b674b75d8a7016d2d0f749347197f87a716a75fcfb351f5a9"
   tags:
     # distribute jobs between docker and k8s runners
     - dfinity
@@ -260,7 +260,7 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:1ebb27149cb43a1a9579f14b3daf27b789f1610d839de26717fff2db224073a7"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:e1aa96782b66f23b674b75d8a7016d2d0f749347197f87a716a75fcfb351f5a9"
   variables:
     SCCACHE_DIR: /cache/sccache
     RUSTC_WRAPPER: "/usr/bin/sccache-run"

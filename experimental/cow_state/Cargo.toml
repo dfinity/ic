@@ -11,7 +11,7 @@ enum_dispatch = "0.3.1"
 ic-sys = { path = "../../rs/sys" }
 ic-utils = { path = "../../rs/utils" }
 libc = "0.2.91"
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
 nix = "0.23.0"
 num-integer = "0.1.43"
 parking_lot = "0.12.1"

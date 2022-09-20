@@ -7,9 +7,9 @@ def _local(path):
 
 def _lmdb_rkv_impl(repository_ctx):
     repository_ctx.download_and_extract(
-        url = "https://github.com/dfinity-lab/lmdb-rs/archive/da5626f8ef81bba671cac0c6b7a078c6e0e73d66.zip",
-        sha256 = "7530d474392861efa70b7844368ee2f607535c56005bd76cf66ad1e364623aab",
-        stripPrefix = "lmdb-rs-da5626f8ef81bba671cac0c6b7a078c6e0e73d66",
+        url = "https://github.com/dfinity-lab/lmdb-rs/archive/f62018b2deb79ea0d53914d5502389433fc3e6da.zip",
+        sha256 = "b0c8ba9187c147c33aff5913723a8e08d9a8a7928b98180a8811beefbda112e8",
+        stripPrefix = "lmdb-rs-f62018b2deb79ea0d53914d5502389433fc3e6da",
     )
     repository_ctx.symlink(_local("BUILD.lmdb-rkv-sys.bazel"), "lmdb-sys/BUILD.bazel")
     repository_ctx.symlink(_local("BUILD.lmdb-rkv.bazel"), "BUILD.bazel")
