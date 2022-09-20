@@ -796,6 +796,7 @@ mod tests {
         });
     }
 
+    #[ignore]
     #[test]
     fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         with_test_replica_logger(|log| {
@@ -989,6 +990,7 @@ mod tests {
         });
     }
 
+    #[ignore]
     #[test]
     fn reports_an_error_on_misconfiguration() {
         with_test_replica_logger(|log| {
