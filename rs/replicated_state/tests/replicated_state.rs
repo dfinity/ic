@@ -27,7 +27,7 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
-    CountBytes, Cycles, QueueIndex,
+    CountBytes, Cycles,
 };
 use proptest::prelude::*;
 use std::str::FromStr;
@@ -100,7 +100,6 @@ fn total_memory_taken_by_canister_queues() {
         // Push a request into a canister input queue.
         state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .sender(OTHER_CANISTER_ID)
                     .receiver(CANISTER_ID)
@@ -161,7 +160,6 @@ fn total_memory_taken_by_subnet_queues() {
         // `max_canister_memory_size` argument.
         state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .sender(CANISTER_ID)
                     .receiver(SUBNET_ID.into())
@@ -248,7 +246,6 @@ fn system_subnet_total_memory_taken_by_canister_queues() {
         // Push a request into a canister input queue.
         state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .sender(OTHER_CANISTER_ID)
                     .receiver(CANISTER_ID)
@@ -288,7 +285,6 @@ fn system_subnet_total_memory_taken_by_subnet_queues() {
         // `max_canister_memory_size` argument.
         state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .sender(CANISTER_ID)
                     .receiver(SUBNET_ID.into())
@@ -361,7 +357,6 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
         // `max_canister_memory_size` argument.
         state
             .push_input(
-                QueueIndex::from(0),
                 RequestBuilder::default()
                     .sender(OTHER_CANISTER_ID)
                     .receiver(SUBNET_ID.into())
@@ -388,12 +383,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
             .receiver(SUBNET_ID.into())
             .build()
             .into();
-        let res = state.push_input(
-            QueueIndex::from(0),
-            request.clone(),
-            0.into(),
-            &mut subnet_available_memory,
-        );
+        let res = state.push_input(request.clone(), 0.into(), &mut subnet_available_memory);
 
         // No more memory for a second request.
         assert_eq!(
@@ -452,7 +442,6 @@ fn push_input_queues_respects_local_remote_subnet() {
     // queue.
     state
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default()
                 .sender(remote_canister_id)
                 .receiver(local_canister_id)
@@ -476,7 +465,6 @@ fn push_input_queues_respects_local_remote_subnet() {
     // Push message from the local canister, should be in the local subnet queue.
     state
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default()
                 .sender(local_canister_id)
                 .receiver(local_canister_id)
@@ -500,7 +488,6 @@ fn push_input_queues_respects_local_remote_subnet() {
     // Push message from the local subnet, should be in the local subnet queue.
     state
         .push_input(
-            QueueIndex::from(0),
             RequestBuilder::default()
                 .sender(CanisterId::new(local_subnet_id.get()).unwrap())
                 .receiver(local_canister_id)
@@ -539,7 +526,6 @@ fn validate_response_fails_when_unknown_callback_id() {
     );
     assert_eq!(
         canister_a.push_input(
-            QueueIndex::new(0),
             response.clone(),
             MAX_CANISTER_MEMORY_SIZE,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -614,7 +600,6 @@ fn validate_responses_against_callback_details() {
     );
     assert_eq!(
         canister_a.push_input(
-            QueueIndex::new(0),
             response.clone(),
             MAX_CANISTER_MEMORY_SIZE,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -639,7 +624,6 @@ fn validate_responses_against_callback_details() {
     );
     assert_eq!(
         canister_a.push_input(
-            QueueIndex::new(0),
             response,
             MAX_CANISTER_MEMORY_SIZE,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -661,7 +645,6 @@ fn validate_responses_against_callback_details() {
     );
     assert_eq!(
         canister_a.push_input(
-            QueueIndex::new(0),
             response,
             MAX_CANISTER_MEMORY_SIZE,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),

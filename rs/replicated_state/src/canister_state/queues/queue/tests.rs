@@ -22,10 +22,7 @@ fn input_queue_with_message_is_not_empty() {
     let mut input_queue = InputQueue::new(1);
 
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .expect("could push");
     assert_ne!(input_queue.num_messages(), 0);
     assert!(!input_queue.is_empty());
@@ -40,35 +37,16 @@ fn input_queue_with_reservation_is_not_empty() {
     assert!(!input_queue.is_empty());
 }
 
-/// Test affirming success on successive pushes with incrementing indices.
-#[test]
-fn input_queue_push_succeeds_on_incremented_id() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    for index in 0..capacity {
-        assert_eq!(
-            Ok(()),
-            input_queue.push(
-                QueueIndex::from(index as u64),
-                RequestBuilder::default().build().into()
-            )
-        );
-    }
-}
-
 /// Test affirming success on popping pushed messages.
 #[test]
 fn input_queue_pushed_messages_get_popped() {
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
     let mut msg_queue = VecDeque::new();
-    for index in 0..capacity {
+    for _ in 0..capacity {
         let req: RequestOrResponse = RequestBuilder::default().build().into();
         msg_queue.push_back(req.clone());
-        assert_eq!(
-            Ok(()),
-            input_queue.push(QueueIndex::from(index as u64), req)
-        );
+        assert_eq!(Ok(()), input_queue.push(req));
     }
     while !msg_queue.is_empty() {
         assert_eq!(input_queue.pop(), msg_queue.pop_front());
@@ -77,55 +55,16 @@ fn input_queue_pushed_messages_get_popped() {
     assert_eq!(None, input_queue.pop());
 }
 
-/// Test affirming that non-sequential pushes fail.
+// Pushing a message succeeds if there is space.
 #[test]
-#[should_panic(expected = "Expected queue index 1, got 0. Message: Request")]
-#[allow(unused_must_use)]
-fn input_queue_push_fails_on_non_sequential_id() {
+fn input_queue_push_succeeds() {
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .unwrap();
 
-    input_queue.push(
-        QueueIndex::from(0),
-        RequestBuilder::default().build().into(),
-    );
-}
-
-// Pushing a message with QueueIndex QUEUE_INDEX_NONE succeeds if there is
-// space.
-#[test]
-fn input_queue_push_succeeds_with_queue_index_none() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    input_queue
-        .push(
-            super::super::QUEUE_INDEX_NONE,
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    input_queue
-        .push(
-            QueueIndex::from(1),
-            RequestBuilder::default().build().into(),
-        )
-        .unwrap();
-
-    assert_eq!(QueueIndex::from(2), input_queue.index);
-    assert_eq!(3, input_queue.num_messages());
+    assert_eq!(1, input_queue.num_messages());
 }
 
 /// Test that overfilling an input queue with messages and reservations
@@ -136,12 +75,9 @@ fn input_queue_push_to_full_queue_fails() {
     // First fill up the queue.
     let capacity: usize = 4;
     let mut input_queue = InputQueue::new(capacity);
-    for index in 0..capacity / 2 {
+    for _ in 0..capacity / 2 {
         input_queue
-            .push(
-                QueueIndex::from(index as u64),
-                RequestBuilder::default().build().into(),
-            )
+            .push(RequestBuilder::default().build().into())
             .unwrap();
     }
     for _index in capacity / 2..capacity {
@@ -152,20 +88,7 @@ fn input_queue_push_to_full_queue_fails() {
     // Now push an extraneous message in.
     assert_eq!(
         input_queue
-            .push(
-                QueueIndex::from(capacity as u64 / 2),
-                RequestBuilder::default().build().into(),
-            )
-            .map_err(|(err, _)| err),
-        Err(StateError::QueueFull { capacity })
-    );
-    // With QueueIndex QUEUE_INDEX_NONE.
-    assert_eq!(
-        input_queue
-            .push(
-                super::super::QUEUE_INDEX_NONE,
-                RequestBuilder::default().build().into(),
-            )
+            .push(RequestBuilder::default().build().into(),)
             .map_err(|(err, _)| err),
         Err(StateError::QueueFull { capacity })
     );
@@ -180,10 +103,7 @@ fn input_queue_push_to_full_queue_fails() {
 fn input_push_without_reservation_fails() {
     let mut queue = InputQueue::new(10);
     queue
-        .push(
-            QueueIndex::from(0),
-            ResponseBuilder::default().build().into(),
-        )
+        .push(ResponseBuilder::default().build().into())
         .unwrap_err();
 }
 
@@ -193,10 +113,7 @@ fn input_queue_available_slots_is_correct() {
     let mut input_queue = InputQueue::new(capacity);
     assert_eq!(input_queue.available_slots(), 2);
     input_queue
-        .push(
-            QueueIndex::from(0),
-            RequestBuilder::default().build().into(),
-        )
+        .push(RequestBuilder::default().build().into())
         .unwrap();
     assert_eq!(input_queue.available_slots(), 1);
     input_queue.reserve_slot().unwrap();
@@ -207,11 +124,10 @@ fn input_queue_available_slots_is_correct() {
 #[test]
 fn input_queue_decode_with_non_empty_deadlines_fails() {
     let mut q = InputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for i in 0..2_u64 {
-        let _ = q.push(
-            QueueIndex::from(i),
-            RequestOrResponse::Request(RequestBuilder::default().build().into()),
-        );
+    for _ in 0..2 {
+        let _ = q.push(RequestOrResponse::Request(
+            RequestBuilder::default().build().into(),
+        ));
     }
     let mut proto_queue: pb_queues::InputOutputQueue = (&q).into();
     proto_queue

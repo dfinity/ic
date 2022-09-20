@@ -624,7 +624,6 @@ impl ReplicatedState {
     /// Updates `subnet_available_memory` to reflect any change in memory usage.
     pub fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
@@ -639,7 +638,6 @@ impl ReplicatedState {
         };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
-                index,
                 msg,
                 max_canister_memory_size,
                 subnet_available_memory,
@@ -651,7 +649,6 @@ impl ReplicatedState {
                 if msg.receiver().get_ref() == subnet_id {
                     push_input(
                         &mut self.subnet_queues,
-                        index,
                         msg,
                         // No canister limit, so pass the subnet limit twice.
                         *subnet_available_memory,

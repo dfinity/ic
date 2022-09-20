@@ -188,22 +188,17 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
     }
 }
 
-/// Representation of a single Canister input queue.  There is an upper bound on
-/// number of messages it can store.  There is also a `QueueIndex` which can be
-/// used effectively as a sequence number for the next message that the queue
-/// expects.  The queue will refuse to insert a message that was not presented
-/// with the expected sequence number.
+/// Representation of a single canister input queue. There is an upper bound on
+/// the number of messages it can store.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct InputQueue {
     queue: QueueWithReservation<RequestOrResponse>,
-    index: QueueIndex,
 }
 
 impl InputQueue {
     pub(super) fn new(capacity: usize) -> Self {
         Self {
             queue: QueueWithReservation::new(capacity),
-            index: QueueIndex::from(0),
         }
     }
 
@@ -217,18 +212,8 @@ impl InputQueue {
 
     pub(super) fn push(
         &mut self,
-        msg_index: QueueIndex,
         msg: RequestOrResponse,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        if msg_index == self.index {
-            self.index.inc_assign();
-        } else if msg_index != super::QUEUE_INDEX_NONE {
-            // We don't pass `QueueIndex` values through streams, this should never happen.
-            panic!(
-                "Expected queue index {}, got {}. Message: {:?}",
-                self.index, msg_index, msg
-            );
-        }
         match msg {
             RequestOrResponse::Request(_) => self.queue.push(msg),
             RequestOrResponse::Response(_) => self.queue.push_into_reserved_slot(msg),
@@ -290,7 +275,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &InputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            index: q.index.get(),
+            index: 0,
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
             deadline_range_ends: Vec::<pb_queues::MessageDeadline>::new(),
@@ -308,7 +293,6 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
             ));
         }
         Ok(Self {
-            index: q.index.into(),
             queue: q.try_into()?,
         })
     }

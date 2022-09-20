@@ -15,7 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{Ingress, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex, Time,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
@@ -567,7 +567,6 @@ impl SystemState {
     /// already exist or does not have a reserved slot.
     pub(crate) fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         canister_available_memory: i64,
         subnet_available_memory: &mut i64,
@@ -614,7 +613,6 @@ impl SystemState {
                 }
                 push_input(
                     &mut self.queues,
-                    index,
                     msg,
                     canister_available_memory,
                     subnet_available_memory,
@@ -782,7 +780,6 @@ impl SystemState {
 /// See `CanisterQueues::push_input()` for further details.
 pub(crate) fn push_input(
     queues: &mut CanisterQueues,
-    index: QueueIndex,
     msg: RequestOrResponse,
     queues_available_memory: i64,
     subnet_available_memory: &mut i64,
@@ -807,7 +804,7 @@ pub(crate) fn push_input(
     // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
     // duplication (and the possibility of divergence).
     *subnet_available_memory += queues.memory_usage() as i64;
-    let res = queues.push_input(index, msg, input_queue_type);
+    let res = queues.push_input(msg, input_queue_type);
     *subnet_available_memory -= queues.memory_usage() as i64;
     res
 }

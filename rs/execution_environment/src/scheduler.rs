@@ -24,9 +24,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState,
-    canister_state::{NextExecution, QUEUE_INDEX_NONE},
-    CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::NextExecution, CanisterState, ExecutionTask,
+    InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -921,7 +920,6 @@ impl SchedulerImpl {
                 .output_queues_for_each(|canister_id, msg| match canisters.get_mut(canister_id) {
                     Some(dest_canister) => dest_canister
                         .push_input(
-                            QUEUE_INDEX_NONE,
                             (*msg).clone(),
                             max_canister_memory_size,
                             &mut subnet_available_memory,

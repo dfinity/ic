@@ -30,10 +30,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{
-        execution_state::{self, WasmMetadata},
-        QUEUE_INDEX_NONE,
-    },
+    canister_state::execution_state::{self, WasmMetadata},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, ReplicatedState,
 };
@@ -284,7 +281,6 @@ impl SchedulerTest {
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
-                QUEUE_INDEX_NONE,
                 RequestBuilder::new()
                     .sender(caller)
                     .receiver(CanisterId::ic_00())
@@ -338,7 +334,6 @@ impl SchedulerTest {
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
-                QUEUE_INDEX_NONE,
                 RequestBuilder::new()
                     .sender(caller)
                     .receiver(CanisterId::ic_00())

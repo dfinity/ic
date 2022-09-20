@@ -7,10 +7,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::PeekableOutputIterator;
 use ic_replicated_state::Stream;
-use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, replicated_state::ReplicatedStateMessageRouting,
-    ReplicatedState,
-};
+use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -186,7 +183,6 @@ impl StreamBuilderImpl {
     ) {
         state
             .push_input(
-                QUEUE_INDEX_NONE,
                 Response {
                     originator: req.sender,
                     respondent: req.receiver,

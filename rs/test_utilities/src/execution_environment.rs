@@ -38,7 +38,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{NextExecution, QUEUE_INDEX_NONE},
+    canister_state::NextExecution,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, InputQueueType, NodeTopology, ReplicatedState,
     SubnetTopology,
@@ -1092,7 +1092,6 @@ impl ExecutionTest {
             match canisters.get_mut(&canister_id) {
                 Some(dest_canister) => {
                     let result = dest_canister.push_input(
-                        QUEUE_INDEX_NONE,
                         message.clone(),
                         max_canister_memory_size,
                         &mut subnet_available_memory,
@@ -1107,7 +1106,7 @@ impl ExecutionTest {
                     if canister_id.get() == state.metadata.own_subnet_id.get() {
                         state
                             .subnet_queues_mut()
-                            .push_input(QUEUE_INDEX_NONE, message, InputQueueType::LocalSubnet)
+                            .push_input(message, InputQueueType::LocalSubnet)
                             .unwrap();
                     } else {
                         self.xnet_messages.push(message);
@@ -1134,7 +1133,6 @@ impl ExecutionTest {
         self.state_mut()
             .subnet_queues_mut()
             .push_input(
-                QUEUE_INDEX_NONE,
                 RequestBuilder::new()
                     .sender(caller_canister_id)
                     .receiver(CanisterId::ic_00())
