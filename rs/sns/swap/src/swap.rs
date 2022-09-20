@@ -458,7 +458,7 @@ impl Swap {
         if old_amount_icp_e8s >= e8s {
             // Already up-to-date. Strict inequality can happen if messages are re-ordered.
             return Ok(RefreshBuyerTokensResponse {
-                icp_accepted_partipation_e8s: e8s,
+                icp_accepted_participation_e8s: e8s,
                 icp_ledger_account_balance_e8s: e8s,
             });
         }
@@ -489,7 +489,7 @@ impl Swap {
             );
         }
         Ok(RefreshBuyerTokensResponse {
-            icp_accepted_partipation_e8s: buyer_state.amount_icp_e8s(),
+            icp_accepted_participation_e8s: buyer_state.amount_icp_e8s(),
             icp_ledger_account_balance_e8s: e8s,
         })
     }
