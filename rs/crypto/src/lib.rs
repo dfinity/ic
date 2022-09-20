@@ -28,8 +28,6 @@ use crate::utils::get_node_keys_or_generate_if_missing;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
-use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -48,7 +46,6 @@ use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
@@ -58,11 +55,9 @@ use tempfile::TempDir;
 /// `ThresholdSigDataStore`.
 pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
 
-/// A type alias for `CryptoComponentFatClient<Csp<OsRng,
-/// ProtoSecretKeyStore, ProtoSecretKeyStore>>`. See the Rust documentation of
-/// `CryptoComponentFatClient`.
-pub type CryptoComponent =
-    CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>;
+/// A type alias for `CryptoComponentFatClient<Csp>`.
+/// See the Rust documentation of `CryptoComponentFatClient`.
+pub type CryptoComponent = CryptoComponentFatClient<Csp>;
 
 /// A crypto component that offers limited functionality and can be used outside
 /// of the replica process.
@@ -167,14 +162,12 @@ impl LockableThresholdSigDataStore {
     }
 }
 
-/// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
-/// can be implemented for [Csp]. See the documentation of the respective `impl`
-/// block for more details on the meaning of `R: 'static`.
-impl<R: Rng + CryptoRng + Send + Sync + Clone + 'static>
-    CryptoComponentFatClient<Csp<R, ProtoSecretKeyStore, VolatileSecretKeyStore>>
-{
+impl CryptoComponentFatClient<Csp> {
     /// Creates a crypto component using the given `csprng` and fake `node_id`.
-    pub fn new_with_rng_and_fake_node_id(
+    /// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
+    /// can be implemented for [Csp]. See the documentation of the respective `impl`
+    /// block for more details on the meaning of `R: 'static`.
+    pub fn new_with_rng_and_fake_node_id<R: Rng + CryptoRng + Send + Sync + Clone + 'static>(
         csprng: R,
         config: &CryptoConfig,
         logger: ReplicaLogger,
@@ -218,7 +211,7 @@ impl<C: CryptoServiceProvider> fmt::Debug for CryptoComponentFatClient<C> {
     }
 }
 
-impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>> {
+impl CryptoComponentFatClient<Csp> {
     /// Creates a new crypto component.
     ///
     /// This is the constructor to use to create the replica's / node's crypto
@@ -228,9 +221,9 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     /// due to concurrent state access. To achieve this, we recommend to
     /// instantiate multiple components as in the example below.
     ///
-    /// WARNING: Multiple crypto componets must be instantiated with
+    /// WARNING: Multiple crypto components must be instantiated with
     /// `Arc::clone` as in the example. Do not create multiple crypto
-    /// componets with the same config (as opposed to using `Arc::clone`),
+    /// components with the same config (as opposed to using `Arc::clone`),
     /// as this will lead to concurrency issues e.g. when the components
     /// access the secret key store simultaneously.
     ///

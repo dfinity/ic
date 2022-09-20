@@ -1,7 +1,6 @@
 use super::api::{CspSigVerifier, CspSigner};
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
 use ed25519::types::PublicKeyBytes;
@@ -14,14 +13,11 @@ use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyId};
 use openssl::sha::sha256;
 use rand::rngs::OsRng;
-use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspSigner
-    for Csp<R, S, C>
-{
+impl CspSigner for Csp {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -192,9 +188,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspSigVerifier
-    for Csp<R, S, C>
-{
+impl CspSigVerifier for Csp {
     fn verify_batch_vartime(
         &self,
         key_signature_pairs: &[(CspPublicKey, CspSignature)],

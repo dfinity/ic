@@ -6,6 +6,8 @@ use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
 use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
+use rand::CryptoRng;
+use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
