@@ -367,6 +367,9 @@ def external_crates_repository(name, annotations):
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
             ),
+            "ic-stable-structures": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-utils": crate.spec(
                 version = "^0.20.0",
             ),

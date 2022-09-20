@@ -5,14 +5,16 @@ use ic_icrc1::{
     Block,
 };
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
-use serde::{Deserialize, Serialize};
-use stable_structures::memory_manager::{ManagedMemory, MemoryId};
-use stable_structures::{
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, RestrictedMemory, Storable, WASM_PAGE_SIZE,
+    DefaultMemoryImpl, RestrictedMemory, Storable,
 };
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
+
+const WASM_PAGE_SIZE: u64 = 65536;
 
 const GIB: usize = 1024 * 1024 * 1024;
 
@@ -29,7 +31,7 @@ const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
 
 type Memory = RestrictedMemory<DefaultMemoryImpl>;
-type BlockLog = StableLog<ManagedMemory<Memory>, ManagedMemory<Memory>>;
+type BlockLog = StableLog<VirtualMemory<Memory>, VirtualMemory<Memory>>;
 type ConfigCell = StableCell<ArchiveConfig, Memory>;
 
 /// Creates a memory region for the configuration stable cell.

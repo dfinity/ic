@@ -217,7 +217,6 @@ members = [
   "sns/root/protobuf_generator",
   "sns/swap",
   "sns/test_utils",
-  "stable-structures",
   "starter",
   "state_manager",
   "state_machine_tests",
