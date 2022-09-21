@@ -1214,8 +1214,9 @@ pub struct ExecutionTestBuilder {
     ecdsa_signature_fee: Option<Cycles>,
     ecdsa_key: Option<EcdsaKeyId>,
     instruction_limit: NumInstructions,
-    install_code_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
+    install_code_instruction_limit: NumInstructions,
+    install_code_slice_instruction_limit: NumInstructions,
     initial_canister_cycles: Cycles,
     subnet_total_memory: i64,
     subnet_message_memory: i64,
@@ -1251,8 +1252,10 @@ impl Default for ExecutionTestBuilder {
             ecdsa_signature_fee: None,
             ecdsa_key: None,
             instruction_limit: scheduler_config.max_instructions_per_message,
-            install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
+            install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
+            install_code_slice_instruction_limit: scheduler_config
+                .max_instructions_per_install_code_slice,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
             subnet_message_memory,
@@ -1324,23 +1327,30 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_instruction_limit(self, instruction_limit: u64) -> Self {
+    pub fn with_instruction_limit(self, limit: u64) -> Self {
         Self {
-            instruction_limit: NumInstructions::from(instruction_limit),
+            instruction_limit: NumInstructions::from(limit),
             ..self
         }
     }
 
-    pub fn with_install_code_instruction_limit(self, install_code_instruction_limit: u64) -> Self {
+    pub fn with_slice_instruction_limit(self, limit: u64) -> Self {
         Self {
-            install_code_instruction_limit: NumInstructions::from(install_code_instruction_limit),
+            slice_instruction_limit: NumInstructions::from(limit),
             ..self
         }
     }
 
-    pub fn with_slice_instruction_limit(self, slice_instruction_limit: u64) -> Self {
+    pub fn with_install_code_instruction_limit(self, limit: u64) -> Self {
         Self {
-            slice_instruction_limit: NumInstructions::from(slice_instruction_limit),
+            install_code_instruction_limit: NumInstructions::from(limit),
+            ..self
+        }
+    }
+
+    pub fn with_install_code_slice_instruction_limit(self, limit: u64) -> Self {
+        Self {
+            install_code_slice_instruction_limit: NumInstructions::from(limit),
             ..self
         }
     }
@@ -1588,7 +1598,7 @@ impl ExecutionTestBuilder {
             install_code_instruction_limits: InstructionLimits::new(
                 deterministic_time_slicing,
                 self.install_code_instruction_limit,
-                self.slice_instruction_limit,
+                self.install_code_slice_instruction_limit,
             ),
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
