@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -57,13 +57,17 @@ DEV_DEPENDENCIES = [
     "@crate_index//:itertools",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
-
 ALIASES = {}
 
 rust_library(
     name = "ic_p8s_service_discovery",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = [
+            "src/main.rs",
+            "src/titanium/main.rs",
+        ],
+    ),
     aliases = ALIASES,
     crate_name = "ic_p8s_service_discovery",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -97,14 +101,24 @@ rust_test(
     name = "ic_p8s_service_discovery_test",
     aliases = ALIASES,
     crate = ":ic_p8s_service_discovery",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite(
-    name = "ic_p8s_service_discovery_integration_tests",
-    srcs = glob(["tests/**/*.rs"]),
+rust_test(
+    name = "ic_p8s_service_discovery_bin_test",
     aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ic_p8s_service_discovery"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    crate = ":ic-p8s-service-discovery",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+py_test(
+    name = "e2e-test",
+    srcs = ["tests/e2e-test.py"],
+    data = [":ic-p8s-sd"],
+    env = {
+        "IC_P8S_SD_PATH": "$(location :ic-p8s-sd)",
+    },
+    tags = ["block-network"],
 )
