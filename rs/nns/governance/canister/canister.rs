@@ -1018,8 +1018,11 @@ fn main() {}
 
 #[test]
 fn check_governance_candid_file() {
-    let governance_did =
-        String::from_utf8(std::fs::read("canister/governance.did").unwrap()).unwrap();
+    let did_path = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
+    )
+    .join("canister/governance.did");
+    let governance_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();

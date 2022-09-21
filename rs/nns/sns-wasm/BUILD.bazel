@@ -96,6 +96,13 @@ optimized_canister(
 )
 
 rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_sns-wasm-canister-raw",
+    data = [":canister/sns-wasm.did"],
+    env = {"CARGO_MANIFEST_DIR": "rs/nns/sns-wasm"},
+)
+
+rust_test(
     name = "sns-wasm_test",
     aliases = ALIASES,
     crate = ":sns-wasm",
