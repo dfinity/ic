@@ -242,6 +242,16 @@ pub enum IDkgVerifyDealingPrivateError {
 }
 impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IDkgVerifyInitialDealingsError {
+    MismatchingTranscriptParams,
+    PublicVerificationFailure {
+        error: String,
+        verify_dealing_public_error: IDkgVerifyDealingPublicError,
+    },
+}
+impl_display_using_debug!(IDkgVerifyInitialDealingsError);
+
 /// Occurs if verifying a complaint using `IDkgProtocol::verify_complaint` fails.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyComplaintError {

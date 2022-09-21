@@ -495,6 +495,14 @@ impl IDkgProtocol for CryptoReturningOk {
         Ok(())
     }
 
+    fn verify_initial_dealings(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError> {
+        Ok(())
+    }
+
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
