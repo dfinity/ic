@@ -1,0 +1,8 @@
+services:
+  web:
+    build: .
+    volumes:
+    - ./docker/templates:/etc/nginx/templates
+    ports:
+    - "80:80"
+    - "443:443"
