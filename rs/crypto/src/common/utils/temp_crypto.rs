@@ -17,9 +17,10 @@ use ic_crypto_tls_interfaces::{
     TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, CanisterSigVerifier, IDkgProtocol, KeyManager,
-    MultiSigVerifier, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
+    KeyManager, LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
+    PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -43,7 +44,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+    create_dealing_error::DkgCreateDealingError, create_transcript_error::DkgCreateTranscriptError,
+    key_removal_error::DkgKeyRemovalError, load_transcript_error::DkgLoadTranscriptError,
+    verify_dealing_error::DkgVerifyDealingError,
+};
+use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgDealing, NiDkgTranscript};
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
     IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf, UserPublicKey,
@@ -605,6 +612,18 @@ impl NodeKeysToGenerate {
     }
 }
 
+impl<C: CryptoServiceProvider, T: Signable> BasicSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_basic(
+        &self,
+        message: &T,
+        signer: NodeId,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSigOf<T>> {
+        self.crypto_component
+            .sign_basic(message, signer, registry_version)
+    }
+}
+
 impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifierByPublicKey<T>
     for TempCryptoComponentGeneric<C>
 {
@@ -643,7 +662,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
         &self,
         params: &IDkgTranscriptParams,
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-        self.crypto_component.create_dealing(params)
+        IDkgProtocol::create_dealing(&self.crypto_component, params)
     }
 
     fn verify_dealing_public(
@@ -669,7 +688,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
         params: &IDkgTranscriptParams,
         dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-        self.crypto_component.create_transcript(params, dealings)
+        IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
     }
 
     fn verify_transcript(
@@ -684,7 +703,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
         &self,
         transcript: &IDkgTranscript,
     ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-        self.crypto_component.load_transcript(transcript)
+        IDkgProtocol::load_transcript(&self.crypto_component, transcript)
     }
 
     fn verify_complaint(
@@ -932,5 +951,80 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
                 subnet_id,
                 registry_version,
             )
+    }
+}
+
+impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
+    fn check_keys_with_registry(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        self.crypto_component
+            .check_keys_with_registry(registry_version)
+    }
+
+    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+        self.crypto_component
+            .collect_and_store_key_count_metrics(registry_version)
+    }
+
+    fn node_public_keys(&self) -> NodePublicKeys {
+        self.crypto_component.node_public_keys()
+    }
+}
+
+impl<C: CryptoServiceProvider> NiDkgAlgorithm for TempCryptoComponentGeneric<C> {
+    fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
+        NiDkgAlgorithm::create_dealing(&self.crypto_component, config)
+    }
+
+    fn verify_dealing(
+        &self,
+        config: &NiDkgConfig,
+        dealer: NodeId,
+        dealing: &NiDkgDealing,
+    ) -> Result<(), DkgVerifyDealingError> {
+        self.crypto_component
+            .verify_dealing(config, dealer, dealing)
+    }
+
+    fn create_transcript(
+        &self,
+        config: &NiDkgConfig,
+        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+    ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
+        NiDkgAlgorithm::create_transcript(&self.crypto_component, config, verified_dealings)
+    }
+
+    fn load_transcript(
+        &self,
+        transcript: &NiDkgTranscript,
+    ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
+        NiDkgAlgorithm::load_transcript(&self.crypto_component, transcript)
+    }
+
+    fn retain_only_active_keys(
+        &self,
+        transcripts: HashSet<NiDkgTranscript>,
+    ) -> Result<(), DkgKeyRemovalError> {
+        self.crypto_component.retain_only_active_keys(transcripts)
+    }
+}
+
+impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+        self.crypto_component.sign_threshold(message, dkg_id)
+    }
+}
+
+impl<C: CryptoServiceProvider, T: Signable> MultiSigner<T> for TempCryptoComponentGeneric<C> {
+    fn sign_multi(
+        &self,
+        message: &T,
+        signer: NodeId,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<IndividualMultiSigOf<T>> {
+        self.crypto_component
+            .sign_multi(message, signer, registry_version)
     }
 }

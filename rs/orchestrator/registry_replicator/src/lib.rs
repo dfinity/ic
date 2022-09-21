@@ -48,7 +48,6 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use url::Url;
 
@@ -110,12 +109,10 @@ impl RegistryReplicator {
         node_id: Option<NodeId>,
         config: &Config,
         metrics_addr: SocketAddr,
-    ) -> (Self, (MetricsRuntimeImpl, TempDir)) {
+    ) -> (Self, MetricsRuntimeImpl) {
         let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
-        let (crypto, _, _crypto_dir) = CryptoComponentFatClient::new_temp_with_all_keys(
-            replicator.get_registry_client(),
-            logger.clone(),
-        );
+        let crypto =
+            CryptoComponentFatClient::new_for_verification_only(replicator.get_registry_client());
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -129,7 +126,7 @@ impl RegistryReplicator {
             &logger.inner_logger.root,
         );
 
-        (replicator, (_runtime, _crypto_dir))
+        (replicator, _runtime)
     }
 
     /// initialize a new registry client and start polling the given data
