@@ -4867,6 +4867,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_asn1 0.6.1",
+ "wycheproof",
 ]
 
 [[package]]
