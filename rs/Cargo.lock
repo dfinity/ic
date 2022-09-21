@@ -5836,6 +5836,8 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "candid",
+ "dfn_core",
+ "dfn_http_metrics",
  "ic-base-types",
  "ic-cdk 0.5.5",
  "ic-cdk-macros",
@@ -5843,6 +5845,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-metrics-encoder",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "num-traits",
