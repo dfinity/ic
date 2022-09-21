@@ -65,7 +65,12 @@ mod test {
 
     #[test]
     fn matches_candid_file() {
-        let expected = String::from_utf8(std::fs::read("interface.did").unwrap()).unwrap();
+        let did_path = std::path::PathBuf::from(
+            std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
+        )
+        .join("interface.did");
+
+        let expected = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
         candid::export_service!();
         let actual = __export_service();

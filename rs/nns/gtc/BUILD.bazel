@@ -106,6 +106,15 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
+rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_genesis-token-canister-raw",
+    data = [":canister/gtc.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/gtc",
+    },
+)
+
 rust_test_suite(
     name = "gtc_integration_test",
     srcs = glob(

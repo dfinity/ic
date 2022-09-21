@@ -408,14 +408,18 @@ fn main() {}
 /// A test that fails if the API was updated but the candid definition was not.
 #[test]
 fn check_wasm_candid_file() {
-    let governance_did =
-        String::from_utf8(std::fs::read("canister/sns-wasm.did").unwrap()).unwrap();
+    let did_path = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
+    )
+    .join("canister/sns-wasm.did");
+
+    let sns_wasm_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
     // See comments in main above
     candid::export_service!();
     let expected = __export_service();
 
-    if governance_did != expected {
+    if sns_wasm_did != expected {
         panic!(
             "Generated candid definition does not match canister/sns-wasm.did. \
             Run `cargo run --bin sns-wasm-canister > canister/sns-wasm.did` in \
