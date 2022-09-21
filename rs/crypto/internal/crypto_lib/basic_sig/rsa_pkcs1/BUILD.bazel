@@ -18,6 +18,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:serde_json",
+    "@crate_index//:wycheproof",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
