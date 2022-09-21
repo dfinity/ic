@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -63,4 +63,12 @@ rust_test(
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":dfn_core"],
+)
+
+rust_doc_test(
+    name = "dfn_core_doc_test",
+    crate = ":dfn_core",
+    deps = [
+        "//rs/rust_canisters/dfn_json",
+    ],
 )

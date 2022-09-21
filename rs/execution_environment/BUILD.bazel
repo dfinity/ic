@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -138,4 +138,9 @@ rust_test(
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "execution_environment_doc_test",
+    crate = ":execution_environment",
 )
