@@ -99,14 +99,3 @@ check-bins-darwin:
       chmod +x /tmp/ic-starter
       otool -L /tmp/ic-starter
       /tmp/ic-starter --version
-
-ic-p8s-sd-e2e-test:
-  extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
-  needs:
-    - cargo-build-release-linux-native
-  stage: cargo-test
-  script:
-    - |
-      $SHELL_WRAPPER python3 "${CI_PROJECT_DIR}"/rs/ic_p8s_service_discovery/tests/e2e-test.py
