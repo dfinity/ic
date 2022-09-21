@@ -282,6 +282,9 @@ fn output_queue_explicit_push_and_pop_test() {
     );
     assert_eq!(4_usize, q.num_messages());
 
+    // After 4 pushes, the index is still 0 since the front of the queue didn't move.
+    assert_eq!(q.index, QueueIndex::from(0_u64));
+
     // Pop a request, the queue is now PQQ_3, [1], {(3,3), (7,4)}
     q.pop();
     assert_eq!(q.deadline_range_ends.len(), 2);
@@ -437,23 +440,18 @@ proptest! {
         let initial_len = q.queue.queue.len();
         let initial_index = q.index;
 
-        let mut last_index = None;
-        while q.num_messages()>0 {
+        while q.num_messages() > 0 {
             // Head is always Some(_).
             prop_assert!(q.queue.queue.front().unwrap().is_some());
 
-            // Indices are strictly increasing.
-            let (index, msg_ref) = q.peek().unwrap();
-            if let Some(last_index) = last_index {
-                prop_assert!(index > last_index);
-            }
-            last_index = Some(index);
+            // Peek message at the front.
+            let msg_ref = q.peek().unwrap();
 
             // Second peek() returns what the first peek returned.
-            prop_assert_eq!((index, msg_ref), q.peek().unwrap());
+            prop_assert_eq!(msg_ref, q.peek().unwrap());
 
             // pop() returns what peek() returned.
-            prop_assert_eq!((index, msg_ref.clone()), q.pop().unwrap());
+            prop_assert_eq!(msg_ref.clone(), q.pop().unwrap());
         }
         prop_assert_eq!((q.index - initial_index).get(), initial_len as u64);
     }
@@ -503,11 +501,11 @@ proptest! {
         // Fill up the queue and keep track of deadlines inserted.
         loop {
             match q.peek() {
-                Some((_, RequestOrResponse::Request(req))) => {
+                Some(RequestOrResponse::Request(req)) => {
                     let _ = test_q.push_request(req.clone(), q.deadline_range_ends[0].0);
                     deadlines_tracker.push_back(q.deadline_range_ends[0].0);
                 }
-                Some((_, RequestOrResponse::Response(resp))) => {
+                Some(RequestOrResponse::Response(resp)) => {
                     let _ = test_q.reserve_slot();
                     test_q.push_response(resp.clone());
                 }
@@ -547,12 +545,12 @@ proptest! {
         // Empty out the queue, check deadlines popped are the same entered.
         loop {
             match test_q.peek() {
-                Some((_, RequestOrResponse::Request(_))) => {
+                Some(RequestOrResponse::Request(_)) => {
                     prop_assert_eq!(deadlines_tracker.pop_front().unwrap(),
                                     test_q.deadline_range_ends[0].0);
                     test_q.pop();
                 }
-                Some((_, RequestOrResponse::Response(_))) => {
+                Some(RequestOrResponse::Response(_)) => {
                     test_q.pop();
                 }
                 None => {
@@ -801,11 +799,10 @@ proptest! {
         // This ensures timing out happened for all requests with a deadline <= time,
         // but not for any of the requests after that.
         let mut timed_out_requests_iter = timed_out_requests.into_iter();
-        while let Some((ref_index, rr)) = ref_q.pop() {
+        while let Some(rr) = ref_q.pop() {
             match rr {
                 RequestOrResponse::Response(ref_response) => {
-                    if let Some((index, RequestOrResponse::Response(response))) = q.pop() {
-                        prop_assert_eq!(ref_index, index);
+                    if let Some(RequestOrResponse::Response(response)) = q.pop() {
                         prop_assert_eq!(ref_response, response);
                     } else {
                         prop_assert!(false, "bad queue after time out");
@@ -814,8 +811,7 @@ proptest! {
                 RequestOrResponse::Request(ref_request) => {
                     if let Some(request) = timed_out_requests_iter.next() {
                         prop_assert_eq!(ref_request, request);
-                    } else if let Some((index, RequestOrResponse::Request(request))) = q.pop() {
-                        prop_assert_eq!(ref_index, index);
+                    } else if let Some(RequestOrResponse::Request(request)) = q.pop() {
                         prop_assert_eq!(ref_request, request);
                     } else {
                         prop_assert!(false, "bad queue after time out");

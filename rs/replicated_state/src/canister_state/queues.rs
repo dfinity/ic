@@ -16,7 +16,7 @@ use ic_types::{
         MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, Cycles, QueueIndex, Time,
+    CanisterId, CountBytes, Cycles, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::{
@@ -157,24 +157,24 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Returns a reference to the message that `pop` / `next` would return.
-    pub fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
+    pub fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
         if let Some((receiver, queue)) = self.queues.front() {
-            let (queue_index, msg) = queue.peek().expect("Empty queue in iterator");
+            let msg = queue.peek().expect("Empty queue in iterator");
             let queue_id = QueueId {
                 src_canister: self.owner,
                 dst_canister: **receiver,
                 session_id: SessionId::new(0),
             };
-            return Some((queue_id, queue_index, msg));
+            return Some((queue_id, msg));
         }
         None
     }
 
     /// Pops a message from the next queue. If this was not the last message in
     /// that queue, the queue is moved to the back of the iteration order.
-    pub fn pop(&mut self) -> Option<(QueueId, QueueIndex, RequestOrResponse)> {
+    pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
         if let Some((receiver, queue)) = self.queues.pop_front() {
-            let (queue_index, msg) = queue.pop().expect("Empty queue in iterator");
+            let msg = queue.pop().expect("Empty queue in iterator");
             let queue_id = QueueId {
                 src_canister: self.owner,
                 dst_canister: *receiver,
@@ -190,7 +190,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             self.size -= 1;
             debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-            return Some((queue_id, queue_index, msg));
+            return Some((queue_id, msg));
         }
         None
     }
@@ -227,7 +227,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 }
 
 impl Iterator for CanisterOutputQueuesIterator<'_> {
-    type Item = (QueueId, QueueIndex, RequestOrResponse);
+    type Item = (QueueId, RequestOrResponse);
 
     /// Alias for `pop`.
     fn next(&mut self) -> Option<Self::Item> {
@@ -267,14 +267,13 @@ impl CanisterQueues {
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
-            while let Some((_, msg)) = queue.peek() {
+            while let Some(msg) = queue.peek() {
                 match f(canister_id, msg) {
                     Err(_) => break,
                     Ok(_) => {
                         let msg = queue
                             .pop()
-                            .expect("peek() returned a message, pop() should not fail")
-                            .1;
+                            .expect("peek() returned a message, pop() should not fail");
                         let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
                         self.output_queues_stats -= oq_stats_delta;
                         self.memory_usage_stats -=
@@ -668,7 +667,7 @@ impl CanisterQueues {
     /// Returns a reference to the message at the head of the respective output
     /// queue, if any.
     pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
-        Some(self.canister_queues.get(canister_id)?.1.peek()?.1)
+        self.canister_queues.get(canister_id)?.1.peek()
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -680,7 +679,6 @@ impl CanisterQueues {
             .get(&own_canister_id)
             .and_then(|(_, output_queue)| output_queue.peek())
             .ok_or(())?
-            .1
             .clone();
 
         self.push_input(msg, InputQueueType::LocalSubnet)
@@ -692,8 +690,7 @@ impl CanisterQueues {
             .expect("Output queue existed above so should not fail.")
             .1
             .pop()
-            .expect("Message peeked above so pop should not fail.")
-            .1;
+            .expect("Message peeked above so pop should not fail.");
         let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
         self.output_queues_stats -= oq_stats_delta;
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
@@ -1344,7 +1341,7 @@ pub mod testing {
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
-        CanisterId, QueueIndex, Time,
+        CanisterId, Time,
     };
     use std::{collections::VecDeque, sync::Arc};
 
@@ -1355,12 +1352,8 @@ pub mod testing {
         fn ingress_queue_size(&self) -> usize;
 
         /// Pops the next message from the output queue associated with
-        /// `dst_canister`. Returned `QueueIndex` values are sequential across
-        /// successful calls.
-        fn pop_canister_output(
-            &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)>;
+        /// `dst_canister`.
+        fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse>;
 
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
@@ -1390,15 +1383,12 @@ pub mod testing {
             self.ingress_queue.size()
         }
 
-        fn pop_canister_output(
-            &mut self,
-            dst_canister: &CanisterId,
-        ) -> Option<(QueueIndex, RequestOrResponse)> {
+        fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
             match self.canister_queues.get_mut(dst_canister) {
                 None => None,
                 Some((_, canister_out_queue)) => {
                     let ret = canister_out_queue.pop();
-                    if let Some((_, msg)) = &ret {
+                    if let Some(msg) = &ret {
                         self.output_queues_stats -= OutputQueuesStats::stats_delta(msg);
                         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
                     }

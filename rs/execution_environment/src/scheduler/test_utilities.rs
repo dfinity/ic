@@ -355,7 +355,7 @@ impl SchedulerTest {
         let xnet_canister_id = self.xnet_canister_id;
         let subnet_queue = self.state_mut().subnet_queues_mut();
 
-        while let Some((_, msg)) = subnet_queue.pop_canister_output(&xnet_canister_id) {
+        while let Some(msg) = subnet_queue.pop_canister_output(&xnet_canister_id) {
             match msg {
                 RequestOrResponse::Request(request) => {
                     panic!(

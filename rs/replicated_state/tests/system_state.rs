@@ -280,7 +280,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
         // Expect the second request to still be in the output queue.
         assert_eq!(
             vec![RequestOrResponse::Request(request)],
-            vec![system_state.output_into_iter(canister_id).next().unwrap().2]
+            vec![system_state.output_into_iter(canister_id).next().unwrap().1]
         );
     } else {
         assert_eq!(

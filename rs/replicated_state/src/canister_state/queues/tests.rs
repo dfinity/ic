@@ -584,22 +584,21 @@ fn test_output_into_iter() {
     }
 
     let expected = vec![
-        (&other_1, 0, 0),
-        (&other_2, 0, 1),
-        (&other_3, 0, 3),
-        (&other_1, 1, 2),
-        (&other_2, 1, 4),
-        (&other_1, 2, 5),
+        (&other_1, 0),
+        (&other_2, 1),
+        (&other_3, 3),
+        (&other_1, 2),
+        (&other_2, 4),
+        (&other_1, 5),
     ];
     assert_eq!(expected.len(), queues.output_message_count());
 
-    for (i, (qid, idx, msg)) in queues.output_into_iter(this).enumerate() {
+    for (i, (qid, msg)) in queues.output_into_iter(this).enumerate() {
         assert_eq!(this, qid.src_canister);
         assert_eq!(*expected[i].0, qid.dst_canister);
-        assert_eq!(expected[i].1, idx.get());
         match msg {
             RequestOrResponse::Request(msg) => {
-                assert_eq!(vec![expected[i].2], msg.method_payload)
+                assert_eq!(vec![expected[i].1], msg.method_payload)
             }
             msg => panic!("unexpected message popped: {:?}", msg),
         }
@@ -906,7 +905,7 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Response(msg)) => {
+        (_, RequestOrResponse::Response(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.refund,
@@ -928,7 +927,7 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Request(msg)) => {
+        (_, RequestOrResponse::Request(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.payment,
@@ -1398,9 +1397,9 @@ proptest! {
         let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
 
         let mut popped = 0;
-        while let Some((queue_id, idx, msg)) = output_iter.peek() {
+        while let Some((queue_id, msg)) = output_iter.peek() {
             popped += 1;
-            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
+            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
         }
 
         assert_eq!(output_iter.next(), None);
@@ -1418,7 +1417,7 @@ proptest! {
         let mut i = start;
         let mut popped = 0;
         let mut excluded = 0;
-        while let Some((queue_id, idx, msg)) = output_iter.peek() {
+        while let Some((queue_id, msg)) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
@@ -1426,7 +1425,7 @@ proptest! {
                 continue;
             }
             popped += 1;
-            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
+            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
         }
         assert_eq!(output_iter.pop(), None);
         assert_eq!(raw_requests.len(), excluded + popped);
@@ -1444,7 +1443,7 @@ proptest! {
             let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
 
             for _ in 0..num_requests / 2 {
-                let (_, _, popped_message) = output_iter.next().unwrap();
+                let (_, popped_message) = output_iter.next().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1455,7 +1454,7 @@ proptest! {
         // Ensure that the messages that have not been consumed above are still in the queues
         // after dropping `output_iter`.
         while let Some(raw) = raw_requests.pop_front() {
-            if let Some((_, msg)) = canister_queues.pop_canister_output(&raw.receiver()) {
+            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 assert_eq!(raw, msg);
             } else {
                 panic!("Not all unconsumed messages left in canister queues");
@@ -1491,7 +1490,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, _, popped_message) = output_iter.pop().unwrap();
+                let (_, popped_message) = output_iter.pop().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1502,7 +1501,7 @@ proptest! {
         // Ensure that the messages that have not been consumed above are still in the queues
         // after dropping `output_iter`.
         while let Some(raw) = excluded_requests.pop_front() {
-            if let Some((_, msg)) = canister_queues.pop_canister_output(&raw.receiver()) {
+            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 assert_eq!(raw, msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
             } else {
                 panic!("Not all unconsumed messages left in canister queues");
@@ -1519,7 +1518,7 @@ proptest! {
     ) {
         let recovered: VecDeque<_> = canister_queues
             .output_into_iter(CanisterId::from_u64(0))
-            .map(|(_, _, msg)| msg)
+            .map(|(_, msg)| msg)
             .collect();
 
         assert_eq!(raw_requests, recovered);
