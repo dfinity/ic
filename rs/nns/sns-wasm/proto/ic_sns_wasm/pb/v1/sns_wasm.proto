@@ -28,6 +28,7 @@ message StableCanisterState {
   repeated DeployedSns deployed_sns_list = 3;
   UpgradePath upgrade_path = 4;
   bool access_controls_enabled = 5;
+  repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 6;
 }
 
 // Details the offset and size of a WASM binary in stable memory and the hash of this binary.
@@ -160,4 +161,17 @@ message GetNextSnsVersionRequest {
 // The response type returned by the get_next_sns_version canister method.
 message GetNextSnsVersionResponse {
   SnsVersion next_version = 1;
+}
+
+// The request type accepted by update_allowed_principals.
+message UpdateAllowedPrincipalsRequest {
+  repeated ic_base_types.pb.v1.PrincipalId add = 1;
+
+  repeated ic_base_types.pb.v1.PrincipalId remove = 2;
+}
+
+// The response type returned by update_allowed_principals.
+// Returns the allowed principals after the update.
+message UpdateAllowedPrincipalsResponse {
+  repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 1;
 }

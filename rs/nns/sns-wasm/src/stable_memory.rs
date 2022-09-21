@@ -229,6 +229,7 @@ mod test {
             deployed_sns_list,
             upgrade_path,
             access_controls_enabled: true,
+            allowed_principals: vec![],
         }
     }
 
