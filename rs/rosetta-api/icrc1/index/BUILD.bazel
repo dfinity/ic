@@ -4,8 +4,11 @@ load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/monitoring/metrics_encoder",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",

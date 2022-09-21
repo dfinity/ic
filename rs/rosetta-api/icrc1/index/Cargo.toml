@@ -8,11 +8,14 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.53"
 candid = "0.7.10"
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = "0.5.5"
 ic-cdk-macros = "0.5.5"
 ic-icrc1 = { path = "../" }
 ic-icrc1-ledger = { path = "../ledger" }
+ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
 num-traits = "0.2.14"
 serde = "1.0.139"
 

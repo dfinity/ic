@@ -17,3 +17,8 @@ async fn heartbeat() {
 async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTransactionsResult {
     ic_icrc1_index::get_account_transactions(args).await
 }
+
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(ic_icrc1_index::encode_metrics);
+}
