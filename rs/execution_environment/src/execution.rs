@@ -15,3 +15,6 @@ pub mod upgrade;
 // Common helpers.
 pub(crate) mod common;
 pub mod inspect_message;
+
+#[cfg(test)]
+pub mod test_utilities;

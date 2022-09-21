@@ -59,6 +59,8 @@ DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/metrics",
+    "//rs/types/types_test_utils",
+    "//rs/universal_canister/lib",
     "@crate_index//:assert_matches",
     "@crate_index//:bitcoin",
     "@crate_index//:criterion",
@@ -82,6 +84,7 @@ rust_library(
     name = "execution_environment",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
@@ -108,26 +111,6 @@ rust_test_suite(
     name = "execution_environment_misc_integration_tests",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
-    compile_data = glob(["tests/test-data/**"]),
-    data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-    ],
-    env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test(
-    # Specific tests in `tests/execution/` folder.
-    name = "execution_environment_execution_integration_tests",
-    srcs = glob(["tests/execution/*.rs"]),
-    aliases = ALIASES,
-    compile_data = glob(["tests/test-data/**"]),
-    crate_root = "tests/execution/lib.rs",
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",

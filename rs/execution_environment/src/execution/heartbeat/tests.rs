@@ -1,9 +1,9 @@
+use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
+use crate::CanisterHeartbeatError;
 use assert_matches::assert_matches;
-use ic_execution_environment::CanisterHeartbeatError;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
-use ic_test_utilities::execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
 use ic_types::NumBytes;
 
 #[test]

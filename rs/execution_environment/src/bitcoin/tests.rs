@@ -1,3 +1,4 @@
+use crate::execution::test_utilities::ExecutionTestBuilder;
 use bitcoin::{
     blockdata::constants::genesis_block, util::psbt::serialize::Serialize, Address, Network,
 };
@@ -14,7 +15,6 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::bitcoin_state::BitcoinState;
-use ic_test_utilities::execution_environment::ExecutionTestBuilder;
 use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     messages::{Payload, Response},

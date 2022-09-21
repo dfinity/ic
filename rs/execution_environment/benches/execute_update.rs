@@ -9,10 +9,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionResponse,
-    RoundLimits,
+    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
+    ExecutionResponse, RoundLimits,
 };
-use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use lazy_static::lazy_static;
@@ -365,7 +364,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
         c,
         "update",
         &BENCHMARKS,
-        |ee_test: &ExecutionTest,
+        |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -384,7 +383,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
-            let res = ee_test.execution_environment().execute_canister_message(
+            let res = exec_env.execute_canister_message(
                 canister_state,
                 execution_parameters.instruction_limits,
                 ingress,
