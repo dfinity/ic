@@ -7,6 +7,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
+use ic_crypto_test_utils_canister_threshold_sigs::load_previous_transcripts_and_create_signed_dealings;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
     create_and_verify_signed_dealing, create_and_verify_signed_dealings, create_signed_dealing,
@@ -19,11 +20,13 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyInitialDealingsError;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
@@ -1906,6 +1909,103 @@ fn should_fail_verify_dealing_public_with_invalid_signature() {
         Err(IDkgVerifyDealingPublicError::InvalidSignature { error, .. }) if error.contains("Invalid basic signature on signed iDKG dealing \
                  from signer")
     ));
+}
+
+mod verify_initial_dealings {
+    use super::*;
+
+    #[test]
+    fn should_successfully_verify_initial_dealing() {
+        let subnet_size = thread_rng().gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let (initial_dealings, reshare_of_unmasked_params) = generate_initial_dealings(&env, false);
+
+        let verifier = random_receiver_id(&reshare_of_unmasked_params);
+        assert!(crypto_for(verifier, &env.crypto_components)
+            .verify_initial_dealings(&reshare_of_unmasked_params, &initial_dealings)
+            .is_ok());
+    }
+
+    #[test]
+    fn should_fail_on_mismatching_transcript_params() {
+        let subnet_size = thread_rng().gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let (initial_dealings, reshare_of_unmasked_params) = generate_initial_dealings(&env, false);
+        let other_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let verifier = random_receiver_id(&reshare_of_unmasked_params);
+        assert!(matches!(
+            crypto_for(verifier, &env.crypto_components)
+                .verify_initial_dealings(&other_params, &initial_dealings),
+            Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams)
+        ));
+    }
+
+    #[test]
+    fn should_fail_if_public_verification_fails() {
+        let subnet_size = thread_rng().gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let (initial_dealings_with_first_currupted, reshare_of_unmasked_params) =
+            generate_initial_dealings(&env, true);
+
+        let verifier = random_receiver_id(&reshare_of_unmasked_params);
+        let result = crypto_for(verifier, &env.crypto_components).verify_initial_dealings(
+            &reshare_of_unmasked_params,
+            &initial_dealings_with_first_currupted,
+        );
+        assert!(
+            matches!(result, Err(IDkgVerifyInitialDealingsError::PublicVerificationFailure { verify_dealing_public_error, ..})
+                if matches!(verify_dealing_public_error, IDkgVerifyDealingPublicError::InvalidSignature { .. })
+            )
+        );
+    }
+
+    fn generate_initial_dealings(
+        env: &CanisterThresholdSigTestEnvironment,
+        corrupt_first_dealing: bool,
+    ) -> (InitialIDkgDealings, IDkgTranscriptParams) {
+        let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let initial_transcript =
+            run_idkg_and_create_and_verify_transcript(&initial_params, &env.crypto_components);
+
+        let unmasked_params = build_params_from_previous(
+            initial_params,
+            IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
+        );
+        let unmasked_transcript =
+            run_idkg_and_create_and_verify_transcript(&unmasked_params, &env.crypto_components);
+
+        let reshare_of_unmasked_params = build_params_from_previous(
+            unmasked_params,
+            IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+        );
+        let signed_dealings = load_previous_transcripts_and_create_signed_dealings(
+            &reshare_of_unmasked_params,
+            &env.crypto_components,
+        );
+        let mut signed_dealings_vec = signed_dealings
+            .into_iter()
+            .map(|(_dealer_id, signed_dealing)| signed_dealing)
+            .collect::<Vec<_>>();
+        if corrupt_first_dealing {
+            if let Some(first_signed_dealing) = signed_dealings_vec.first_mut() {
+                let corrupted_sig = {
+                    let mut sig_clone = first_signed_dealing.signature.signature.get_ref().clone();
+                    sig_clone.0.push(0xff);
+                    BasicSigOf::new(sig_clone)
+                };
+                first_signed_dealing.signature.signature = corrupted_sig;
+            }
+        }
+        let initial_dealings =
+            InitialIDkgDealings::new(reshare_of_unmasked_params.clone(), signed_dealings_vec)
+                .expect("failed to create initial dealings");
+
+        (initial_dealings, reshare_of_unmasked_params)
+    }
 }
 
 #[test]

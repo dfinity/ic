@@ -42,7 +42,7 @@ use ic_types::{
     consensus::{ecdsa, ecdsa::EcdsaBlockReader, Block, BlockPayload, HasHeight},
     crypto::canister_threshold_sig::{
         error::{
-            IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError,
+            IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError,
         },
         idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
@@ -73,7 +73,7 @@ pub enum PermanentError {
     TranscriptParamsError(ecdsa::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
-    IDkgVerifyDealingPublicError(IDkgVerifyDealingPublicError),
+    IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
@@ -142,9 +142,9 @@ impl From<IDkgVerifyTranscriptError> for PermanentError {
     }
 }
 
-impl From<IDkgVerifyDealingPublicError> for PermanentError {
-    fn from(err: IDkgVerifyDealingPublicError) -> Self {
-        PermanentError::IDkgVerifyDealingPublicError(err)
+impl From<IDkgVerifyInitialDealingsError> for PermanentError {
+    fn from(err: IDkgVerifyInitialDealingsError) -> Self {
+        PermanentError::IDkgVerifyInitialDealingsError(err)
     }
 }
 
@@ -482,16 +482,13 @@ fn validate_reshare_dealings(
                         .as_ref()
                         .translate(block_reader)
                         .map_err(PermanentError::from)?;
-                    let dealings =
+                    let initial_dealings =
                         InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
-                            .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?
-                            .dealings();
-                    for signed_dealing in dealings.iter() {
-                        crypto
-                            .verify_dealing_public(&param, signed_dealing)
-                            .map_err(PermanentError::from)?;
-                    }
-                    new_dealings.insert(transcript_id, dealings);
+                            .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
+                    crypto
+                        .verify_initial_dealings(&param, &initial_dealings)
+                        .map_err(PermanentError::from)?;
+                    new_dealings.insert(transcript_id, initial_dealings.dealings());
                 }
             } else {
                 return Err(XNetReshareRequestDisappeared(request.clone()).into());

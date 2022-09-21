@@ -11,9 +11,10 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
+    IDkgVerifyInitialDealingsError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing,
+    IDkgDealing, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::NodeId;
 use std::convert::TryFrom;
@@ -195,4 +196,34 @@ pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
         number_of_receivers,
         &params.context_data(),
     )
+}
+
+pub fn verify_initial_dealings<C: CspIDkgProtocol + CspSigner>(
+    csp_client: &C,
+    registry: &Arc<dyn RegistryClient>,
+    params: &IDkgTranscriptParams,
+    initial_dealings: &InitialIDkgDealings,
+) -> Result<(), IDkgVerifyInitialDealingsError> {
+    if params != &initial_dealings.params() {
+        return Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams);
+    };
+    for (i, signed_dealing) in initial_dealings.dealings().iter().enumerate() {
+        verify_dealing_public(
+            csp_client,
+            registry,
+            &initial_dealings.params(),
+            signed_dealing,
+        )
+        .map_err(|verify_dealing_public_error| {
+            let signer = signed_dealing.signature.signer;
+            IDkgVerifyInitialDealingsError::PublicVerificationFailure {
+                error: format!(
+                    "Failed to publicly verify signed iDKG dealing with index \
+                    {i} from signer {signer}: {verify_dealing_public_error}",
+                ),
+                verify_dealing_public_error,
+            }
+        })?;
+    }
+    Ok(())
 }
