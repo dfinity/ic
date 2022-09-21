@@ -131,7 +131,7 @@ fn call_canister_via_uc(test: &mut ExecutionTest, uc: CanisterId, canister_id: C
 
 fn assert_correct_request(system_state: &mut SystemState, canister_id: CanisterId) {
     let dst = wat_canister_id();
-    let (_, message) = system_state.queues_mut().pop_canister_output(&dst).unwrap();
+    let message = system_state.queues_mut().pop_canister_output(&dst).unwrap();
     if let RequestOrResponse::Request(msg) = message {
         assert_eq!(msg.receiver, dst);
         assert_eq!(msg.sender, canister_id);
@@ -348,7 +348,7 @@ fn callee_can_reply_and_produce_output_request() {
     assert_eq!(2, system_state.queues().output_queues_len());
     assert_eq!(2, system_state.queues().output_message_count());
     assert_correct_request(system_state, canister_id);
-    let (_, message) = system_state.queues_mut().pop_canister_output(&uc).unwrap();
+    let message = system_state.queues_mut().pop_canister_output(&uc).unwrap();
     if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, uc);
         assert_eq!(msg.respondent, canister_id);
@@ -367,7 +367,7 @@ fn callee_can_reject() {
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     assert_eq!(1, system_state.queues().output_queues_len());
     assert_eq!(1, system_state.queues().output_message_count());
-    let (_, message) = system_state.queues_mut().pop_canister_output(&uc).unwrap();
+    let message = system_state.queues_mut().pop_canister_output(&uc).unwrap();
     if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, uc);
         assert_eq!(msg.respondent, canister_id);
@@ -420,7 +420,7 @@ fn response_callback_can_reject() {
     let system_state = &mut test.canister_state_mut(b_id).system_state;
     assert_eq!(2, system_state.queues().output_queues_len());
     assert_eq!(1, system_state.queues().output_message_count());
-    let (_, message) = system_state
+    let message = system_state
         .queues_mut()
         .pop_canister_output(&a_id)
         .unwrap();
@@ -507,7 +507,7 @@ fn stopping_canister_rejects_requests() {
     let system_state = &mut test.canister_state_mut(b_id).system_state;
     assert_eq!(1, system_state.queues().output_queues_len());
     assert_eq!(1, system_state.queues().output_message_count());
-    let (_, message) = system_state
+    let message = system_state
         .queues_mut()
         .pop_canister_output(&a_id)
         .unwrap();
@@ -552,7 +552,7 @@ fn stopped_canister_rejects_requests() {
     let system_state = &mut test.canister_state_mut(b_id).system_state;
     assert_eq!(1, system_state.queues().output_queues_len());
     assert_eq!(1, system_state.queues().output_message_count());
-    let (_, message) = system_state
+    let message = system_state
         .queues_mut()
         .pop_canister_output(&a_id)
         .unwrap();

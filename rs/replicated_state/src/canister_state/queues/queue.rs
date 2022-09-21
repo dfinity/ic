@@ -451,15 +451,13 @@ impl OutputQueue {
     /// Pops a message off the queue and returns it.
     ///
     /// Ensures there is always a 'Some' at the front.
-    pub(crate) fn pop(&mut self) -> Option<(QueueIndex, RequestOrResponse)> {
+    pub(crate) fn pop(&mut self) -> Option<RequestOrResponse> {
         match self.queue.pop() {
             None => None,
             Some(None) => {
                 panic!("OutputQueue invariant violated: Found `None` at the front.");
             }
             Some(Some(msg)) => {
-                let ret = Some((self.index, msg));
-
                 self.index.inc_assign();
                 self.advance_to_next_message();
 
@@ -469,7 +467,7 @@ impl OutputQueue {
                     self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
                 );
 
-                ret
+                Some(msg)
             }
         }
     }
@@ -494,10 +492,8 @@ impl OutputQueue {
 
     /// Returns the message that `pop` would have returned, without removing it
     /// from the queue.
-    pub(crate) fn peek(&self) -> Option<(QueueIndex, &RequestOrResponse)> {
-        self.queue
-            .peek()
-            .map(|msg| (self.index, msg.as_ref().unwrap()))
+    pub(crate) fn peek(&self) -> Option<&RequestOrResponse> {
+        self.queue.peek().map(|msg| msg.as_ref().unwrap())
     }
 
     /// Number of actual messages in the queue (`None` are ignored).
@@ -605,7 +601,7 @@ impl<'a> Iterator for TimedOutRequestsIter<'a> {
 }
 
 impl std::iter::Iterator for OutputQueue {
-    type Item = (QueueIndex, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.pop()

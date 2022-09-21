@@ -14,7 +14,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     xnet::QueueId,
-    CountBytes, QueueIndex, SubnetId,
+    CountBytes, SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
@@ -244,17 +244,10 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            (expected_id, expected_index, expected_message): (
-                QueueId,
-                QueueIndex,
-                &RequestOrResponse,
-            ),
+            (expected_id, expected_message): (QueueId, &RequestOrResponse),
         ) -> RequestOrResponse {
-            let (queue_id, queue_index, message) = iterator.next().unwrap();
-            debug_assert_eq!(
-                (queue_id, queue_index, &message),
-                (expected_id, expected_index, expected_message)
-            );
+            let (queue_id, message) = iterator.next().unwrap();
+            debug_assert_eq!((queue_id, &message), (expected_id, expected_message));
             message
         }
 
@@ -308,7 +301,7 @@ impl StreamBuilderImpl {
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
-        while let Some((queue_id, queue_index, msg)) = output_iter.peek() {
+        while let Some((queue_id, msg)) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
@@ -345,7 +338,7 @@ impl StreamBuilderImpl {
                     }
 
                     // We will route (or reject) the message, pop it.
-                    let mut msg = validated_next(&mut output_iter, (queue_id, queue_index, &msg));
+                    let mut msg = validated_next(&mut output_iter, (queue_id, &msg));
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
@@ -426,7 +419,7 @@ impl StreamBuilderImpl {
                 None => {
                     warn!(self.log, "No route to canister {}", queue_id.dst_canister);
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, (queue_id, queue_index, &msg)) {
+                    match validated_next(&mut output_iter, (queue_id, &msg)) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);
