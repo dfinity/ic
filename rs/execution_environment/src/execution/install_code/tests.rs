@@ -1,9 +1,9 @@
 use ic_error_types::ErrorCode;
 use ic_types::Cycles;
 
+use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
 use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
 use ic_replicated_state::canister_state::NextExecution;
-use ic_test_utilities::execution_environment::{check_ingress_status, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
 use wabt::wat2wasm_with_features;
 

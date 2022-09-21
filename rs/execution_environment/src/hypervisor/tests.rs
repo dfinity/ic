@@ -1,32 +1,33 @@
+use crate::execution::test_utilities::{
+    assert_empty_reply, check_ingress_status, get_reply,
+    universal_canister_compilation_cost_correction, wasm_compilation_cost, wat_compilation_cost,
+    ExecutionTest, ExecutionTestBuilder,
+};
+use crate::CompilationCostHandling;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_execution_environment::CompilationCostHandling;
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{AvailableMemory, HypervisorError};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::CanisterStatus;
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, page_map::MemoryRegion,
-    testing::CanisterQueuesTesting, ExportedFunctions, Global, PageIndex,
+    canister_state::execution_state::CustomSectionType, page_map::MemoryRegion, ExportedFunctions,
+    Global, PageIndex,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
-use ic_test_utilities::execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply,
-    universal_canister_compilation_cost_correction, wasm_compilation_cost, wat_compilation_cost,
-    ExecutionTest, ExecutionTestBuilder,
-};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
     CanisterId, Cycles, NumBytes, NumInstructions,
 };
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
@@ -3038,7 +3039,7 @@ fn can_extract_exported_custom_sections() {
     // Custom start=0x00028de2 end=0x00028dfc (size=0x0000001a) "icp:private candid:args"
     // Custom start=0x00028e02 end=0x00028e30 (size=0x0000002e) "icp:private motoko:stable-types"
 
-    let binary = include_bytes!("test-data/custom_sections.wasm").to_vec();
+    let binary = include_bytes!("../../tests/test-data/custom_sections.wasm").to_vec();
     let canister_id = test.canister_from_binary(binary).unwrap();
 
     let execution_state = test.execution_state(canister_id);

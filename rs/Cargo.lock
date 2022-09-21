@@ -5591,6 +5591,8 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-metrics",
  "ic-types 0.8.0",
+ "ic-types-test-utils",
+ "ic-universal-canister",
  "ic-utils 0.8.0",
  "ic-wasm-types",
  "lazy_static",

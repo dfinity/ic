@@ -29,6 +29,9 @@ use crate::{
     CompilationCostHandling, RoundLimits,
 };
 
+#[cfg(test)]
+mod tests;
+
 /// Indicates whether to keep the old stable memory or replace it with the new
 /// (empty) stable memory.
 #[derive(Clone, Copy, Debug, PartialEq)]

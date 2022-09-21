@@ -1,5 +1,9 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+
+use crate::execution::test_utilities::{
+    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
@@ -14,15 +18,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
 };
-use ic_test_utilities::assert_utils::assert_balance_equals;
-use ic_test_utilities::{
-    execution_environment::{
-        assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
-    },
-    mock_time,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-    universal_canister::{call_args, wasm},
-};
+use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -32,6 +28,13 @@ use ic_types::{
     },
     CanisterId, Cycles, RegistryVersion,
 };
+use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_universal_canister::{call_args, wasm};
+
+#[cfg(test)]
+mod compilation;
+#[cfg(test)]
+mod orthogonal_persistence;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 

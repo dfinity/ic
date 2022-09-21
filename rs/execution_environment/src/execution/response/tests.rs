@@ -1,22 +1,19 @@
+use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
+use crate::ExecutionResponse;
 use assert_matches::assert_matches;
 use ic_error_types::ErrorCode;
-use ic_execution_environment::ExecutionResponse;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::CanisterStatus;
-use ic_test_utilities::{
-    execution_environment::check_ingress_status,
-    execution_environment::ExecutionTestBuilder,
-    types::messages::ResponseBuilder,
-    universal_canister::{call_args, wasm},
-};
+use ic_test_utilities::types::messages::ResponseBuilder;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
     Cycles, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
+use ic_universal_canister::{call_args, wasm};
 
 #[test]
 fn execute_response_with_incorrect_canister_status() {

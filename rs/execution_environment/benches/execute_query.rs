@@ -8,11 +8,10 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions,
-    execution::nonreplicated_query::execute_non_replicated_query, NonReplicatedQueryKind,
-    RoundLimits,
+    execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
+    NonReplicatedQueryKind, RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
-use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_types::PrincipalId;
 
 use lazy_static::lazy_static;
@@ -44,7 +43,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
         c,
         "query",
         &BENCHMARKS,
-        |ee_test: &ExecutionTest,
+        |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -72,7 +71,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 time,
                 execution_parameters,
                 &network_topology,
-                ee_test.hypervisor_deprecated(),
+                exec_env.hypervisor_for_testing(),
                 &mut round_limits,
             );
             let executed_instructions =

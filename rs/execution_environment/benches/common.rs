@@ -2,17 +2,29 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
+use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_config::subnet_config::SubnetConfigs;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
-use ic_execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, SubnetAvailableMemory};
+use ic_execution_environment::{
+    as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
+    IngressHistoryWriterImpl, RoundLimits,
+};
+use ic_interfaces::execution_environment::{
+    AvailableMemory, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+};
 use ic_interfaces::messages::CanisterInputMessage;
+use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
-use ic_test_utilities::execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities::{
+    execution_environment::generate_network_topology,
     mock_time,
     state::canister_from_exec_state,
     types::ids::{canister_test_id, user_test_id},
@@ -56,12 +68,16 @@ pub struct BenchmarkArgs {
 /// Benchmark to run: name (id), WAT, expected number of instructions.
 pub struct Benchmark(pub &'static str, pub String, pub u64);
 
-pub fn get_execution_args<W>(ee_test: &ExecutionTest, wat: W) -> BenchmarkArgs
+pub fn get_execution_args<W>(exec_env: &ExecutionEnvironment, wat: W) -> BenchmarkArgs
 where
     W: AsRef<str>,
 {
-    let hypervisor = ee_test.hypervisor_deprecated();
-    let canister_root = ee_test.state().root.clone();
+    let own_subnet_id = subnet_test_id(1);
+    let nns_subnet_id = subnet_test_id(2);
+    let hypervisor = exec_env.hypervisor_for_testing();
+
+    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    let canister_root = tmpdir.path().to_path_buf();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
@@ -118,8 +134,6 @@ where
         message: "reject message".to_string(),
     });
 
-    let network_topology = Arc::new(ee_test.state().metadata.network_topology.clone());
-
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
         instruction_limits: InstructionLimits::new(
@@ -129,9 +143,19 @@ where
         ),
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
         compute_allocation: canister_state.scheduler_state.compute_allocation,
-        subnet_type: SubnetType::Application,
+        subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
     };
+
+    let subnets = vec![own_subnet_id, nns_subnet_id];
+    let network_topology = Arc::new(generate_network_topology(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        own_subnet_id,
+        nns_subnet_id,
+        hypervisor.subnet_type(),
+        subnets,
+        None,
+    ));
 
     BenchmarkArgs {
         canister_state,
@@ -154,12 +178,12 @@ fn run_benchmark<G, I, W, R>(
     wat: W,
     expected_instructions: u64,
     routine: R,
-    ee_test: &ExecutionTest,
+    exec_env: &ExecutionEnvironment,
 ) where
     G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
-    R: Fn(&ExecutionTest, u64, BenchmarkArgs),
+    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs),
 {
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
@@ -176,12 +200,12 @@ fn run_benchmark<G, I, W, R>(
                             expected_instructions / 1_000_000
                         );
                         println!("    WAT: {}", wat.as_ref());
-                        bench_args = Some(get_execution_args(ee_test, wat.as_ref()));
+                        bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(ee_test, expected_instructions, args);
+                    routine(exec_env, expected_instructions, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -194,9 +218,42 @@ fn run_benchmark<G, I, W, R>(
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
 where
     G: AsRef<str>,
-    R: Fn(&ExecutionTest, u64, BenchmarkArgs) + Copy,
+    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
-    let ee_test = ExecutionTestBuilder::new().build();
+    let log = no_op_logger();
+    let own_subnet_id = subnet_test_id(1);
+    let own_subnet_type = SubnetType::Application;
+    let subnet_configs = SubnetConfigs::default().own_subnet_config(own_subnet_type);
+    let cycles_account_manager = Arc::new(CyclesAccountManager::new(
+        subnet_configs.scheduler_config.max_instructions_per_message,
+        own_subnet_type,
+        own_subnet_id,
+        subnet_configs.cycles_account_manager_config,
+    ));
+    let config = Config::default();
+    let metrics_registry = MetricsRegistry::new();
+    let hypervisor = Arc::new(Hypervisor::new(
+        config.clone(),
+        &metrics_registry,
+        own_subnet_id,
+        own_subnet_type,
+        log.clone(),
+        Arc::clone(&cycles_account_manager),
+    ));
+    let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
+        IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),
+    );
+    let exec_env = ExecutionEnvironment::new(
+        log,
+        hypervisor,
+        Arc::clone(&ingress_history_writer),
+        &metrics_registry,
+        own_subnet_id,
+        own_subnet_type,
+        100,
+        config,
+        cycles_account_manager,
+    );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(
             c,
@@ -205,7 +262,7 @@ where
             wat,
             *expected_instructions,
             routine,
-            &ee_test,
+            &exec_env,
         );
     }
 }

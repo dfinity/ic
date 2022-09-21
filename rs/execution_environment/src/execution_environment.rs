@@ -76,6 +76,9 @@ use std::sync::Mutex;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
+#[cfg(test)]
+mod tests;
+
 lazy_static! {
     /// Track how many heartbeat errors have been encountered so that we can
     /// restrict logging to a sample of them.
