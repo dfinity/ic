@@ -75,8 +75,8 @@ fn install_code_fails_on_invalid_memory_allocation() {
 #[test]
 fn dts_resume_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -121,8 +121,8 @@ fn dts_resume_works_in_install_code() {
 #[test]
 fn dts_abort_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();

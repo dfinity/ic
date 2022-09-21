@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{uninstall_canister, InstallCodeContext},
+    canister_manager::uninstall_canister,
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -13,9 +13,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
-};
+use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler},
@@ -42,7 +40,6 @@ use std::cmp::Reverse;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
-    convert::TryFrom,
     str::FromStr,
     sync::Arc,
 };
@@ -292,7 +289,7 @@ impl SchedulerImpl {
             let instruction_limits = InstructionLimits::new(
                 self.deterministic_time_slicing,
                 self.config.max_instructions_per_install_code,
-                self.config.max_instructions_per_slice,
+                self.config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
             state = self.exec_env.resume_install_code(
@@ -352,12 +349,10 @@ impl SchedulerImpl {
                 break;
             }
             if let Some(msg) = state.pop_subnet_input() {
-                let max_instructions_per_message =
-                    get_instructions_limit_for_subnet_message(&self.config, &msg);
-                let instruction_limits = InstructionLimits::new(
+                let instruction_limits = get_instructions_limits_for_subnet_message(
                     self.deterministic_time_slicing,
-                    max_instructions_per_message,
-                    self.config.max_instructions_per_slice,
+                    &self.config,
+                    &msg,
                 );
 
                 if is_bitcoin_request(&msg) {
@@ -1788,26 +1783,26 @@ fn can_execute_msg(
 }
 
 /// Based on the type of the subnet message to execute, figure out its
-/// instruction limit.
+/// instruction limits.
 ///
 /// This is primarily done because upgrading a canister might need to
 /// (de)-serialize a large state and thus consume a lot of instructions.
-fn get_instructions_limit_for_subnet_message(
+fn get_instructions_limits_for_subnet_message(
+    dts: FlagStatus,
     config: &SchedulerConfig,
     msg: &CanisterInputMessage,
-) -> NumInstructions {
-    let (method_name, payload, sender) = match &msg {
-        CanisterInputMessage::Response(_) => return config.max_instructions_per_message,
-        CanisterInputMessage::Ingress(ingress) => (
-            &ingress.method_name,
-            &ingress.method_payload,
-            ingress.source.get(),
-        ),
-        CanisterInputMessage::Request(request) => (
-            &request.method_name,
-            &request.method_payload,
-            request.sender.get(),
-        ),
+) -> InstructionLimits {
+    let default_limits = InstructionLimits::new(
+        dts,
+        config.max_instructions_per_message,
+        config.max_instructions_per_slice,
+    );
+    let method_name = match &msg {
+        CanisterInputMessage::Response(_) => {
+            return default_limits;
+        }
+        CanisterInputMessage::Ingress(ingress) => &ingress.method_name,
+        CanisterInputMessage::Request(request) => &request.method_name,
     };
 
     use Ic00Method::*;
@@ -1834,16 +1829,14 @@ fn get_instructions_limit_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
-            | ProvisionalTopUpCanister => config.max_instructions_per_message,
-            InstallCode => match InstallCodeArgs::decode(payload) {
-                Err(_) => config.max_instructions_per_message,
-                Ok(args) => match InstallCodeContext::try_from((sender, args)) {
-                    Err(_) => config.max_instructions_per_message,
-                    Ok(_) => config.max_instructions_per_install_code,
-                },
-            },
+            | ProvisionalTopUpCanister => default_limits,
+            InstallCode => InstructionLimits::new(
+                dts,
+                config.max_instructions_per_install_code,
+                config.max_instructions_per_install_code_slice,
+            ),
         },
-        Err(_) => config.max_instructions_per_message,
+        Err(_) => default_limits,
     }
 }
 

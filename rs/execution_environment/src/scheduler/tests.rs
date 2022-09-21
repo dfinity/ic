@@ -7,7 +7,7 @@ use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method};
+use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method, Payload as _};
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
@@ -1071,6 +1071,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             max_instructions_per_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -3573,6 +3574,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             max_instructions_per_message: NumInstructions::from(40),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
             ..SchedulerConfig::application_subnet()
         })
         .with_deterministic_time_slicing()
