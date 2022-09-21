@@ -3060,6 +3060,11 @@ async fn main() {
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
+            SubCommand::ProposeToPrepareCanisterMigration(_) => (),
+            SubCommand::ProposeToCompleteCanisterMigration(_) => (),
+            SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToStartCanister(_) => (),
+            SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
