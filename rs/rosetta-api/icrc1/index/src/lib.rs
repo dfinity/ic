@@ -9,10 +9,14 @@ use ic_icrc1::{
     Account, Subaccount,
 };
 use num_traits::cast::ToPrimitive;
+use std::ops::Bound::{Included, Unbounded};
 
 // Maximum number of transactions that can be returned
 // by [get_account_transactions]
 const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
+// Maximum number of subaccounts that can be returned
+// by [list_subaccounts]
+const MAX_SUBACCOUNTS_PER_RESPONSE: usize = 1000;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
@@ -98,6 +102,35 @@ pub struct GetTransactionsErr {
 }
 
 pub type GetTransactionsResult = Result<GetTransactions, GetTransactionsErr>;
+
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
+pub struct ListSubaccountsArgs {
+    pub owner: PrincipalId,
+    // The last subaccount seen by the client for the given principal.
+    // This subaccount is not included in the result.
+    // If None then the results will start from the first
+    // in natural order.
+    pub start: Option<Subaccount>,
+}
+
+pub fn list_subaccounts(list_subaccounts_args: ListSubaccountsArgs) -> Vec<Subaccount> {
+    with_index(
+        |idx| match idx.account_index.get(&list_subaccounts_args.owner) {
+            None => vec![],
+            Some(subaccounts) => subaccounts
+                .range((
+                    list_subaccounts_args
+                        .start
+                        .map(Included)
+                        .unwrap_or(Unbounded),
+                    Unbounded,
+                ))
+                .take(MAX_SUBACCOUNTS_PER_RESPONSE)
+                .map(|(k, _)| *k)
+                .collect(),
+        },
+    )
+}
 
 pub async fn heartbeat() {
     if with_index(|idx| idx.is_heartbeat_running) {
@@ -380,7 +413,7 @@ mod tests {
     ) {
         let actual = get_account_transactions_ids(GetAccountTransactionsArgs {
             account: account(1),
-            start: start.map(|x| n(x)),
+            start: start.map(n),
             max_results: n(max_results),
         });
         let expected: Vec<Nat> = expected.iter().map(|x| n(*x)).collect();
@@ -486,7 +519,7 @@ mod tests {
 
             get_account_transactions_ids(GetAccountTransactionsArgs {
                 account: account(1),
-                start: start.map(|x| n(x)),
+                start: start.map(n),
                 max_results: n(max_results)
             });
         }
