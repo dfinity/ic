@@ -156,6 +156,7 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             upgrade_path,
             stable_memory: SnsWasmStableMemory::<M>::default(),
             access_controls_enabled: stable_canister_state.access_controls_enabled,
+            allowed_principals: stable_canister_state.allowed_principals,
         }
     }
 }
@@ -171,6 +172,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
         let deployed_sns_list = state.deployed_sns_list;
         let upgrade_path = Some(state.upgrade_path.into());
         let access_controls_enabled = state.access_controls_enabled;
+        let allowed_principals = state.allowed_principals;
 
         StableCanisterState {
             wasm_indexes,
@@ -178,6 +180,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             deployed_sns_list,
             upgrade_path,
             access_controls_enabled,
+            allowed_principals,
         }
     }
 }
