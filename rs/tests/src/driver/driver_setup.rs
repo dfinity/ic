@@ -16,7 +16,7 @@ use super::farm::Farm;
 use serde::{Deserialize, Serialize};
 
 const ASYNC_CHAN_SIZE: usize = 8192;
-const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
+pub const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 pub const SSH_AUTHORIZED_PUB_KEYS_DIR: &str = "ssh/authorized_pub_keys";
 pub const SSH_AUTHORIZED_PRIV_KEYS_DIR: &str = "ssh/authorized_priv_keys";
@@ -141,7 +141,7 @@ pub fn create_driver_context_from_cli(
     }
 }
 
-pub fn mk_logger() -> Logger {
+pub fn mk_stdout_logger() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain)
