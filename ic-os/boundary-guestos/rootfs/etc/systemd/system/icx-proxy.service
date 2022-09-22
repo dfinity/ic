@@ -24,7 +24,8 @@ ExecStart=/usr/bin/icx-proxy                                           \
     --dns-suffix "${DOMAIN}"                                           \
     --dns-suffix "raw.${DOMAIN}"                                       \
     --metrics-addr "[::]:9314"                                         \
-    ${SSL_OPTIONS}
+    # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)
+    $SSL_OPTIONS
 
 
 Restart=always
