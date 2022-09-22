@@ -33,12 +33,12 @@ type GetAccountTransactionsArgs = record {
     // txid.
     start : opt TxId;
     // Maximum number of transactions to fetch.
-    max_results : nat,
+    max_results : nat;
 };
 
 type TransactionWithId = record {
   id : TxId;
-  transaction : Transaction,
+  transaction : Transaction;
 };
 
 type GetTransactions = record {
@@ -56,6 +56,11 @@ type GetTransactionsResult = variant {
   Err : GetTransactionsErr;
 };
 
-service : {
+// The initialization parameters of the Index canister.
+type InitArgs = record {
+    ledger_id : principal;
+};
+
+service : (InitArgs) -> {
   get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
 };
