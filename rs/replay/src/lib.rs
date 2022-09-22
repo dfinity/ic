@@ -50,11 +50,11 @@ mod validator;
 /// use std::str::FromStr;
 ///
 /// let args = ReplayToolArgs {
-///     subnet_id: ClapSubnetId::from_str(
+///     subnet_id: Some(ClapSubnetId::from_str(
 ///         "z4uqq-mbj6v-dxsuk-7a4wc-f6vta-cv7qg-25cqh-4jwi3-heaw3-l6b33-uae",
 ///     )
-///     .unwrap(),
-///     config: PathBuf::from("/path/to/ic.json5"),
+///     .unwrap()),
+///     config: Some(PathBuf::from("/path/to/ic.json5")),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
 ///     data_root: None,
@@ -86,7 +86,10 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
 
-        let source = ConfigSource::File(args.config);
+        let source = ConfigSource::File(args.config.unwrap_or_else(|| {
+            println!("Config file is required!");
+            std::process::exit(1);
+        }));
         let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             println!("Failed to load config:\n  {}", err);
             std::process::exit(1);
@@ -102,7 +105,13 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         }
 
         let canister_caller_id = args.canister_caller_id.unwrap_or(GOVERNANCE_CANISTER_ID);
-        let subnet_id = args.subnet_id.0;
+        let subnet_id = args
+            .subnet_id
+            .unwrap_or_else(|| {
+                println!("Subnet is required!");
+                std::process::exit(1);
+            })
+            .0;
 
         let target_height = args.replay_until_height;
         if let Some(h) = target_height {
