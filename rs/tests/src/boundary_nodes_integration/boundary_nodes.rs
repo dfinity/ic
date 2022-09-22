@@ -566,6 +566,130 @@ pub fn denylist_test(env: TestEnv) {
     panic_handler.disable();
 }
 
+/* tag::catalog[]
+Title:: Boundary nodes canister-allowlist blocking test
+
+Goal:: Ensure that the canister-allowlist overrides the denylist
+
+Success::
+    A canister being present in the Allowlist overrides the restriction
+    due to that canister being present in the denylist.
+
+end::catalog[] */
+
+pub fn canister_allowlist_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut panic_handler = PanicHandler::new(env.clone());
+
+    let mut install_url = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_url = Some(node.get_public_url());
+        }
+    }
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    struct TestCase {
+        id: &'static str,
+        allow: bool,
+        deny: bool,
+        want: reqwest::StatusCode,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            id: "denylisted",
+            allow: false,
+            deny: true,
+            want: reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+        },
+        TestCase {
+            id: "allowlisted",
+            allow: true,
+            deny: false,
+            want: reqwest::StatusCode::OK,
+        },
+        TestCase {
+            id: "allowlisted & denylisted",
+            allow: true,
+            deny: true,
+            want: reqwest::StatusCode::OK,
+        },
+    ];
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        info!(&logger, "creating replica agent");
+        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+
+        let http_counter_canister = env.load_wasm("http_counter.wasm");
+
+
+        for tc in test_cases {
+            info!(logger, "running testcase: {}", tc.id);
+
+            info!(&logger, "installing canister");
+            let canister_id = create_canister(&agent, &http_counter_canister, None)
+                .await
+                .expect("Could not create http_counter canister");
+
+            // wait for canister to finish installing
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            info!(&logger, "created canister={canister_id}");
+
+            let denylist_cmd = format!(r#"printf "{} 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#, canister_id);
+            let allowlist_cmd = format!(r#"printf "{} 1;\n" | sudo tee /run/ic-node/allowlist_canisters.map && sudo mount -o ro,bind /run/ic-node/allowlist_canisters.map /etc/nginx/allowlist_canisters.map"#, canister_id);
+            let reload_cmd = "sudo service nginx reload";
+
+            if tc.deny {
+                let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &denylist_cmd).unwrap();
+                info!(logger, "update denylist {BOUNDARY_NODE_NAME} with {denylist_cmd} to '{}'. Exit status = {}", cmd_output.trim(), exit_status);
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+
+            if tc.allow {
+                let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &allowlist_cmd).unwrap();
+                info!(logger, "update allowlist {BOUNDARY_NODE_NAME} with {allowlist_cmd} to '{}'. Exit status = {}", cmd_output.trim(), exit_status);
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+
+            let (_, exit_status) = exec_ssh_command(&boundary_node_vm, reload_cmd).unwrap();
+            info!(logger, "reloading {BOUNDARY_NODE_NAME} with {reload_cmd}. Exit status = {}", exit_status);
+
+            // Wait a bit for the reload to complete
+            tokio::time::sleep(Duration::from_secs(2)).await;
+
+            let client = reqwest::ClientBuilder::new()
+                .danger_accept_invalid_certs(true)
+                .resolve(
+                    &format!("{}.raw.ic0.app", canister_id),
+                    SocketAddrV6::new(boundary_node_vm.ipv6(), 443, 0, 0).into(),
+                )
+                .build()
+                .unwrap();
+
+            let res = client
+                .get(format!("https://{}.raw.ic0.app/", canister_id))
+                .send()
+                .await
+                .expect("Could not perform get request.")
+                .status();
+
+            assert_eq!(res, tc.want, "Testcase {} failed.", tc.id);
+
+        }
+    });
+
+    panic_handler.disable();
+}
+
 pub fn redirect_http_to_https_test(env: TestEnv) {
     let logger = env.logger();
 
