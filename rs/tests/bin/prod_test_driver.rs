@@ -14,7 +14,7 @@ use ic_tests::{
     driver::{
         cli::{CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs},
         config::{self, *},
-        driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger},
+        driver_setup::{create_driver_context_from_cli, initialize_env, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
         ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         pot_dsl::*,
@@ -42,7 +42,7 @@ fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
     );
     let system_env = validated_args.working_dir.join(config::SYSTEM_ENV_DIR);
     fs::create_dir(&system_env)?;
-    let logger = mk_logger();
+    let logger = mk_stdout_logger();
     let env = TestEnv::new(system_env, logger.clone())?;
     initialize_env(&env, validated_args.clone())?;
     let context = create_driver_context_from_cli(validated_args, env, get_hostname());

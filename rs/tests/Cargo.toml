@@ -142,3 +142,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "prod-test-driver"
 path = "bin/prod_test_driver.rs"
+
+[[bin]]
+name = "ic-systest-basic-health"
+path = "bin/basic_health.rs"
