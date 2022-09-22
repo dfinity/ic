@@ -1,6 +1,18 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+BIN_DEPS = [
+    "@crate_index//:askama",
+    "@crate_index//:clap",
+    "@crate_index//:eyre",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:pathdiff",
+    "@crate_index//:semver",
+    "@crate_index//:serde",
+    "@crate_index//:toml",
+]
 
 rust_binary(
     name = "bazelifier",
@@ -8,15 +20,18 @@ rust_binary(
     compile_data = glob(["templates/**"]),
     crate_name = "bazelifier",
     version = "0.1.0",
-    deps = [
-        "@crate_index//:askama",
-        "@crate_index//:clap",
-        "@crate_index//:eyre",
-        "@crate_index//:lazy_static",
-        "@crate_index//:maplit",
-        "@crate_index//:pathdiff",
-        "@crate_index//:semver",
-        "@crate_index//:serde",
-        "@crate_index//:toml",
-    ],
+    deps = BIN_DEPS,
+)
+
+rust_binary(
+    name = "workspaceifier",
+    srcs = ["src/bin/workspaceifier.rs"],
+    compile_data = glob(["templates/**"]),
+    version = "0.1.0",
+    deps = BIN_DEPS,
+)
+
+rust_test(
+    name = "workspacifier_unit_tests",
+    crate = ":workspaceifier",
 )
