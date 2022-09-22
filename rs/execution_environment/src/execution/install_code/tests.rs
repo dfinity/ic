@@ -2,7 +2,7 @@ use ic_error_types::ErrorCode;
 use ic_types::Cycles;
 
 use crate::execution::test_utilities::{check_ingress_status, ExecutionTestBuilder};
-use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Payload};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_types::ingress::WasmResult;
 use wabt::wat2wasm_with_features;
@@ -93,7 +93,7 @@ fn dts_resume_works_in_install_code() {
         query_allocation: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
-    let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
+    let ingress_id = test.dts_install_code(payload);
     for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -139,7 +139,7 @@ fn dts_abort_works_in_install_code() {
         query_allocation: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
-    let ingress_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
+    let ingress_id = test.dts_install_code(payload);
     for _ in 0..3 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),

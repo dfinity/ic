@@ -397,8 +397,12 @@ impl ExecutionTest {
     }
 
     /// Sends an `install_code` message to the IC management canister with DTS.
+    /// Similar to `subnet_message()`but does not check the ingress status of
+    /// the response as the subnet message execution may not finish immediately.
     pub fn dts_install_code(&mut self, args: InstallCodeArgs) -> MessageId {
-        self.subnet_message_raw(Method::InstallCode, args.encode())
+        let message_id = self.subnet_message_raw(Method::InstallCode, args.encode());
+        self.execute_subnet_message();
+        message_id
     }
 
     /// Sends an `uninstall_code` message to the IC management canister.
@@ -417,7 +421,9 @@ impl ExecutionTest {
     /// Changes the state of the given canister to stopping if it was previously running.
     pub fn stop_canister(&mut self, canister_id: CanisterId) -> MessageId {
         let payload = CanisterIdRecord::from(canister_id).encode();
-        self.subnet_message_raw(Method::StopCanister, payload)
+        let message_id = self.subnet_message_raw(Method::StopCanister, payload);
+        self.execute_subnet_message();
+        message_id
     }
 
     /// Stops stopping canisters that no longer have open call contexts.
@@ -620,18 +626,18 @@ impl ExecutionTest {
         self.canister_from_cycles_and_binary(self.initial_canister_cycles, wasm_binary)
     }
 
-    // Creates a canister and installs the Wasm module given in the textual
-    // representation.
+    /// Creates a canister and installs the Wasm module given in the textual
+    /// representation.
     pub fn canister_from_wat<S: ToString>(&mut self, wat: S) -> Result<CanisterId, UserError> {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
-    // Creates and installs a universal canister.
+    /// Creates and installs a universal canister.
     pub fn universal_canister(&mut self) -> Result<CanisterId, UserError> {
         self.canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
     }
 
-    // Creates and installs a universal canister with cycles
+    /// Creates and installs a universal canister with cycles
     pub fn universal_canister_with_cycles(
         &mut self,
         cycles: Cycles,
@@ -803,19 +809,20 @@ impl ExecutionTest {
         response
     }
 
-    // A low-level helper to send subnet messages to the IC management canister.
+    /// A low-level helper to send subnet messages to the IC management canister.
+    /// Execution of the message is started immediately after.
+    /// Check the ingress status of the response.
     pub fn subnet_message<S: ToString>(
         &mut self,
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let ingress_id = self.subnet_message_raw(method_name, method_payload);
+        self.execute_subnet_message();
         check_ingress_status(self.ingress_status(&ingress_id))
     }
 
-    // Similar to `subnet_message()` but does not check the ingress status of
-    // the response. It is useful when the subnet message execution may not
-    // finish immediately.
+    /// A low-level helper to send a subnet messages to the IC management canister.
     pub fn subnet_message_raw<S: ToString>(
         &mut self,
         method_name: S,
@@ -844,14 +851,12 @@ impl ExecutionTest {
 
         self.state = Some(state);
 
-        self.execute_subnet_message();
-
         message_id
     }
 
-    // Executes a single subnet message from the subnet input queue.
-    // Return a progress flag indicating if the message was executed or not.
-    fn execute_subnet_message(&mut self) -> bool {
+    /// Executes a single subnet message from the subnet input queue.
+    /// Return a progress flag indicating if the message was executed or not.
+    pub fn execute_subnet_message(&mut self) -> bool {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let message = match state.pop_subnet_input() {
