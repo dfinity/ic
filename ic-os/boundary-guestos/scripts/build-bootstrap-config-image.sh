@@ -50,6 +50,9 @@ options may be specified:
     (make sure to quote the argument string so it appears as a single argument
     to the script, e.g. --journalbeat_tags "testnet1 slo")
 
+  --elasticsearch_url url
+    Logging url to use.
+
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by commas (make sure to quote the argument string in that
@@ -66,21 +69,76 @@ options may be specified:
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
 
-  --deployment-type [prod|dev|staging]
-    Creates a file named ./deployment_type with contents 'dev|prod|staging' on the
-    config image.  The boundary vm consults this file to perform any runtime
-    change required for enabling a development mode. The default deployment type
-    is 'prod'.
-
   --denylist path
-    Specify a denylist of canisters for the Boundary Nodes
+    Specify an initial denylist of canisters for the Boundary Nodes
+
+  --denylist_url url
+    Specify the url for the denylist updater 
 
   --prober-identity path
     specify an identity file for the prober
 
-  --nginx-domainname
-    domain name hosted by nginx ic0.dev or ic0.app
+  --domain-name
+    domain name hosted by nginx (e.g. ic0.dev or ic0.app)
+
+  --ipv4_http_ips
+    the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
+    traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_http_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound http(s)
+    traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_debug_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound debug
+    (e.g. ssh) traffic. Multiple block may be specified separated by commas.
+
+  --ipv6_monitoring_ips)
+    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound
+    monitoring (e.g. prometheus) traffic. Multiple block may be specified separated by
+    commas.
+
 EOF
+}
+
+# Arguments:
+# - $1 the comma seperated list of IPv4 addresses/prefixes
+function check_ipv4_prefixes() {
+    local ipv4_prefixes="$1"
+    local fail=0
+    for ipv4_prefix in ${ipv4_prefixes//,/ }; do
+        IFS=/ read -r ipv4_address ipv4_length <<<${ipv4_prefix}
+
+        if [[ ! ${ipv4_address} =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$ ]]; then
+            echo "Incorrectly formatted IPv4 address: ${ipv4_address}"
+            fail=1
+        fi
+
+        if [[ ! -z "${ipv4_length:-}" ]] && ((ipv4_length < 0 || ipv4_length > 32)); then
+            echo "IPv4 prefix length out of bounds: ${ipv4_length}"
+            fail=1
+        fi
+    done
+    return ${fail}
+}
+
+# Arguments:
+# - $1 the comma seperated list of IPv6 addresses/prefixes
+function check_ipv6_prefixes() {
+    local ipv6_prefixes="$1"
+    local fail=0
+    for ipv6_prefix in ${ipv6_prefixes//,/ }; do
+        IFS=/ read -r ipv6_address ipv6_length <<<${ipv6_prefix}
+        if [[ ! ${ipv6_address} =~ ^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$ ]]; then
+            echo "Incorrectly formatted IPv6 address: ${ipv6_address}"
+            fail=1
+        fi
+        if [[ ! -z "${ipv6_length:-}" ]] && ((ipv6_length < 0 || ipv6_length > 128)); then
+            echo "IPv6 prefix length out of bounds: ${ipv6_length}"
+            fail=1
+        fi
+    done
+    return ${fail}
 }
 
 # Arguments:
@@ -90,11 +148,14 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
-    local IPV4_ADDRESS IPV4_GATEWAY NAME_SERVERS HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY
+    local IPV4_ADDRESS IPV4_GATEWAY
+    local NAME_SERVERS HOSTNAME
     local NNS_URL NNS_PUBLIC_KEY
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
+    local ELASTICSEARCH_URL
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
+    local IPV6_REPLICA_IPS IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
     while true; do
         if [ $# == 0 ]; then
             break
@@ -124,6 +185,9 @@ function build_ic_bootstrap_tar() {
             --journalbeat_tags)
                 JOURNALBEAT_TAGS="$2"
                 ;;
+            --elasticsearch_url)
+                ELASTICSEARCH_URL="$2"
+                ;;
             --nns_url)
                 NNS_URL="$2"
                 ;;
@@ -134,21 +198,31 @@ function build_ic_bootstrap_tar() {
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
             --denylist)
-                DENY_LIST="$2"
+                DENYLIST="$2"
+                ;;
+            --denylist_url)
+                DENYLIST_URL="$2"
                 ;;
             --prober-identity)
                 PROBER_IDENTITY="$2"
                 ;;
-            --deployment-type)
-                DEPLOYMENT_TYPE="$2"
-                if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ] && [ ${DEPLOYMENT_TYPE} != "staging" ]; then
-                    echo "only prod, dev or staging deployment types supported"
-                    usage
-                    exit 1
-                fi
+            --domain-name)
+                DOMAIN_NAME="$2"
                 ;;
-            --nginx-domainname)
-                NGINX_DOMAIN_NAME="$2"
+            --ipv6_replica_ips)
+                IPV6_REPLICA_IPS="$2"
+                ;;
+            --ipv4_http_ips)
+                IPV4_HTTP_IPS="$2"
+                ;;
+            --ipv6_http_ips)
+                IPV6_HTTP_IPS="$2"
+                ;;
+            --ipv6_debug_ips)
+                IPV6_DEBUG_IPS="$2"
+                ;;
+            --ipv6_monitoring_ips)
+                IPV6_MONITORING_IPS="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -165,22 +239,39 @@ function build_ic_bootstrap_tar() {
         exit 1
     }
 
-    NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
-    DENY_LIST="${DENY_LIST:=""}"
+    DOMAIN="${DOMAIN:="ic0.app"}"
+    DENYLIST="${DENYLIST:=""}"
     PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
+    ELASTICSEARCH_URL="${ELASTICSEARCH_URL:="https://elasticsearch.testnet.dfinity.systems"}"
+    IPV6_REPLICA_IPS="${IPV6_REPLICA_IPS:="::/128"}"
+    IPV4_HTTP_IPS="${IPV4_HTTP_IPS:="103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,104.16.0.0/13,104.24.0.0/14,108.162.192.0/18,131.0.72.0/22,141.101.64.0/18,149.97.209.182/30,149.97.209.186/30,162.158.0.0/15,172.64.0.0/13,173.245.48.0/20,188.114.96.0/20,190.93.240.0/20,192.235.122.32/28,197.234.240.0/22,198.41.128.0/17,212.71.124.192/29,62.209.33.184/29"}"
+    IPV6_HTTP_IPS="${IPV6_HTTP_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    IPV6_DEBUG_IPS="${IPV6_DEBUG_IPS:="2001:4d78:40d::/48,2607:f6f0:3004::/48,2607:fb58:9005::/48,2a00:fb01:400::/56"}"
+    IPV6_MONITORING_IPS="${IPV6_MONITORING_IPS:="2a05:d01c:e2c:a700::/56"}"
 
-    if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
-        echo "malformed domain name $NGINX_DOMAIN_NAME"
-        NGINX_DOMAIN_NAME="ic0.app"
+    local fail=0
+    if ! check_ipv4_prefixes ${IPV4_HTTP_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_REPLICA_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_HTTP_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_DEBUG_IPS}; then
+        fail=1
+    fi
+    if ! check_ipv6_prefixes ${IPV6_MONITORING_IPS}; then
+        fail=1
+    fi
+    if [[ $fail == 1 ]]; then
+        exit 1
     fi
 
-    echo "Using domain name $NGINX_DOMAIN_NAME"
-    NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
-    NGINX_TLD=${NGINX_DOMAIN_NAME#*.}
-    if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
-        echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
-        NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
-        NGINX_TLD="${NGINX_TLD:="app"}"
+    if ! echo $DOMAIN | grep -q ".*\..*"; then
+        echo "malformed domain name $DOMAIN"
+        DOMAIN="ic0.app"
     fi
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
@@ -192,6 +283,7 @@ ipv4_address=$IPV4_ADDRESS
 ipv4_gateway=$IPV4_GATEWAY
 name_servers=$NAME_SERVERS
 hostname=$HOSTNAME
+ipv6_replica_ips=${IPV6_REPLICA_IPS}
 EOF
     if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
         echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
@@ -215,27 +307,33 @@ EOF
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
-    # set the deployment type
-    echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
-
-    # Set the domain name
-    echo DOMAIN=${NGINX_DOMAIN} >"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
-    echo TLD=${NGINX_TLD} >>"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
-
     # setup the deny list
-    if [[ -f ${DENY_LIST} ]]; then
-        echo "Using deny list ${DENY_LIST}"
-        cp ${DENY_LIST} ${BOOTSTRAP_TMPDIR}/denylist.map
+    if [[ -f "${DENYLIST}" ]]; then
+        echo "Using deny list ${DENYLIST}"
+        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.map"
     else
         echo "Using empty denylist"
-        touch ${BOOTSTRAP_TMPDIR}/denylist.map
+        touch "${BOOTSTRAP_TMPDIR}/denylist.map"
     fi
 
+    # setup the bn_vars
+    cat >"${BOOTSTRAP_TMPDIR}/bn_vars.conf" <<EOF
+domain=${DOMAIN}
+denylist_url=${DENYLIST_URL}
+elasticsearch_url=${ELASTICSEARCH_URL}
+ipv4_http_ips=${IPV4_HTTP_IPS}
+ipv6_http_ips=${IPV6_HTTP_IPS}
+ipv6_debug_ips=${IPV6_DEBUG_IPS}
+ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
+EOF
+
     # setup the prober identity
-    if [[ -f ${PROBER_IDENTITY} ]]; then
+    mkdir -p "${BOOTSTRAP_TMPDIR}/prober"
+    if [[ -f "${PROBER_IDENTITY}" ]]; then
         echo "Using prober identity ${PROBER_IDENTITY}"
-        mkdir -p ${BOOTSTRAP_TMPDIR}/prober
-        cp ${PROBER_IDENTITY} ${BOOTSTRAP_TMPDIR}/prober/identity.pem
+        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober/identity.pem"
+    else
+        touch "${BOOTSTRAP_TMPDIR}/prober/prober.disabled"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .

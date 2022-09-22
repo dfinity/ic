@@ -20,8 +20,7 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        pot_dsl::get_ic_handle_and_ctx,
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             retry_async, HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
@@ -159,8 +158,6 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
-
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -169,18 +166,8 @@ pub fn config(env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let nns_urls: Vec<_> = handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| ep.is_root_subnet)
-        .map(|ep| ep.url.clone())
-        .collect();
-
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .with_nns_urls(nns_urls.clone())
-        .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+    let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME)).for_ic(&env, "");
+    bn.start(&env).expect("failed to setup BoundaryNode VM");
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
@@ -194,7 +181,7 @@ pub fn config(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(nns_urls);
+    let registry = RegistryCanister::new(bn.nns_node_urls);
     let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
         let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
             .context("Failed to `get_value` from registry")?;
@@ -216,9 +203,13 @@ pub fn config(env: TestEnv) {
 
     info!(
         &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
-        boundary_node_vm.block_on_ipv4().unwrap(),
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv6 {:?}",
         boundary_node_vm.ipv6()
+    );
+    info!(
+        &logger,
+        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap()
     );
 
     info!(&logger, "Waiting for routes file");
@@ -1219,7 +1210,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
         .resolve("cid.ic0.app", vm_addr.into())
-        .resolve("CID.raw.ic0.app", vm_addr.into())
+        .resolve("cid.raw.ic0.app", vm_addr.into())
         .build()
         .unwrap();
 
@@ -1256,7 +1247,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            let res = client.get("https://CID.raw.ic0.app/").send().await?;
+            let res = client.get("https://cid.raw.ic0.app/").send().await?;
 
             if res.status() != reqwest::StatusCode::BAD_REQUEST {
                 bail!("{name} failed: {}", res.status())

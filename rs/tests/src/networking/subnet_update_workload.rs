@@ -25,8 +25,7 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        pot_dsl::get_ic_handle_and_ctx,
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, ADMIN,
@@ -88,8 +87,6 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
 
-    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
-
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -98,23 +95,17 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
         .install_nns_canisters()
         .expect("Could not install NNS canisters.");
 
-    let nns_urls: Vec<_> = handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| ep.is_root_subnet)
-        .map(|ep| ep.url.clone())
-        .collect();
-
-    if use_boundary_node {
+    let bn = if use_boundary_node {
         info!(&logger, "Installing a boundary node ...");
 
-        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-            .with_nns_urls(nns_urls.clone())
-            .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
-            .start(&env)
-            .expect("Failed to setup a universal VM.");
+        let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME)).for_ic(&env, "");
+
+        bn.start(&env).expect("Failed to setup a universal VM.");
         info!(&logger, "Installation of the boundary nodes succeeded.");
-    }
+        Some(bn)
+    } else {
+        None
+    };
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
@@ -127,21 +118,21 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
-    info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(nns_urls);
-    let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-            .context("Failed to `get_value` from registry")?;
-        let routes = PbRoutingTable::decode(bytes.as_slice())
-            .context("Failed to decode registry routes")?;
-        let routes = RoutingTable::try_from(routes)
-            .context("Failed to convert registry routes")?;
-        Ok((latest, routes))
-    }))
-    .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
-    info!(&logger, "Latest registry {latest}: {routes:?}");
+    if let Some(bn) = bn {
+        info!(&logger, "Polling registry");
+        let registry = RegistryCanister::new(bn.nns_node_urls);
+        let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+                .context("Failed to `get_value` from registry")?;
+            let routes = PbRoutingTable::decode(bytes.as_slice())
+                .context("Failed to decode registry routes")?;
+            let routes = RoutingTable::try_from(routes)
+                .context("Failed to convert registry routes")?;
+            Ok((latest, routes))
+        }))
+        .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
+        info!(&logger, "Latest registry {latest}: {routes:?}");
 
-    if use_boundary_node {
         // Await Boundary Node
         let boundary_node_vm = env
             .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
