@@ -334,28 +334,9 @@ function generate_prober_config() {
             fi
 
             # enable/disable prober
-            if [ -z ${prober:-} ]; then
+            if [ "${prober:-}" != "true" ]; then
                 echo "Disabling prober"
                 touch "${CONFIG_DIR}/${NODE_PREFIX}/prober/prober.disabled"
-            fi
-        fi
-    done
-}
-
-function copy_deny_list() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [[ -f "${DENY_LIST:-}" ]]; then
-                echo "Using deny list ${DENY_LIST}"
-                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
-            else
-                echo "Using empty denylist"
-                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
             fi
         fi
     done
@@ -376,6 +357,25 @@ function copy_ssh_keys() {
             # can lead to confusion and side effects when overwriting one
             # file changes another).
             cp -Lr "${SSH}" "${CONFIG_DIR}/${NODE_PREFIX}/accounts_ssh_authorized_keys"
+        fi
+    done
+}
+
+function copy_deny_list() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
+
+            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+            if [[ -f "${DENY_LIST:-}" ]]; then
+                echo "Using deny list ${DENY_LIST}"
+                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+            else
+                echo "Using empty denylist"
+                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+            fi
         fi
     done
 }
