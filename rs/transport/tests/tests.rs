@@ -16,6 +16,7 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_transport::transport::create_transport;
+    use ic_transport::transport_h2::create_transport_h2;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use std::convert::Infallible;
     use std::net::SocketAddr;
@@ -69,6 +70,11 @@ mod tests {
 
     #[test]
     fn test_start_connection_between_two_peers() {
+        test_start_connection_between_two_peers_impl(false);
+        test_start_connection_between_two_peers_impl(true);
+    }
+
+    fn test_start_connection_between_two_peers_impl(use_h2: bool) {
         with_test_replica_logger(|logger| {
             let registry_version = REG_V1;
 
@@ -87,10 +93,15 @@ mod tests {
                 10,
                 event_handler_1,
                 event_handler_2,
+                use_h2,
             );
 
             assert_eq!(done_1.blocking_recv(), Some(true));
             assert_eq!(done_2.blocking_recv(), Some(true));
+            if use_h2 {
+                assert_eq!(done_1.blocking_recv(), Some(true));
+                assert_eq!(done_2.blocking_recv(), Some(true));
+            }
         });
     }
 
@@ -130,6 +141,7 @@ mod tests {
                 1,
                 event_handler_1,
                 hol_event_handler,
+                false,
             );
 
             let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
@@ -188,6 +200,7 @@ mod tests {
                 1,
                 peer_a_event_handler,
                 peer_b_event_handler,
+                false,
             );
 
             let msg_1 = TransportPayload(vec![0xa; 1000000]);
@@ -231,6 +244,7 @@ mod tests {
                 1,
                 peer_a_event_handler,
                 peer_b_event_handler,
+                false,
             );
             std::thread::sleep(Duration::from_secs(20));
 
@@ -281,6 +295,7 @@ mod tests {
                 queue_size,
                 event_handler_1,
                 hol_event_handler,
+                false,
             );
 
             let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
@@ -322,11 +337,13 @@ mod tests {
         let (event_handler, mut handle) = create_mock_event_handler();
 
         rt.spawn(async move {
-            let (event, rsp) = handle.next_request().await.unwrap();
-            if let TransportEvent::PeerUp(_) = event {
-                connected.try_send(true).unwrap()
+            loop {
+                let (event, rsp) = handle.next_request().await.unwrap();
+                if let TransportEvent::PeerUp(_) = event {
+                    connected.try_send(true).unwrap()
+                }
+                rsp.send_response(());
             }
-            rsp.send_response(());
         });
         event_handler
     }
@@ -573,6 +590,7 @@ mod tests {
         send_queue_size: usize,
         event_handler_1: TransportEventHandler,
         event_handler_2: TransportEventHandler,
+        use_h2: bool,
     ) -> (Arc<dyn Transport>, Arc<dyn Transport>) {
         // Setup registry and crypto component
         let registry_and_data = RegistryAndDataProvider::new();
@@ -590,15 +608,16 @@ mod tests {
             send_queue_size,
         };
 
-        let peer_a = create_transport(
+        let peer_a = create_transport_obj(
             NODE_ID_1,
             peer_a_config,
             registry_version,
-            MetricsRegistry::new(),
             Arc::new(crypto_1),
             rt_handle.clone(),
             logger.clone(),
+            use_h2,
         );
+
         peer_a.set_event_handler(event_handler_1);
 
         let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
@@ -609,14 +628,14 @@ mod tests {
             send_queue_size,
         };
 
-        let peer_b = create_transport(
+        let peer_b = create_transport_obj(
             NODE_ID_2,
             peer_b_config,
             registry_version,
-            MetricsRegistry::new(),
             Arc::new(crypto_2),
             rt_handle,
             logger,
+            use_h2,
         );
         peer_b.set_event_handler(event_handler_2);
         let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
@@ -631,5 +650,37 @@ mod tests {
             .expect("start_connection");
 
         (peer_a, peer_b)
+    }
+
+    fn create_transport_obj(
+        node_id: NodeId,
+        transport_config: TransportConfig,
+        registry_version: RegistryVersion,
+        crypto: Arc<dyn TlsHandshake + Send + Sync>,
+        rt_handle: tokio::runtime::Handle,
+        logger: ReplicaLogger,
+        use_h2: bool,
+    ) -> Arc<dyn Transport> {
+        if use_h2 {
+            create_transport_h2(
+                node_id,
+                transport_config,
+                registry_version,
+                MetricsRegistry::new(),
+                crypto,
+                rt_handle,
+                logger,
+            )
+        } else {
+            create_transport(
+                node_id,
+                transport_config,
+                registry_version,
+                MetricsRegistry::new(),
+                crypto,
+                rt_handle,
+                logger,
+            )
+        }
     }
 }

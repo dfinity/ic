@@ -104,10 +104,10 @@ impl TransportImplH2 {
             node_ip,
             config,
             allowed_clients: Arc::new(RwLock::new(BTreeSet::<NodeId>::new())),
-            _crypto: crypto,
+            crypto,
             registry_version: Arc::new(RwLock::new(registry_version)),
             rt_handle,
-            _data_plane_metrics: DataPlaneMetrics::new(metrics_registry.clone()),
+            data_plane_metrics: DataPlaneMetrics::new(metrics_registry.clone()),
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
@@ -122,7 +122,7 @@ impl TransportImplH2 {
 }
 
 /// Returns the production implementation of the `Transport` interfaces.
-pub fn create_transport(
+pub fn create_transport_h2(
     node_id: NodeId,
     transport_config: TransportConfig,
     registry_version: RegistryVersion,

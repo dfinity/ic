@@ -35,6 +35,7 @@
 mod control_plane;
 mod control_plane_h2;
 mod data_plane;
+mod data_plane_h2;
 mod metrics;
 pub mod transport;
 pub mod transport_h2;
