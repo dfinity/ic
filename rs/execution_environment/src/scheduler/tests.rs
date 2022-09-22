@@ -8,8 +8,8 @@ use candid::Encode;
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method,
-    Payload as _, SignWithECDSAArgs,
+    BitcoinGetBalanceArgs, CanisterHttpRequestArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId,
+    EmptyBlob, HttpMethod, Method, Payload as _, SignWithECDSAArgs, TransformFunc, TransformType,
 };
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -28,7 +28,9 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_metrics::{fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
-use ic_types::messages::{Payload, MAX_RESPONSE_COUNT_BYTES};
+use ic_types::messages::{
+    Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
+};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use proptest::prelude::*;
@@ -2905,6 +2907,74 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
     payment_before - payment_after
 }
 
+fn simulate_http_request_fee_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of sending http request.
+    // Limitation of the test -- caller canister is not charged.
+    // Payment is done via attaching cycles to request and the cost is subtracted from it
+    // after executing the message.
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    let canister_id = test.create_canister();
+
+    let payment_before = Cycles::new(211_000_000_000) * subnet_size;
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: None,
+        headers: Vec::new(),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformType::Function(TransformFunc(candid::Func {
+            principal: canister_id.get().0,
+            method: "transform".to_string(),
+        }))),
+    };
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        args.encode(),
+        payment_before,
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let (_, context) = canister_http_request_contexts.iter().next().unwrap();
+    let payment_after = context.request.payment;
+
+    payment_before - payment_after
+}
+
+fn calculate_http_request_fee_cycles(
+    config: &CyclesAccountManagerConfig,
+    request_size: NumBytes,
+    response_size_limit: Option<NumBytes>,
+    subnet_size: usize,
+) -> Cycles {
+    let response_size = match response_size_limit {
+        Some(response_size) => response_size.get(),
+        // Defaults to maximum response size.
+        None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    };
+    let total_bytes = response_size + request_size.get();
+    scale_cost(
+        config,
+        config.http_request_baseline_fee + config.http_request_per_byte_fee * total_bytes,
+        subnet_size,
+    )
+}
+
 fn calculate_sign_with_ecdsa_cycles(
     config: &CyclesAccountManagerConfig,
     subnet_size: usize,
@@ -3455,6 +3525,53 @@ fn test_subnet_size_sign_with_ecdsa() {
     let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
     for subnet_size in 1..50 {
         let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_http_request_fee() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost =
+        calculate_http_request_fee_cycles(&config, NumBytes::new(17), None, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_http_request_fee_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1)
+            < simulate_http_request_fee_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 11)
+            < simulate_http_request_fee_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 101)
+            < simulate_http_request_fee_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_http_request_fee_cost(subnet_type, 1_001)
+            < simulate_http_request_fee_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_http_request_fee_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_http_request_fee_cost(subnet_type, subnet_size);
         let calculated_cost =
             Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
         assert!(
