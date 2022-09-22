@@ -2,7 +2,7 @@
 Description=Setup Prober
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Before=setup-prober.service
+Before=prober.service
 
 [Install]
 RequiredBy=prober.service
