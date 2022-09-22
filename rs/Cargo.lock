@@ -11259,15 +11259,10 @@ name = "proxy_canister"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_candid",
- "dfn_core",
- "ic-base-types",
  "ic-cdk 0.5.5",
  "ic-cdk-macros",
  "ic-ic00-types",
- "ic-types 0.8.0",
  "serde",
- "wasm-bindgen",
 ]
 
 [[package]]
