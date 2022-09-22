@@ -128,10 +128,10 @@ pub(crate) struct TransportImplH2 {
     /// The registry version that is used
     pub registry_version: Arc<RwLock<RegistryVersion>>,
     /// Reference to the crypto component
-    pub _crypto: Arc<dyn TlsHandshake + Send + Sync>,
+    pub crypto: Arc<dyn TlsHandshake + Send + Sync>,
 
     /// Data plane metrics
-    pub _data_plane_metrics: DataPlaneMetrics,
+    pub data_plane_metrics: DataPlaneMetrics,
     /// Control plane metrics
     pub control_plane_metrics: ControlPlaneMetrics,
     /// Send queue metrics
@@ -254,11 +254,11 @@ pub(crate) struct PeerStateH2 {
     /// Transport channel label, used for metrics
     pub _channel_id_label: String,
     /// Peer label, used for metrics
-    pub _peer_label: String,
+    pub peer_label: String,
     /// Connection state where peer is server
-    _connection_state_write_path: ConnectionState,
+    connection_state_write_path: ConnectionState,
     /// Connection state where peer is client
-    _connection_state_read_path: ConnectionState,
+    connection_state_read_path: ConnectionState,
     /// The send queue of this flow
     pub send_queue: Box<dyn SendQueue + Send + Sync>,
     /// Metrics
@@ -267,14 +267,14 @@ pub(crate) struct PeerStateH2 {
 
 impl PeerStateH2 {
     pub(crate) fn new(
-        log: ReplicaLogger,
+        _log: ReplicaLogger,
         channel_id: TransportChannelId,
         peer_label: String,
         connection_state_write_path: ConnectionState,
         connection_state_read_path: ConnectionState,
         queue_size: QueueSize,
         send_queue_metrics: SendQueueMetrics,
-        control_plane_metrics: ControlPlaneMetrics,
+        _control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
         let send_queue = Box::new(SendQueueImpl::new(
             peer_label.clone(),
@@ -283,13 +283,13 @@ impl PeerStateH2 {
             send_queue_metrics,
         ));
         let ret = Self {
-            _log: log,
+            _log,
             _channel_id_label: channel_id.to_string(),
-            _peer_label: peer_label,
-            _connection_state_write_path: connection_state_write_path,
-            _connection_state_read_path: connection_state_read_path,
+            peer_label,
+            connection_state_write_path,
+            connection_state_read_path,
             send_queue,
-            _control_plane_metrics: control_plane_metrics,
+            _control_plane_metrics,
         };
         ret.report_connection_state(ConnectionRole::Client);
         ret.report_connection_state(ConnectionRole::Server);
@@ -297,14 +297,14 @@ impl PeerStateH2 {
     }
 
     // Connection role represents role of calling node, not the peer
-    pub(crate) fn _update_peer_state(
+    pub(crate) fn update(
         &mut self,
         connection_state: ConnectionState,
         connection_role: ConnectionRole,
     ) {
         match connection_role {
-            ConnectionRole::Client => self._connection_state_write_path.update(connection_state),
-            ConnectionRole::Server => self._connection_state_read_path.update(connection_state),
+            ConnectionRole::Client => self.connection_state_write_path.update(connection_state),
+            ConnectionRole::Server => self.connection_state_read_path.update(connection_state),
         }
         self.report_connection_state(connection_role);
     }
@@ -314,15 +314,15 @@ impl PeerStateH2 {
         //TODO - metrics
     }
 
-    pub(crate) fn _get_connected(&self, connection_role: ConnectionRole) -> Option<&Connected> {
+    pub(crate) fn get_connected(&self, connection_role: ConnectionRole) -> Option<&Connected> {
         match connection_role {
             ConnectionRole::Client => {
-                if let ConnectionState::Connected(connected) = &self._connection_state_write_path {
+                if let ConnectionState::Connected(connected) = &self.connection_state_write_path {
                     return Some(connected);
                 }
             }
             ConnectionRole::Server => {
-                if let ConnectionState::Connected(connected) = &self._connection_state_read_path {
+                if let ConnectionState::Connected(connected) = &self.connection_state_read_path {
                     return Some(connected);
                 }
             }
@@ -345,6 +345,8 @@ pub(crate) enum ConnectionState {
     Connecting(Connecting),
     /// Connection established
     Connected(Connected),
+    /// Connection established (H2)
+    ConnectedH2(ConnectedH2),
 }
 
 /// Info about a flow in ConnectionState::Connecting
@@ -366,6 +368,18 @@ pub(crate) struct Connected {
 
     /// The write task handle
     pub write_task: JoinHandle<()>,
+
+    /// Our role
+    pub role: ConnectionRole,
+}
+
+/// Info about a flow in ConnectionState::Connected
+pub(crate) struct ConnectedH2 {
+    /// Peer node
+    pub peer_addr: SocketAddr,
+
+    /// The read or write task handle
+    pub _task: JoinHandle<()>,
 
     /// Our role
     pub role: ConnectionRole,
@@ -395,6 +409,11 @@ impl ConnectionState {
                         valid = true;
                     }
                 }
+                if let Self::ConnectedH2(s) = next_state {
+                    if s.role == ConnectionRole::Server {
+                        valid = true;
+                    }
+                }
             }
             Self::Connecting(_) => {
                 if let Self::Connected(s) = next_state {
@@ -402,8 +421,26 @@ impl ConnectionState {
                         valid = true;
                     }
                 }
+                if let Self::ConnectedH2(s) = next_state {
+                    if s.role == ConnectionRole::Client {
+                        valid = true;
+                    }
+                }
             }
             Self::Connected(s) => match next_state {
+                Self::Listening => {
+                    if s.role == ConnectionRole::Server {
+                        valid = true;
+                    }
+                }
+                Self::Connecting(_) => {
+                    if s.role == ConnectionRole::Client {
+                        valid = true;
+                    }
+                }
+                _ => (),
+            },
+            Self::ConnectedH2(s) => match next_state {
                 Self::Listening => {
                     if s.role == ConnectionRole::Server {
                         valid = true;
@@ -425,6 +462,7 @@ impl ConnectionState {
             Self::Listening => 1,
             Self::Connecting(_) => 2,
             Self::Connected(_) => 3,
+            Self::ConnectedH2(_) => 4,
         }
     }
 }
@@ -446,6 +484,13 @@ impl Debug for ConnectionState {
                 write!(
                     f,
                     "ConnectionState::Connected(peer = {:?}, role = {:?})",
+                    state.peer_addr, state.role
+                )
+            }
+            Self::ConnectedH2(state) => {
+                write!(
+                    f,
+                    "ConnectionState::ConnectedH2(peer = {:?}, role = {:?})",
                     state.peer_addr, state.role
                 )
             }
