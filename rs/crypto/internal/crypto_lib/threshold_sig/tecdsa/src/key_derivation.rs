@@ -117,7 +117,7 @@ impl DerivationPath {
         let curve_type = master_public_key.curve_type();
 
         if curve_type == EccCurveType::K256 {
-            let mut derived_key = *master_public_key;
+            let mut derived_key = master_public_key.clone();
             let mut derived_chain_key = chain_code.to_vec();
             let mut derived_offset = EccScalar::zero(curve_type);
 

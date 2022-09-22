@@ -411,7 +411,7 @@ impl SimpleCommitment {
     }
 
     pub fn constant_term(&self) -> EccPoint {
-        self.points[0]
+        self.points[0].clone()
     }
 
     /// Create a new simple commitment
@@ -459,7 +459,7 @@ impl PedersenCommitment {
     }
 
     pub fn constant_term(&self) -> EccPoint {
-        self.points[0]
+        self.points[0].clone()
     }
 
     /// Create a new Pedersen commitment
@@ -596,7 +596,7 @@ impl PolynomialCommitment {
     }
 
     pub fn constant_term(&self) -> EccPoint {
-        self.points()[0]
+        self.points()[0].clone()
     }
 
     pub fn curve_type(&self) -> EccCurveType {
