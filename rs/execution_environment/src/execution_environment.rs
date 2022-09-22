@@ -724,6 +724,7 @@ impl ExecutionEnvironment {
                                         registry_settings.max_ecdsa_queue_size,
                                         &mut state,
                                         rng,
+                                        registry_settings.subnet_size,
                                     )
                                     .map_or_else(
                                         |err| Some((Err(err), msg.take_cycles())),
@@ -1624,6 +1625,7 @@ impl ExecutionEnvironment {
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
+        subnet_size: usize,
     ) -> Result<(), UserError> {
         // We already ensured message_hash is 32 byte statically, so there is
         // no need to check length here.
@@ -1636,7 +1638,7 @@ impl ExecutionEnvironment {
             .routing_table
             .route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee();
+            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
