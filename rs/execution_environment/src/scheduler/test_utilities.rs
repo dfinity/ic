@@ -20,7 +20,7 @@ use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
-use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
     RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
@@ -47,6 +47,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
+    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
@@ -101,6 +102,8 @@ pub(crate) struct SchedulerTest {
     wasm_executor: Arc<TestWasmExecutor>,
     // Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
+    // ECDSA keys.
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -391,7 +394,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            BTreeMap::new(),
+            self.ecdsa_subnet_public_keys.clone(),
             self.round,
             round_type,
             self.registry_settings(),
@@ -491,6 +494,7 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
+    ecdsa_keys: Vec<EcdsaKeyId>,
     /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
     use_cost_scaling_flag: bool,
 }
@@ -519,6 +523,7 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: false,
             log: no_op_logger(),
+            ecdsa_keys: Vec::new(),
             use_cost_scaling_flag: false,
         }
     }
@@ -604,6 +609,12 @@ impl SchedulerTestBuilder {
             deterministic_time_slicing: true,
             ..self
         }
+    }
+
+    pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
+        let mut ecdsa_keys = self.ecdsa_keys;
+        ecdsa_keys.push(key);
+        Self { ecdsa_keys, ..self }
     }
 
     pub fn build(self) -> SchedulerTest {
@@ -709,6 +720,16 @@ impl SchedulerTestBuilder {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
         );
+        let mut ecdsa_subnet_public_keys = BTreeMap::new();
+        for ecdsa_key in self.ecdsa_keys {
+            ecdsa_subnet_public_keys.insert(
+                ecdsa_key,
+                MasterEcdsaPublicKey {
+                    algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                    public_key: b"master_ecdsa_public_key".to_vec(),
+                },
+            );
+        }
         SchedulerTest {
             state: Some(state),
             next_canister_id: 0,
@@ -719,6 +740,7 @@ impl SchedulerTestBuilder {
             scheduler,
             wasm_executor,
             registry_settings: self.registry_settings,
+            ecdsa_subnet_public_keys,
         }
     }
 }

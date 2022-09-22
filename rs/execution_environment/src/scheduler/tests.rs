@@ -7,7 +7,10 @@ use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method, Payload as _};
+use ic_ic00_types::{
+    BitcoinGetBalanceArgs, CanisterIdRecord, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method,
+    Payload as _, SignWithECDSAArgs,
+};
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
@@ -2857,6 +2860,58 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
     balance_before - balance_after
 }
 
+fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+    // This function simulates `execute_round` to get the cost of signing with ECDSA.
+    // Limitation of the test -- caller canister is not charged.
+    // Payment is done via attaching cycles to request and the cost is subtracted from it
+    // after executing the message.
+    let ecdsa_key = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "secp256k1".to_string(),
+    };
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(subnet_type)
+        .with_cost_scaling(true)
+        .with_subnet_size(subnet_size)
+        .with_ecdsa_key(ecdsa_key.clone())
+        .build();
+    let canister_id = test.create_canister();
+
+    let payment_before = Cycles::new(15_000_000_000) * subnet_size;
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        Encode!(&SignWithECDSAArgs {
+            message_hash: [0; 32],
+            derivation_path: Vec::new(),
+            key_id: ecdsa_key
+        })
+        .unwrap(),
+        payment_before,
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+    let (_, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let payment_after = context.request.payment;
+
+    payment_before - payment_after
+}
+
+fn calculate_sign_with_ecdsa_cycles(
+    config: &CyclesAccountManagerConfig,
+    subnet_size: usize,
+) -> Cycles {
+    scale_cost(config, config.ecdsa_signature_fee, subnet_size)
+}
+
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
     match subnet_type {
         SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
@@ -3360,6 +3415,52 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
         assert_eq!(
             simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size),
             Cycles::zero()
+        );
+    }
+}
+
+#[test]
+fn test_subnet_size_sign_with_ecdsa() {
+    let subnet_type = SubnetType::Application;
+    let config = get_cycles_account_manager_config(subnet_type);
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = calculate_sign_with_ecdsa_cycles(&config, reference_subnet_size);
+
+    // Check default cost.
+    assert_eq!(
+        simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size),
+        reference_cost
+    );
+
+    // Check if cost is increasing with subnet size.
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 1)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 2)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 11)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 12)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 101)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 102)
+    );
+    assert!(
+        simulate_sign_with_ecdsa_cost(subnet_type, 1_001)
+            < simulate_sign_with_ecdsa_cost(subnet_type, 1_002)
+    );
+
+    // Check linear scaling.
+    let reference_subnet_size = config.reference_subnet_size as usize;
+    let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
+    for subnet_size in 1..50 {
+        let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
+        let calculated_cost =
+            Cycles::new(reference_cost.get() * subnet_size as u128 / reference_subnet_size as u128);
+        assert!(
+            is_almost_eq(simulated_cost, calculated_cost),
+            "subnet_size={}",
+            subnet_size
         );
     }
 }
