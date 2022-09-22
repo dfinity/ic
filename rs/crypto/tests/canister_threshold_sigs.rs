@@ -51,8 +51,10 @@ fn should_fail_create_dealing_if_registry_missing_mega_pubkey() {
     let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let new_node_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
-    let crypto_not_in_registry =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, new_node_id);
+    let crypto_not_in_registry = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(new_node_id)
+        .build();
     env.crypto_components
         .insert(new_node_id, crypto_not_in_registry);
 
@@ -74,8 +76,10 @@ fn should_fail_create_dealing_if_node_isnt_a_dealer() {
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
     let bad_dealer_id = random_node_id_excluding(params.dealers().get());
-    let crypto_not_in_registry =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, bad_dealer_id);
+    let crypto_not_in_registry = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(bad_dealer_id)
+        .build();
     env.crypto_components
         .insert(bad_dealer_id, crypto_not_in_registry);
 
@@ -309,8 +313,10 @@ fn should_return_ok_from_load_transcript_if_not_a_receiver() {
 
     let loader_id_not_receiver =
         random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
-    let crypto_not_in_registry =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, loader_id_not_receiver);
+    let crypto_not_in_registry = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(loader_id_not_receiver)
+        .build();
     env.crypto_components
         .insert(loader_id_not_receiver, crypto_not_in_registry);
 
@@ -799,8 +805,10 @@ fn should_fail_create_signature_if_not_receiver() {
     };
 
     let bad_signer_id = random_node_id_excluding(inputs.receivers().get());
-    let bad_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, bad_signer_id);
+    let bad_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(bad_signer_id)
+        .build();
 
     let result = bad_crypto_component.sign_share(&inputs);
     let err = result.unwrap_err();
@@ -1493,8 +1501,10 @@ fn should_combine_sig_shares_successfully() {
 
     // Combiner can be someone not involved in the IDkg
     let combiner_id = random_node_id_excluding(inputs.receivers().get());
-    let combiner_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, combiner_id);
+    let combiner_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(combiner_id)
+        .build();
     let result = combiner_crypto_component.combine_sig_shares(&inputs, &sig_shares);
     assert!(result.is_ok());
 }
@@ -1550,8 +1560,10 @@ fn should_verify_sig_shares_and_combined_sig_successfully() {
         .collect();
 
     let verifier_id = random_node_id_excluding(inputs.receivers().get());
-    let verifier_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let verifier_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
 
     // Verify that each signature share can be verified
     for (signer_id, sig_share) in sig_shares.iter() {
@@ -1567,8 +1579,10 @@ fn should_verify_sig_shares_and_combined_sig_successfully() {
 
     // Combiner can be someone not involved in the IDkg
     let combiner_id = random_node_id_excluding(inputs.receivers().get());
-    let combiner_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, combiner_id);
+    let combiner_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(combiner_id)
+        .build();
     let signature = combiner_crypto_component
         .combine_sig_shares(&inputs, &sig_shares)
         .expect("Failed to generate signature");
@@ -1637,8 +1651,10 @@ fn should_run_threshold_ecdsa_protocol_with_single_node() {
 
     // Verify that the returned signature is valid.
     let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
-    let verifier_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let verifier_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
 
     assert!(verifier_crypto_component
         .verify_combined_sig(&sig_inputs, &signature)
@@ -1879,7 +1895,10 @@ fn should_run_verify_dealing_public() {
     let signed_dealing = create_signed_dealing(&params, &env.crypto_components, dealer_id);
 
     let verifier_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
-    let verifier = TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let verifier = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
 
     let result = verifier.verify_dealing_public(&params, &signed_dealing);
     assert!(result.is_ok());
@@ -1900,7 +1919,10 @@ fn should_fail_verify_dealing_public_with_invalid_signature() {
     signed_dealing.signature = other_dealing.signature;
 
     let verifier_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
-    let verifier = TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let verifier = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
 
     let result = verifier.verify_dealing_public(&params, &signed_dealing);
 
@@ -2560,6 +2582,18 @@ fn environment_with_transcript_and_complaint() -> (
 }
 
 fn temp_crypto_components_for(nodes: &[NodeId]) -> BTreeMap<NodeId, TempCryptoComponent> {
-    let registry = RegistryClientImpl::new(Arc::new(ProtoRegistryDataProvider::new()), None);
-    TempCryptoComponent::multiple_new(nodes, Arc::new(registry))
+    let registry = Arc::new(RegistryClientImpl::new(
+        Arc::new(ProtoRegistryDataProvider::new()),
+        None,
+    ));
+    nodes
+        .iter()
+        .map(|node| {
+            let temp_crypto = TempCryptoComponent::builder()
+                .with_registry(Arc::clone(&registry) as Arc<_>)
+                .with_node_id(*node)
+                .build();
+            (*node, temp_crypto)
+        })
+        .collect()
 }

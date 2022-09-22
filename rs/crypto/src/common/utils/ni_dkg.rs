@@ -111,7 +111,10 @@ pub fn initial_dkg_transcript(
 
     let dealer = first_dealer(dkg_config);
     let registry = fake_registry_with_encryption_keys(receiver_keys, dkg_config.registry_version());
-    let dealer_crypto = TempCryptoComponent::new(Arc::new(registry), dealer);
+    let dealer_crypto = TempCryptoComponent::builder()
+        .with_registry(Arc::new(registry))
+        .with_node_id(dealer)
+        .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto)
 }
