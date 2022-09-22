@@ -34,4 +34,5 @@ rust_binary(
 rust_test(
     name = "workspacifier_unit_tests",
     crate = ":workspaceifier",
+    tags = ["local"],
 )
