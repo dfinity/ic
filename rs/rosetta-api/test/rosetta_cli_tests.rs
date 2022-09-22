@@ -56,10 +56,8 @@ async fn rosetta_cli_data_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            rosetta_cli().as_str(),
             "check:data",
             "--configuration-file",
             local("test/rosetta-cli_data_test.json").as_str(),
@@ -123,10 +121,8 @@ async fn rosetta_cli_construction_create_account_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            rosetta_cli().as_str(),
             "check:construction",
             "--configuration-file",
             local("test/rosetta-cli_construction_create_account_test.json").as_str(),
@@ -209,16 +205,12 @@ async fn rosetta_cli_construction_test() {
         debug!("Server thread done");
     }));
 
-    let output = Command::new("timeout")
+    let output = Command::new(rosetta_cli())
         .args(&[
-            "300s",
-            rosetta_cli().as_str(),
             "check:construction",
             "--configuration-file",
             local("test/rosetta-cli_construction_test.json").as_str(),
         ])
-        //.stdout(std::process::Stdio::inherit())
-        //.stderr(std::process::Stdio::inherit())
         .output()
         .expect("failed to execute rosetta-cli");
 
