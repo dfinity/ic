@@ -85,7 +85,7 @@ const METRIC_INC_STREAM_INDEX: &str = "mr_inc_stream_index";
 const METRIC_INC_CYCLES: &str = "mr_inc_cycles";
 const METRIC_INC_CHECKSUM: &str = "mr_inc_cycle_index_checksum";
 
-const METRIC_CYCLES_MINTED: &str = "mr_cycles_minted";
+const METRIC_CYCLES_MINTED: &str = "cycles_minted_per_subnet";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
