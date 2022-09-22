@@ -4,7 +4,7 @@ use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, Seed};
 use ic_interfaces::crypto::{
-    BasicSigner, IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
@@ -466,18 +466,18 @@ impl CanisterThresholdSigTestEnvironment {
             return;
         }
 
-        let registry = Arc::clone(&self.registry) as Arc<_>;
-        let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
-            registry,
-            node_id,
-            ic_crypto::utils::NodeKeysToGenerate {
+        let temp_crypto = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&self.registry) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(ic_crypto::utils::NodeKeysToGenerate {
                 generate_node_signing_keys: true,
                 generate_committee_signing_keys: true,
                 generate_dkg_dealing_encryption_keys: false,
                 generate_idkg_dealing_encryption_keys: true,
                 generate_tls_keys_and_certificate: false,
-            },
-        );
+            })
+            .build();
+        let node_keys = temp_crypto.node_public_keys();
         self.crypto_components.insert(node_id, temp_crypto);
 
         self.registry_data
@@ -712,16 +712,20 @@ pub fn run_tecdsa_protocol(
 
     // Verify that each signature share can be verified
     let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
-    let verifier_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let verifier_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         assert!(verifier_crypto_component
             .verify_sig_share(*signer_id, sig_inputs, sig_share)
             .is_ok());
     }
 
-    let combiner_crypto_component =
-        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+    let combiner_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .build();
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)
         .expect("Failed to generate signature")

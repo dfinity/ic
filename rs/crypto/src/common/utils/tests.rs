@@ -5,6 +5,8 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_crypto_test_utils::files::temp_dir;
+use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::registry::RegistryClient;
 use ic_types_test_utils::ids::node_test_id;
 
 fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
@@ -254,13 +256,13 @@ fn should_correctly_generate_idkg_keys_if_other_keys_already_present_with_versio
 #[test]
 #[should_panic(expected = "inconsistent key material")]
 fn should_panic_if_node_has_inconsistent_keys() {
-    let (temp_crypto, _node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, _node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::only_node_signing_key(),
     );
     let different_node_signing_pk = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_node_signing_key(),
@@ -303,14 +305,14 @@ fn check_keys_locally_returns_none_if_no_public_keys_are_present() {
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_node_signing_secret_key_is_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::only_node_signing_key(),
     );
     let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
     let different_node_signing_pk = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_node_signing_key(),
@@ -337,14 +339,14 @@ fn should_fail_check_keys_locally_if_no_matching_node_signing_secret_key_is_pres
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_committee_signing_secret_key_is_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all(),
     );
     let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
     let different_committee_signing_pk = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_committee_signing_key(),
@@ -374,14 +376,14 @@ fn should_fail_check_keys_locally_if_no_matching_committee_signing_secret_key_is
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_dkg_dealing_encryption_secret_key_is_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all(),
     );
     let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
     let different_dkg_dealing_enc_pk = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_dkg_dealing_encryption_key(),
@@ -411,14 +413,14 @@ fn should_fail_check_keys_locally_if_no_matching_dkg_dealing_encryption_secret_k
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_idkg_dealing_encryption_secret_key_is_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all(),
     );
     let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
     let different_idkg_dealing_enc_pk = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
@@ -448,14 +450,14 @@ fn should_fail_check_keys_locally_if_no_matching_idkg_dealing_encryption_secret_
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_tls_secret_key_is_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all(),
     );
     let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
     let different_tls_cert = {
-        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
             empty_fake_registry(),
             node_test_id(2),
             NodeKeysToGenerate::only_tls_key_and_cert(),
@@ -481,7 +483,7 @@ fn should_fail_check_keys_locally_if_no_matching_tls_secret_key_is_present() {
 
 #[test]
 fn should_succeed_check_keys_locally_if_all_keys_are_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all(),
@@ -496,7 +498,7 @@ fn should_succeed_check_keys_locally_if_all_keys_are_present() {
 
 #[test]
 fn should_succeed_check_keys_locally_if_all_keys_except_idkg_dealing_enc_key_are_present() {
-    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::all_except_idkg_dealing_encryption_key(),
@@ -589,4 +591,18 @@ fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
         && node_pks.tls_certificate.is_some()
         && node_pks.dkg_dealing_encryption_pk.is_some()
         && node_pks.idkg_dealing_encryption_pk.is_some()
+}
+
+fn crypto_with_node_keys_generation(
+    registry_client: Arc<dyn RegistryClient>,
+    node_id: NodeId,
+    selector: NodeKeysToGenerate,
+) -> (TempCryptoComponent, NodePublicKeys) {
+    let temp_crypto = TempCryptoComponent::builder()
+        .with_registry(registry_client)
+        .with_node_id(node_id)
+        .with_keys(selector)
+        .build();
+    let node_public_keys = temp_crypto.node_public_keys();
+    (temp_crypto, node_public_keys)
 }

@@ -26,7 +26,6 @@ use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -131,6 +130,7 @@ pub struct TempCryptoBuilder {
     vault_server_runtime_handle: Option<tokio::runtime::Handle>,
     vault_client_runtime_handle: Option<tokio::runtime::Handle>,
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
+    temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
 }
 
@@ -162,6 +162,11 @@ impl TempCryptoBuilder {
 
     pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
         self.logger = Some(logger);
+        self
+    }
+
+    pub fn with_temp_dir_source(mut self, source: PathBuf) -> Self {
+        self.temp_dir_source = Some(source);
         self
     }
 
@@ -204,6 +209,9 @@ impl TempCryptoBuilder {
 
     pub fn build(self) -> TempCryptoComponent {
         let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
+        if let Some(source) = self.temp_dir_source {
+            copy_crypto_root(&source, temp_dir.path());
+        }
         let mut csp = csp_for_config(&config, None);
         let node_keys_to_generate = self
             .node_keys_to_generate
@@ -291,16 +299,23 @@ impl TempCryptoBuilder {
             fake_registry_client as Arc<dyn RegistryClient>
         });
 
-        let node_pubkeys = NodePublicKeys {
-            version: 1,
-            node_signing_pk,
-            committee_signing_pk,
-            dkg_dealing_encryption_pk,
-            idkg_dealing_encryption_pk,
-            tls_certificate,
-        };
-        public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
-            .unwrap_or_else(|_| panic!("failed to store public key material"));
+        if node_keys_to_generate != NodeKeysToGenerate::none() {
+            public_key_store::read_node_public_keys(&config.crypto_root).expect_err(
+                "New private keys were generated and so the corresponding \
+                public keys need to be saved. This would have overwritten the existing \
+                public keys store and so is probably not what you wanted.",
+            );
+            let node_pubkeys = NodePublicKeys {
+                version: 1,
+                node_signing_pk,
+                committee_signing_pk,
+                dkg_dealing_encryption_pk,
+                idkg_dealing_encryption_pk,
+                tls_certificate,
+            };
+            public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
+                .unwrap_or_else(|_| panic!("failed to store public key material"));
+        }
 
         let opt_remote_vault_environment = if self.start_remote_vault {
             let vault_server =
@@ -422,97 +437,18 @@ impl TempCryptoComponent {
             node_keys_to_generate: None,
             registry_version: None,
             connected_remote_vault: None,
+            temp_dir_source: None,
             logger: None,
         }
     }
 
-    pub fn new(registry_client: Arc<dyn RegistryClient>, node_id: NodeId) -> Self {
-        TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .build()
-    }
-
-    pub fn new_with_ni_dkg_dealing_encryption_key_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, PublicKeyProto) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .build();
-        let dkg_dealing_encryption_pubkey = temp_crypto
-            .node_public_keys()
-            .dkg_dealing_encryption_pk
-            .expect("missing dkg_dealing_encryption_pk");
-        (temp_crypto, dkg_dealing_encryption_pubkey)
-    }
-
-    pub fn new_with_tls_key_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> (Self, TlsPublicKeyCert) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
-            .build();
-        let tls_certificate = temp_crypto
+    pub fn node_tls_public_key_certificate(&self) -> TlsPublicKeyCert {
+        let tls_certificate = self
             .node_public_keys()
             .tls_certificate
             .expect("missing tls_certificate");
-        let tls_pubkey = TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
-            .expect("failed to create X509 cert from DER");
-        (temp_crypto, tls_pubkey)
-    }
-
-    pub fn new_with_node_keys_generation(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        selector: NodeKeysToGenerate,
-    ) -> (Self, NodePublicKeys) {
-        let temp_crypto = TempCryptoComponent::builder()
-            .with_registry(registry_client)
-            .with_node_id(node_id)
-            .with_keys(selector)
-            .build();
-        let node_pubkeys = temp_crypto.node_public_keys();
-        (temp_crypto, node_pubkeys)
-    }
-
-    pub fn new_with(
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        config: &CryptoConfig,
-        temp_dir: TempDir,
-    ) -> Self {
-        let crypto_component = CryptoComponent::new_with_fake_node_id(
-            config,
-            None,
-            registry_client,
-            node_id,
-            no_op_logger(),
-        );
-
-        TempCryptoComponent {
-            crypto_component,
-            remote_vault_environment: None,
-            temp_dir,
-        }
-    }
-
-    pub fn multiple_new(
-        nodes: &[NodeId],
-        registry: Arc<dyn RegistryClient>,
-    ) -> BTreeMap<NodeId, TempCryptoComponent> {
-        nodes
-            .iter()
-            .map(|node| {
-                let temp_crypto = Self::new(Arc::clone(&registry), *node);
-                (*node, temp_crypto)
-            })
-            .collect()
+        TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
+            .expect("failed to create X509 cert from DER")
     }
 
     pub fn temp_dir_path(&self) -> &Path {
@@ -530,10 +466,14 @@ impl TempCryptoComponent {
             .as_ref()
             .map(|env| env.vault_client_runtime.handle())
     }
+
+    pub fn copy_crypto_root_to(&self, target: &Path) {
+        copy_crypto_root(self.temp_dir_path(), target);
+    }
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,
@@ -1036,5 +976,27 @@ impl<C: CryptoServiceProvider, T: Signable> MultiSigner<T> for TempCryptoCompone
     ) -> CryptoResult<IndividualMultiSigOf<T>> {
         self.crypto_component
             .sign_multi(message, signer, registry_version)
+    }
+}
+
+/// Copies the given source directory into a newly-created directory.
+///
+/// Note: The copy is only of files and only one level deep (all that's
+/// required for a CryptoComponent).
+fn copy_crypto_root(src: &Path, dest: &Path) {
+    std::fs::create_dir_all(dest).unwrap_or_else(|err| {
+        panic!(
+            "Failed to create crypto root directory {}: {}",
+            dest.display(),
+            err
+        )
+    });
+    for entry in std::fs::read_dir(src).expect("src directory doesn't exist") {
+        let path = entry.expect("failed to get path in src dir").path();
+        if path.is_file() {
+            let filename = path.file_name().expect("failed to get src path");
+            let dest_path = dest.join(filename);
+            std::fs::copy(&path, &dest_path).expect("failed to copy file");
+        }
     }
 }

@@ -232,5 +232,8 @@ fn temp_crypto_with_registry_with_root_pubkey(
         .expect("failed to add root subnet ID to registry");
     registry.update_to_latest_version();
 
-    TempCryptoComponent::new(Arc::new(registry), node_test_id(42))
+    TempCryptoComponent::builder()
+        .with_registry(Arc::new(registry))
+        .with_node_id(node_test_id(42))
+        .build()
 }

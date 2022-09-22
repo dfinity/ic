@@ -2,7 +2,7 @@
 mod tests {
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::TransportConfig;
-    use ic_crypto::utils::TempCryptoComponent;
+    use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
     use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
     use ic_interfaces_transport::{
@@ -321,10 +321,12 @@ mod tests {
         registry_and_data: &RegistryAndDataProvider,
         node_id: NodeId,
     ) -> TempCryptoComponent {
-        let (temp_crypto, tls_pubkey_cert) = TempCryptoComponent::new_with_tls_key_generation(
-            Arc::clone(&registry_and_data.registry) as Arc<_>,
-            node_id,
-        );
+        let temp_crypto = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&registry_and_data.registry) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
+            .build();
+        let tls_pubkey_cert = temp_crypto.node_tls_public_key_certificate();
         registry_and_data
             .data_provider
             .add(
