@@ -25,8 +25,8 @@ pub async fn replay(
     output: PathBuf,
 ) -> RecoveryResult<StateParams> {
     let args = ReplayToolArgs {
-        subnet_id: ClapSubnetId::from_str(&subnet_id.to_string()).unwrap(),
-        config,
+        subnet_id: Some(ClapSubnetId::from_str(&subnet_id.to_string()).unwrap()),
+        config: Some(config),
         canister_caller_id,
         replay_until_height: None,
         subcmd,

@@ -19,7 +19,7 @@ impl std::str::FromStr for ClapSubnetId {
 #[clap(version = "1.0")]
 pub struct ReplayToolArgs {
     /// Path to Replica configuration file.
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     /// Caller id that is allowed to mutate the registry canister.
     #[clap(long)]
@@ -30,7 +30,7 @@ pub struct ReplayToolArgs {
 
     /// Subnet id of the replica, whose state we use
     #[clap(long)]
-    pub subnet_id: ClapSubnetId,
+    pub subnet_id: Option<ClapSubnetId>,
 
     /// Data root directory; if not specified, the value from the replica config is used
     #[clap(long)]
