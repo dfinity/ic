@@ -25,7 +25,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         curve,
         Seed::from_rng(&mut rng),
         threshold,
-        &[pk0, pk1],
+        &[pk0.clone(), pk1.clone()],
         dealer_index,
         associated_data,
     )?;
@@ -173,7 +173,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         curve,
         Seed::from_rng(&mut rng),
         threshold,
-        &[pk0, pk1],
+        &[pk0.clone(), pk1],
         dealer_index,
         associated_data,
     )?;
@@ -221,7 +221,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
         curve,
         Seed::from_rng(&mut rng),
         threshold,
-        &[pk],
+        &[pk.clone()],
         dealer_index,
         associated_data,
     )?;

@@ -23,7 +23,7 @@ pub struct ProofOfEqualOpenings {
     response: EccScalar,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct ProofOfEqualOpeningsInstance {
     curve_type: EccCurveType,
     // Commitment key for simple commitments and first element in the commitment key for Pedersen commitments.
@@ -60,8 +60,8 @@ impl ProofOfEqualOpeningsInstance {
             curve_type,
             g,
             h,
-            a: *pedersen,
-            b: *simple,
+            a: pedersen.clone(),
+            b: simple.clone(),
         })
     }
 
@@ -156,7 +156,7 @@ pub struct ProofOfProduct {
     response2: EccScalar,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct ProofOfProductInstance {
     curve_type: EccCurveType,
     g: EccPoint,
@@ -204,9 +204,9 @@ impl ProofOfProductInstance {
             curve_type,
             g,
             h,
-            lhs_com: *lhs_com,
-            rhs_com: *rhs_com,
-            product_com: *product_com,
+            lhs_com: lhs_com.clone(),
+            rhs_com: rhs_com.clone(),
+            product_com: product_com.clone(),
         })
     }
 
@@ -314,7 +314,7 @@ pub struct ProofOfDLogEquivalence {
     pub(crate) response: EccScalar,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct ProofOfDLogEquivalenceInstance {
     curve_type: EccCurveType,
     g: EccPoint,
@@ -330,8 +330,8 @@ impl ProofOfDLogEquivalenceInstance {
         let h_x = h.scalar_mul(x)?;
         Ok(Self {
             curve_type,
-            g: *g,
-            h: *h,
+            g: g.clone(),
+            h: h.clone(),
             g_x,
             h_x,
         })
@@ -346,10 +346,10 @@ impl ProofOfDLogEquivalenceInstance {
         let curve_type = g.curve_type();
         Ok(Self {
             curve_type,
-            g: *g,
-            h: *h,
-            g_x: *g_x,
-            h_x: *h_x,
+            g: g.clone(),
+            h: h.clone(),
+            g_x: g_x.clone(),
+            h_x: h_x.clone(),
         })
     }
 

@@ -411,8 +411,14 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum EccPoint {
+#[derive(Clone, Eq, PartialEq)]
+pub struct EccPoint {
+    point: EccPointInternal,
+    precompute: Option<NafLut>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum EccPointInternal {
     K256(secp256k1::Point),
     P256(secp256r1::Point),
 }
@@ -432,16 +438,16 @@ impl EccPoint {
     /// Return a point which is the identity element on the curve
     pub fn identity(curve: EccCurveType) -> Self {
         match curve {
-            EccCurveType::K256 => Self::K256(secp256k1::Point::identity()),
-            EccCurveType::P256 => Self::P256(secp256r1::Point::identity()),
+            EccCurveType::K256 => secp256k1::Point::identity().into(),
+            EccCurveType::P256 => secp256r1::Point::identity().into(),
         }
     }
 
     /// Return the "standard" generator for this curve
     pub fn generator_g(curve: EccCurveType) -> ThresholdEcdsaResult<Self> {
         match curve {
-            EccCurveType::K256 => Ok(Self::K256(secp256k1::Point::generator())),
-            EccCurveType::P256 => Ok(Self::P256(secp256r1::Point::generator())),
+            EccCurveType::K256 => Ok(secp256k1::Point::generator().into()),
+            EccCurveType::P256 => Ok(secp256r1::Point::generator().into()),
         }
     }
 
@@ -474,9 +480,9 @@ impl EccPoint {
     }
 
     pub fn curve_type(&self) -> EccCurveType {
-        match self {
-            Self::K256(_) => EccCurveType::K256,
-            Self::P256(_) => EccCurveType::P256,
+        match self.point {
+            EccPointInternal::K256(_) => EccCurveType::K256,
+            EccPointInternal::P256(_) => EccCurveType::P256,
         }
     }
 
@@ -519,44 +525,44 @@ impl EccPoint {
 
     /// Add two elliptic curve points
     pub fn add_points(&self, other: &Self) -> ThresholdEcdsaResult<Self> {
-        match (self, other) {
-            (Self::K256(pt1), Self::K256(pt2)) => Ok(Self::K256(pt1.add(pt2))),
-            (Self::P256(pt1), Self::P256(pt2)) => Ok(Self::P256(pt1.add(pt2))),
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+        match (&self.point, &other.point) {
+            (EccPointInternal::K256(pt1), EccPointInternal::K256(pt2)) => Ok(pt1.add(pt2).into()),
+            (EccPointInternal::P256(pt1), EccPointInternal::P256(pt2)) => Ok(pt1.add(pt2).into()),
+            _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
 
     /// Subtract two elliptic curve points
     pub fn sub_points(&self, other: &Self) -> ThresholdEcdsaResult<Self> {
-        match (self, other) {
-            (Self::K256(pt1), Self::K256(pt2)) => Ok(Self::K256(pt1.sub(pt2))),
-            (Self::P256(pt1), Self::P256(pt2)) => Ok(Self::P256(pt1.sub(pt2))),
+        match (&self.point, &other.point) {
+            (EccPointInternal::K256(pt1), EccPointInternal::K256(pt2)) => Ok(pt1.sub(pt2).into()),
+            (EccPointInternal::P256(pt1), EccPointInternal::P256(pt2)) => Ok(pt1.sub(pt2).into()),
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
 
     /// Perform point*scalar multiplication
     pub fn scalar_mul(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
-        match (self, scalar) {
-            (Self::K256(pt), EccScalar::K256(s)) => Ok(Self::K256(pt.mul(s))),
-            (Self::P256(pt), EccScalar::P256(s)) => Ok(Self::P256(pt.mul(s))),
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+        match (&self.point, scalar) {
+            (EccPointInternal::K256(pt), EccScalar::K256(s)) => Ok(pt.mul(s).into()),
+            (EccPointInternal::P256(pt), EccScalar::P256(s)) => Ok(pt.mul(s).into()),
+            _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
 
     /// Perform point doubling
     pub fn double(&self) -> Self {
-        match self {
-            Self::K256(pt) => Self::K256(pt.double()),
-            Self::P256(pt) => Self::P256(pt.double()),
+        match &self.point {
+            EccPointInternal::K256(pt) => pt.double().into(),
+            EccPointInternal::P256(pt) => pt.double().into(),
         }
     }
 
     /// Perform point negation
     pub fn negate(&self) -> Self {
-        match self {
-            Self::K256(pt) => Self::K256(pt.negate()),
-            Self::P256(pt) => Self::P256(pt.negate()),
+        match &self.point {
+            EccPointInternal::K256(pt) => pt.negate().into(),
+            EccPointInternal::P256(pt) => pt.negate().into(),
         }
     }
 
@@ -595,17 +601,162 @@ impl EccPoint {
         pt2: &EccPoint,
         scalar2: &EccScalar,
     ) -> ThresholdEcdsaResult<Self> {
-        match (pt1, scalar1, pt2, scalar2) {
-            (Self::K256(pt1), EccScalar::K256(s1), Self::K256(pt2), EccScalar::K256(s2)) => {
-                Ok(Self::K256(secp256k1::Point::lincomb(pt1, s1, pt2, s2)))
-            }
+        match (&pt1.point, scalar1, &pt2.point, scalar2) {
+            (
+                EccPointInternal::K256(pt1),
+                EccScalar::K256(s1),
+                EccPointInternal::K256(pt2),
+                EccScalar::K256(s2),
+            ) => Ok(secp256k1::Point::lincomb(pt1, s1, pt2, s2).into()),
 
-            (Self::P256(pt1), EccScalar::P256(s1), Self::P256(pt2), EccScalar::P256(s2)) => {
-                Ok(Self::P256(secp256r1::Point::lincomb(pt1, s1, pt2, s2)))
-            }
+            (
+                EccPointInternal::P256(pt1),
+                EccScalar::P256(s1),
+                EccPointInternal::P256(pt2),
+                EccScalar::P256(s2),
+            ) => Ok(secp256r1::Point::lincomb(pt1, s1, pt2, s2).into()),
 
-            (_, _, _, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
+    }
+
+    pub const MIN_LUT_WINDOW_SIZE: usize = NafLut::MIN_WINDOW_SIZE;
+    pub const MAX_LUT_WINDOW_SIZE: usize = NafLut::MAX_WINDOW_SIZE;
+
+    /// Creates a new `Self` object and computes a look-up table (LUT) with multiplication
+    /// with small scalars for `point`, which will be used for faster vartime (batch) multiplication.
+    /// Multiplications stored in the LUT are for scalars represented in
+    /// [`Naf`](https://en.wikipedia.org/wiki/Non-adjacent_form)
+    /// of length `window_size` with the leading digit being non-zero.
+    /// The supported values of `window_size` are in `3..=7`.
+    ///
+    /// # Errors
+    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
+    pub fn precompute(&mut self, window_size: usize) -> ThresholdEcdsaResult<()> {
+        self.precompute = Some(NafLut::new(&self.clone(), window_size)?);
+        Ok(())
+    }
+
+    pub fn is_precopmuted(&self) -> bool {
+        self.precompute.is_some()
+    }
+
+    /// Takes in an NAF state for a scalar and an accumulator point,
+    /// which must be initialized with the identity in the first call,
+    /// and performs one step for the scalar-point multiplication.
+    /// This function must be called as many times as the length of
+    /// the NAF representation of the scalar.
+    ///     
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    fn scalar_mul_step_vartime(
+        &self,
+        scalar_naf_state: &mut SlidingWindowMulState,
+        accum: &mut EccPoint,
+    ) -> ThresholdEcdsaResult<()> {
+        match &self.precompute {
+            Some(lut) => {
+                let next = scalar_naf_state.next();
+                match next {
+                    SlidingWindowStep::Continue => {}
+                    SlidingWindowStep::Window(window) => match window {
+                        1i8 => {
+                            let sum = accum.add_points(self)?;
+                            *accum = sum;
+                        }
+                        -1i8 => {
+                            let sum = accum.sub_points(self)?;
+                            *accum = sum;
+                        }
+                        w => {
+                            let p = lut.get(w);
+                            let sum = accum.add_points(p)?;
+                            *accum = sum;
+                        }
+                    },
+                    SlidingWindowStep::Break => {}
+                }
+                Ok(())
+            }
+            None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+            ))),
+        }
+    }
+
+    /// Multiples `self.point` by `scalar` utilizing a precomputed LUT
+    /// for efficiency.
+    ///
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    pub fn scalar_mul_vartime(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        match &self.precompute {
+            Some(lut) => {
+                let mut scalar_naf_state = SlidingWindowMulState::new(scalar, lut.window_size);
+                let mut result = Self::identity(self.curve_type());
+                for _ in 0..(scalar_naf_state.naf.bit_len() - 1) {
+                    self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
+                    result = result.double();
+                }
+                self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
+                Ok(result)
+            }
+            None => Ok(self.scalar_mul(scalar)?),
+        }
+    }
+
+    /// Multiplies and adds together `point_scalar_pairs` as
+    /// `ps[0].0 * ps[0].1 + ... + ps[ps.len() - 1].0 * ps[ps.len() - 1].1`,
+    /// where `ps` is `point_scalar_pairs`.
+    /// The use of `EccPointWithLut` objects with different `window_size`s is supported.
+    ///
+    /// Warning: this function leaks information about the scalars via
+    /// side channels. Do not use this function with secret scalars.
+    pub fn mul_n_points_vartime<'a>(
+        point_scalar_pairs: &[(&'a EccPoint, &EccScalar)],
+    ) -> ThresholdEcdsaResult<EccPoint> {
+        if point_scalar_pairs.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                "Trying to compute the sum of products with 0 inputs",
+            )));
+        }
+
+        let get_lut_or_return_error = |pt: &'a EccPoint| -> ThresholdEcdsaResult<&'a NafLut> {
+            match &pt.precompute {
+                Some(lut) => Ok(lut),
+                None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                    "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+                ))),
+            }
+        };
+
+        let luts: Vec<&NafLut> = point_scalar_pairs
+            .iter()
+            .map(|&(p, _s)| get_lut_or_return_error(p))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
+            .iter()
+            .zip(luts.iter())
+            .map(|(&(_p, s), lut)| (SlidingWindowMulState::new(s, lut.window_size)))
+            .collect();
+
+        let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
+
+        // for each digit in the NAF representation
+        for _ in 0..(mul_states[0].naf.bit_len() - 1) {
+            // iterate over all pairs and add all emitted LUT windows to the accumulator
+            for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
+                p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
+            }
+            // shift the accumulator by 1 bit to the left
+            accum = accum.double();
+        }
+        // perform the last iteration without the shift
+        for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
+            p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
+        }
+        Ok(accum)
     }
 
     pub fn pedersen(scalar1: &EccScalar, scalar2: &EccScalar) -> ThresholdEcdsaResult<Self> {
@@ -627,9 +778,9 @@ impl EccPoint {
     /// followed by a single field element, which for K256 and P256 is
     /// 32 bytes long.
     pub fn serialize(&self) -> Vec<u8> {
-        match self {
-            Self::K256(pt) => pt.serialize(),
-            Self::P256(pt) => pt.serialize(),
+        match &self.point {
+            EccPointInternal::K256(pt) => pt.serialize(),
+            EccPointInternal::P256(pt) => pt.serialize(),
         }
     }
 
@@ -641,9 +792,9 @@ impl EccPoint {
         let mut bytes = Vec::with_capacity(1 + self.curve_type().point_bytes());
         bytes.push(self.curve_type().tag());
 
-        bytes.extend_from_slice(&match self {
-            Self::K256(pt) => pt.serialize(),
-            Self::P256(pt) => pt.serialize(),
+        bytes.extend_from_slice(&match &self.point {
+            EccPointInternal::K256(pt) => pt.serialize(),
+            EccPointInternal::P256(pt) => pt.serialize(),
         });
 
         bytes
@@ -655,9 +806,9 @@ impl EccPoint {
     /// followed by a two field elements, which for K256 and P256 is
     /// 32 bytes long each.
     fn serialize_uncompressed(&self) -> Vec<u8> {
-        match self {
-            Self::K256(pt) => pt.serialize_uncompressed(),
-            Self::P256(pt) => pt.serialize_uncompressed(),
+        match &self.point {
+            EccPointInternal::K256(pt) => pt.serialize_uncompressed(),
+            EccPointInternal::P256(pt) => pt.serialize_uncompressed(),
         }
     }
 
@@ -679,9 +830,9 @@ impl EccPoint {
 
     /// Return true if this is the point at infinity
     pub fn is_infinity(&self) -> ThresholdEcdsaResult<bool> {
-        match self {
-            Self::K256(p) => Ok(p.is_infinity()),
-            Self::P256(p) => Ok(p.is_infinity()),
+        match &self.point {
+            EccPointInternal::K256(pt) => Ok(pt.is_infinity()),
+            EccPointInternal::P256(pt) => Ok(pt.is_infinity()),
         }
     }
 
@@ -736,13 +887,33 @@ impl EccPoint {
             EccCurveType::K256 => {
                 let pt = secp256k1::Point::deserialize(bytes)
                     .ok_or(ThresholdEcdsaError::InvalidPoint)?;
-                Ok(Self::K256(pt))
+                Ok(pt.into())
             }
             EccCurveType::P256 => {
                 let pt = secp256r1::Point::deserialize(bytes)
                     .ok_or(ThresholdEcdsaError::InvalidPoint)?;
-                Ok(Self::P256(pt))
+                Ok(pt.into())
             }
+        }
+    }
+}
+
+/// Converts `secp256r1` point to `EccPoint`
+impl From<secp256r1::Point> for EccPoint {
+    fn from(point: secp256r1::Point) -> Self {
+        Self {
+            point: EccPointInternal::P256(point),
+            precompute: None,
+        }
+    }
+}
+
+/// Converts `secp256k1` point to `EccPoint`
+impl From<secp256k1::Point> for EccPoint {
+    fn from(point: secp256k1::Point) -> Self {
+        Self {
+            point: EccPointInternal::K256(point),
+            precompute: None,
         }
     }
 }
@@ -895,131 +1066,6 @@ impl Naf {
     }
 }
 
-/// `EccPoint` with a look-up table (LUT) for faster multiplication.
-/// A LUT contains a precomputed mutliplication of `point` with particular small scalars.
-/// Using the LUT, the multiplication is performed window-wise and not bit-wise.
-pub struct EccPointWithLut {
-    point: EccPoint,
-    lut: NafLut,
-}
-
-impl EccPointWithLut {
-    pub const MIN_WINDOW_SIZE: usize = NafLut::MIN_WINDOW_SIZE;
-    pub const MAX_WINDOW_SIZE: usize = NafLut::MAX_WINDOW_SIZE;
-
-    pub fn curve_type(&self) -> EccCurveType {
-        self.point.curve_type()
-    }
-
-    /// Creates a new `Self` object and computes a look-up table (LUT) with multiplication
-    /// with small scalars for `point`, which will be used for faster vartime (batch) multiplication.
-    /// Multiplications stored in the LUT are for scalars represented in
-    /// [`Naf`](https://en.wikipedia.org/wiki/Non-adjacent_form)
-    /// of length `window_size` with the leading digit being non-zero.
-    /// The supported values of `window_size` are in `3..=7`.
-    ///
-    /// # Errors
-    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
-    pub fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
-        let data = NafLut::new(point, window_size)?;
-        Ok(Self {
-            point: *point,
-            lut: data,
-        })
-    }
-
-    /// Takes in an NAF state for a scalar and an accumulator point,
-    /// which must be initialized with the identity in the first call,
-    /// and performs one step for the scalar-point multiplication.
-    /// This function must be called as many times as the length of
-    /// the NAF representation of the scalar.
-    ///     
-    /// Warning: this function leaks information about the scalars via
-    /// side channels. Do not use this function with secret scalars.
-    fn scalar_mul_step_vartime(
-        &self,
-        scalar_naf_state: &mut SlidingWindowMulState,
-        accum: &mut EccPoint,
-    ) -> ThresholdEcdsaResult<()> {
-        let next = scalar_naf_state.next();
-        match next {
-            SlidingWindowStep::Continue => {}
-            SlidingWindowStep::Window(window) => match window {
-                1i8 => {
-                    let sum = accum.add_points(&self.point)?;
-                    *accum = sum;
-                }
-                -1i8 => {
-                    let sum = accum.sub_points(&self.point)?;
-                    *accum = sum;
-                }
-                w => {
-                    let p = self.lut.get(w);
-                    let sum = accum.add_points(p)?;
-                    *accum = sum;
-                }
-            },
-            SlidingWindowStep::Break => {}
-        }
-        Ok(())
-    }
-
-    /// Multiples `self.point` by `scalar` utilizing a precomputed LUT
-    /// for efficiency.
-    ///     
-    /// Warning: this function leaks information about the scalars via
-    /// side channels. Do not use this function with secret scalars.
-    pub fn scalar_mul_vartime(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
-        let mut scalar_naf_state = SlidingWindowMulState::new(scalar, self.lut.window_size);
-        let mut result = EccPoint::identity(self.point.curve_type());
-        for _ in 0..(scalar_naf_state.naf.bit_len() - 1) {
-            self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
-            result = result.double();
-        }
-        self.scalar_mul_step_vartime(&mut scalar_naf_state, &mut result)?;
-        Ok(result)
-    }
-
-    /// Multiplies and adds together `point_scalar_pairs` as
-    /// `ps[0].0 * ps[0].1 + ... + ps[ps.len() - 1].0 * ps[ps.len() - 1].1`,
-    /// where `ps` is `point_scalar_pairs`.
-    /// The use of `EccPointWithLut` objects with different `window_size`s is supported.
-    ///
-    /// Warning: this function leaks information about the scalars via
-    /// side channels. Do not use this function with secret scalars.
-    pub fn mul_n_points_vartime_naf(
-        point_scalar_pairs: &[(&EccPointWithLut, &EccScalar)],
-    ) -> ThresholdEcdsaResult<EccPoint> {
-        if point_scalar_pairs.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "Trying to compute the sum of products with 0 inputs",
-            )));
-        }
-
-        let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
-            .iter()
-            .map(|&(p, s)| (SlidingWindowMulState::new(s, p.lut.window_size)))
-            .collect();
-
-        let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
-
-        // for each digit in the NAF representation
-        for _ in 0..(mul_states[0].naf.bit_len() - 1) {
-            // iterate over all pairs and add all emitted LUT windows to the accumulator
-            for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
-                p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
-            }
-            // shift the accumulator by 1 bit to the left
-            accum = accum.double();
-        }
-        // perform the last iteration without the shift
-        for (i, (p, _s)) in point_scalar_pairs.iter().enumerate() {
-            p.scalar_mul_step_vartime(&mut mul_states[i], &mut accum)?;
-        }
-        Ok(accum)
-    }
-}
-
 /// Represents the action to be taken in the
 /// [sliding window method](https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Sliding-window_method)
 /// step.
@@ -1115,7 +1161,8 @@ impl SlidingWindowMulState {
 
 /// Look-up table (LUT) that can be used to improve the efficiency of
 /// multiplication of the input `EccPoint` by an `EccScalar`.
-struct NafLut {
+#[derive(Clone, Eq, PartialEq)]
+pub struct NafLut {
     multiplications: Vec<EccPoint>,
     window_size: usize,
 }
@@ -1125,8 +1172,8 @@ impl NafLut {
     /// Manually the bounds can be computed as an "all-one" NAF value, e.g.,
     /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjecent non-zero values)
     const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
-    const MIN_WINDOW_SIZE: usize = 3;
-    const MAX_WINDOW_SIZE: usize = 7;
+    pub const MIN_WINDOW_SIZE: usize = 3;
+    pub const MAX_WINDOW_SIZE: usize = 7;
 
     /// Generates a LUT with the values `BOUND[window_size - 1] + 1..=BOUND[window_size]` and their negations.
     /// The values are stored in the ascending order, e.g., for `window_size == 5` it stores
@@ -1134,7 +1181,7 @@ impl NafLut {
     ///
     /// # Errors
     /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
-    pub fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
+    fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
         if !(Self::MIN_WINDOW_SIZE..=Self::MAX_WINDOW_SIZE).contains(&window_size) {
             return Err(ThresholdEcdsaError::InvalidArguments(format!(
                 "NAF LUT window sizes are only allowed in range {}..={} but got {}",
@@ -1152,7 +1199,7 @@ impl NafLut {
 
     /// Checks that the scalar index is in bounds, i.e., the multiplication with `i` has been
     /// computed and stored in `self.multiplications`.
-    pub fn is_in_bounds(window_size: usize, i: i8) -> bool {
+    fn is_in_bounds(window_size: usize, i: i8) -> bool {
         (i.abs() as usize) > Self::BOUND[window_size - 1]
             && (i.abs() as usize) < (Self::BOUND[window_size] + 1)
     }
@@ -1171,7 +1218,7 @@ impl NafLut {
         let id = EccPoint::identity(point.curve_type());
         let mut result = vec![id; 2 * num_negatives];
 
-        let mut point_in_bounds = *point;
+        let mut point_in_bounds = point.clone();
         let mut index_in_bounds: i8 = 1;
         while index_in_bounds as usize <= lower_bound {
             point_in_bounds = point_in_bounds.double();
@@ -1212,7 +1259,7 @@ impl NafLut {
     ///
     /// # Panics
     /// * if `i` is out of bounds, i.e., if it has not been precomputed.
-    pub fn get(&self, i: i8) -> &EccPoint {
+    fn get(&self, i: i8) -> &EccPoint {
         assert!(Self::is_in_bounds(self.window_size, i));
         let lower_bound = Self::BOUND[self.window_size - 1];
         let num_negatives = self.multiplications.len() / 2;

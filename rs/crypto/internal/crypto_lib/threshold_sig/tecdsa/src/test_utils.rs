@@ -25,8 +25,8 @@ pub fn corrupt_dealing(
             }
 
             MEGaCiphertextSingle {
-                ephemeral_key: c.ephemeral_key,
-                pop_public_key: c.pop_public_key,
+                ephemeral_key: c.ephemeral_key.clone(),
+                pop_public_key: c.pop_public_key.clone(),
                 pop_proof: c.pop_proof,
                 ctexts,
             }
@@ -41,8 +41,8 @@ pub fn corrupt_dealing(
             }
 
             MEGaCiphertextPair {
-                ephemeral_key: c.ephemeral_key,
-                pop_public_key: c.pop_public_key,
+                ephemeral_key: c.ephemeral_key.clone(),
+                pop_public_key: c.pop_public_key.clone(),
                 pop_proof: c.pop_proof,
                 ctexts,
             }
@@ -92,7 +92,7 @@ pub fn corrupt_complaint_zk_proof(
     // return a corrupted `IDkgComplaintInternal` instance
     Ok(IDkgComplaintInternal {
         proof: corrupted_zk_proof,
-        shared_secret: complaint.shared_secret,
+        shared_secret: complaint.shared_secret.clone(),
     })
 }
 
