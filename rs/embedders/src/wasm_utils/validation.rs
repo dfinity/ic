@@ -24,7 +24,7 @@ use wasmtime::Config;
 #[doc(hidden)] // pub for usage in tests
 pub const RESERVED_SYMBOLS: [&str; 2] = ["canister counter_instructions", "canister_start"];
 
-const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 10_000;
+const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 15_000;
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 
 // Represents the expected function signature for any System APIs the Internet

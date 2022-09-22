@@ -777,7 +777,7 @@ fn function_with_result_is_invalid() {
 #[test]
 fn complex_function_rejected() {
     let mut wat = "(module (func) (func".to_string();
-    for _ in 0..10_001 {
+    for _ in 0..15_001 {
         wat.push_str("(loop)");
     }
     wat.push_str("))");
@@ -786,8 +786,8 @@ fn complex_function_rejected() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::FunctionComplexityTooHigh {
             index: 1,
-            complexity: 10_001,
-            allowed: 10_000
+            complexity: 15_001,
+            allowed: 15_000
         })
     )
 }
