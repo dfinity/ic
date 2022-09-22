@@ -345,3 +345,6 @@ impl Csp {
 // Trait implementations:
 pub mod keygen;
 mod signer;
+
+#[cfg(test)]
+mod tests;

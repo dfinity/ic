@@ -234,7 +234,7 @@ fn verifier() -> impl CryptoServiceProvider {
     Csp::of(csprng, dummy_key_store)
 }
 
-fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -> CspPublicKey {
+pub fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -> CspPublicKey {
     let pubkey_bytes = public_key_cert
         .as_x509()
         .public_key()
