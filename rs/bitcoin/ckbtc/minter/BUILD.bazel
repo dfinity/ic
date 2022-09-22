@@ -50,7 +50,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     crate_name = "ic_ckbtc_minter_canister",
     proc_macro_deps = [
-        "@crate_index//:async-trait",
         "@crate_index//:ic-cdk-macros",
     ],
     deps = [
@@ -67,18 +66,18 @@ optimized_canister(
     wasm = ":ckbtc_minter_raw",
 )
 
-# unit tests defined in ckbtc minter src/
 rust_test(
-    name = "ckbtc_minter_unit_tests",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
-    data = [
-        ":ckbtc_minter.did",
-    ],
-    proc_macro_deps = LIB_PROC_MACRO_DEPS,
-    deps = LIB_DEPS,
+    name = "ckbtc_minter_lib_unit_tests",
+    crate = ":ckbtc_minter_lib",
+)
+
+rust_test(
+    name = "ckbtc_unit_tests",
+    crate = ":_wasm_ckbtc_minter_raw",
+    data = [":ckbtc_minter.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
+    },
 )
 
 # integration tests defined in ckbtc minter tests/

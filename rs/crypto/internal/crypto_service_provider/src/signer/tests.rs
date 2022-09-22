@@ -5,6 +5,7 @@ use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::imported_utilities::sign_utils::user_public_key_from_bytes;
 use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
+use crate::SecretKeyStore;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::{
     RFC8032_ED25519_1, RFC8032_ED25519_SHA_ABC,
@@ -14,6 +15,8 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
 };
 use ic_crypto_internal_test_vectors::test_data;
 use ic_types::crypto::{AlgorithmId::Ed25519, KeyId};
+use rand::CryptoRng;
+use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 

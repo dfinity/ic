@@ -451,8 +451,8 @@ impl CyclesAccountManager {
     }
 
     /// Amount to charge for an ECDSA signature.
-    pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.config.ecdsa_signature_fee
+    pub fn ecdsa_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
     }
 
     ////////////////////////////////////////////////////////////////////////////

@@ -46,8 +46,10 @@ fi
 # on top of this directory. We don't want its contents in the root
 # image.
 rm -rf "${BASEDIR}"/boot/*
+rm -rf "${BASEDIR}"/boot/.* >/dev/null 2>&1 || true # Ignore warnings from `.` and `..`
 
 rm -rf "${BASEDIR}"/run/*
+rm -rf "${BASEDIR}"/run/.* >/dev/null 2>&1 || true # Ignore warnings from `.` and `..`
 chmod 0644 "${BASEDIR}"/etc/hosts "${BASEDIR}"/etc/hostname "${BASEDIR}"/etc/resolv.conf
 
 if [ "${ROOT_FILE_CONTEXTS}" != "" ]; then

@@ -5,7 +5,6 @@ use ic_ic00_types::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CanisterState, InputQueueType, ReplicatedState, Stream,
 };
@@ -106,7 +105,6 @@ fn reject_local_request() {
         // Which should result in a reject Response being enqueued onto the input queue.
         expected_state
             .push_input(
-                QUEUE_INDEX_NONE,
                 Response {
                     originator: msg.sender,
                     respondent: msg.receiver,
@@ -171,7 +169,6 @@ fn reject_local_request_for_subnet() {
         // queue.
         expected_state
             .push_input(
-                QUEUE_INDEX_NONE,
                 Response {
                     originator: msg.sender,
                     respondent: msg.receiver,
@@ -1054,7 +1051,6 @@ fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
     canister_state
         .push_input(
-            QUEUE_INDEX_NONE,
             msg,
             (1 << 30).into(),
             &mut subnet_available_memory,

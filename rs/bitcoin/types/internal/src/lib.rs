@@ -63,6 +63,10 @@ impl From<v1::SendTransactionRequest> for SendTransactionRequest {
 pub enum BitcoinAdapterRequestWrapper {
     GetSuccessorsRequest(GetSuccessorsRequest),
     SendTransactionRequest(SendTransactionRequest),
+    // A request from the bitcoin wasm canister.
+    // This supersedes `GetSuccessorsRequest`, which will be deleted
+    // once the Bitcoin replica canister is phased out.
+    CanisterGetSuccessorsRequest(CanisterGetSuccessorsRequestInitial),
 }
 
 impl BitcoinAdapterRequestWrapper {
@@ -70,6 +74,7 @@ impl BitcoinAdapterRequestWrapper {
         match self {
             BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => "get_successors",
             BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => "send_transaction",
+            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(_) => "get_successors",
         }
     }
 }
@@ -95,6 +100,15 @@ impl From<&BitcoinAdapterRequestWrapper> for v1::BitcoinAdapterRequestWrapper {
                     ),
                 }
             }
+            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(request) => {
+                v1::BitcoinAdapterRequestWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_request_wrapper::R::CanisterGetSuccessorsRequest(
+                            request.into(),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -110,6 +124,9 @@ impl TryFrom<v1::BitcoinAdapterRequestWrapper> for BitcoinAdapterRequestWrapper 
             ),
             v1::bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => Ok(
                 BitcoinAdapterRequestWrapper::SendTransactionRequest(r.try_into()?),
+            ),
+            v1::bitcoin_adapter_request_wrapper::R::CanisterGetSuccessorsRequest(r) => Ok(
+                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(r.try_into()?),
             ),
         }
     }
@@ -569,7 +586,8 @@ type PageNumber = u8;
 /// variant {
 ///   initial : record {
 ///     network: network;
-///     processed_block_hashes: vec blob
+///     anchor: blob;
+///     processed_block_hashes: vec blob;
 ///   };
 ///   follow_up : nat8;
 /// };
@@ -588,6 +606,7 @@ pub enum CanisterGetSuccessorsRequest {
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterGetSuccessorsRequestInitial {
     pub network: Network,
+    pub anchor: BlockHash,
     pub processed_block_hashes: Vec<BlockHash>,
 }
 
@@ -599,6 +618,7 @@ impl From<&CanisterGetSuccessorsRequestInitial> for v1::CanisterGetSuccessorsReq
                 Network::Mainnet => 2,
                 Network::Regtest => 3,
             },
+            anchor: request.anchor.clone(),
             processed_block_hashes: request.processed_block_hashes.clone(),
         }
     }
@@ -618,6 +638,7 @@ impl TryFrom<v1::CanisterGetSuccessorsRequestInitial> for CanisterGetSuccessorsR
                     ))
                 }
             },
+            anchor: request.anchor,
             processed_block_hashes: request.processed_block_hashes,
         })
     }

@@ -94,6 +94,7 @@ impl SnsInitPayload {
             url: None,
             name: None,
             description: None,
+            sns_initialization_parameters: Some("".to_string()),
         }
     }
 
@@ -149,6 +150,11 @@ impl SnsInitPayload {
         governance.sns_metadata = Some(self.get_sns_metadata());
 
         governance.neurons = self.get_initial_neurons(&parameters)?;
+
+        governance.sns_initialization_parameters = self
+            .sns_initialization_parameters
+            .clone()
+            .expect("sns_initialization_parameters not set");
 
         Ok(governance)
     }

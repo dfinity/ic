@@ -7,8 +7,8 @@ use ic_replicated_state::bitcoin_state::{
     UtxoSet as ReplicatedUtxoSet,
 };
 use ic_replicated_state::page_map::PersistenceError;
+use ic_stable_structures::StableBTreeMap;
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
-use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
 use std::{convert::TryFrom, path::Path};
 

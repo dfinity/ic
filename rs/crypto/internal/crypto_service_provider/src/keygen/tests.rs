@@ -1,11 +1,12 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
-use crate::types::CspSecretKey;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
 use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
+use rand::CryptoRng;
+use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
@@ -28,23 +29,6 @@ fn should_correctly_generate_ed25519_keys() {
         CspPublicKey::ed25519_from_hex(
             "78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b"
         )
-    );
-}
-
-#[test]
-fn should_retrieve_newly_generated_secret_key_from_store() {
-    let csprng = csprng_seeded_with(42);
-    let csp = Csp::of(csprng, volatile_key_store());
-    let public_key = csp.gen_key_pair(AlgorithmId::Ed25519).unwrap();
-    let key_id = public_key_hash_as_key_id(&public_key);
-
-    let retrieved_sk = csp.csp_vault.get_secret_key(&key_id);
-
-    assert_eq!(
-        retrieved_sk,
-        Some(CspSecretKey::ed25519_from_hex(
-            "7848b5d711bc9883996317a3f9c90269d56771005d540a19184939c9e8d0db2a"
-        ))
     );
 }
 
@@ -159,34 +143,12 @@ mod tls {
     use super::*;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreError;
-    use crate::vault::api::CspVault;
-    use openssl::pkey::{Id, PKey};
     use openssl::x509::X509VerifyResult;
     use std::collections::BTreeSet;
-    use std::sync::Arc;
 
     const NODE_1: u64 = 4241;
     const FIXED_SEED: u64 = 42;
     const NOT_AFTER: &str = "25670102030405Z";
-
-    #[test]
-    fn should_insert_secret_key_into_store_in_der_format() {
-        let sks = volatile_key_store();
-        let csp = Csp::of(rng(), sks);
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS key pair");
-
-        let secret_key = secret_key_from_store(Arc::clone(&csp.csp_vault), cert.as_x509().clone());
-        if let CspSecretKey::TlsEd25519(sk_der_bytes) = &secret_key {
-            let private_key = PKey::private_key_from_der(&sk_der_bytes.bytes)
-                .expect("unable to parse DER secret key");
-            assert_eq!(private_key.id(), Id::ED25519);
-        } else {
-            panic!("secret key has the wrong type");
-        }
-    }
 
     #[test]
     #[should_panic(expected = "has already been inserted")]
@@ -344,15 +306,6 @@ mod tls {
 
     fn rng() -> impl CryptoRng + Rng + Clone {
         csprng_seeded_with(42)
-    }
-
-    fn secret_key_from_store(csp_vault: Arc<dyn CspVault>, x509_cert: X509) -> CspSecretKey {
-        let cert = TlsPublicKeyCert::new_from_x509(x509_cert)
-            .expect("failed to convert X509 into TlsPublicKeyCert");
-        let key_id = tls_keygen::tls_cert_hash_as_key_id(&cert);
-        csp_vault
-            .get_secret_key(&key_id)
-            .expect("secret key not found")
     }
 
     fn cn_entries(x509_cert: &X509) -> X509NameEntries {

@@ -5,19 +5,20 @@ use crate::pb::v1::{
     DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest,
     GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
     SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
+    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
 };
 use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::iter::zip;
 use std::thread::LocalKey;
@@ -43,6 +44,8 @@ where
     /// If true, updates (e.g. add_wasm) can only be made by NNS Governance
     /// (via proposal execution), otherwise updates can be made by any caller
     pub access_controls_enabled: bool,
+    /// List of principals that are allowed to deploy an SNS
+    pub allowed_principals: Vec<PrincipalId>,
 }
 const ONE_TRILLION: u64 = 1_000_000_000_000;
 const ONE_BILLION: u64 = 1_000_000_000;
@@ -823,6 +826,37 @@ where
             .expect("Failed to read canister state from stable memory")
             .into()
     }
+
+    /// Update allowed principals list
+    pub fn update_allowed_principals(
+        &mut self,
+        update_allowed_principals_request: UpdateAllowedPrincipalsRequest,
+    ) -> UpdateAllowedPrincipalsResponse {
+        let remove_set: HashSet<PrincipalId> = update_allowed_principals_request
+            .remove
+            .into_iter()
+            .collect();
+
+        let add_set: HashSet<PrincipalId> =
+            update_allowed_principals_request.add.into_iter().collect();
+
+        let current_set: HashSet<PrincipalId> =
+            self.allowed_principals.clone().into_iter().collect();
+
+        self.allowed_principals = current_set
+            .union(&add_set)
+            .copied()
+            .collect::<HashSet<PrincipalId>>()
+            .difference(&remove_set)
+            .copied()
+            .collect::<Vec<PrincipalId>>()
+            .into_iter()
+            .collect();
+
+        UpdateAllowedPrincipalsResponse {
+            allowed_principals: self.allowed_principals.clone(),
+        }
+    }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
@@ -1055,6 +1089,12 @@ mod test {
         state
     }
 
+    /// Constructs a test principal id from an integer.
+    /// Convenience function to make creating neurons more concise.
+    pub fn principal(i: u64) -> PrincipalId {
+        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    }
+
     /// Add some placeholder wasms with different values so we can test
     /// that each value is installed into the correct spot
     fn add_mock_wasms(canister: &mut SnsWasmCanister<TestCanisterStableMemory>) -> SnsVersion {
@@ -1220,6 +1260,64 @@ mod test {
             AddWasmResponse {
                 result: Some(add_wasm_response::Result::Hash(valid_hash.to_vec()))
             }
+        );
+    }
+
+    #[test]
+    fn test_update_allowed_principals() {
+        let mut canister = new_wasm_canister();
+
+        let update_allowed_principals_response_1 =
+            canister.update_allowed_principals(UpdateAllowedPrincipalsRequest {
+                add: vec![principal(1), principal(2), principal(3)],
+                remove: vec![],
+            });
+
+        let expected_1: HashSet<PrincipalId> = vec![principal(1), principal(2), principal(3)]
+            .into_iter()
+            .collect();
+
+        assert!(
+            expected_1
+                .symmetric_difference(
+                    &update_allowed_principals_response_1
+                        .allowed_principals
+                        .iter()
+                        .copied()
+                        .collect()
+                )
+                .count()
+                == 0
+        );
+
+        let update_allowed_principals_response_2 =
+            canister.update_allowed_principals(UpdateAllowedPrincipalsRequest {
+                add: vec![principal(1), principal(4), principal(5)],
+                remove: vec![principal(2)],
+            });
+
+        let expected_2: HashSet<PrincipalId> =
+            vec![principal(1), principal(3), principal(4), principal(5)]
+                .into_iter()
+                .collect();
+
+        assert!(
+            expected_2
+                .symmetric_difference(
+                    &update_allowed_principals_response_2
+                        .allowed_principals
+                        .into_iter()
+                        .collect()
+                )
+                .count()
+                == 0
+        );
+
+        assert!(
+            expected_2
+                .symmetric_difference(&canister.allowed_principals.into_iter().collect())
+                .count()
+                == 0
         );
     }
 

@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE},
+    canister_state::DEFAULT_QUEUE_CAPACITY,
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, SystemState,
 };
@@ -13,7 +13,7 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
-    Cycles, QueueIndex,
+    Cycles,
 };
 use std::sync::Arc;
 
@@ -61,7 +61,7 @@ fn correct_charging_target_canister_for_a_response() {
     // Enqueue the Request.
     system_state
         .queues_mut()
-        .push_input(QueueIndex::from(0), request, InputQueueType::RemoteSubnet)
+        .push_input(request, InputQueueType::RemoteSubnet)
         .unwrap();
 
     // Assume it was processed and enqueue a Response.
@@ -237,7 +237,6 @@ fn induct_messages_to_self_memory_limit_test_impl(
     system_state
         .queues_mut()
         .push_input(
-            QUEUE_INDEX_NONE,
             RequestOrResponse::Request(request.clone()),
             InputQueueType::RemoteSubnet,
         )
@@ -281,7 +280,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
         // Expect the second request to still be in the output queue.
         assert_eq!(
             vec![RequestOrResponse::Request(request)],
-            vec![system_state.output_into_iter(canister_id).next().unwrap().2]
+            vec![system_state.output_into_iter(canister_id).next().unwrap().1]
         );
     } else {
         assert_eq!(

@@ -1,9 +1,9 @@
+use crate::execution::test_utilities::ExecutionTestBuilder;
 use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, UserError};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::{
-    execution_environment::ExecutionTestBuilder,
     types::ids::user_test_id,
     universal_canister::{call_args, wasm},
 };

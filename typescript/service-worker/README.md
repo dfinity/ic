@@ -97,6 +97,33 @@ with:
 export type Token = { type: <T>() => IDL.Type<T> };
 ```
 
+## Testing locally
+
+1. Generate SSL certificates:
+      ```shell
+      npm run create-ssl-certs
+      ```
+1. Add the following to your `/etc/hosts` file.
+      ```shell
+      127.0.0.1 ic0.local
+
+      # Internet Identity
+      127.0.0.1 rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.local  
+
+      # NNS
+      127.0.0.1 qoctq-giaaa-aaaaa-aaaea-cai.ic0.local 
+
+      # Distrikt
+      127.0.0.1 az5sd-cqaaa-aaaae-aaarq-cai.ic0.local 
+
+      # DSCVR
+      127.0.0.1 h5aet-waaaa-aaaab-qaamq-cai.ic0.local 
+      ```
+1. Build and run the docker image:
+      ```shell
+      docker compose up --build
+      ```
+
 ## Release
 
 1. Create MR that updates `version` in `package.json`

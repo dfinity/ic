@@ -23,8 +23,13 @@ use ic_config::registry_client::DataProviderConfig;
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_types::ReplicaVersion;
+use prost::Message;
 use std::cell::RefCell;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
+use std::error::Error;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 use std::rc::Rc;
 
 mod backup;
@@ -45,11 +50,11 @@ mod validator;
 /// use std::str::FromStr;
 ///
 /// let args = ReplayToolArgs {
-///     subnet_id: ClapSubnetId::from_str(
+///     subnet_id: Some(ClapSubnetId::from_str(
 ///         "z4uqq-mbj6v-dxsuk-7a4wc-f6vta-cv7qg-25cqh-4jwi3-heaw3-l6b33-uae",
 ///     )
-///     .unwrap(),
-///     config: PathBuf::from("/path/to/ic.json5"),
+///     .unwrap()),
+///     config: Some(PathBuf::from("/path/to/ic.json5")),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
 ///     data_root: None,
@@ -70,7 +75,21 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let result: Rc<RefCell<ReplayResult>> = Rc::new(RefCell::new(Ok(Default::default())));
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
-        let source = ConfigSource::File(args.config);
+        let subcmd = &args.subcmd;
+        if let Some(SubCommand::VerifySubnetCUP(cmd)) = subcmd {
+            if let Err(err) = verify_cup_signature(&cmd.cup_file, &cmd.public_key_file) {
+                println!("CUP signature verification failed: {}", err);
+                std::process::exit(1);
+            } else {
+                println!("CUP signature verification succeeded");
+                return;
+            }
+        }
+
+        let source = ConfigSource::File(args.config.unwrap_or_else(|| {
+            println!("Config file is required!");
+            std::process::exit(1);
+        }));
         let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             println!("Failed to load config:\n  {}", err);
             std::process::exit(1);
@@ -86,9 +105,14 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         }
 
         let canister_caller_id = args.canister_caller_id.unwrap_or(GOVERNANCE_CANISTER_ID);
-        let subnet_id = args.subnet_id.0;
+        let subnet_id = args
+            .subnet_id
+            .unwrap_or_else(|| {
+                println!("Subnet is required!");
+                std::process::exit(1);
+            })
+            .0;
 
-        let subcmd = &args.subcmd;
         let target_height = args.replay_until_height;
         if let Some(h) = target_height {
             let question = format!("The checkpoint created at height {} ", h)
@@ -115,6 +139,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
             return;
         }
+
         {
             let _enter_guard = rt.enter();
             let player = match (subcmd.as_ref(), target_height) {
@@ -222,7 +247,6 @@ fn cmd_get_recovery_cup(
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
     use ic_types::consensus::{catchup::CUPWithOriginalProtobuf, HasHeight};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
-    use prost::Message;
 
     let context_time = ic_types::time::current_time();
     let time = context_time + std::time::Duration::from_secs(60);
@@ -286,5 +310,19 @@ fn cmd_get_recovery_cup(
     use std::io::Write;
     file.write_all(&bytes)
         .expect("Failed to write to output file");
+    Ok(())
+}
+
+fn verify_cup_signature(cup_file: &Path, public_key_file: &Path) -> Result<(), Box<dyn Error>> {
+    let mut file = File::open(cup_file)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+
+    let cup: ic_types::consensus::CatchUpPackage =
+        (&ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())?).try_into()?;
+    let pk = ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(public_key_file)?;
+
+    ic_crypto_utils_threshold_sig::verify_combined(&cup.content, &cup.signature.signature, &pk)?;
+
     Ok(())
 }

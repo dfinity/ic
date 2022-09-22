@@ -367,6 +367,9 @@ def external_crates_repository(name, annotations):
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
             ),
+            "ic-stable-structures": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-utils": crate.spec(
                 version = "^0.20.0",
             ),
@@ -1002,7 +1005,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.2",
             ),
             "wasmtime": crate.spec(
-                version = "^0.39.1",
+                version = "^0.40.0",
                 default_features = False,
                 features = [
                     "cranelift",

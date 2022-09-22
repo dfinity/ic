@@ -56,6 +56,17 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 // with roughly 100MB of state, so we set the limit to 40x.
 const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
 
+// The limit on the number of instructions a slice of an `install_code` message
+// is allowed to executed.
+//
+// If deterministic time slicing is enabled, then going above this limit
+// causes the Wasm execution to pause until the next slice.
+//
+// If deterministic time slicing is disabled, then this limit is ignored and
+// `MAX_INSTRUCTIONS_PER_INSTALL_CODE` is used for execution of the
+// single slice.
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions = NumInstructions::new(40 * 5 * B);
+
 // The factor to bump the instruction limit for system subnets.
 const SYSTEM_SUBNET_FACTOR: u64 = 10;
 
@@ -150,6 +161,10 @@ pub struct SchedulerConfig {
     /// Maximum number of instructions an `install_code` message can consume.
     pub max_instructions_per_install_code: NumInstructions,
 
+    /// Maximum number of instructions a single slice of `install_code` message
+    /// can consume. This should not exceed `max_instructions_per_install_code`.
+    pub max_instructions_per_install_code_slice: NumInstructions,
+
     /// This specifies the upper limit on how much heap delta all the canisters
     /// together on the subnet can produce in between checkpoints. This is a
     /// soft limit in the sense, that we will continue to execute canisters as
@@ -196,6 +211,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -217,6 +233,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
+            max_instructions_per_install_code_slice: max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -241,6 +258,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,

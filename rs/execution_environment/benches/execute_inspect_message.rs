@@ -8,8 +8,8 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_execution_environment::execution::inspect_message;
 
+use ic_execution_environment::ExecutionEnvironment;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use lazy_static::lazy_static;
@@ -45,7 +45,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
         c,
         "inspect",
         &BENCHMARKS,
-        |ee_test: &ExecutionTest,
+        |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -62,7 +62,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
                 .build()
                 .into();
 
-            let hypervisor = ee_test.hypervisor_deprecated();
+            let hypervisor = exec_env.hypervisor_for_testing();
             let (instructions_left, result) = inspect_message::execute_inspect_message(
                 time,
                 canister_state,

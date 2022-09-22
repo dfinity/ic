@@ -85,7 +85,7 @@ pub fn user_public_key_from_bytes(
         (key_bytes.0.key, alg_id, key_contents_type)
     } else if pkix_algo_id == iccsa::algorithm_identifier() {
         (
-            iccsa::api::public_key_bytes_from_der(bytes)?.0,
+            iccsa::public_key_bytes_from_der(bytes)?.0,
             AlgorithmId::IcCanisterSignature,
             KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer,
         )

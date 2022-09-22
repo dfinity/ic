@@ -2,7 +2,7 @@
 mod tests {
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::TransportConfig;
-    use ic_crypto::utils::TempCryptoComponent;
+    use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
     use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
     use ic_interfaces_transport::{
@@ -116,29 +116,12 @@ mod tests {
             let notify = Arc::new(Notify::new());
             let listener = notify.clone();
 
-            let (hol_event_handler, mut hol_handle) = create_mock_event_handler();
             let blocking_msg = TransportPayload(vec![0xa; 1000000]);
             let normal_msg = TransportPayload(vec![0xb; 1000000]);
 
-            let blocking_msg_copy = blocking_msg.clone();
             // Create event handler that blocks on message
-            rt.spawn(async move {
-                loop {
-                    let (event, rsp) = hol_handle.next_request().await.unwrap();
-                    match event {
-                        TransportEvent::Message(msg) => {
-                            connected_2.send(true).await.expect("Channel full");
-                            // This will block the read task
-                            if msg.payload == blocking_msg_copy {
-                                listener.notified().await;
-                            }
-                        }
-                        TransportEvent::PeerUp(_) => {}
-                        TransportEvent::PeerDown(_) => {}
-                    };
-                    rsp.send_response(());
-                }
-            });
+            let hol_event_handler =
+                setup_blocking_event_handler(rt.handle().clone(), connected_2, listener);
 
             let (client, _server) = start_connection_between_two_peers(
                 rt.handle().clone(),
@@ -261,6 +244,75 @@ mod tests {
         });
     }
 
+    /*
+    Tests that clearing send queue unblocks queue from receiving more messages.
+    Set Peer B to block event handler so no messages are consumed
+    A sends messages until send queue full, confirm error
+    Call clear send queue
+    A sends another message, confirm queue can accept more messages
+    */
+    #[test]
+    fn test_clear_send_queue() {
+        let registry_version = REG_V1;
+        with_test_replica_logger(|logger| {
+            // Setup registry and crypto component
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            let (peer_a_sender, _peer_a_receiver) = channel(10);
+            let event_handler_1 =
+                setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
+
+            let (peer_b_sender, mut peer_b_receiver) = channel(10);
+
+            let listener = Arc::new(Notify::new());
+
+            let blocking_msg = TransportPayload(vec![0xa; 1000000]);
+            let normal_msg = TransportPayload(vec![0xb; 1000000]);
+
+            let hol_event_handler =
+                setup_blocking_event_handler(rt.handle().clone(), peer_b_sender, listener);
+
+            let queue_size = 10;
+
+            let (peer_a, _peer_b) = start_connection_between_two_peers(
+                rt.handle().clone(),
+                logger,
+                registry_version,
+                queue_size,
+                event_handler_1,
+                hol_event_handler,
+            );
+
+            let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
+
+            // A sends message to B
+            let res = peer_a.send(&NODE_ID_2, channel_id, blocking_msg);
+            assert_eq!(res, Ok(()));
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
+
+            // Send messages from A->B until TCP Queue is full
+            let _temp = normal_msg.clone();
+            loop {
+                if let Err(TransportError::SendQueueFull(ref _temp)) =
+                    peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone())
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let res2 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+            assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg.clone())));
+
+            peer_a.clear_send_queues(&NODE_ID_2);
+
+            // Confirm that queue is completely clear by sending messages = queue size
+            for _ in 1..queue_size {
+                let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+                assert_eq!(res3, Ok(()));
+            }
+        });
+    }
+
     // helper functions
 
     fn setup_peer_up_ack_event_handler(
@@ -301,6 +353,34 @@ mod tests {
         event_handler
     }
 
+    fn setup_blocking_event_handler(
+        rt: tokio::runtime::Handle,
+        sender: Sender<bool>,
+        listener: Arc<Notify>,
+    ) -> TransportEventHandler {
+        let blocking_msg = TransportPayload(vec![0xa; 1000000]);
+        let (event_handler, mut handle) = create_mock_event_handler();
+
+        rt.spawn(async move {
+            loop {
+                let (event, rsp) = handle.next_request().await.unwrap();
+                match event {
+                    TransportEvent::Message(msg) => {
+                        sender.send(true).await.expect("Channel busy");
+                        // This will block the read task
+                        if msg.payload == blocking_msg {
+                            listener.notified().await;
+                        }
+                    }
+                    TransportEvent::PeerUp(_) => {}
+                    TransportEvent::PeerDown(_) => {}
+                };
+                rsp.send_response(());
+            }
+        });
+        event_handler
+    }
+
     struct RegistryAndDataProvider {
         data_provider: Arc<ProtoRegistryDataProvider>,
         registry: Arc<FakeRegistryClient>,
@@ -321,10 +401,12 @@ mod tests {
         registry_and_data: &RegistryAndDataProvider,
         node_id: NodeId,
     ) -> TempCryptoComponent {
-        let (temp_crypto, tls_pubkey_cert) = TempCryptoComponent::new_with_tls_key_generation(
-            Arc::clone(&registry_and_data.registry) as Arc<_>,
-            node_id,
-        );
+        let temp_crypto = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&registry_and_data.registry) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
+            .build();
+        let tls_pubkey_cert = temp_crypto.node_tls_public_key_certificate();
         registry_and_data
             .data_provider
             .add(

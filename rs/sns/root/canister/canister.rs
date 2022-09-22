@@ -404,7 +404,12 @@ mod tests {
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
     fn check_candid_interface_definition_file() {
-        let root_did = String::from_utf8(std::fs::read("canister/root.did").unwrap()).unwrap();
+        let did_path = std::path::PathBuf::from(
+            std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
+        )
+        .join("canister/root.did");
+
+        let root_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
 
         // See comments in main above
         candid::export_service!();

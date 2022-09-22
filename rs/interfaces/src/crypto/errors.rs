@@ -1,8 +1,8 @@
 use crate::crypto::ErrorReplication;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
@@ -196,6 +196,25 @@ impl ErrorReplication for IDkgVerifyDealingPublicError {
             // The dealing was publically invalid
             Self::InvalidDealing { .. } => true,
             Self::InvalidSignature { crypto_error, .. } => crypto_error.is_replicated(),
+        }
+    }
+}
+
+impl ErrorReplication for IDkgVerifyInitialDealingsError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Public dealing verification does not depend on any local or private
+        // state and so is inherently replicated.
+        match self {
+            // The params do not become matching through retrying
+            Self::MismatchingTranscriptParams => true,
+            Self::PublicVerificationFailure {
+                verify_dealing_public_error,
+                ..
+            } => verify_dealing_public_error.is_replicated(),
         }
     }
 }

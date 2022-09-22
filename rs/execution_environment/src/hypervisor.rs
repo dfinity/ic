@@ -29,6 +29,9 @@ use std::{path::PathBuf, sync::Arc};
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 
+#[cfg(test)]
+mod tests;
+
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
     accessed_pages: Histogram,

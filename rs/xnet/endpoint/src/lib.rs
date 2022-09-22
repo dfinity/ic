@@ -24,6 +24,7 @@ use std::convert::{Infallible, TryFrom};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use threadpool::ThreadPool;
 use tokio::{
     runtime,
     sync::{oneshot, Notify},
@@ -48,6 +49,8 @@ const RESOURCE_ERROR: &str = "error";
 const RESOURCE_STREAM: &str = "stream";
 const RESOURCE_STREAMS: &str = "streams";
 const RESOURCE_UNKNOWN: &str = "unknown";
+
+const XNET_ENDPOINT_NUM_WORKER_THREADS: usize = 4;
 
 impl XNetEndpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -107,7 +110,7 @@ enum WorkerMessage {
 ///     (`msg_begin` if missing), of up to `byte_limit` bytes.
 pub struct XNetEndpoint {
     server_address: SocketAddr,
-    handler_thread_handle: Option<std::thread::JoinHandle<()>>,
+    handler_thread_pool: threadpool::ThreadPool,
     shutdown_notify: Arc<Notify>,
     request_sender: crossbeam_channel::Sender<WorkerMessage>,
     log: ReplicaLogger,
@@ -121,14 +124,15 @@ impl Drop for XNetEndpoint {
 
         // Request graceful shutdown of the HTTP server and the background thread.
         self.shutdown_notify.notify_one();
-        self.request_sender
-            .send(WorkerMessage::Stop)
-            .expect("failed to send stop signal");
 
-        // Join the background worker.
-        if let Some(h) = self.handler_thread_handle.take() {
-            h.join().expect("could not join handler thread");
+        for _ in 0..self.handler_thread_pool.active_count() {
+            self.request_sender
+                .send(WorkerMessage::Stop)
+                .expect("failed to send stop signal!");
         }
+
+        // Join the background workers.
+        self.handler_thread_pool.join();
 
         info!(self.log, "XNet Endpoint shut down");
     }
@@ -136,11 +140,6 @@ impl Drop for XNetEndpoint {
 
 const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
-
-/// We should not buffer too many requests. The handler is single-threaded and
-/// (initially) block making is synchronous. Also, the longer the queue, the
-/// longer it may take to shut down.
-const REQUEST_QUEUE_LENGTH: usize = 3;
 
 impl<'a> XNetEndpoint {
     /// Creates and starts an `XNetEndpoint` to publish XNet `Streams`.
@@ -172,7 +171,8 @@ impl<'a> XNetEndpoint {
         // We use a crossbeam channel instead of [tokio::sync::mpsc] because we want the
         // receiver to be blocking, and [tokio::sync::mpsc::Receiver::blocking_recv] is
         // only available in tokio ≥ 0.3.
-        let (request_sender, request_receiver) = crossbeam_channel::bounded(REQUEST_QUEUE_LENGTH);
+        let (request_sender, request_receiver) =
+            crossbeam_channel::bounded(XNET_ENDPOINT_NUM_WORKER_THREADS);
 
         let make_service = make_service_fn({
             #[derive(Clone)]
@@ -287,10 +287,17 @@ impl<'a> XNetEndpoint {
         // currently realized by the state manager.
         let handler_log = log.clone();
         let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
-
-        let handler_thread_handle = std::thread::Builder::new()
-            .name("XNet Endpoint Handler".to_string())
-            .spawn(move || {
+        let handler_thread_pool = ThreadPool::with_name(
+            "XNet Endpoint Handler".to_string(),
+            XNET_ENDPOINT_NUM_WORKER_THREADS,
+        );
+        for _ in 0..XNET_ENDPOINT_NUM_WORKER_THREADS {
+            let request_receiver = request_receiver.clone();
+            let base_url = base_url.clone();
+            let handler_log = handler_log.clone();
+            let metrics = Arc::clone(&metrics);
+            let certified_stream_store = Arc::clone(&certified_stream_store);
+            handler_thread_pool.execute(move || {
                 while let Ok(WorkerMessage::HandleRequest {
                     request,
                     response_sender,
@@ -312,16 +319,20 @@ impl<'a> XNetEndpoint {
                     });
                 }
                 debug!(handler_log, "  ...XNet Endpoint Handler shut down");
-            })
-            .expect("Cannot spawn XNet Endpoint Handler thread");
+            });
+        }
 
         Self {
             server_address: address,
             shutdown_notify,
+            handler_thread_pool,
             request_sender,
-            handler_thread_handle: Some(handler_thread_handle),
             log,
         }
+    }
+
+    pub fn num_workers() -> usize {
+        XNET_ENDPOINT_NUM_WORKER_THREADS
     }
 
     /// Returns the port that the HTTP server is listening on.

@@ -55,8 +55,8 @@ impl Backup {
             "Starting to replay from height {}", start_height
         );
         let args = ReplayToolArgs {
-            subnet_id: ClapSubnetId(self.subnet_id),
-            config: PathBuf::from(&self.config_path()),
+            subnet_id: Some(ClapSubnetId(self.subnet_id)),
+            config: Some(PathBuf::from(&self.config_path())),
             canister_caller_id: None,
             replay_until_height: None,
             subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {

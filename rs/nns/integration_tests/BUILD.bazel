@@ -165,8 +165,6 @@ rust_test_suite_with_extra_srcs(
         ["src/**/*.rs"],
         exclude = [
             "src/lib.rs",
-            # randmkit is broken under Bazel - uncomment this line when its fixed / replaced.
-            "src/fuzz.rs",
             # governance mem test is tested in a separate rule below, it needs 5+ minutes to finish.
             "src/governance_mem_test.rs",
         ],

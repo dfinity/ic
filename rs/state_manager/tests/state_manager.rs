@@ -26,6 +26,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId, StateSyncAttribute},
     chunkable::ChunkId,
@@ -42,7 +43,6 @@ use std::{
     collections::HashSet,
     convert::{TryFrom, TryInto},
 };
-use tempfile::Builder;
 
 pub mod common;
 use common::*;
@@ -417,7 +417,7 @@ fn state_manager_crash_test<Test>(
 ) where
     Test: FnOnce(&MetricsRegistry, StateManagerImpl),
 {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
     with_test_replica_logger(|log| {
         for (i, fixture) in fixtures.into_iter().enumerate() {
@@ -573,7 +573,7 @@ fn can_commit_same_state_twice() {
 
 #[test]
 fn checkpoints_outlive_state_manager() {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
 
     with_test_replica_logger(|log| {
@@ -634,7 +634,7 @@ fn checkpoints_outlive_state_manager() {
 
 #[test]
 fn certifications_are_not_persisted() {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
     with_test_replica_logger(|log| {
         {

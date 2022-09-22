@@ -2,21 +2,16 @@
 """E2E-test for ic-titanium-p8s-daemon."""
 import json
 import os
-import shlex
 import shutil
-import subprocess
 import tempfile
 import time
 import unittest
 import urllib.request
 from pathlib import Path
-from shutil import which
 from subprocess import Popen
 from unittest import TestCase
 
 IC_BINARY_NAME = "ic-p8s-sd"
-# Don't start scraping mainnet
-DEFAULT_ARGUMENTS = "--no-poll --listen-addr=[::]:11235"
 # Seconds to wait for the deamon to start up
 DAEMON_STARTUP_TIMEOUT_SECONDS = 270
 
@@ -70,8 +65,9 @@ class IcP8sDaemonTest(TestCase):
 
     def setUp(self):
         """Set up tests."""
-        self.targets_dir = tempfile.mkdtemp()
-        self.file_sd_dir = tempfile.mkdtemp()
+        tmpdir = os.environ["TEST_TMPDIR"]
+        self.targets_dir = tempfile.mkdtemp(dir=tmpdir)
+        self.file_sd_dir = tempfile.mkdtemp(dir=tmpdir)
         self.daemon = start_daemon(Path(self.targets_dir), Path(self.file_sd_dir))
         retry_with_timeout(lambda: get_request("replica"))
 
@@ -110,30 +106,19 @@ class IcP8sDaemonTest(TestCase):
         shutil.rmtree(self.file_sd_dir)
 
 
-def in_ci_env() -> bool:
-    """Return true iff the process is running on CI (based on env variables)."""
-    return "CI_JOB_ID" in os.environ
-
-
 def start_daemon(targets_dir: Path, file_sd_config_dir: Path) -> Popen:
     """Start the discovery daemon, either by invoking 'cargo run'."""
-    args = "{} --file-sd-base-path {} --targets-dir {}".format(DEFAULT_ARGUMENTS, file_sd_config_dir, targets_dir)
-    if in_ci_env():
-        # On CI, we assume that someone else cleanups after us.
-        tmpdir = tempfile.mkdtemp()
-        target_bin = f"{tmpdir}/{IC_BINARY_NAME}"
-
-        def sh(c):
-            subprocess.run(c, shell=True, check=True)
-
-        sh(f'gunzip -c -d "${{CI_PROJECT_DIR}}/artifacts/release/ic-p8s-sd.gz" >"{target_bin}"')
-        sh(f"chmod +x {target_bin}")
-        args = "{} {}".format(target_bin, args)
-    else:
-        bin_path = which("cargo")
-        args = "{} run --bin {} -- {}".format(bin_path, IC_BINARY_NAME, args)
-
-    p = Popen(shlex.split(args))
+    bin = os.environ["IC_P8S_SD_PATH"]
+    args = [
+        bin,
+        "--no-poll",
+        "--listen-addr=[::1]:11235",
+        "--file-sd-base-path",
+        file_sd_config_dir,
+        "--targets-dir",
+        targets_dir,
+    ]
+    p = Popen(args)
     time.sleep(1)
     r = p.poll()
     if r is not None:

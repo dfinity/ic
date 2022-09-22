@@ -10,7 +10,6 @@ use ic_metrics::{
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE,
     metadata_state::{StreamHandle, Streams},
     replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_NOT_FOUND,
@@ -604,7 +603,6 @@ impl StreamHandlerImpl {
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
-                    QUEUE_INDEX_NONE,
                     msg,
                     self.max_canister_memory_size,
                     subnet_available_memory,

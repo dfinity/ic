@@ -416,7 +416,7 @@ message RefreshBuyerTokensRequest {
   string buyer = 1;
 }
 message RefreshBuyerTokensResponse {
-  uint64 icp_accepted_partipation_e8s = 1;
+  uint64 icp_accepted_participation_e8s = 1;
   uint64 icp_ledger_account_balance_e8s = 2;
 }
 

@@ -191,10 +191,25 @@ mod secret_key_store {
     #[test]
     fn key_should_be_present_only_after_generation() {
         let tokio_rt = new_tokio_runtime();
-        let csp_vault_1 = new_csp_vault_for_test(tokio_rt.handle());
-        let csp_vault_2 = new_csp_vault_for_test(tokio_rt.handle());
+        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
 
-        test_utils::sks::sks_should_contain_keys_only_after_generation(csp_vault_1, csp_vault_2);
+        test_utils::sks::sks_should_contain_keys_only_after_generation(vault_1, vault_2);
+    }
+
+    #[test]
+    fn tls_key_should_be_present_only_after_generation() {
+        let tokio_rt = new_tokio_runtime();
+        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
+
+        test_utils::sks::sks_should_contain_tls_keys_only_after_generation(vault_1, vault_2);
+    }
+
+    fn new_csp_vaults_for_test(
+        rt_handle: &tokio::runtime::Handle,
+    ) -> (Arc<dyn CspVault>, Arc<dyn CspVault>) {
+        let csp_vault_1 = new_csp_vault_for_test(rt_handle);
+        let csp_vault_2 = new_csp_vault_for_test(rt_handle);
+        (csp_vault_1, csp_vault_2)
     }
 }
 

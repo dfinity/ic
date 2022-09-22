@@ -202,8 +202,6 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
     let mut rng = test_rng::test_rng();
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
-            let g = EccPoint::generator_g(curve_type)?;
-
             // 0, 1, -1 (maximum value), 100 random values
             let mut scalars = Vec::with_capacity(103);
             scalars.push(EccScalar::zero(curve_type));
@@ -215,9 +213,14 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
 
             // test correctness for the generated scalars
             for scalar in scalars {
-                let p = EccPointWithLut::new(&g, window_size)?;
-                let computed_point = p.scalar_mul_vartime(&scalar)?;
-                let expected_point = g.scalar_mul(&scalar)?;
+                // random point
+                let random_scalar = EccScalar::random(curve_type, &mut rng);
+                let mut random_point = EccPoint::mul_by_g(&random_scalar)?;
+                let expected_point = random_point.scalar_mul(&scalar)?;
+                assert!(!random_point.is_precopmuted());
+                random_point.precompute(window_size)?;
+                assert!(random_point.is_precopmuted());
+                let computed_point = random_point.scalar_mul_vartime(&scalar)?;
                 assert_eq!(computed_point, expected_point);
             }
         }
@@ -254,8 +257,8 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
-    assert_eq!(EccPointWithLut::MIN_WINDOW_SIZE, 3);
-    assert_eq!(EccPointWithLut::MAX_WINDOW_SIZE, 7);
+    assert_eq!(EccPoint::MIN_LUT_WINDOW_SIZE, 3);
+    assert_eq!(EccPoint::MAX_LUT_WINDOW_SIZE, 7);
 
     let mut rng = test_rng::test_rng();
 
@@ -271,35 +274,32 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
 
             for num_terms in [1, 2, 3, 4, 5, 10, 30, 50] {
                 // generate point-scalar pairs
-                let pairs: Vec<_> = (0..num_terms)
+                let mut pairs: Vec<_> = (0..num_terms)
                     .map(|_| random_pair())
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let mut prec_points = Vec::<EccPointWithLut>::with_capacity(num_terms);
-
-                for (p, _s) in pairs.iter() {
-                    prec_points.push(EccPointWithLut::new(p, window_size)?);
-                }
-
-                // create refs of pairs
-                let mut refs_of_pairs =
-                    Vec::<(&EccPointWithLut, &EccScalar)>::with_capacity(num_terms);
-
-                for i in 0..num_terms {
-                    refs_of_pairs.push((&prec_points[i], &pairs[i].1));
-                }
-
-                // compute the result using an optimized algorithm, which is to be tested
-                let computed_result = EccPointWithLut::mul_n_points_vartime_naf(&refs_of_pairs)?;
                 // compute the result using a non-optimized algorithm, which is assumed to always be correct
                 let expected_result =
                     pairs
                         .iter()
-                        .try_fold(EccPoint::identity(curve_type), |acc, &pair| {
-                            let &(p, s) = &pair;
+                        .try_fold(EccPoint::identity(curve_type), |acc, pair| {
+                            let (p, s) = &pair;
                             // acc += p * s
-                            acc.add_points(&p.scalar_mul(&s)?)
+                            acc.add_points(&p.scalar_mul(s)?)
                         })?;
+
+                for (p, _s) in pairs.iter_mut() {
+                    assert!(!p.is_precopmuted());
+                    p.precompute(window_size)?;
+                    assert!(p.is_precopmuted());
+                }
+
+                // create refs of pairs
+                let refs_of_pairs: Vec<_> = pairs.iter().map(|(p, s)| (p, s)).collect();
+
+                // compute the result using an optimized algorithm, which is to be tested
+                let computed_result = EccPoint::mul_n_points_vartime(&refs_of_pairs[..])?;
+
                 assert_eq!(computed_result, expected_result);
             }
         }

@@ -7,7 +7,10 @@ extern crate chrono;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
 use clap::Parser;
-use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
+use cycles_minting_canister::{
+    ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
+    UpdateSubnetTypeArgs,
+};
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_sha::Sha256;
@@ -272,6 +275,12 @@ enum SubCommand {
     /// Submits a proposal to set authorized subnetworks that the cycles minting
     /// canister can use.
     ProposeToSetAuthorizedSubnetworks(ProposeToSetAuthorizedSubnetworksCmd),
+    /// Submits a proposal to update the subnet types that are available in the
+    /// cycles minting canister.
+    ProposeToUpdateSubnetType(ProposeToUpdateSubnetTypeCmd),
+    /// Submits a proposal to add or remove subnets from a subnet type in the
+    /// cycles minting canister.
+    ProposeToChangeSubnetTypeAssignment(ProposeToChangeSubnetTypeAssignmentCmd),
     /// Submits a proposal to add a new canister on NNS.
     ProposeToAddNnsCanister(ProposeToAddNnsCanisterCmd),
     /// Convert the integer node ID into Principal Id
@@ -2078,6 +2087,103 @@ impl ProposalTitleAndPayload<SetAuthorizedSubnetworkListArgs>
     }
 }
 
+/// Sub-command to submit a proposal to add or remove subnet types in cycles
+/// minting canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateSubnetTypeCmd {
+    /// A value to indicate whether the subnet type is to be added or removed.
+    #[clap(long, required = true)]
+    pub operation: AddOrRemove,
+
+    /// The name of the subnet type to be added or removed.
+    #[clap(long, required = true)]
+    pub subnet_type: String,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match &self.operation {
+                AddOrRemove::Add => {
+                    format!("Adding new subnet type: {}", self.subnet_type)
+                }
+                AddOrRemove::Remove => {
+                    format!("Removing subnet type: {}", self.subnet_type)
+                }
+            },
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateSubnetTypeArgs {
+        match self.operation {
+            AddOrRemove::Add => UpdateSubnetTypeArgs::Add(self.subnet_type.clone()),
+            AddOrRemove::Remove => UpdateSubnetTypeArgs::Remove(self.subnet_type.clone()),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to add or remove subnets to/from a subnet
+/// type in cycles minting canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToChangeSubnetTypeAssignmentCmd {
+    /// A value to indicate whether subnets are going to be added or removed
+    /// to/from a subnet type.
+    #[clap(long, required = true)]
+    pub operation: AddOrRemove,
+
+    /// The list of subnets to be added to or removed from a subnet type.
+    #[clap(long, required = true)]
+    pub subnets: Vec<PrincipalId>,
+
+    /// The subnet type to add subnets to or remove subnets from.
+    #[clap(long, required = true)]
+    pub subnet_type: String,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<ChangeSubnetTypeAssignmentArgs>
+    for ProposeToChangeSubnetTypeAssignmentCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match &self.operation {
+                AddOrRemove::Add => {
+                    format!(
+                        "Adding subnets: {} to subnet type {}",
+                        shortened_pids_string(&self.subnets),
+                        self.subnet_type
+                    )
+                }
+                AddOrRemove::Remove => {
+                    format!(
+                        "Removing subnets: {} from subnet type {}",
+                        shortened_pids_string(&self.subnets),
+                        self.subnet_type
+                    )
+                }
+            },
+        }
+    }
+
+    async fn payload(&self, _: Url) -> ChangeSubnetTypeAssignmentArgs {
+        match self.operation {
+            AddOrRemove::Add => ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
+                subnets: self.subnets.iter().cloned().map(SubnetId::from).collect(),
+                subnet_type: self.subnet_type.clone(),
+            }),
+            AddOrRemove::Remove => ChangeSubnetTypeAssignmentArgs::Remove(SubnetListWithType {
+                subnets: self.subnets.iter().cloned().map(SubnetId::from).collect(),
+                subnet_type: self.subnet_type.clone(),
+            }),
+        }
+    }
+}
+
 /// Sub-command to get the public key of a subnet from the registry.
 #[derive(Parser)]
 struct SubnetPublicKeyCmd {
@@ -2943,6 +3049,8 @@ async fn main() {
             SubCommand::ProposeToRemoveFirewallRules(_) => (),
             SubCommand::ProposeToUpdateFirewallRules(_) => (),
             SubCommand::ProposeToSetAuthorizedSubnetworks(_) => (),
+            SubCommand::ProposeToUpdateSubnetType(_) => (),
+            SubCommand::ProposeToChangeSubnetTypeAssignment(_) => (),
             SubCommand::ProposeToAddOrRemoveNodeProvider(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
@@ -2952,6 +3060,11 @@ async fn main() {
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
+            SubCommand::ProposeToPrepareCanisterMigration(_) => (),
+            SubCommand::ProposeToCompleteCanisterMigration(_) => (),
+            SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToStartCanister(_) => (),
+            SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3332,6 +3445,24 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetAuthorizedSubnetworks,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateSubnetType(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateSubnetType,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToChangeSubnetTypeAssignment(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::ChangeSubnetTypeAssignment,
                 opts.nns_url,
                 sender,
             )

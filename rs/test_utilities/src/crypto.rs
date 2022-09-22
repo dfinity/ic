@@ -50,7 +50,10 @@ pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
 }
 
 pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
-    TempCryptoComponent::new(empty_fake_registry(), node_id)
+    TempCryptoComponent::builder()
+        .with_registry(empty_fake_registry())
+        .with_node_id(node_id)
+        .build()
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
@@ -492,6 +495,14 @@ impl IDkgProtocol for CryptoReturningOk {
         _params: &IDkgTranscriptParams,
         _signed_dealing: &SignedIDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        Ok(())
+    }
+
+    fn verify_initial_dealings(
+        &self,
+        _params: &IDkgTranscriptParams,
+        _initial_dealings: &InitialIDkgDealings,
+    ) -> Result<(), IDkgVerifyInitialDealingsError> {
         Ok(())
     }
 

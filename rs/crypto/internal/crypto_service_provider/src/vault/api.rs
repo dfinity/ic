@@ -1,7 +1,6 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::secret_key_store::{Scope, SecretKeyStoreError};
+use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
-use crate::types::{CspPublicCoefficients, CspSecretKey};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -135,6 +134,7 @@ pub trait CspVault:
     + TlsHandshakeCspVault
 {
 }
+
 // Blanket implementation of `CspVault` for all types that fulfill the
 // requirements.
 impl<T> CspVault for T where
@@ -383,20 +383,11 @@ pub trait NiDkgCspVault {
 /// `CspSecretKeyStoreChecker`).
 pub trait SecretKeyStoreCspVault {
     /// Checks whether the secret key store contains a key with the given
-    /// `key_id`. # Arguments
+    /// `key_id`.
+    ///
+    /// # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
     fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
-
-    // TODO(CRP-1326): remove this method.
-    fn insert_secret_key(
-        &self,
-        id: KeyId,
-        key: CspSecretKey,
-        scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError>;
-
-    // TODO(CRP-1326): remove this method.
-    fn get_secret_key(&self, id: &KeyId) -> Option<CspSecretKey>;
 }
 
 /// Operations of `CspVault` related to TLS handshakes.

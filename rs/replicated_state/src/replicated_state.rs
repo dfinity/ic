@@ -26,7 +26,7 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, MessageId, Payload, RequestOrResponse, Response},
     xnet::QueueId,
-    CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
+    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -169,21 +169,21 @@ impl<'a> OutputIterator<'a> {
 }
 
 impl std::iter::Iterator for OutputIterator<'_> {
-    type Item = (QueueId, QueueIndex, RequestOrResponse);
+    type Item = (QueueId, RequestOrResponse);
 
     /// Pops a message from the next canister. If this was not the last message
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some((queue_id, queue_index, msg)) = canister_iterator.next() {
+            if let Some((queue_id, msg)) = canister_iterator.next() {
                 self.size -= 1;
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
                 debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
-                return Some((queue_id, queue_index, msg));
+                return Some((queue_id, msg));
             }
         }
         None
@@ -195,12 +195,10 @@ impl std::iter::Iterator for OutputIterator<'_> {
     }
 }
 
-pub trait PeekableOutputIterator:
-    std::iter::Iterator<Item = (QueueId, QueueIndex, RequestOrResponse)>
-{
+pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
     /// Peeks into the iterator and returns a reference to the item `next`
     /// would return.
-    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)>;
+    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The mesages are retained
@@ -209,7 +207,7 @@ pub trait PeekableOutputIterator:
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
+    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
         self.canister_iterators.front().and_then(|it| it.peek())
     }
 
@@ -624,7 +622,6 @@ impl ReplicatedState {
     /// Updates `subnet_available_memory` to reflect any change in memory usage.
     pub fn push_input(
         &mut self,
-        index: QueueIndex,
         msg: RequestOrResponse,
         max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
@@ -639,7 +636,6 @@ impl ReplicatedState {
         };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
-                index,
                 msg,
                 max_canister_memory_size,
                 subnet_available_memory,
@@ -651,7 +647,6 @@ impl ReplicatedState {
                 if msg.receiver().get_ref() == subnet_id {
                     push_input(
                         &mut self.subnet_queues,
-                        index,
                         msg,
                         // No canister limit, so pass the subnet limit twice.
                         *subnet_available_memory,

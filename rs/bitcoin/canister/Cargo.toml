@@ -16,6 +16,7 @@ ic-btc-types-internal = { path = "../types/internal" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-stable-structures = "0.1.0"
 ic-state-layout = { path = "../../state_layout" }
 ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
@@ -24,7 +25,6 @@ prost = "0.10.4"
 serde = "1.0.132"
 serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-stable-structures = { path = "../../stable-structures" }
 
 [build-dependencies]
 prost-build = "0.10.4"

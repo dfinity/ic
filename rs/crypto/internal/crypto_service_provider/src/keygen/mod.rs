@@ -1,7 +1,6 @@
 //! Utilities for key generation and key identifier generation
 
 use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPop, CspPublicKey};
 use crate::vault::api::CspTlsKeygenError;
 use crate::Csp;
@@ -12,7 +11,7 @@ use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use ic_types::NodeId;
-use rand::{CryptoRng, Rng};
+
 use std::convert::TryFrom;
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
@@ -22,9 +21,7 @@ const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspKeyGenerator
-    for Csp<R, S, C>
-{
+impl CspKeyGenerator for Csp {
     fn gen_key_pair(&self, alg_id: AlgorithmId) -> Result<CspPublicKey, CryptoError> {
         match alg_id {
             AlgorithmId::MultiBls12_381 => {
@@ -71,9 +68,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    CspSecretKeyStoreChecker for Csp<R, S, C>
-{
+impl CspSecretKeyStoreChecker for Csp {
     fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CryptoError> {
         Ok(self.csp_vault.sks_contains(key_id)?)
     }

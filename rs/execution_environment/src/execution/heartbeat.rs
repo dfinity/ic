@@ -14,6 +14,9 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{Cycles, NumBytes, Time};
 use std::sync::Arc;
 
+#[cfg(test)]
+mod tests;
+
 /// Holds the result of heartbeat execution.
 pub struct HeartbeatResult {
     /// The canister state resulted from the heartbeat execution.

@@ -5,6 +5,9 @@ use crate::{
         InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
+    execution::test_utilities::{
+        get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    },
     execution_environment::as_round_instructions,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
@@ -37,9 +40,6 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    execution_environment::{
-        get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
-    },
     mock_time,
     state::{
         get_running_canister, get_running_canister_with_args, get_stopped_canister,

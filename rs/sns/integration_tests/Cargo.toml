@@ -39,7 +39,7 @@ num-traits = "0.2.14"
 pretty-bytes = "0.2.2"
 prost = "0.10.0"
 rand = "0.8.4"
-rand_core = "0.6.2"
+serde_yaml = "0.8.24"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -56,6 +56,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils/" }
+ic-sns-cli = { path = "../cli" }
 ic-sns-governance = { path = "../governance", features = ["test"] }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
@@ -70,5 +71,4 @@ tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
-ed25519-dalek = "1.0.1"
-rand_chacha = "0.2.2"
+rand_chacha = "0.3"

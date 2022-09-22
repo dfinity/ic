@@ -1695,7 +1695,7 @@ mod tests {
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
-                BTreeMap::new(),
+                Vec::new(),
                 RegistryVersion::from(0),
                 Height::from(100),
                 Height::from(100),

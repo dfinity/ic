@@ -113,6 +113,13 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
+rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_sns-root-canister-raw",
+    data = [":canister/root.did"],
+    env = {"CARGO_MANIFEST_DIR": "rs/sns/root"},
+)
+
 rust_test_suite(
     name = "root_integration_tests",
     srcs = glob(

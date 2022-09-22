@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,4 +18,9 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],
+)
+
+rust_doc_test(
+    name = "ledger_core_doc_test",
+    crate = ":ledger_core",
 )

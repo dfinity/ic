@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,21 +18,21 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
+    compile_data = ["src/universal_canister.wasm"],
     crate_name = "ic_universal_canister",
-    data = ["src/universal_canister.wasm"],
     version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
 # Disabled, doc tests do not support data dependencies.
-# rust_doc_test(
-#     name = "lib_doc_test",
-#     crate = ":lib",
-#     deps = [
-#         "//rs/crypto/sha",
-#         "//rs/types/types",
-#     ],
-# )
+rust_doc_test(
+    name = "lib_doc_test",
+    crate = ":lib",
+    deps = [
+        "//rs/crypto/sha",
+        "//rs/types/types",
+    ],
+)
 
 rust_test(
     name = "lib_test",

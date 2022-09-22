@@ -9,10 +9,14 @@ use ic_icrc1::{
     Account, Subaccount,
 };
 use num_traits::cast::ToPrimitive;
+use std::ops::Bound::{Included, Unbounded};
 
 // Maximum number of transactions that can be returned
 // by [get_account_transactions]
 const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
+// Maximum number of subaccounts that can be returned
+// by [list_subaccounts]
+const MAX_SUBACCOUNTS_PER_RESPONSE: usize = 1000;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
@@ -29,6 +33,9 @@ struct Index {
 
     // The index of transactions per account
     pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<TxId>>>,
+
+    // The number of unique (principal, subaccount) pairs in the index.
+    pub accounts_num: u64,
 }
 
 impl Index {
@@ -38,6 +45,7 @@ impl Index {
             next_txid: Nat::from(0),
             is_heartbeat_running: false,
             account_index: BTreeMap::new(),
+            accounts_num: 0,
         }
     }
 }
@@ -94,6 +102,35 @@ pub struct GetTransactionsErr {
 }
 
 pub type GetTransactionsResult = Result<GetTransactions, GetTransactionsErr>;
+
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
+pub struct ListSubaccountsArgs {
+    pub owner: PrincipalId,
+    // The last subaccount seen by the client for the given principal.
+    // This subaccount is not included in the result.
+    // If None then the results will start from the first
+    // in natural order.
+    pub start: Option<Subaccount>,
+}
+
+pub fn list_subaccounts(list_subaccounts_args: ListSubaccountsArgs) -> Vec<Subaccount> {
+    with_index(
+        |idx| match idx.account_index.get(&list_subaccounts_args.owner) {
+            None => vec![],
+            Some(subaccounts) => subaccounts
+                .range((
+                    list_subaccounts_args
+                        .start
+                        .map(Included)
+                        .unwrap_or(Unbounded),
+                    Unbounded,
+                ))
+                .take(MAX_SUBACCOUNTS_PER_RESPONSE)
+                .map(|(k, _)| *k)
+                .collect(),
+        },
+    )
+}
 
 pub async fn heartbeat() {
     if with_index(|idx| idx.is_heartbeat_running) {
@@ -187,6 +224,7 @@ fn add_tx(txid: Nat, account: Account) {
         };
         match account_index.entry(*account.effective_subaccount()) {
             btree_map::Entry::Vacant(v) => {
+                idx.accounts_num += 1;
                 let _ = v.insert(vec![txid.clone()]);
             }
             btree_map::Entry::Occupied(o) => o.into_mut().push(txid.clone()),
@@ -294,6 +332,30 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
     })
 }
 
+pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "index_stable_memory_pages",
+        dfn_core::api::stable_memory_size_in_pages() as f64,
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_gauge(
+        "index_stable_memory_bytes",
+        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_number_of_transactions",
+        with_index(|idx| idx.next_txid.0.to_u64().unwrap() as f64),
+        "Total number of transaction stored in the main memory.",
+    )?;
+    w.encode_gauge(
+        "index_number_of_accounts",
+        with_index(|idx| idx.accounts_num) as f64,
+        "Total number of accounts indexed.",
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{btree_map, BTreeMap};
@@ -304,15 +366,18 @@ mod tests {
 
     use proptest::{option, proptest};
 
-    use crate::{get_account_transactions_ids, GetAccountTransactionsArgs, Index, TxId, INDEX};
+    use crate::{
+        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, TxId,
+        INDEX,
+    };
 
     fn n(i: u64) -> Nat {
         Nat::from(i)
     }
 
-    fn account1() -> Account {
+    fn account(n: u64) -> Account {
         Account {
-            owner: PrincipalId::new_anonymous(),
+            owner: PrincipalId::new_user_test_id(n),
             subaccount: None,
         }
     }
@@ -336,6 +401,7 @@ mod tests {
                 next_txid: Nat::from(0u16),
                 is_heartbeat_running: false,
                 account_index,
+                accounts_num: 0,
             });
         });
     }
@@ -346,8 +412,8 @@ mod tests {
         expected: Vec<u64>,
     ) {
         let actual = get_account_transactions_ids(GetAccountTransactionsArgs {
-            account: account1(),
-            start: start.map(|x| n(x)),
+            account: account(1),
+            start: start.map(n),
             max_results: n(max_results),
         });
         let expected: Vec<Nat> = expected.iter().map(|x| n(*x)).collect();
@@ -368,7 +434,7 @@ mod tests {
 
     #[test]
     fn get_account_transactions_start_none() {
-        init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+        init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
         // first element
         check_get_account_transactions_ids(None, 1, vec![9]);
@@ -383,7 +449,7 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_from_end_fuzzy(max_results in 6u64..) {
-            init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
             // max_results > num transactions
             check_get_account_transactions_ids(None, max_results, vec![9, 6, 5, 3, 1]);
@@ -392,7 +458,7 @@ mod tests {
 
     #[test]
     fn get_account_transactions_start_some() {
-        init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+        init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
         // start matches an existing txid, return that tx
         check_get_account_transactions_ids(Some(3), 1, vec![3]);
@@ -419,7 +485,7 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_start_some_fuzzy(max_results in 5u64..) {
-            init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
             // all results from each existing txid
             check_get_account_transactions_ids(Some(0), max_results, vec![]);
@@ -439,7 +505,7 @@ mod tests {
 
         #[test]
         fn get_account_transactions_start_some_fuzzy_out_of_range(max_results in 0u64..) {
-            init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
             // start = 0 so the results must always be empty
             check_get_account_transactions_ids(Some(0), max_results, vec![]);
@@ -449,13 +515,59 @@ mod tests {
     proptest! {
         #[test]
         fn get_account_transactions_check_panics(start in option::of(0u64..), max_results in u64::MIN..u64::MAX) {
-            init_state(vec![(account1(), vec![n(1), n(3), n(5), n(6), n(9)])]);
+            init_state(vec![(account(1), vec![n(1), n(3), n(5), n(6), n(9)])]);
 
             get_account_transactions_ids(GetAccountTransactionsArgs {
-                account: account1(),
-                start: start.map(|x| n(x)),
+                account: account(1),
+                start: start.map(n),
                 max_results: n(max_results)
             });
         }
+    }
+
+    #[test]
+    fn account_num() {
+        init_state(vec![]);
+
+        let mut next_txid = (0u64..).map(Nat::from);
+        let mut add_tx_for = |principal: u64, subaccount_number: u64| -> u64 {
+            let mut subaccount = [0u8; 32];
+            subaccount[0..8].copy_from_slice(&subaccount_number.to_le_bytes());
+            let account = Account {
+                owner: PrincipalId::new_user_test_id(principal),
+                subaccount: Some(subaccount),
+            };
+            add_tx(next_txid.next().unwrap(), account);
+            with_index(|idx| idx.accounts_num)
+        };
+
+        // no accounts at the beginning
+        assert_eq!(0, with_index(|idx| idx.accounts_num));
+
+        // new tx for new principal => add one account
+        assert_eq!(1, add_tx_for(0, 0));
+
+        // new tx for existing principal => same number of accounts
+        assert_eq!(1, add_tx_for(0, 0));
+
+        // new tx for new principal => add one account
+        assert_eq!(2, add_tx_for(1, 0));
+
+        // new tx for existing principals => same number of accounts
+        assert_eq!(2, add_tx_for(0, 0));
+        assert_eq!(2, add_tx_for(1, 0));
+
+        // new tx for exiting principals but new subaccount
+        assert_eq!(3, add_tx_for(0, 1));
+        assert_eq!(3, add_tx_for(0, 1));
+        assert_eq!(4, add_tx_for(0, 2));
+        assert_eq!(4, add_tx_for(0, 2));
+        assert_eq!(5, add_tx_for(1, 1));
+        assert_eq!(5, add_tx_for(1, 1));
+
+        // new tx for new principal and different subaccounts
+        assert_eq!(6, add_tx_for(2, 1));
+        assert_eq!(7, add_tx_for(2, 3));
+        assert_eq!(8, add_tx_for(2, 10));
     }
 }

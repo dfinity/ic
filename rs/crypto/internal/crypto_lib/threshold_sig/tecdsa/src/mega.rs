@@ -44,7 +44,7 @@ impl MEGaCiphertextType {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MEGaPublicKey {
     point: EccPoint,
 }

@@ -1,6 +1,5 @@
 //! Threshold signature implementation for the CSP
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
-use crate::secret_key_store::SecretKeyStore;
 use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
@@ -13,7 +12,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_types::crypto::KeyId;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::NodeIndex;
-use rand::{CryptoRng, Rng};
+
 use std::convert::TryFrom;
 
 pub mod ni_dkg;
@@ -21,9 +20,7 @@ pub mod ni_dkg;
 #[cfg(test)]
 mod tests;
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    ThresholdSignatureCspClient for Csp<R, S, C>
-{
+impl ThresholdSignatureCspClient for Csp {
     /// See the trait for documentation.
     ///
     /// Warning: The secret key store has no transactions, so in the event of

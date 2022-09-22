@@ -22,7 +22,7 @@ use ic_types::{
 use mockall::*;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Barrier, RwLock};
 
 mock! {
     pub StateManager {}
@@ -108,6 +108,8 @@ pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
     tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
     _tempdir: Arc<tempfile::TempDir>,
+    /// Size 1 by default (no op).
+    pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
 }
 
 impl Default for FakeStateManager {
@@ -141,6 +143,7 @@ impl FakeStateManager {
                 ),
             )))),
             _tempdir: Arc::new(tmpdir),
+            encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
         }
     }
 }
@@ -471,6 +474,10 @@ impl CertifiedStreamStore for FakeStateManager {
         mut msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
+        self.encode_certified_stream_slice_barrier
+            .read()
+            .unwrap()
+            .wait();
         use ic_types::{
             consensus::certification::CertificationContent,
             crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},

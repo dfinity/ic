@@ -57,7 +57,11 @@ SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 cd "$SCRIPT_DIR/../../tools/"
 
-./nns_state_deployment.sh "$testnet" "$GIT_REVISION" "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae" "$PEM_FILE" &>"$LOG_FILE"
+curl "https://download.dfinity.systems/ic/$GIT_REVISION/release/ic-admin.gz" | zcat >"ic-admin"
+chmod +x "ic-admin"
+NNS_REVISION=$(./ic-admin --nns-url "https://ic0.app" get-subnet 0 | jq -r ".records[0].value.replica_version_id")
+
+./nns_state_deployment.sh "$testnet" "$NNS_REVISION" "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae" "$PEM_FILE" &>"$LOG_FILE"
 
 if grep -q "can successfully create proposals" "$LOG_FILE"; then
     echo "SUCCESS!"

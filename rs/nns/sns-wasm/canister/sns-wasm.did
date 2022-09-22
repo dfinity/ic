@@ -48,6 +48,7 @@ type SnsInitPayload = record {
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   description : opt text;
   transaction_fee_e8s : opt nat64;
+  sns_initialization_parameters : opt text;
   initial_token_distribution : opt InitialTokenDistribution;
   token_name : opt text;
   proposal_reject_cost_e8s : opt nat64;

@@ -58,8 +58,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::UserQuery,
     time::current_time,
-    CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
-    Time, UserId,
+    CryptoHashOfState, Height, NodeId, PrincipalId, Randomness, RegistryVersion, ReplicaVersion,
+    SubnetId, Time, UserId,
 };
 use ic_types::{
     consensus::CatchUpContentProtobufBytes,
@@ -118,7 +118,6 @@ pub struct Player {
     pub subnet_id: SubnetId,
     backup_dir: Option<PathBuf>,
     tmp_dir: Option<TempDir>,
-    _crypto_dir: TempDir,
     // The target height until which the state will be replayed.
     // None means finalized height.
     replay_target_height: Option<u64>,
@@ -282,8 +281,7 @@ impl Player {
             subnet_id,
             subnet_config.cycles_account_manager_config,
         ));
-        let (crypto, node_id, _crypto_dir) =
-            CryptoComponentFatClient::new_temp_with_all_keys(registry.clone(), log.clone());
+        let crypto = CryptoComponentFatClient::new_for_verification_only(registry.clone());
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
@@ -327,10 +325,11 @@ impl Player {
             )
         });
 
+        let dummy_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let validator = consensus_pool.as_ref().map(|pool| {
             ReplayValidator::new(
                 cfg,
-                node_id,
+                dummy_node_id,
                 subnet_id,
                 crypto,
                 pool.get_cache().clone(),
@@ -357,7 +356,6 @@ impl Player {
             log,
             _async_log_guard,
             tmp_dir: None,
-            _crypto_dir,
             replay_target_height: None,
         }
     }
@@ -568,7 +566,6 @@ impl Player {
             match deliver_batches(
                 message_routing,
                 pool,
-                &*self.state_manager,
                 &*self.registry,
                 self.subnet_id,
                 self.replica_version.clone(),

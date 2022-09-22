@@ -155,7 +155,7 @@ fn combine_commitments_via_interpolation(
     for i in 0..reconstruction_threshold {
         let mut values = Vec::new();
         for commitment in &commitments {
-            values.push(commitment.points()[i]);
+            values.push(commitment.points()[i].clone());
         }
         combined.push(coefficients.interpolate_point(&values)?);
     }

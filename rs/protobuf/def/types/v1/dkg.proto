@@ -24,6 +24,8 @@ message Dealings {
 }
 
 message Summary {
+    reserved 8;
+	reserved "transcripts_for_new_subnets";
 	uint64 registry_version = 1;
 	uint64 interval_length = 2;
 	uint64 next_interval_length = 3;
@@ -31,8 +33,8 @@ message Summary {
 	repeated TaggedNiDkgTranscript current_transcripts = 5;
 	repeated TaggedNiDkgTranscript next_transcripts = 6;
 	repeated NiDkgConfig configs = 7;
-	repeated IdedNiDkgTranscript transcripts_for_new_subnets = 8;
 	repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
+	repeated CallbackIdedNiDkgTranscript transcripts_for_new_subnets_with_callback_ids = 10;
 }
 
 message TaggedNiDkgTranscript {
@@ -40,9 +42,10 @@ message TaggedNiDkgTranscript {
 	NiDkgTag tag = 2;
 }
 
-message IdedNiDkgTranscript {
+message CallbackIdedNiDkgTranscript {
 	NiDkgId dkg_id = 1;
 	NiDkgTranscriptResult transcript_result = 2;
+	uint64 callback_id = 3;
 }
 
 message NiDkgTranscriptResult {
