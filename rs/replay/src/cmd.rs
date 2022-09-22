@@ -72,6 +72,9 @@ pub enum SubCommand {
     /// WARNING: This is a test-only sub-command and should only be used in
     /// tests.
     WithTrustedNeuronsFollowingNeuronForTests(WithTrustedNeuronsFollowingNeuronCmd),
+
+    /// Verify the signature of a CUP from a subnet
+    VerifySubnetCUP(VerifySubnetCUPCmd),
 }
 
 #[derive(Clone, Parser)]
@@ -152,4 +155,12 @@ pub struct WithNeuronCmd {
     pub neuron_controller: PrincipalId,
     /// How much stake the neuron will have.
     pub neuron_stake_e8s: u64,
+}
+
+#[derive(Clone, Parser, Debug)]
+pub struct VerifySubnetCUPCmd {
+    /// File wih the content of the CUP
+    pub cup_file: PathBuf,
+    /// File wih the content of the public key
+    pub public_key_file: PathBuf,
 }
