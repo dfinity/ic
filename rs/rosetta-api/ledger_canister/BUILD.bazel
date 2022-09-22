@@ -78,23 +78,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_test(
-    name = "ledger_canister_canister_test",
-    srcs = ["src/main.rs"],
-    # TODO: Migrate this test to work in bazel environment IDX-2469
-    args = [
-        "--skip",
-        "check_candid_interface_compatibility",
-    ],
-    data = [
-        "ledger.did",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
-    },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ledger_canister"],
-)
-
 motoko_library(
     name = "ledger_mo_lib",
     srcs = ["wasm/Ledger.mo"],
@@ -197,6 +180,17 @@ rust_canister(
 optimized_canister(
     name = "ledger-canister-wasm",
     wasm = "ledger-canister-wasm-raw",
+)
+
+rust_test(
+    name = "ledger_canister_unit_test",
+    crate = ":_wasm_ledger-canister-wasm-raw",
+    data = [
+        ":ledger.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/ledger_canister",
+    },
 )
 
 rust_canister(
