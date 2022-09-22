@@ -7181,6 +7181,8 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
+ "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-http-handler",

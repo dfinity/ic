@@ -15,6 +15,8 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }
 ic-crypto = { path = "../crypto" }
+ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = {path = "../crypto/sha/"}
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
