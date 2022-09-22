@@ -7,6 +7,9 @@ set -euox pipefail
 readonly BOOT_CONFIG='/boot/config'
 readonly SYSTEMD_NETWORK='/run/systemd/network'
 
+HAS_IPV6=false
+HAS_IPV4=false
+
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
 }
@@ -35,6 +38,27 @@ function read_variables() {
             "name_servers") name_servers="${value}" ;;
         esac
     done <"${BOOT_CONFIG}/network.conf"
+
+    # Check the config
+    if [[ -n "${ipv6_address:-}" ]]; then
+        if [[ -n "${ipv6_gateway:-}" ]]; then
+            HAS_IPV6=true
+        else
+            err "ipv6 override failed, ipv6_address='${ipv6_address}' but ipv6_gateway not found in ${BOOT_CONFIG}/network.conf"
+        fi
+    elif [[ -n "${ipv6_gateway:-}" ]]; then
+        err "ipv6 override failed, ipv6_gateway was '${ipv6_gateway}' but ipv6_address not found in ${BOOT_CONFIG}/network.conf"
+    fi
+
+    if [[ -n "${ipv4_address:-}" ]]; then
+        if [[ -n "${ipv4_gateway:-}" ]]; then
+            HAS_IPV4=true
+        else
+            err "ipv4 override failed, ipv4_address was '${ipv4_address}' but ipv4_gateway not found in ${BOOT_CONFIG}/network.conf"
+        fi
+    elif [[ -n "${ipv4_gateway:-}" ]]; then
+        err "ipv4 override failed, ipv4_gateway was '${ipv4_gateway}' but ipv4_address not found in ${BOOT_CONFIG}/network.conf"
+    fi
 }
 
 function generate_name_server_list() {
@@ -47,9 +71,9 @@ function generate_ipv6_block() {
     # If we have an IPv6 address given, just configure it. Also, explicitly
     # turn off router advertisements, otherwise we may end up with two
     # (distinct) addresses on the same interface.
-    if [ "${ipv6_address}" != "" ]; then
-        echo Address=$ipv6_address
-        echo Gateway=$ipv6_gateway
+    if [[ "${HAS_IPV6}" == "true" ]]; then
+        echo Address=${ipv6_address}
+        echo Gateway=${ipv6_gateway}
         echo IPv6AcceptRA=false
     else
         echo IPv6AcceptRA=true
@@ -57,9 +81,9 @@ function generate_ipv6_block() {
 }
 function generate_ipv4_block() {
     # If we have an IPv4 address given, just configure it.
-    if [ "${ipv4_address}" != "" ]; then
-        echo Address=$ipv4_address
-        echo Gateway=$ipv4_gateway
+    if [[ "${HAS_IPV4}" == "true" ]]; then
+        echo Address=${ipv4_address}
+        echo Gateway=${ipv4_gateway}
     else
         echo DHCP=ipv4
         echo LinkLocalAddressing=no

@@ -7,11 +7,11 @@ set -euox pipefail
 readonly BOOT_CONFIG='/boot/config'
 readonly RUN_DIR='/run/ic-node/etc/nftables'
 
-ipv6_replica_ips=()
-ipv4_http_ips=()
-ipv6_http_ips=()
-ipv6_debug_ips=()
-ipv6_monitoring_ips=()
+ipv6_replica_ips=("::/128")
+ipv4_http_ips=("0.0.0.0/32")
+ipv6_http_ips=("::/128")
+ipv6_debug_ips=("::/128")
+ipv6_monitoring_ips=("::/128")
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
