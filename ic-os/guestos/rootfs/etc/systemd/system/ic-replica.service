@@ -7,6 +7,9 @@ Wants=bootstrap-ic-node.service
 # We must also wait for storage permission fixup to have finished.
 After=setup-permissions.service
 Wants=setup-permissions.service
+# Replica & orchestrator need ic-crypto-csp service running.
+After=ic-crypto-csp.service
+Wants=ic-crypto-csp.service
 # We must also wait for the network to become online: We must
 # put the correct address(es) into the ic.json5, but in case
 # of dynamic assignment they only become available once all

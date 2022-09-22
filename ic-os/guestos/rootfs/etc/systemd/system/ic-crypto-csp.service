@@ -25,5 +25,5 @@ Restart=always
 RestartSec=10
 
 [Install]
-RequiredBy=ic-replica.service
+WantedBy=ic-replica.service
 Also=ic-crypto-csp.socket
