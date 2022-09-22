@@ -5,6 +5,7 @@ use crate::{
     crypto::threshold_sig::ni_dkg::{
         config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
     },
+    messages::CallbackId,
     ReplicaVersion,
 };
 use ic_protobuf::types::v1 as pb;
@@ -115,8 +116,8 @@ pub struct Summary {
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     /// Transcripts that are computed for new subnets being created.
-    #[serde_as(as = "Vec<(_, _)>")]
-    transcripts_for_new_subnets: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    pub transcripts_for_new_subnets_with_callback_ids:
+        Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -135,7 +136,7 @@ impl Summary {
         configs: Vec<NiDkgConfig>,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
         next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-        transcripts_for_new_subnets: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+        transcripts_for_new_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         registry_version: RegistryVersion,
         interval_length: Height,
         next_interval_length: Height,
@@ -149,7 +150,7 @@ impl Summary {
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_new_subnets,
+            transcripts_for_new_subnets_with_callback_ids: transcripts_for_new_subnets,
             registry_version,
             interval_length,
             next_interval_length,
@@ -242,13 +243,6 @@ impl Summary {
         self.height + self.interval_length + Height::from(1)
     }
 
-    /// Returns the transcripts for new subnets
-    pub fn transcripts_for_new_subnets(
-        &self,
-    ) -> &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>> {
-        &self.transcripts_for_new_subnets
-    }
-
     /// Returns the oldest registry version that is still relevant to DKG.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.current_transcripts()
@@ -271,26 +265,29 @@ fn build_tagged_transcripts_vec(
         .collect()
 }
 
-fn build_ided_transcripts_vec(
-    transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
-) -> Vec<pb::IdedNiDkgTranscript> {
+fn build_callback_ided_transcripts_vec(
+    transcripts: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+) -> Vec<pb::CallbackIdedNiDkgTranscript> {
     transcripts
         .iter()
-        .map(|(id, transcript_result)| pb::IdedNiDkgTranscript {
-            dkg_id: Some(pb::NiDkgId::from(*id)),
-            transcript_result: match transcript_result {
-                Ok(transcript) => Some(pb::NiDkgTranscriptResult {
-                    val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
-                        pb::NiDkgTranscript::from(transcript),
-                    )),
-                }),
-                Err(error_string) => Some(pb::NiDkgTranscriptResult {
-                    val: Some(pb::ni_dkg_transcript_result::Val::ErrorString(
-                        error_string.as_bytes().to_vec(),
-                    )),
-                }),
+        .map(
+            |(id, callback_id, transcript_result)| pb::CallbackIdedNiDkgTranscript {
+                dkg_id: Some(pb::NiDkgId::from(*id)),
+                transcript_result: match transcript_result {
+                    Ok(transcript) => Some(pb::NiDkgTranscriptResult {
+                        val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
+                            pb::NiDkgTranscript::from(transcript),
+                        )),
+                    }),
+                    Err(error_string) => Some(pb::NiDkgTranscriptResult {
+                        val: Some(pb::ni_dkg_transcript_result::Val::ErrorString(
+                            error_string.as_bytes().to_vec(),
+                        )),
+                    }),
+                },
+                callback_id: callback_id.get(),
             },
-        })
+        )
         .collect()
 }
 
@@ -319,8 +316,10 @@ impl From<&Summary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_new_subnets: build_ided_transcripts_vec(
-                &summary.transcripts_for_new_subnets,
+            transcripts_for_new_subnets_with_callback_ids: build_callback_ided_transcripts_vec(
+                summary
+                    .transcripts_for_new_subnets_with_callback_ids
+                    .as_slice(),
             ),
             initial_dkg_attempts: build_initial_dkg_attempts_vec(&summary.initial_dkg_attempts),
         }
@@ -349,23 +348,24 @@ fn build_tagged_transcripts_map(
         .collect::<Result<BTreeMap<_, _>, _>>()
 }
 
-fn build_ided_transcripts_map(
-    transcripts: Vec<pb::IdedNiDkgTranscript>,
-) -> Result<BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>, String> {
-    let mut transcripts_for_new_subnets =
-        BTreeMap::<NiDkgId, Result<NiDkgTranscript, String>>::new();
+#[allow(clippy::type_complexity)]
+fn build_transcripts_vec_from_pb(
+    transcripts: Vec<pb::CallbackIdedNiDkgTranscript>,
+) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, String> {
+    let mut transcripts_for_new_subnets = Vec::new();
     for transcript in transcripts.into_iter() {
         let id = transcript.dkg_id.ok_or_else(|| {
             "Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgId".to_string()
         })?;
         let id = NiDkgId::try_from(id)
             .map_err(|e| format!("Failed to convert NiDkgId of transcript: {:?}", e))?;
+        let callback_id = CallbackId::from(transcript.callback_id);
         let transcript_result = transcript
             .transcript_result
             .ok_or("Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?;
         let transcript_result = build_transcript_result(&transcript_result)
             .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {:?}", e))?;
-        transcripts_for_new_subnets.insert(id, transcript_result);
+        transcripts_for_new_subnets.push((id, callback_id, transcript_result));
     }
     Ok(transcripts_for_new_subnets)
 }
@@ -421,8 +421,8 @@ impl TryFrom<pb::Summary> for Summary {
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_new_subnets: build_ided_transcripts_map(
-                summary.transcripts_for_new_subnets,
+            transcripts_for_new_subnets_with_callback_ids: build_transcripts_vec_from_pb(
+                summary.transcripts_for_new_subnets_with_callback_ids,
             )?,
             initial_dkg_attempts: build_initial_dkg_attempts_map(&summary.initial_dkg_attempts),
         })

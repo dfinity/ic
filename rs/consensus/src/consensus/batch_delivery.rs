@@ -17,17 +17,13 @@ use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
 };
-use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
     canister_http::*,
     consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
-    crypto::threshold_sig::ni_dkg::{
-        NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
-    },
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     messages::{CallbackId, Response},
     ReplicaVersion,
 };
@@ -40,7 +36,6 @@ use std::collections::BTreeMap;
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
     pool: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     current_replica_version: ReplicaVersion,
@@ -77,8 +72,7 @@ pub fn deliver_batches(
                     }
                 );
                 // Compute consensus' responses to subnet calls.
-                let consensus_responses =
-                    generate_responses_to_subnet_calls(&*state_manager, &block, log);
+                let consensus_responses = generate_responses_to_subnet_calls(&block, log);
 
                 if block.payload.is_summary() {
                     info!(log, "Delivering finalized batch at CUP height of {}", h);
@@ -200,33 +194,20 @@ pub fn deliver_batches(
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
 /// - Threshold ECDSA signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-pub fn generate_responses_to_subnet_calls(
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    block: &Block,
-    log: &ReplicaLogger,
-) -> Vec<Response> {
+pub fn generate_responses_to_subnet_calls(block: &Block, log: &ReplicaLogger) -> Vec<Response> {
     let mut consensus_responses = Vec::<Response>::new();
     let block_payload = &block.payload;
     if block_payload.is_summary() {
-        if let Ok(state) = state_manager.get_state_at(block.context.certified_height) {
-            let setup_initial_dkg_contexts = &state
-                .get_ref()
-                .metadata
-                .subnet_call_context_manager
-                .setup_initial_dkg_contexts;
-            let summary = block_payload.as_ref().as_summary();
-            info!(
-                log,
-                "New DKG summary with config ids created: {:?}",
-                summary.dkg.configs.keys().collect::<Vec<_>>()
-            );
-
-            consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
-                setup_initial_dkg_contexts,
-                summary.dkg.transcripts_for_new_subnets(),
-                log,
-            ));
-        }
+        let summary = block_payload.as_ref().as_summary();
+        info!(
+            log,
+            "New DKG summary with config ids created: {:?}",
+            summary.dkg.configs.keys().collect::<Vec<_>>()
+        );
+        consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
+            &summary.dkg.transcripts_for_new_subnets_with_callback_ids,
+            log,
+        ))
     } else {
         let block_payload = block_payload.as_ref().as_data();
         if let Some(payload) = &block_payload.ecdsa {
@@ -291,95 +272,129 @@ pub fn generate_execution_responses_for_canister_http_responses(
         .collect()
 }
 
+struct TranscriptResults {
+    low_threshold: Option<Result<NiDkgTranscript, String>>,
+    high_threshold: Option<Result<NiDkgTranscript, String>>,
+}
+
 /// This function creates responses to the SetupInitialDKG system calls with the
-/// computed DKG key material for remote subnets.
+/// computed DKG key material for remote subnets, without needing values from the state.
 pub fn generate_responses_to_setup_initial_dkg_calls(
-    contexts: &BTreeMap<CallbackId, SetupInitialDkgContext>,
-    transcripts_for_new_subnets: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    transcripts_for_new_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
 ) -> Vec<Response> {
     let mut consensus_responses = Vec::<Response>::new();
-    for (callback_id, context) in contexts.iter() {
-        let target_id = context.target_id;
 
-        let transcript = |dkg_tag| {
-            transcripts_for_new_subnets
-                .iter()
-                .filter_map(|(id, transcript)| {
-                    if id.dkg_tag == dkg_tag && id.target_subnet == Remote(target_id) {
-                        Some(transcript)
-                    } else {
-                        None
+    let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
+
+    for (id, callback_id, transcript) in transcripts_for_new_subnets.iter() {
+        let add_transcript = |transcript_results: &mut TranscriptResults| {
+            let value = Some(transcript.clone());
+            match id.dkg_tag {
+                NiDkgTag::LowThreshold => {
+                    if transcript_results.low_threshold.is_some() {
+                        error!(
+                            log,
+                            "Multiple low threshold transcripts for {}", callback_id
+                        );
                     }
-                })
-                .last()
+                    transcript_results.low_threshold = value;
+                }
+                NiDkgTag::HighThreshold => {
+                    if transcript_results.high_threshold.is_some() {
+                        error!(
+                            log,
+                            "Multiple high threshold transcripts for {}", callback_id
+                        );
+                    }
+                    transcript_results.high_threshold = value;
+                }
+            }
         };
-
-        let payload = match (
-            transcript(NiDkgTag::LowThreshold),
-            transcript(NiDkgTag::HighThreshold),
-        ) {
-            (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
-                info!(
-                    log,
-                    "Found transcripts for another subnet with ids {:?} and {:?}",
-                    low_threshold_transcript.dkg_id,
-                    high_threshold_transcript.dkg_id
-                );
-                let low_threshold_transcript_record =
-                    initial_ni_dkg_transcript_record_from_transcript(
-                        low_threshold_transcript.clone(),
-                    );
-                let high_threshold_transcript_record =
-                    initial_ni_dkg_transcript_record_from_transcript(
-                        high_threshold_transcript.clone(),
-                    );
-
-                // This is what we expect consensus to reply with.
-                let threshold_sig_pk = high_threshold_transcript.public_key();
-                let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
-                let key_der: Vec<u8> =
-                    ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
-                let fresh_subnet_id =
-                    SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
-
-                let initial_transcript_records = SetupInitialDKGResponse {
-                    low_threshold_transcript_record,
-                    high_threshold_transcript_record,
-                    fresh_subnet_id,
-                    subnet_threshold_public_key,
+        match transcripts.get_mut(callback_id) {
+            Some(existing) => add_transcript(existing),
+            None => {
+                let mut transcript_results = TranscriptResults {
+                    low_threshold: None,
+                    high_threshold: None,
                 };
-
-                Some(messages::Payload::Data(initial_transcript_records.encode()))
+                add_transcript(&mut transcript_results);
+                transcripts.insert(*callback_id, transcript_results);
             }
-            (Some(Err(err_str1)), Some(Err(err_str2))) => {
-                Some(messages::Payload::Reject(messages::RejectContext {
-                    code: ic_error_types::RejectCode::CanisterReject,
-                    message: format!("{}{}", err_str1, err_str2),
-                }))
-            }
-            (Some(Err(err_str)), _) => Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_error_types::RejectCode::CanisterReject,
-                message: err_str.to_string(),
-            })),
-            (_, Some(Err(err_str))) => Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_error_types::RejectCode::CanisterReject,
-                message: err_str.to_string(),
-            })),
-            _ => None,
         };
+    }
 
+    for (callback_id, transcript_results) in transcripts.into_iter() {
+        let payload = generate_dkg_response_payload(
+            transcript_results.low_threshold.as_ref(),
+            transcript_results.high_threshold.as_ref(),
+            log,
+        );
         if let Some(response_payload) = payload {
             consensus_responses.push(Response {
                 originator: CanisterId::ic_00(),
                 respondent: CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
+                originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
                 response_payload,
             });
         }
     }
     consensus_responses
+}
+
+/// Generate a response payload given the low and high threshold transcripts
+fn generate_dkg_response_payload(
+    low_threshold: Option<&Result<NiDkgTranscript, String>>,
+    high_threshold: Option<&Result<NiDkgTranscript, String>>,
+    log: &ReplicaLogger,
+) -> Option<messages::Payload> {
+    match (low_threshold, high_threshold) {
+        (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
+            info!(
+                log,
+                "Found transcripts for another subnet with ids {:?} and {:?}",
+                low_threshold_transcript.dkg_id,
+                high_threshold_transcript.dkg_id
+            );
+            let low_threshold_transcript_record =
+                initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript.clone());
+            let high_threshold_transcript_record =
+                initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript.clone());
+
+            // This is what we expect consensus to reply with.
+            let threshold_sig_pk = high_threshold_transcript.public_key();
+            let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
+            let key_der: Vec<u8> =
+                ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
+            let fresh_subnet_id =
+                SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
+
+            let initial_transcript_records = SetupInitialDKGResponse {
+                low_threshold_transcript_record,
+                high_threshold_transcript_record,
+                fresh_subnet_id,
+                subnet_threshold_public_key,
+            };
+
+            Some(messages::Payload::Data(initial_transcript_records.encode()))
+        }
+        (Some(Err(err_str1)), Some(Err(err_str2))) => {
+            Some(messages::Payload::Reject(messages::RejectContext {
+                code: ic_error_types::RejectCode::CanisterReject,
+                message: format!("{}{}", err_str1, err_str2),
+            }))
+        }
+        (Some(Err(err_str)), _) => Some(messages::Payload::Reject(messages::RejectContext {
+            code: ic_error_types::RejectCode::CanisterReject,
+            message: err_str.to_string(),
+        })),
+        (_, Some(Err(err_str))) => Some(messages::Payload::Reject(messages::RejectContext {
+            code: ic_error_types::RejectCode::CanisterReject,
+            message: err_str.to_string(),
+        })),
+        _ => None,
+    }
 }
 
 /// Creates responses to `SignWithECDSA` system calls with the computed

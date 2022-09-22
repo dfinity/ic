@@ -566,7 +566,6 @@ impl Player {
             match deliver_batches(
                 message_routing,
                 pool,
-                &*self.state_manager,
                 &*self.registry,
                 self.subnet_id,
                 self.replica_version.clone(),
