@@ -54,6 +54,8 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-traits",
+    "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rust_decimal",
     "@crate_index//:tokio",
     "@wabt_rs//:wabt",
@@ -121,7 +123,6 @@ rust_test_suite_with_extra_srcs(
         ["src/*.rs"],
         exclude = [
             "src/lib.rs",
-            "src/swap.rs",
         ],
     ),
     aliases = ALIASES,
